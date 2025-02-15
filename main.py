@@ -1,27 +1,31 @@
 import pandas as pd
 
-from src.feature_engineering import feature_construction
+from src.feature_engineering import feature_construction, type_casting
 from src.optiondata_csvs_to_df_merge import combine_csv_files
 from src.tradingview_optionchain_scrapper import scrape_option_data
 from src.price_and_technical_analysis_data_scrapper import scrape_and_save_price_and_technical_indicators
 from src.merge_csv_dataframes_data import merge_data_dataframes
+from src.util import create_all_project_folders, get_option_expiry_dates
 from src.yfinance_analyst_price_targets import scrape_yahoo_finance_analyst_price_targets
 from config import *
 
 if __name__ == '__main__':
-    print("#"*80)
-    print("Get Yahoo Finance data")
-    print("#" * 80)
-    scrape_yahoo_finance_analyst_price_targets()
-    print("Get Yahoo Finance data - Done")
-
-    print("#" * 80)
-    print("Get option data")
-    print("#" * 80)
-    for symbol in SYMBOLS:
-        scrape_option_data(symbol=symbol, expiration_date=EXPIRATION_DATE, exchange=SYMBOLS_EXCHANGE[symbol], folderpath=PATH_OPTION_DATA_TRADINGVIEW)
-
-    print("Get option data - Done")
+    # create_all_project_folders()
+    #
+    # print("#"*80)
+    # print("Get Yahoo Finance data")
+    # print("#" * 80)
+    # scrape_yahoo_finance_analyst_price_targets()
+    # print("Get Yahoo Finance data - Done")
+    #
+    # print("#" * 80)
+    # print("Get option data")
+    # print("#" * 80)
+    # for expiration_date in get_option_expiry_dates():
+    #     for symbol in SYMBOLS:
+    #         scrape_option_data(symbol=symbol, expiration_date=expiration_date, exchange=SYMBOLS_EXCHANGE[symbol], folderpath=PATH_OPTION_DATA_TRADINGVIEW)
+    #
+    # print("Get option data - Done")
 
     print("#" * 80)
     print("Combine option data JSON to csv")
@@ -45,6 +49,7 @@ if __name__ == '__main__':
     print("Feature engineering")
     print("#" * 80)
     feature_construction()
+    type_casting()
     print("Feature engineering - Done")
 
 

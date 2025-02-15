@@ -16,7 +16,7 @@ def _extract_strikeprice_from_option_string(option_string):
         return None
 
 
-def _response_json_to_df(data, symbol, exchange):
+def _response_json_to_df(data, symbol, exchange, expiration_date):
     # in the JSON response the symbols are the options and not the stock symbols!
     fields = data["fields"]
     options = data["symbols"]
@@ -30,6 +30,7 @@ def _response_json_to_df(data, symbol, exchange):
         row["symbol"] = symbol
         row["strike"] = _extract_strikeprice_from_option_string(row["option"])
         row["exchange"] = exchange
+        row["expiration_date"] = expiration_date
         rows.append(row)
 
     df = pd.DataFrame(rows)
@@ -63,12 +64,12 @@ def scrape_option_data(symbol, expiration_date, exchange, folderpath):
         print(f"Request {symbol} @{exchange} for expiration {expiration_date} was successful:")
 
         if response.json()['totalCount'] > 0:
-            df = _response_json_to_df(data=response.json(), symbol=symbol, exchange=exchange)
+            df = _response_json_to_df(data=response.json(), symbol=symbol, exchange=exchange, expiration_date=expiration_date)
             df.to_csv(f"{folderpath}{symbol}_{expiration_date}.csv", index=False)
         else:
             print("No data was found")
     else:
-        print(f"Request {symbol} @{exchange} for expiration {expiration_date} was failed:")
+        print(f"Request {symbol} @{exchange} for expiration {expiration_date} has failed:")
         print(f"Error: {response.status_code}")
         print(response.text)
 
