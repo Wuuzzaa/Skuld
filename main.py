@@ -10,23 +10,22 @@ from src.yfinance_analyst_price_targets import scrape_yahoo_finance_analyst_pric
 from config import *
 
 if __name__ == '__main__':
-    # create_all_project_folders()
-    #
-    # print("#"*80)
-    # print("Get Yahoo Finance data")
-    # print("#" * 80)
-    # scrape_yahoo_finance_analyst_price_targets()
-    # print("Get Yahoo Finance data - Done")
-    #
-    # print("#" * 80)
-    # print("Get option data")
-    # print("#" * 80)
-    # for expiration_date in get_option_expiry_dates():
-    #     for symbol in SYMBOLS:
-    #         scrape_option_data(symbol=symbol, expiration_date=expiration_date, exchange=SYMBOLS_EXCHANGE[symbol], folderpath=PATH_OPTION_DATA_TRADINGVIEW)
-    #
-    # print("Get option data - Done")
+    create_all_project_folders()
 
+    print("#"*80)
+    print("Get Yahoo Finance data")
+    print("#" * 80)
+    scrape_yahoo_finance_analyst_price_targets()
+    print("Get Yahoo Finance data - Done")
+
+    print("#" * 80)
+    print("Get option data")
+    print("#" * 80)
+    for expiration_date in get_option_expiry_dates():
+        for symbol in SYMBOLS:
+            scrape_option_data(symbol=symbol, expiration_date=expiration_date, exchange=SYMBOLS_EXCHANGE[symbol], folderpath=PATH_OPTION_DATA_TRADINGVIEW)
+
+    print("Get option data - Done")
     print("#" * 80)
     print("Combine option data JSON to csv")
     print("#" * 80)
