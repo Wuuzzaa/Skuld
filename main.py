@@ -1,3 +1,5 @@
+import streamlit as st
+
 import pandas as pd
 
 from src.feature_engineering import feature_construction, type_casting
