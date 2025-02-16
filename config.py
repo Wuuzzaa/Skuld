@@ -1,3 +1,5 @@
+from pathlib import Path
+
 SYMBOLS_EXCHANGE = {
     "AAPL": 'NASDAQ',
     "AMD": 'NASDAQ',
@@ -60,13 +62,19 @@ SYMBOLS_EXCHANGE = {
 
 SYMBOLS = SYMBOLS_EXCHANGE.keys()
 
-# FILEPATHS relative to main.py
-PATH_DATA = 'data/'
-PATH_OPTION_DATA_TRADINGVIEW = 'data/json/option_data_tradingview/'
-PATH_DATAFRAME_OPTION_DATA_CSV = 'data/option_data.csv'
-PATH_DATAFRAME_PRICE_AND_INDICATOR_DATA_CSV = 'data/price_and_indicators.csv'
-PATH_DATAFRAME_DATA_MERGED_CSV = 'data/merged_df.csv'
-PATH_DATAFRAME_DATA_ANALYST_PRICE_TARGET_CSV = 'data/price_target_df.csv'
+# Basisverzeichnis relativ zur main.py oder der config.py
+BASE_DIR = Path(__file__).resolve().parent
+
+# Datenverzeichnis
+PATH_DATA = BASE_DIR / 'data'
+PATH_OPTION_DATA_TRADINGVIEW = PATH_DATA / 'json' / 'option_data_tradingview'
+PATH_DATAFRAME_OPTION_DATA_CSV = PATH_DATA / 'option_data.csv'
+PATH_DATAFRAME_PRICE_AND_INDICATOR_DATA_CSV = PATH_DATA / 'price_and_indicators.csv'
+PATH_DATAFRAME_DATA_MERGED_CSV = PATH_DATA / 'merged_df.csv'
+PATH_DATAFRAME_DATA_ANALYST_PRICE_TARGET_CSV = PATH_DATA / 'price_target_df.csv'
+
+print(BASE_DIR)
+print(PATH_OPTION_DATA_TRADINGVIEW)
 
 # FOLDERPATHS relative to main.py
 FOLDERPATHS = \
