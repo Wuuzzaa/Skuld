@@ -1,17 +1,19 @@
-import os
 import calendar
+from pathlib import Path
 from config import FOLDERPATHS
 from datetime import date, timedelta
+
 
 def create_all_project_folders():
     print("Creating all project folders if needed...")
 
     for folder in FOLDERPATHS:
-        directory = os.path.dirname(folder)
-
-        if directory and not os.path.exists(directory):
-            print("Creating folder {}".format(folder))
-            os.makedirs(directory)
+        folder_path = Path(folder)
+        if not folder_path.exists():
+            folder_path.mkdir(parents=True, exist_ok=True)
+            print(f"Created folder: {folder_path}")
+        else:
+            print(f"Folder already exists: {folder_path}")
 
 
 def get_option_expiry_dates():
