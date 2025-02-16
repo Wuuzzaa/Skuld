@@ -1,5 +1,3 @@
-import pandas as pd
-
 from src.feature_engineering import feature_construction, type_casting
 from src.optiondata_csvs_to_df_merge import combine_csv_files
 from src.tradingview_optionchain_scrapper import scrape_option_data
@@ -9,7 +7,8 @@ from src.util import create_all_project_folders, get_option_expiry_dates
 from src.yfinance_analyst_price_targets import scrape_yahoo_finance_analyst_price_targets
 from config import *
 
-if __name__ == '__main__':
+
+def main():
     create_all_project_folders()
 
     print("#"*80)
@@ -51,6 +50,11 @@ if __name__ == '__main__':
     type_casting()
     print("Feature engineering - Done")
 
+    print("RUN DONE")
+
+
+if __name__ == '__main__':
+    main()
 
 
 
