@@ -3,14 +3,14 @@ import yfinance as yf
 import pandas as pd
 
 
-def scrape_yahoo_finance_analyst_price_targets():
+def scrape_yahoo_finance_analyst_price_targets(symbols):
     print("#"*80)
     print(f"Scraping analyst price targets on Yahoo Finance...")
     print("#"*80)
 
     results = []
 
-    for symbol in SYMBOLS:
+    for symbol in symbols:
         print(f"Scraping {symbol} on Yahoo Finance...")
         data = yf.Ticker(symbol)
 
