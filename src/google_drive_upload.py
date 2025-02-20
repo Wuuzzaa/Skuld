@@ -7,6 +7,7 @@ from google.oauth2 import service_account
 def upload_csv_to_drive(service_account_file, file_path, file_name, parent_folder_id, convert_to_google_format=False):
     """
     Lädt eine CSV-Datei per Service Account zu Google Drive hoch.
+    Prüft, ob im Zielordner bereits eine Datei mit dem gleichen Namen existiert. Falls ja, wird diese gelöscht.
     Optional kann die Datei in ein Google-Format konvertiert werden (z.B. Google Sheets).
 
     :param service_account_file: Pfad zur Service-Account-JSON-Datei
@@ -25,6 +26,16 @@ def upload_csv_to_drive(service_account_file, file_path, file_name, parent_folde
 
         # Drive API-Client erstellen
         service = build("drive", "v3", credentials=creds)
+
+        # Prüfen, ob im Zielordner bereits eine Datei mit file_name existiert
+        query = f"name = '{file_name}' and '{parent_folder_id}' in parents and trashed = false"
+        results = service.files().list(q=query, fields="files(id, name)").execute()
+        files = results.get('files', [])
+        if files:
+            for file in files:
+                print(f"Datei '{file['name']}' mit ID {file['id']} existiert bereits. Lösche diese...")
+                service.files().delete(fileId=file['id']).execute()
+                print("Datei gelöscht.")
 
         # Metadaten für die neue Datei
         file_metadata = {

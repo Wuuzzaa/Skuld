@@ -4,6 +4,9 @@ on:
   push:
     branches: [ "master" ]
   workflow_dispatch:  
+  schedule:
+    - cron: "0 9 * * 1-5"   # Jeden Wochentag (Mo-Fr) um 10:00 CET (09:00 UTC)
+    - cron: "0 15 * * 1-5"  # Jeden Wochentag (Mo-Fr) um 16:00 CET (15:00 UTC)
 
 jobs:
   build-and-run:
@@ -29,4 +32,4 @@ jobs:
 
       - name: Run main script in test mode
         run: |
-          python main.py --testmode
+          python main.py 
