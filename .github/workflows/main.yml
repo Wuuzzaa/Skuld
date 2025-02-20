@@ -2,7 +2,7 @@ name: Run Pipeline
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "master" ]
 
 jobs:
   build-and-run:
