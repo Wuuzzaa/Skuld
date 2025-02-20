@@ -60,7 +60,7 @@ SYMBOLS_EXCHANGE = {
     "XOP": 'AMEX',
 }
 
-SYMBOLS = SYMBOLS_EXCHANGE.keys()
+SYMBOLS = list(SYMBOLS_EXCHANGE.keys())
 
 # Basisverzeichnis relativ zur main.py oder der config.py
 BASE_DIR = Path(__file__).resolve().parent
@@ -81,7 +81,6 @@ FOLDERPATHS = \
     [
         PATH_DATA,
         PATH_OPTION_DATA_TRADINGVIEW
-
     ]
 # set the columns needed for further work
 DATAFRAME_DATA_MERGED_COLUMNS = [

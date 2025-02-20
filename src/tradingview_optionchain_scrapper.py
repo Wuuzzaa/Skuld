@@ -1,4 +1,3 @@
-import json
 import re
 
 import requests
@@ -65,7 +64,6 @@ def scrape_option_data(symbol, expiration_date, exchange, folderpath):
 
         if response.json()['totalCount'] > 0:
             df = _response_json_to_df(data=response.json(), symbol=symbol, exchange=exchange, expiration_date=expiration_date)
-            #df.to_csv(f"{folderpath}{symbol}_{expiration_date}.csv", index=False)
             df.to_csv(folderpath / f"{symbol}_{expiration_date}.csv", index=False)
         else:
             print("No data was found")
