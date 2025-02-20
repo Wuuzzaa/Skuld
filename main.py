@@ -8,27 +8,36 @@ from src.yfinance_analyst_price_targets import scrape_yahoo_finance_analyst_pric
 from config import *
 
 
-def main():
+def main(testmode=False):
     create_all_project_folders()
 
     print("#"*80)
     print("Get Yahoo Finance data")
     print("#" * 80)
-    scrape_yahoo_finance_analyst_price_targets()
+    if testmode:
+        scrape_yahoo_finance_analyst_price_targets(SYMBOLS[:3])
+    else:
+        scrape_yahoo_finance_analyst_price_targets(SYMBOLS)
     print("Get Yahoo Finance data - Done")
 
     print("#" * 80)
     print("Get option data")
     print("#" * 80)
-    for expiration_date in get_option_expiry_dates():
-        for symbol in SYMBOLS:
-            scrape_option_data(symbol=symbol, expiration_date=expiration_date, exchange=SYMBOLS_EXCHANGE[symbol], folderpath=PATH_OPTION_DATA_TRADINGVIEW)
+
+    if testmode:
+        for expiration_date in get_option_expiry_dates()[:3]:
+            for symbol in SYMBOLS[:3]:
+                scrape_option_data(symbol=symbol, expiration_date=expiration_date, exchange=SYMBOLS_EXCHANGE[symbol], folderpath=PATH_OPTION_DATA_TRADINGVIEW)
+    else:
+        for expiration_date in get_option_expiry_dates():
+            for symbol in SYMBOLS:
+                scrape_option_data(symbol=symbol, expiration_date=expiration_date, exchange=SYMBOLS_EXCHANGE[symbol], folderpath=PATH_OPTION_DATA_TRADINGVIEW)
 
     print("Get option data - Done")
     print("#" * 80)
     print("Combine option data JSON to csv")
     print("#" * 80)
-    df = combine_csv_files(folder_path=PATH_OPTION_DATA_TRADINGVIEW, data_csv_path=PATH_DATAFRAME_OPTION_DATA_CSV)
+    combine_csv_files(folder_path=PATH_OPTION_DATA_TRADINGVIEW, data_csv_path=PATH_DATAFRAME_OPTION_DATA_CSV)
     print("Combine option data JSON to csv - Done")
 
     print("#" * 80)
