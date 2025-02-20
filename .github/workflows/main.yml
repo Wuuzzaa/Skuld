@@ -32,4 +32,4 @@ jobs:
 
       - name: Run main script in test mode
         run: |
-          python main.py --testmode
+          python main.py 
