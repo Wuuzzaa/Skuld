@@ -1,6 +1,6 @@
 import pandas as pd
 from config import *
-from google_drive_upload import upload_csv_to_drive  # <--- Import der Upload-Funktion
+from src.google_drive_upload import upload_csv_to_drive# <--- Import der Upload-Funktion
 
 def merge_data_dataframes():
     print("Merge Option and Price Indicators Data")
