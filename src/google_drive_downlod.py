@@ -138,7 +138,7 @@ def should_update_file(local_file, update_times, tz_name=LOCAL_TZ) -> bool:
 # ----------------------
 # Laden der Daten (mit Caching)
 # ----------------------
-@st.cache_data(ttl=10, show_spinner="Lade aktualisierte Daten...")
+@st.cache_data(ttl=1800, show_spinner="Lade aktualisierte Daten...")
 def load_updated_data():
     """
     Lädt die CSV-Daten. Wird die lokale Datei als veraltet erkannt, so wird sie von Google Drive heruntergeladen,
@@ -176,5 +176,4 @@ def load_updated_data():
         except Exception as e:
             st.error(f"Fehler beim Lesen der CSV: {e}")
             return None
-
 

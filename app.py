@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 
-from src.google_drive_downlod import load_data,PATH_DATAFRAME_DATA_MERGED_CSV
+from src.google_drive_downlod import load_updated_data,PATH_DATAFRAME_DATA_MERGED_CSV
 
 
 
