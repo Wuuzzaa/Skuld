@@ -3,6 +3,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 from google.oauth2 import service_account
+from config import PATH_DATAFRAME_DATA_MERGED_CSV
 
 def upload_csv_to_drive(service_account_file, file_path, file_name, parent_folder_id, convert_to_google_format=False):
     """
@@ -39,8 +40,8 @@ def upload_csv_to_drive(service_account_file, file_path, file_name, parent_folde
 
         # Metadaten für die neue Datei
         file_metadata = {
-            "name": file_name,              # Dateiname in Google Drive
-            "parents": [parent_folder_id]   # Zielordner
+            "name": file_name,
+            "parents": [parent_folder_id]
         }
 
         # Optional: Konvertierung in Google Spreadsheet
@@ -67,3 +68,23 @@ def upload_csv_to_drive(service_account_file, file_path, file_name, parent_folde
     except HttpError as error:
         print(f"Ein Fehler ist aufgetreten: {error}")
         return None
+
+def upload_merged_data():
+    """
+    Führt den Upload der zusammengeführten CSV-Datei zu Google Drive durch.
+    Diese Funktion kapselt den Upload-Schritt und ruft intern upload_csv_to_drive auf.
+    """
+    print("Starte Upload zur Google Drive ...")
+    service_account_file = "service_account.json"  # Name der Service Account Datei
+    parent_folder_id = "1ahLHST1IEUDf03TT3hEdbVm1r7rcxJcu"  # Zielordner-ID in Google Drive
+    file_path = PATH_DATAFRAME_DATA_MERGED_CSV  # Lokaler Pfad zur zusammengeführten CSV
+    file_name = "merged_data.csv"  # Name, unter dem die Datei in Google Drive gespeichert werden soll
+
+    upload_csv_to_drive(
+        service_account_file=service_account_file,
+        file_path=file_path,
+        file_name=file_name,
+        parent_folder_id=parent_folder_id,
+        convert_to_google_format=False  # Falls keine Konvertierung in Google Spreadsheet erwünscht
+    )
+    print("Upload beendet.")
