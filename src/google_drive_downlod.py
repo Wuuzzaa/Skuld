@@ -93,10 +93,6 @@ def download_csv_from_drive(file_id):
         return None
 
 def load_data():
-    """
-    Lädt die CSV-Datei. Falls sie lokal nicht existiert, wird sie von Google Drive heruntergeladen.
-    Gibt einen DataFrame zurück oder None, wenn etwas schiefgeht.
-    """
     if not os.path.exists(PATH_DATAFRAME_DATA_MERGED_CSV):
         st.info("Lokale Datei nicht gefunden. Suche Datei-ID anhand des Dateinamens ...")
         file_id = find_file_id_by_name(FILE_NAME, PARENT_FOLDER_ID)
@@ -107,12 +103,14 @@ def load_data():
         file_stream = download_csv_from_drive(file_id)
         if file_stream is None:
             return None
+
+        # Sicherstellen, dass der Zielordner existiert:
+        os.makedirs(os.path.dirname(PATH_DATAFRAME_DATA_MERGED_CSV), exist_ok=True)
         
         # Speichere die heruntergeladene Datei lokal, damit sie beim nächsten Mal direkt geladen werden kann.
         with open(PATH_DATAFRAME_DATA_MERGED_CSV, "wb") as f:
             f.write(file_stream.read())
         
-        # Den Stream zurücksetzen, damit er erneut gelesen werden kann.
         file_stream.seek(0)
         try:
             df = pd.read_csv(file_stream)
