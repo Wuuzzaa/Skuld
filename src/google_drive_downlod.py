@@ -15,10 +15,11 @@ FILE_NAME = "merged_data.csv"                              # Dateiname, nach dem
 PARENT_FOLDER_ID = "1ahLHST1IEUDf03TT3hEdbVm1r7rcxJcu"     # ID des Ordners, in dem gesucht werden soll
 
 def get_credentials():
-
     service_account_info = st.secrets["service_account"]
-    # Da der Wert als JSON-String gespeichert ist, wandeln wir ihn in ein Python-Dictionary um.
-    service_account_dict = json.loads(service_account_info)
+    if isinstance(service_account_info, str):
+        service_account_dict = json.loads(service_account_info)
+    else:
+        service_account_dict = service_account_info
     return service_account.Credentials.from_service_account_info(
         service_account_dict,
         scopes=["https://www.googleapis.com/auth/drive"]
