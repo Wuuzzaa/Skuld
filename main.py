@@ -5,6 +5,7 @@ from src.price_and_technical_analysis_data_scrapper import scrape_and_save_price
 from src.merge_csv_dataframes_data import merge_data_dataframes
 from src.util import create_all_project_folders, get_option_expiry_dates
 from src.yfinance_analyst_price_targets import scrape_yahoo_finance_analyst_price_targets
+from src.google_drive_upload import upload_merged_data
 from config import *
 
 
@@ -58,6 +59,13 @@ def main(testmode=False):
     feature_construction()
     type_casting()
     print("Feature engineering - Done")
+
+    print("#" * 80)
+    print("Upload to Google Drive")
+    print("#" * 80)
+    # Aufruf der Upload-Funktion nach Abschluss aller Schritte
+    upload_merged_data()
+
 
     print("RUN DONE")
 
