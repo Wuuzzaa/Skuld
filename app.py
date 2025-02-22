@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
-from src.google_drive_download import load_data, PATH_DATAFRAME_DATA_MERGED_CSV 
+from src.google_drive_download import load_data
+from src.google_drive_download import PATH_DATAFRAME_DATA_MERGED_CSV 
 
 
 # Seitenlayout und Titel festlegen
