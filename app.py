@@ -10,7 +10,7 @@ st.set_page_config(layout="wide")
 st.title("SKULD - Option Viewer")
 
 # CSV-Datei laden (wird heruntergeladen, falls nicht lokal vorhanden)
-df = load_data()
+df = load_updated_data()
 if df is None:
     st.error("Datei konnte nicht geladen werden. Bitte später erneut versuchen.")
     st.stop()  # Bricht die Ausführung der App ab

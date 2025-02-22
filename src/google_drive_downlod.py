@@ -3,38 +3,37 @@ import io
 import json
 import streamlit as st
 import pandas as pd
-from datetime import datetime, time, timedelta
-from zoneinfo import ZoneInfo  # Python 3.9+
+from datetime import datetime, time
+from zoneinfo import ZoneInfo  # Für Python 3.9+; bei älteren Versionen: backports.zoneinfo
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 from googleapiclient.errors import HttpError
 
-
 # ----------------------
 # Konfiguration
 # ----------------------
 PATH_DATAFRAME_DATA_MERGED_CSV = "data/merged_data.csv"  # Lokaler Speicherort der CSV
-FILE_NAME = "merged_data.csv"                              # Name der Datei auf Google Drive
-PARENT_FOLDER_ID = "1ahLHST1IEUDf03TT3hEdbVm1r7rcxJcu"     # Google Drive Ordner-ID
+FILE_NAME = "merged_data.csv"                              # Dateiname, wie er auf Google Drive vorliegt
+PARENT_FOLDER_ID = "1ahLHST1IEUDf03TT3hEdbVm1r7rcxJcu"     # ID des Google Drive-Ordners
 LOCAL_TZ = "Europe/Berlin"                                 # Lokale Zeitzone (CET)
 UPDATE_TIMES = [time(10, 15), time(16, 15)]                # Update-Zeiten in lokaler Zeitzone
-
 
 # ----------------------
 # Google Drive Funktionen
 # ----------------------
 def get_credentials():
     """
-    Liest die Service Account-Credentials aus st.secrets (als Dictionary) und erzeugt ein Credentials-Objekt.
+    Liest die Service Account-Credentials aus den Streamlit-Secrets (im Abschnitt [service_account])
+    und erstellt ein Credentials-Objekt.
     """
+    # Wir gehen davon aus, dass in deiner .streamlit/secrets.toml der Abschnitt [service_account] vorhanden ist
     service_account_dict = st.secrets["service_account"]
     return service_account.Credentials.from_service_account_info(
         service_account_dict,
         scopes=["https://www.googleapis.com/auth/drive"]
     )
-
 
 def find_file_id_by_name(file_name, parent_folder_id=None):
     """
@@ -68,7 +67,6 @@ def find_file_id_by_name(file_name, parent_folder_id=None):
         st.error(f"Ein Fehler ist aufgetreten: {error}")
         return None
 
-
 def download_csv_from_drive(file_id):
     """
     Lädt die Datei (CSV oder als exportiertes Google Spreadsheet) von Google Drive herunter.
@@ -95,23 +93,21 @@ def download_csv_from_drive(file_id):
                 st.write(f"Download-Fortschritt: {int(status.progress() * 100)}%")
         file_stream.seek(0)
         return file_stream
-
     except HttpError as error:
         st.error(f"Ein Fehler ist aufgetreten: {error}")
         return None
-
 
 # ----------------------
 # Update-Logik (Zeitprüfung)
 # ----------------------
 def get_update_datetime(local_update_time: time, tz_name=LOCAL_TZ) -> datetime:
     """
-    Erzeugt ein timezone-bewusstes Datum für die gegebene Update-Zeit in der lokalen Zeitzone und konvertiert es in UTC.
+    Erzeugt ein timezone-bewusstes Datum für die gegebene Update-Zeit (z. B. 10:15 oder 16:15) in der lokalen Zeitzone
+    und wandelt es in UTC um.
     """
     today_local = datetime.now(ZoneInfo(tz_name)).date()
     local_dt = datetime.combine(today_local, local_update_time, tzinfo=ZoneInfo(tz_name))
     return local_dt.astimezone(ZoneInfo("UTC"))
-
 
 def file_last_modified(path) -> datetime:
     """
@@ -119,14 +115,13 @@ def file_last_modified(path) -> datetime:
     """
     return datetime.fromtimestamp(os.path.getmtime(path), tz=ZoneInfo("UTC"))
 
-
 def should_update_file(local_file, update_times, tz_name=LOCAL_TZ) -> bool:
     """
     Prüft, ob die lokale Datei aktualisiert werden soll.
-    Die Logik:
-      - Wenn die Datei nicht existiert: Update erforderlich.
-      - An Werktagen (Mo-Fr) wird geprüft, ob der aktuelle Zeitpunkt die definierte Update-Zeit erreicht hat,
-        und ob die Datei vor dieser Zeit zuletzt modifiziert wurde.
+    Logik:
+      - Falls die Datei nicht existiert, muss sie aktualisiert werden.
+      - An Werktagen (Mo-Fr) wird geprüft, ob für eine der definierten Update-Zeiten (in CET) bereits
+        erreicht wurde und ob die Datei vor dieser Zeit zuletzt modifiziert wurde.
     """
     if not os.path.exists(local_file):
         return True
@@ -140,16 +135,15 @@ def should_update_file(local_file, update_times, tz_name=LOCAL_TZ) -> bool:
                 return True
     return False
 
-
 # ----------------------
-# Laden der Daten
+# Laden der Daten (mit Caching)
 # ----------------------
-@st.experimental_memo(ttl=3600)
+@st.cache_data(ttl=10, show_spinner="Lade aktualisierte Daten...")
 def load_updated_data():
     """
-    Lädt die CSV-Daten. Wird die Datei aktualisiert (Download erforderlich), so wird sie von Google Drive geholt,
+    Lädt die CSV-Daten. Wird die lokale Datei als veraltet erkannt, so wird sie von Google Drive heruntergeladen,
     lokal gespeichert und als DataFrame eingelesen. Andernfalls wird die lokale Datei verwendet.
-    Der Cache wird alle 3600 Sekunden (1 Stunde) invalidiert.
+    Der Cache ist auf 3600 Sekunden (1 Stunde) gesetzt.
     """
     if should_update_file(PATH_DATAFRAME_DATA_MERGED_CSV, UPDATE_TIMES):
         st.info("Neue Datei verfügbar – starte Download von Google Drive ...")
@@ -184,11 +178,3 @@ def load_updated_data():
             return None
 
 
-# ----------------------
-# Hauptteil der Streamlit-App
-# ----------------------
-df = load_updated_data()
-if df is not None:
-    st.dataframe(df)
-else:
-    st.error("Daten konnten nicht geladen werden.")
