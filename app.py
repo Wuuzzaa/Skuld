@@ -1,64 +1,45 @@
 import streamlit as st
 import pandas as pd
-from config import *
+from src.google_drive_download import load_data, PATH_DATAFRAME_DATA_MERGED_CSV 
 
 
-# Layout
+# Seitenlayout und Titel festlegen
 st.set_page_config(layout="wide")
-
-# Titel
 st.title("SKULD - Option Viewer")
 
-# load dataframe
-df = pd.read_csv(PATH_DATAFRAME_DATA_MERGED_CSV)
+# CSV-Datei laden (wird heruntergeladen, falls nicht lokal vorhanden)
+df = load_data()
+if df is None:
+    st.error("Datei konnte nicht geladen werden. Bitte später erneut versuchen.")
+    st.stop()  # Bricht die Ausführung der App ab
+
 st.success(f"Datei erfolgreich geladen: {PATH_DATAFRAME_DATA_MERGED_CSV}")
 
-# add tabs
-tab1, tab2, tab3 = st.tabs(
-    [
-        "Gesamter DataFrame",
-        "Gefilterte Ansicht",
-        "Analyst Prices"
-    ]
-)
+# Beispiel: Darstellung des gesamten DataFrames in einem Tab
+tab1, tab2, tab3 = st.tabs(["Gesamter DataFrame", "Gefilterte Ansicht", "Analyst Prices"])
 
 with tab1:
     st.subheader("Gesamter DataFrame")
-    #st.write(df)
     st.dataframe(df, use_container_width=True)
 
 with tab2:
     st.subheader("Gefilterte Ansicht")
-
-    # Filteroptionen bereitstellen
+    # Filteroptionen – Beispiel für numerische Filter
     st.sidebar.header("Filter")
-
-    # Filter für numerische Spalten
-    num_cols = df.select_dtypes(include=['float64', 'int64']).columns
     filtered_df = df.copy()
+    num_cols = df.select_dtypes(include=['float64', 'int64']).columns
     for col in num_cols:
         min_val, max_val = st.sidebar.slider(
             f"Filter für {col}",
             float(df[col].min()),
             float(df[col].max()),
-            (float(df[col].min()), float(df[col].max())),
+            (float(df[col].min()), float(df[col].max()))
         )
         filtered_df = filtered_df[(filtered_df[col] >= min_val) & (filtered_df[col] <= max_val)]
-
-    # Filter für kategorische Spalten
-    cat_cols = df.select_dtypes(include=['object']).columns
-    for col in cat_cols:
-        selected = st.sidebar.multiselect(f"Werte für {col} auswählen", df[col].unique())
-        if selected:
-            filtered_df = filtered_df[filtered_df[col].isin(selected)]
-
-    # Gefilterter DataFrame anzeigen
-    #st.write(filtered_df)
     st.dataframe(filtered_df, use_container_width=True)
 
 with tab3:
     st.subheader("Analyst Prices")
-
     df_tab3 = df[
         [
             "symbol",
@@ -70,8 +51,7 @@ with tab3:
             "target-close%"
         ]
     ].drop_duplicates().reset_index(drop=True)
-
-    # rename columns for the app-view
+    # Spalten umbenennen für bessere Darstellung
     df_tab3 = df_tab3.rename(
         columns={
             "symbol": "Symbol",
@@ -83,12 +63,4 @@ with tab3:
             "target-close%": "Difference (%) analyst target and price"
         }
     )
-
-    #st.write(df_tab3)
     st.dataframe(df_tab3, use_container_width=True)
-
-
-
-
-
-
