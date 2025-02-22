@@ -16,7 +16,7 @@ PARENT_FOLDER_ID = "1ahLHST1IEUDf03TT3hEdbVm1r7rcxJcu"     # ID des Ordners, in 
 
 def get_credentials():
 
-    service_account_info = st.secrets["general"]["service_account"]
+    service_account_info = st.secrets["service_account"]
     # Da der Wert als JSON-String gespeichert ist, wandeln wir ihn in ein Python-Dictionary um.
     service_account_dict = json.loads(service_account_info)
     return service_account.Credentials.from_service_account_info(
