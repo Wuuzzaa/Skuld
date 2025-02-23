@@ -40,7 +40,6 @@ def get_option_expiry_dates():
         if future_date.weekday() == 4:  # Friday
             expiry_dates.add(future_date)
 
-    #expiry_dates_list = [int(d.strftime('%Y%m%d')) for d in sorted(expiry_dates)]
     expiry_dates_list = sorted(int(d.strftime('%Y%m%d')) for d in expiry_dates)
     print('expiry_dates:')
     print(expiry_dates_list)

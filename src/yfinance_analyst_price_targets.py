@@ -20,5 +20,5 @@ def scrape_yahoo_finance_analyst_price_targets(symbols):
         results.append({"symbol": symbol, "analyst_mean_target": mean_target})
 
     df = pd.DataFrame(results)
-    df.to_csv(PATH_DATAFRAME_DATA_ANALYST_PRICE_TARGET_CSV, index=False)
+    df.to_feather(PATH_DATAFRAME_DATA_ANALYST_PRICE_TARGET_FEATHER)
 

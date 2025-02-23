@@ -4,7 +4,7 @@ from config import *
 
 def feature_construction():
     # load data
-    df = pd.read_csv(PATH_DATAFRAME_DATA_MERGED_CSV)
+    df = pd.read_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
 
     # add new features
     print("add analyst target price - close price in USD")
@@ -14,15 +14,15 @@ def feature_construction():
     df["target-close%"] = round(df["target-close$"] / df["close"] * 100, 2)
 
     # store data back again
-    df.to_csv(PATH_DATAFRAME_DATA_MERGED_CSV, index=False)
+    df.to_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
 
 
 def type_casting():
     # load data
-    df = pd.read_csv(PATH_DATAFRAME_DATA_MERGED_CSV)
+    df = pd.read_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
 
     # cast expiration_date column from int to datetime
     df["expiration_date"] = pd.to_datetime(df["expiration_date"].astype(str), format="%Y%m%d")
 
     # store data back again
-    df.to_csv(PATH_DATAFRAME_DATA_MERGED_CSV, index=False)
+    df.to_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
