@@ -36,7 +36,7 @@ def scrape_and_save_price_and_technical_indicators(path_outputfile):
     # make a dataframe from the results
     df = pd.DataFrame(results)
 
-    df.to_csv(path_outputfile, index=False)
+    df.to_feather(path_outputfile)
 
 
 

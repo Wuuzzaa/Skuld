@@ -11,8 +11,8 @@ st.set_page_config(layout="wide")
 st.title("SKULD - Option Viewer")
 
 # load dataframe
-df = pd.read_csv(PATH_DATAFRAME_DATA_MERGED_CSV)
-st.success(f"Datei erfolgreich geladen: {PATH_DATAFRAME_DATA_MERGED_CSV}")
+df = pd.read_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
+st.success(f"Datei erfolgreich geladen: {PATH_DATAFRAME_DATA_MERGED_FEATHER}")
 
 # add tabs
 tab1, tab2, tab3 = st.tabs(
