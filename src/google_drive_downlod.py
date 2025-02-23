@@ -5,6 +5,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, time
 from zoneinfo import ZoneInfo  # Für Python 3.9+; bei älteren Versionen: backports.zoneinfo
+from src.custom_logging import log_info, log_error, log_write
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -76,9 +77,22 @@ def download_csv_from_drive(file_id):
         creds = get_credentials()
         service = build("drive", "v3", credentials=creds)
 
-        file_info = service.files().get(fileId=file_id, fields="id, name, mimeType").execute()
+        # modifiedTime zusätzlich anfordern
+        file_info = service.files().get(
+            fileId=file_id,
+            fields="id, name, mimeType, modifiedTime"
+        ).execute()
+
         mime_type = file_info.get("mimeType", "")
 
+        # modifiedTime aus den Metadaten in ein lokales Datum umwandeln und anzeigen
+        modified_time_str = file_info.get("modifiedTime")
+        if modified_time_str:
+            modified_time_utc = datetime.fromisoformat(modified_time_str.replace("Z", "+00:00"))
+            modified_time_local = modified_time_utc.astimezone(ZoneInfo(LOCAL_TZ))
+            log_info(f"Datei zuletzt geändert (Google Drive): {modified_time_local.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+
+        # CSV herunterladen
         if mime_type == "application/vnd.google-apps.spreadsheet":
             request = service.files().export_media(fileId=file_id, mimeType="text/csv")
         else:
@@ -90,12 +104,16 @@ def download_csv_from_drive(file_id):
         while not done:
             status, done = downloader.next_chunk()
             if status:
-                st.write(f"Download-Fortschritt: {int(status.progress() * 100)}%")
+                log_write(f"Download-Fortschritt: {int(status.progress() * 100)}%")
+
         file_stream.seek(0)
         return file_stream
+
     except HttpError as error:
-        st.error(f"Ein Fehler ist aufgetreten: {error}")
+        log_error(f"Ein Fehler ist aufgetreten: {error}")
         return None
+
+
 
 # ----------------------
 # Update-Logik (Zeitprüfung)
@@ -128,28 +146,25 @@ def should_update_file(local_file, update_times, tz_name=LOCAL_TZ) -> bool:
 
     last_mod = file_last_modified(local_file)
     now = datetime.now(ZoneInfo("UTC"))
-    if now.weekday() < 5:  # Montag bis Freitag
+    if now.weekday() < 6:  # Montag bis Freitag
         for ut in update_times:
             update_dt_utc = get_update_datetime(ut, tz_name)
             if now >= update_dt_utc and last_mod < update_dt_utc:
                 return True
     return False
 
-# ----------------------
-# Laden der Daten (mit Caching)
-# ----------------------
 @st.cache_data(ttl=1800, show_spinner="Lade aktualisierte Daten...")
 def load_updated_data():
     """
     Lädt die CSV-Daten. Wird die lokale Datei als veraltet erkannt, so wird sie von Google Drive heruntergeladen,
     lokal gespeichert und als DataFrame eingelesen. Andernfalls wird die lokale Datei verwendet.
-    Der Cache ist auf 3600 Sekunden (1 Stunde) gesetzt.
+    Der Cache ist auf 1800 Sekunden (30 min) gesetzt.
     """
     if should_update_file(PATH_DATAFRAME_DATA_MERGED_CSV, UPDATE_TIMES):
-        st.info("Neue Datei verfügbar – starte Download von Google Drive ...")
+        log_info("Neue Datei verfügbar – starte Download von Google Drive ...")
         file_id = find_file_id_by_name(FILE_NAME, PARENT_FOLDER_ID)
         if file_id is None:
-            st.error("Datei mit dem angegebenen Namen wurde auf Google Drive nicht gefunden.")
+            log_error("Datei mit dem angegebenen Namen wurde auf Google Drive nicht gefunden.")
             return None
 
         file_stream = download_csv_from_drive(file_id)
@@ -158,22 +173,31 @@ def load_updated_data():
 
         # Sicherstellen, dass der Zielordner existiert
         os.makedirs(os.path.dirname(PATH_DATAFRAME_DATA_MERGED_CSV), exist_ok=True)
+
+        # Falls die lokale Datei bereits existiert, löschen wir sie zuerst
+        if os.path.exists(PATH_DATAFRAME_DATA_MERGED_CSV):
+            os.remove(PATH_DATAFRAME_DATA_MERGED_CSV)
+
         with open(PATH_DATAFRAME_DATA_MERGED_CSV, "wb") as f:
             f.write(file_stream.read())
 
         file_stream.seek(0)
         try:
             df = pd.read_csv(file_stream)
+            log_info("Neue CSV-Datei erfolgreich heruntergeladen und eingelesen.")
             return df
         except Exception as e:
-            st.error(f"Fehler beim Lesen der CSV: {e}")
+            log_error(f"Fehler beim Lesen der CSV: {e}")
             return None
     else:
-        st.info("Lade lokale Datei ...")
+        log_info("Lade lokale Datei ...")
         try:
             df = pd.read_csv(PATH_DATAFRAME_DATA_MERGED_CSV)
+            last_mod = file_last_modified(PATH_DATAFRAME_DATA_MERGED_CSV)
+            last_mod_local = last_mod.astimezone(ZoneInfo(LOCAL_TZ))
+            log_info(f"Lokale Datei zuletzt geändert am: {last_mod_local.strftime('%Y-%m-%d %H:%M:%S %Z')}")
             return df
         except Exception as e:
-            st.error(f"Fehler beim Lesen der CSV: {e}")
+            log_error(f"Fehler beim Lesen der CSV: {e}")
             return None
 

@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
 
-from src.google_drive_downlod import load_updated_data,PATH_DATAFRAME_DATA_MERGED_CSV
-
+from src.google_drive_downlod import load_updated_data, PATH_DATAFRAME_DATA_MERGED_CSV
+from src.custom_logging import show_log_messages,log_info  # Importiere die Log-Anzeige-Funktion
 
 
 # Seitenlayout und Titel festlegen
@@ -15,10 +15,11 @@ if df is None:
     st.error("Datei konnte nicht geladen werden. Bitte später erneut versuchen.")
     st.stop()  # Bricht die Ausführung der App ab
 
-st.success(f"Datei erfolgreich geladen: {PATH_DATAFRAME_DATA_MERGED_CSV}")
+# Erfolgsmeldung im Hauptbereich (optional) oder auch im Log-Tab ausgeben
+log_info(f"Datei erfolgreich geladen: {PATH_DATAFRAME_DATA_MERGED_CSV}")
 
-# Beispiel: Darstellung des gesamten DataFrames in einem Tab
-tab1, tab2, tab3 = st.tabs(["Gesamter DataFrame", "Gefilterte Ansicht", "Analyst Prices"])
+# Vier Tabs: Gesamter DataFrame, Gefilterte Ansicht, Analyst Prices, Infos
+tab1, tab2, tab3, tab4 = st.tabs(["Gesamter DataFrame", "Gefilterte Ansicht", "Analyst Prices", "Infos"])
 
 with tab1:
     st.subheader("Gesamter DataFrame")
@@ -66,3 +67,7 @@ with tab3:
         }
     )
     st.dataframe(df_tab3, use_container_width=True)
+
+with tab4:
+    st.subheader("Technischer-Log")
+    show_log_messages()
