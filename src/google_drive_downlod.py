@@ -58,15 +58,16 @@ def find_file_id_by_name(file_name, parent_folder_id=None):
 
         files = results.get("files", [])
         if not files:
-            st.error("Keine Datei mit diesem Namen gefunden.")
+            log_error("Keine Datei mit diesem Namen gefunden.")
             return None
         else:
             file = files[0]
-            st.info(f"Gefundene Datei: {file.get('name')} (ID: {file.get('id')})")
+            log_info(f"Gefundene Datei: {file.get('name')} (ID: {file.get('id')})")
             return file.get("id")
     except HttpError as error:
-        st.error(f"Ein Fehler ist aufgetreten: {error}")
+        log_error(f"Ein Fehler ist aufgetreten: {error}")
         return None
+
 
 def download_csv_from_drive(file_id):
     """
