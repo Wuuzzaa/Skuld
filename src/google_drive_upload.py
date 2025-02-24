@@ -7,44 +7,44 @@ from config import PATH_DATAFRAME_DATA_MERGED_CSV
 
 def upload_csv_to_drive(service_account_file, file_path, file_name, parent_folder_id, convert_to_google_format=False):
     """
-    Lädt eine CSV-Datei per Service Account zu Google Drive hoch.
-    Prüft, ob im Zielordner bereits eine Datei mit dem gleichen Namen existiert. Falls ja, wird diese gelöscht.
-    Optional kann die Datei in ein Google-Format konvertiert werden (z.B. Google Sheets).
+    Uploads a CSV file to Google Drive using a Service Account.
+    Checks if a file with the same name already exists in the target folder. If so, it deletes that file.
+    Optionally, the file can be converted to a Google format (e.g., Google Sheets).
 
-    :param service_account_file: Pfad zur Service-Account-JSON-Datei
-    :param file_path: Lokaler Pfad zur hochzuladenden CSV
-    :param file_name: Name der Datei auf Google Drive
-    :param parent_folder_id: ID des Zielordners auf Google Drive
-    :param convert_to_google_format: True, wenn als Google Spreadsheet konvertiert werden soll
-    :return: ID der hochgeladenen Datei oder None bei Fehler
+    :param service_account_file: Path to the Service Account JSON file
+    :param file_path: Local path to the CSV file to be uploaded
+    :param file_name: Name of the file on Google Drive
+    :param parent_folder_id: ID of the target folder on Google Drive
+    :param convert_to_google_format: True if the file should be converted to a Google Spreadsheet
+    :return: ID of the uploaded file or None in case of an error
     """
     try:
-        # Service Account Credentials laden
+        # Load Service Account credentials
         creds = service_account.Credentials.from_service_account_file(
             service_account_file,
             scopes=["https://www.googleapis.com/auth/drive"]
         )
 
-        # Drive API-Client erstellen
+        # Create the Drive API client
         service = build("drive", "v3", credentials=creds)
 
-        # Prüfen, ob im Zielordner bereits eine Datei mit file_name existiert
+        # Check if a file with file_name already exists in the target folder
         query = f"name = '{file_name}' and '{parent_folder_id}' in parents and trashed = false"
         results = service.files().list(q=query, fields="files(id, name)").execute()
         files = results.get('files', [])
         if files:
             for file in files:
-                print(f"Datei '{file['name']}' mit ID {file['id']} existiert bereits. Lösche diese...")
+                print(f"File '{file['name']}' with ID {file['id']} already exists. Deleting it...")
                 service.files().delete(fileId=file['id']).execute()
-                print("Datei gelöscht.")
+                print("File deleted.")
 
-        # Metadaten für die neue Datei
+        # Metadata for the new file
         file_metadata = {
             "name": file_name,
             "parents": [parent_folder_id]
         }
 
-        # Optional: Konvertierung in Google Spreadsheet
+        # Optionally: Convert to Google Spreadsheet format
         if convert_to_google_format:
             file_metadata["mimeType"] = "application/vnd.google-apps.spreadsheet"
 
@@ -59,32 +59,32 @@ def upload_csv_to_drive(service_account_file, file_path, file_name, parent_folde
         while response is None:
             status, response = request.next_chunk()
             if status:
-                print(f"Upload-Fortschritt: {int(status.progress() * 100)}%")
+                print(f"Upload progress: {int(status.progress() * 100)}%")
 
         file_id = response.get("id")
-        print(f"Datei mit der ID: '{file_id}' wurde hochgeladen.")
+        print(f"File with ID: '{file_id}' has been uploaded.")
         return file_id
 
     except HttpError as error:
-        print(f"Ein Fehler ist aufgetreten: {error}")
+        print(f"An error occurred: {error}")
         return None
 
 def upload_merged_data():
     """
-    Führt den Upload der zusammengeführten CSV-Datei zu Google Drive durch.
-    Diese Funktion kapselt den Upload-Schritt und ruft intern upload_csv_to_drive auf.
+    Executes the upload of the merged CSV file to Google Drive.
+    This function encapsulates the upload step and internally calls upload_csv_to_drive.
     """
-    print("Starte Upload zur Google Drive ...")
-    service_account_file = "service_account.json"  # Name der Service Account Datei
-    parent_folder_id = "1ahLHST1IEUDf03TT3hEdbVm1r7rcxJcu"  # Zielordner-ID in Google Drive
-    file_path = PATH_DATAFRAME_DATA_MERGED_CSV  # Lokaler Pfad zur zusammengeführten CSV
-    file_name = "merged_data.csv"  # Name, unter dem die Datei in Google Drive gespeichert werden soll
+    print("Starting upload to Google Drive ...")
+    service_account_file = "service_account.json"  # Name of the Service Account file
+    parent_folder_id = "1ahLHST1IEUDf03TT3hEdbVm1r7rcxJcu"  # Target folder ID in Google Drive
+    file_path = PATH_DATAFRAME_DATA_MERGED_CSV  # Local path to the merged CSV
+    file_name = "merged_data.csv"  # Name under which the file will be saved on Google Drive
 
     upload_csv_to_drive(
         service_account_file=service_account_file,
         file_path=file_path,
         file_name=file_name,
         parent_folder_id=parent_folder_id,
-        convert_to_google_format=False  # Falls keine Konvertierung in Google Spreadsheet erwünscht
+        convert_to_google_format=False  # Set to True if conversion to Google Spreadsheet is desired
     )
-    print("Upload beendet.")
+    print("Upload completed.")
