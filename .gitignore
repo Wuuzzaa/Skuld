@@ -172,4 +172,6 @@ cython_debug/
 
 # Manual ignores Wuuzzaa start
 /data/
-/testbert.py
+/testbert.py 
+
+.streamlit/secrets.toml
