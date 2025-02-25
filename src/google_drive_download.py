@@ -128,9 +128,8 @@ def should_update_file(local_file, update_times, tz_name=LOCAL_TZ) -> bool:
 
 @st.cache_data(ttl=1800, show_spinner="Loading updated data...")
 def load_updated_data():
-    """Loads the data in Feather format. If the local file is outdated, downloads the CSV file from Google Drive,
-    reads it into a DataFrame, saves it as a Feather file, and returns the DataFrame. Otherwise, uses the local file.
-    The cache is set to 1800 seconds (30 minutes).
+    """Loads data in Feather format. If the local file is outdated, downloads the CSV file from Google Drive,
+    reads it into a DataFrame, converts it to Feather format, and saves it. Otherwise, loads the local file.
     """
     if should_update_file(PATH_DATAFRAME_DATA_MERGED_FEATHER, UPDATE_TIMES):
         log_info("New file available – starting download from Google Drive ...")
@@ -142,17 +141,21 @@ def load_updated_data():
         if file_stream is None:
             return None
         os.makedirs(os.path.dirname(PATH_DATAFRAME_DATA_MERGED_FEATHER), exist_ok=True)
-        if os.path.exists(PATH_DATAFRAME_DATA_MERGED_FEATHER):
-            os.remove(PATH_DATAFRAME_DATA_MERGED_FEATHER)
-        with open(PATH_DATAFRAME_DATA_MERGED_FEATHER, "wb") as f:
-            f.write(file_stream.read())
+        # Read CSV from the downloaded stream
         try:
-            df = pd.read_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
-            log_info("New Feather file successfully downloaded and read.")
-            return df
+            df = pd.read_csv(file_stream)
+            log_info("CSV file successfully read.")
         except Exception as e:
-            log_error(f"Error reading the Feather file: {e}")
+            log_error(f"Error reading the CSV file: {e}")
             return None
+        # Save the DataFrame as a Feather file
+        try:
+            df.to_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
+            log_info("CSV converted to Feather format and saved.")
+        except Exception as e:
+            log_error(f"Error saving the Feather file: {e}")
+            return None
+        return df
     else:
         log_info("Loading local file ...")
         try:
