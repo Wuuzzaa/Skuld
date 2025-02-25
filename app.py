@@ -1,65 +1,63 @@
 import streamlit as st
 import pandas as pd
 from config import *
+from custom_logging import show_log_messages  # Adjust the module name as needed
 
 # streamlit run C:\Users\jonas\PycharmProjects\Skuld\app.py
 
-# Layout
+# Set the layout of the page to wide
 st.set_page_config(layout="wide")
 
-# Titel
+# Title of the app
 st.title("SKULD - Option Viewer")
 
-# load dataframe
+# Load the DataFrame from a Feather file
 df = pd.read_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
-st.success(f"Datei erfolgreich geladen: {PATH_DATAFRAME_DATA_MERGED_FEATHER}")
+st.success(f"File loaded successfully: {PATH_DATAFRAME_DATA_MERGED_FEATHER}")
 
-# add tabs
-tab1, tab2, tab3 = st.tabs(
+# Create tabs for the application
+tab1, tab2, tab3, tab4 = st.tabs(
     [
-        "Gesamter DataFrame",
-        "Gefilterte Ansicht",
-        "Analyst Prices"
+        "Complete DataFrame",
+        "Filtered View",
+        "Analyst Prices",
+        "Logs"
     ]
 )
 
 with tab1:
-    st.subheader("Gesamter DataFrame")
-    #st.write(df)
+    st.subheader("Complete DataFrame")
     st.dataframe(df, use_container_width=True)
 
 with tab2:
-    st.subheader("Gefilterte Ansicht")
+    st.subheader("Filtered View")
+    st.sidebar.header("Filter Options")
 
-    # Filteroptionen bereitstellen
-    st.sidebar.header("Filter")
-
-    # Filter für numerische Spalten
+    """ Filter for numeric columns """
     num_cols = df.select_dtypes(include=['float64', 'int64']).columns
     filtered_df = df.copy()
     for col in num_cols:
         min_val, max_val = st.sidebar.slider(
-            f"Filter für {col}",
+            f"Filter for {col}",
             float(df[col].min()),
             float(df[col].max()),
             (float(df[col].min()), float(df[col].max())),
         )
         filtered_df = filtered_df[(filtered_df[col] >= min_val) & (filtered_df[col] <= max_val)]
 
-    # Filter für kategorische Spalten
+    """ Filter for categorical columns """
     cat_cols = df.select_dtypes(include=['object']).columns
     for col in cat_cols:
-        selected = st.sidebar.multiselect(f"Werte für {col} auswählen", df[col].unique())
+        selected = st.sidebar.multiselect(f"Select values for {col}", df[col].unique())
         if selected:
             filtered_df = filtered_df[filtered_df[col].isin(selected)]
 
-    # Gefilterter DataFrame anzeigen
-    #st.write(filtered_df)
     st.dataframe(filtered_df, use_container_width=True)
 
 with tab3:
     st.subheader("Analyst Prices")
 
+    """ Create a DataFrame for Analyst Prices tab """
     df_tab3 = df[
         [
             "symbol",
@@ -72,24 +70,22 @@ with tab3:
         ]
     ].drop_duplicates().reset_index(drop=True)
 
-    # rename columns for the app-view
+    """ Rename columns for a better display """
     df_tab3 = df_tab3.rename(
         columns={
             "symbol": "Symbol",
             "close": "Price",
             "analyst_mean_target": "Mean Analyst Target",
             "recommendation": "Indicators Recommendation",
-            "Recommend.All": "Recommendation strength (-1 to 1)",
+            "Recommend.All": "Recommendation Strength (-1 to 1)",
             "target-close$": "Difference ($) analyst target and price",
             "target-close%": "Difference (%) analyst target and price"
         }
     )
 
-    #st.write(df_tab3)
     st.dataframe(df_tab3, use_container_width=True)
 
-
-
-
-
-
+with tab4:
+    st.subheader("Logs")
+    """ Display all collected log messages """
+    show_log_messages()
