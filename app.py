@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from config import *
-from custom_logging import show_log_messages  # Adjust the module name as needed
+from src.custom_logging import show_log_messages  # Adjust the module name as needed
 
 # streamlit run C:\Users\jonas\PycharmProjects\Skuld\app.py
 
@@ -13,7 +13,7 @@ st.title("SKULD - Option Viewer")
 
 # Load the DataFrame from a Feather file
 df = pd.read_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
-st.success(f"File loaded successfully: {PATH_DATAFRAME_DATA_MERGED_FEATHER}")
+log_info(f"File loaded successfully: {PATH_DATAFRAME_DATA_MERGED_FEATHER}")
 
 # Create tabs for the application
 tab1, tab2, tab3, tab4 = st.tabs(
