@@ -6,9 +6,10 @@ from src.merge_feather_dataframes_data import merge_data_dataframes
 from src.util import create_all_project_folders, get_option_expiry_dates
 from src.yfinance_analyst_price_targets import scrape_yahoo_finance_analyst_price_targets
 from config import *
+from src.google_drive_upload import upload_merged_data
 
 
-def main(testmode=False):
+def main(testmode=True):
     create_all_project_folders()
 
     print("#"*80)
@@ -57,7 +58,12 @@ def main(testmode=False):
     print("#" * 80)
     feature_construction()
     type_casting()
-    print("Feature engineering - Done")
+    print("Feature engineering - Done") 
+
+    # Upload the merged Feather file to Google Drive after feature construction is completed
+    upload_merged_data()
+
+
 
     print("RUN DONE")
 

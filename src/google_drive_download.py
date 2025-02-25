@@ -11,15 +11,16 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 from googleapiclient.errors import HttpError
+from config import PATH_DATAFRAME_DATA_MERGED_FEATHER , FILENAME_GOOGLE_DRIVE, PATH_ON_GOOGLE_DRIVE, PATH_FOR_SERVICE_ACCOUNT_FILE  
 
 """Configuration:
 - Local storage location for the Feather file.
 - The file on Google Drive is initially a CSV file.
 - Google Drive folder ID, local timezone, and update times (in local timezone).
 """
-PATH_DATAFRAME_DATA_MERGED_FEATHER = "data/merged_data.feather"
-FILE_NAME = "merged_data.feather"
-PARENT_FOLDER_ID = "1ahLHST1IEUDf03TT3hEdbVm1r7rcxJcu"
+PATH_DATAFRAME_DATA_MERGED_FEATHER = PATH_DATAFRAME_DATA_MERGED_FEATHER
+FILE_NAME = FILENAME_GOOGLE_DRIVE
+PARENT_FOLDER_ID = PATH_ON_GOOGLE_DRIVE
 LOCAL_TZ = "Europe/Berlin"
 UPDATE_TIMES = [time(10, 15), time(16, 15)]
 
