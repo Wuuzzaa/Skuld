@@ -2,7 +2,7 @@ name: Run Pipeline
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "dividend_feather" ]
   workflow_dispatch:
   schedule:
     - cron: "0 9 * * 1-5"   # Every weekday (Mon-Fri) at 10:00 CET (09:00 UTC)
