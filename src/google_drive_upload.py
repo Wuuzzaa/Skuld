@@ -5,17 +5,18 @@ from googleapiclient.http import MediaFileUpload
 from google.oauth2 import service_account
 from config import PATH_DATAFRAME_DATA_MERGED_CSV
 
-def upload_csv_to_drive(service_account_file, file_path, file_name, parent_folder_id, convert_to_google_format=False):
+def upload_feather_to_drive(service_account_file, file_path, file_name, parent_folder_id, convert_to_google_format=False):
     """
-    Uploads a CSV file to Google Drive using a Service Account.
+    Uploads a Feather file to Google Drive using a Service Account.
     Checks if a file with the same name already exists in the target folder. If so, it deletes that file.
-    Optionally, the file can be converted to a Google format (e.g., Google Sheets).
-
+    Optionally, the file can be converted to a Google format (e.g., Google Sheets), though for a Feather file
+    conversion is typically not applicable.
+    
     :param service_account_file: Path to the Service Account JSON file
-    :param file_path: Local path to the CSV file to be uploaded
+    :param file_path: Local path to the Feather file to be uploaded
     :param file_name: Name of the file on Google Drive
     :param parent_folder_id: ID of the target folder on Google Drive
-    :param convert_to_google_format: True if the file should be converted to a Google Spreadsheet
+    :param convert_to_google_format: True if the file should be converted to a Google Spreadsheet (not usually used for Feather files)
     :return: ID of the uploaded file or None in case of an error
     """
     try:
@@ -44,11 +45,12 @@ def upload_csv_to_drive(service_account_file, file_path, file_name, parent_folde
             "parents": [parent_folder_id]
         }
 
-        # Optionally: Convert to Google Spreadsheet format
+        # Optionally: Convert to Google Spreadsheet format (not common for Feather files)
         if convert_to_google_format:
             file_metadata["mimeType"] = "application/vnd.google-apps.spreadsheet"
 
-        media = MediaFileUpload(file_path, mimetype="text/csv", chunksize=256*1024, resumable=True)
+        # Upload the file; using application/octet-stream as the mimetype for a Feather file
+        media = MediaFileUpload(file_path, mimetype="application/octet-stream", chunksize=256*1024, resumable=True)
         request = service.files().create(
             body=file_metadata,
             media_body=media,
@@ -71,20 +73,20 @@ def upload_csv_to_drive(service_account_file, file_path, file_name, parent_folde
 
 def upload_merged_data():
     """
-    Executes the upload of the merged CSV file to Google Drive.
-    This function encapsulates the upload step and internally calls upload_csv_to_drive.
+    Executes the upload of the merged Feather file to Google Drive.
+    This function encapsulates the upload step and internally calls upload_feather_to_drive.
     """
     print("Starting upload to Google Drive ...")
-    service_account_file = "service_account.json"  # Name of the Service Account file
+    service_account_file = "service_account.json"  # Path to the Service Account JSON file
     parent_folder_id = "1ahLHST1IEUDf03TT3hEdbVm1r7rcxJcu"  # Target folder ID in Google Drive
-    file_path = PATH_DATAFRAME_DATA_MERGED_CSV  # Local path to the merged CSV
-    file_name = "merged_data.csv"  # Name under which the file will be saved on Google Drive
+    file_path = PATH_DATAFRAME_DATA_MERGED_FEATHER  # Local path to the merged Feather file
+    file_name = "merged_data.feather"  # Name under which the file will be saved on Google Drive
 
-    upload_csv_to_drive(
+    upload_feather_to_drive(
         service_account_file=service_account_file,
         file_path=file_path,
         file_name=file_name,
         parent_folder_id=parent_folder_id,
-        convert_to_google_format=False  # Set to True if conversion to Google Spreadsheet is desired
+        convert_to_google_format=False  # Set to True if conversion to Google Spreadsheet is desired (not typical for Feather files)
     )
     print("Upload completed.")
