@@ -9,7 +9,7 @@ from config import *
 from src.google_drive_upload import upload_merged_data
 
 
-def main(testmode=True):
+def main(testmode=False):
     create_all_project_folders()
 
     print("#"*80)

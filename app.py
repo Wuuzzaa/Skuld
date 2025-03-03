@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from config import *
-from src.custom_logging import show_log_messages  # Adjust the module name as needed
+from src.custom_logging import show_log_messages, log_info # Adjust the module name as needed
 
 # streamlit run C:\Users\jonas\PycharmProjects\Skuld\app.py
 
