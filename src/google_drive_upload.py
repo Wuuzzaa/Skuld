@@ -4,7 +4,7 @@ from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 from google.oauth2 import service_account
 from config import PATH_DATAFRAME_DATA_MERGED_FEATHER , FILENAME_GOOGLE_DRIVE, PATH_ON_GOOGLE_DRIVE, PATH_FOR_SERVICE_ACCOUNT_FILE  
-from custom_logging import log_info, log_error, log_write, show_log_messages
+from src.custom_logging import log_info, log_error, log_write, show_log_messages
 
 
 def upload_feather_to_drive(service_account_file, file_path, file_name, parent_folder_id, convert_to_google_format=False):
@@ -81,10 +81,10 @@ def upload_merged_data():
     This function encapsulates the upload step and internally calls upload_feather_to_drive.
     """
     # Beispiel-Pfade/Variablen: Ersetze sie durch deine Konstanten oder Variablen
-    service_account_file = "PATH_FOR_SERVICE_ACCOUNT_FILE"  # Path to the Service Account JSON file
-    parent_folder_id = "PATH_ON_GOOGLE_DRIVE"  # Target folder ID in Google Drive
-    file_path = "PATH_DATAFRAME_DATA_MERGED_FEATHER"  # Local path to the merged Feather file
-    file_name = "FILENAME_GOOGLE_DRIVE"  # Name under which the file will be saved on Google Drive
+    service_account_file = PATH_FOR_SERVICE_ACCOUNT_FILE  # Path to the Service Account JSON file
+    parent_folder_id = PATH_ON_GOOGLE_DRIVE  # Target folder ID in Google Drive
+    file_path = PATH_DATAFRAME_DATA_MERGED_FEATHER  # Local path to the merged Feather file
+    file_name = FILENAME_GOOGLE_DRIVE  # Name under which the file will be saved on Google Drive
 
     log_info("Starting upload to Google Drive ...")
     upload_feather_to_drive(
