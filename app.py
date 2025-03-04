@@ -26,6 +26,8 @@ total_dataframe = st.Page("pages/total_dataframe.py", title="Total Data")
 filtered_dataframe = st.Page("pages/filtered_dataframe.py", title="Filtered Data")
 analyst_prices = st.Page("pages/analyst_prices.py", title="Analyst Prices")
 
+log_messages = st.Page("pages/log_messages.py", title="Log messages")
+
 # Set up navigation
 page = st.navigation([total_dataframe, filtered_dataframe, analyst_prices])
 
