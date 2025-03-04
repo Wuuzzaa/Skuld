@@ -51,7 +51,7 @@ def download_xlsx_file():
     return file_response.content
 
 def process_dividend_data(path_outputfile):
-    st.title("Dividend Radar Data Extraction")
+    
     
     log_info("Starting dividend data extraction process.")
     content = download_xlsx_file()
@@ -62,6 +62,7 @@ def process_dividend_data(path_outputfile):
     
     try:
         # Read the "All" sheet, assuming the header is in the third row (header index 2)
+        # Maybe this need to be changed in the feature due to file changes or similar
         df = pd.read_excel(io.BytesIO(content), sheet_name="All", header=2)
         log_info("Excel file read successfully.")
     except Exception as e:
