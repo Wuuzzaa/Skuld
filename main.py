@@ -11,7 +11,7 @@ from src.dividend_radar import process_dividend_data
 
 
 
-def main(testmode=True):
+def main(testmode=False):
     create_all_project_folders()
 
     print("#"*80)
