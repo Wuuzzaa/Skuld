@@ -13,9 +13,10 @@ from googleapiclient.http import MediaIoBaseDownload
 from googleapiclient.errors import HttpError
 from config import PATH_DATAFRAME_DATA_MERGED_FEATHER , FILENAME_GOOGLE_DRIVE, PATH_ON_GOOGLE_DRIVE, PATH_FOR_SERVICE_ACCOUNT_FILE  
 
-"""Configuration:
+"""
+Configuration:
 - Local storage location for the Feather file.
-- The file on Google Drive is initially a CSV file.
+- The file on Google Drive is now in Feather format.
 - Google Drive folder ID, local timezone, and update times (in local timezone).
 """
 PATH_DATAFRAME_DATA_MERGED_FEATHER = PATH_DATAFRAME_DATA_MERGED_FEATHER
@@ -62,9 +63,9 @@ def find_file_id_by_name(file_name, parent_folder_id=None):
         log_error(f"An error occurred: {error}")
         return None
 
-def download_csv_from_drive(file_id):
-    """Downloads the file (CSV or an exported Google Spreadsheet) from Google Drive.
-    Returns a BytesIO stream.
+def download_feather_from_drive(file_id):
+    """Downloads the Feather file from Google Drive.
+    Returns a BytesIO stream containing the file.
     """
     try:
         creds = get_credentials()
@@ -79,10 +80,8 @@ def download_csv_from_drive(file_id):
             modified_time_utc = datetime.fromisoformat(modified_time_str.replace("Z", "+00:00"))
             modified_time_local = modified_time_utc.astimezone(ZoneInfo(LOCAL_TZ))
             log_info(f"File last modified (Google Drive): {modified_time_local.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-        if mime_type == "application/vnd.google-apps.spreadsheet":
-            request = service.files().export_media(fileId=file_id, mimeType="text/csv")
-        else:
-            request = service.files().get_media(fileId=file_id)
+        # Directly download the file without export since it's a Feather file
+        request = service.files().get_media(fileId=file_id)
         file_stream = io.BytesIO()
         downloader = MediaIoBaseDownload(file_stream, request)
         done = False
@@ -129,8 +128,8 @@ def should_update_file(local_file, update_times, tz_name=LOCAL_TZ) -> bool:
 
 @st.cache_data(ttl=1800, show_spinner="Loading updated data...")
 def load_updated_data():
-    """Loads data in Feather format. If the local file is outdated, downloads the CSV file from Google Drive,
-    reads it into a DataFrame, converts it to Feather format, and saves it. Otherwise, loads the local file.
+    """Loads data in Feather format. If the local file is outdated, downloads the Feather file from Google Drive,
+    reads it into a DataFrame, and saves it locally. Otherwise, loads the local file.
     """
     if should_update_file(PATH_DATAFRAME_DATA_MERGED_FEATHER, UPDATE_TIMES):
         log_info("New file available – starting download from Google Drive ...")
@@ -138,27 +137,27 @@ def load_updated_data():
         if file_id is None:
             log_error("File with the specified name was not found on Google Drive.")
             return None
-        file_stream = download_csv_from_drive(file_id)
+        file_stream = download_feather_from_drive(file_id)
         if file_stream is None:
             return None
         os.makedirs(os.path.dirname(PATH_DATAFRAME_DATA_MERGED_FEATHER), exist_ok=True)
-        # Read CSV from the downloaded stream
+        # Read Feather from the downloaded stream
         try:
-            df = pd.read_csv(file_stream)
-            log_info("CSV file successfully read.")
+            df = pd.read_feather(file_stream)
+            log_info("Feather file successfully read from the downloaded stream.")
         except Exception as e:
-            log_error(f"Error reading the CSV file: {e}")
+            log_error(f"Error reading the Feather file: {e}")
             return None
-        # Save the DataFrame as a Feather file
+        # Save the DataFrame as a local Feather file
         try:
             df.to_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
-            log_info("CSV converted to Feather format and saved.")
+            log_info("Downloaded Feather file saved locally.")
         except Exception as e:
             log_error(f"Error saving the Feather file: {e}")
             return None
         return df
     else:
-        log_info("Loading local file ...")
+        log_info("Loading local Feather file ...")
         try:
             df = pd.read_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
             last_mod = file_last_modified(PATH_DATAFRAME_DATA_MERGED_FEATHER)
@@ -166,5 +165,5 @@ def load_updated_data():
             log_info(f"Local file last modified on: {last_mod_local.strftime('%Y-%m-%d %H:%M:%S %Z')}")
             return df
         except Exception as e:
-            log_error(f"Error reading the Feather file: {e}")
+            log_error(f"Error reading the local Feather file: {e}")
             return None
