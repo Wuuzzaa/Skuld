@@ -11,7 +11,7 @@ from src.dividend_radar import process_dividend_data
 
 
 
-def main(testmode=False):
+def main(testmode=True):
     create_all_project_folders()
 
     print("#"*80)
@@ -72,8 +72,12 @@ def main(testmode=False):
 
 
     # Upload the merged Feather file to Google Drive after feature construction is completed
+    print("#" * 80)
+    print("Upload file to Google Drive")
+    print("#" * 80)
     upload_merged_data() 
-
+    print("Upload file to Google Drive - Done")
+    
 
 
     print("RUN DONE")
