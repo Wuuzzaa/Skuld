@@ -95,8 +95,7 @@ def get_buy_option(df, option_type, expiration_date, symbol, sell_option):
 
 def __check_valid_spread_options(sell_option, buy_option):
     if sell_option is None or buy_option is None:
-        print("Sell_option or buy_option is None -> No Spread possible")
-        return None
+        raise ValueError("Sell_option or buy_option is None -> No Spread possible")
 
     if sell_option.symbol != buy_option.symbol:
         raise ValueError("Sell and Buy Symbol must be the same")
@@ -114,21 +113,23 @@ def _calc_JMS_preparatory_values(spread, is_iron_condor=False):
     # the iron condor win probability is 1 - short call delta - short put delta.
     # Where both deltas are absolute.
     if is_iron_condor:
+        #todo adjust for iron condors
         prep_values["win_prob"] = 1 - abs(spread['Call Spread Short Delta']) - abs(spread['Put Spread Short Delta'])
     else:
-        prep_values["win_prob"] = 1 - abs(spread['Short Delta'])
+        prep_values["win_prob"] = 1 - abs(spread['sell_delta'])
 
     prep_values["loss_prob"] = 1 - prep_values["win_prob"]
-    prep_values["tp_goal"] = 0.6
-    prep_values["mental_stop"] = 2
-    prep_values["potential_win"] = spread["Max Profit"] * prep_values["tp_goal"]
-    prep_values["potential_loss"] = spread["Max Profit"] * prep_values["mental_stop"]
-    prep_values["win_fraction"] = prep_values["potential_win"] / spread["BPR"]
-    prep_values["loss_fraction"] = prep_values["potential_loss"] / spread["BPR"]
+    prep_values["tp_goal"] = JMS_TP_GOAL
+    prep_values["mental_stop"] = JMS_MENTAL_STOP
+    prep_values["potential_win"] = spread["max_profit"] * prep_values["tp_goal"]
+    prep_values["potential_loss"] = spread["max_profit"] * prep_values["mental_stop"]
+    prep_values["win_fraction"] = prep_values["potential_win"] / spread["bpr"]
+    prep_values["loss_fraction"] = prep_values["potential_loss"] / spread["bpr"]
     prep_values["expected_win_value"] = prep_values["win_prob"] * prep_values["potential_win"]
     prep_values["expected_loss_value"] = prep_values["potential_loss"] * prep_values["loss_prob"]
 
     return prep_values
+
 
 def _calc_JMS(spread, is_iron_condor=False):
     """
@@ -141,7 +142,7 @@ def _calc_JMS(spread, is_iron_condor=False):
     prep_values = _calc_JMS_preparatory_values(spread, is_iron_condor)
     win_value = prep_values["expected_win_value"]
     loss_value = prep_values["expected_loss_value"]
-    jms = (win_value - loss_value) / spread["BPR"] * 100  # *100 for better readability
+    jms = (win_value - loss_value) / spread["bpr"] * 100  # *100 for better readability
     jms = round(jms, 2)
     return jms
 
@@ -150,7 +151,7 @@ def _calc_JMS_kelly_criterion(spread, is_iron_condor=False):
     """
     Calculates the kelly criterion based on the values of the JMS calculations.
 
-    For more details, see https://en.wikipedia.org/wiki/JMS_kelly_criterion
+    For more details, see https://en.wikipedia.org/wiki/Kelly_criterion
     """
     prep_values = _calc_JMS_preparatory_values(spread, is_iron_condor)
     p = prep_values["win_prob"]
@@ -164,16 +165,17 @@ def _calc_JMS_kelly_criterion(spread, is_iron_condor=False):
 
 
 def create_spread(sell_option, buy_option):
-    __check_valid_spread_options(sell_option, buy_option)
+    try:
+        __check_valid_spread_options(sell_option, buy_option)
+    except ValueError:
+        return None
 
-    # calculations
+    # calculations (jms and jms kelly under the spread creation)
     spread_width = abs(sell_option.strike - buy_option.strike)
     max_profit = 100 * (sell_option.bid - buy_option.ask)
     bpr = spread_width * 100 - max_profit
     profit_to_risk = max_profit / bpr
     spread_theta = sell_option.theta - buy_option.theta
-    #todo jms = ?
-    #todo jms kelly
 
     data = {
         # Same values sell and buy options
@@ -205,7 +207,13 @@ def create_spread(sell_option, buy_option):
         'spread_theta': spread_theta,
     }
 
-    return pd.Series(data)
+    spread = pd.Series(data)
+
+    # add jms and jms kelly to spread values
+    spread['jms'] = _calc_JMS(spread, is_iron_condor=False)
+    spread['jms_kelly'] = _calc_JMS_kelly_criterion(spread, is_iron_condor=False)
+
+    return spread
 
 
 if __name__ == "__main__":
@@ -214,12 +222,16 @@ if __name__ == "__main__":
     spread_width = 5
 
     df = load_df_option_columns_only()
+    spreads = []
 
     for option_type in ['call', 'put']:
         # the scraped and correct delta for puts is negative
         # the userinput should be positive for puts and calls just for simply use of the app
         if option_type == "put":
             delta_target *= -1
+
+        # DEBUG
+        #SYMBOLS = ['SQ']
 
         for symbol in SYMBOLS:
             print()
@@ -233,7 +245,12 @@ if __name__ == "__main__":
 
             # calculate the spread of both options
             spread = create_spread(sell_option, buy_option)
-            pass
+
+            if spread is not None:
+                print(spread)
+                spreads.append(spread)
+    spread_df = pd.DataFrame(spreads)
+    pass
 
 
 
