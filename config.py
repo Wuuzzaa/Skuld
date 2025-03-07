@@ -197,3 +197,8 @@ DATAFRAME_DATA_MERGED_COLUMNS = [
     # "BB.upper",
     # "AO[2]",
 ]
+
+# JMS Settings
+JMS_TP_GOAL = 0.6
+JMS_MENTAL_STOP = 2
+
