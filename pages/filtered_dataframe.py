@@ -3,7 +3,6 @@ import streamlit as st
 # Titel
 st.subheader("Gefilterte Ansicht")
 
-
 df = st.session_state['df']
 
 # Filteroptionen bereitstellen

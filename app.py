@@ -24,9 +24,17 @@ if 'df' not in st.session_state:
 total_dataframe = st.Page("pages/total_dataframe.py", title="Total Data")
 filtered_dataframe = st.Page("pages/filtered_dataframe.py", title="Filtered Data")
 analyst_prices = st.Page("pages/analyst_prices.py", title="Analyst Prices")
+spreads = st.Page("pages/spreads.py", title="Spreads")
 
 # Set up navigation
-page = st.navigation([total_dataframe, filtered_dataframe, analyst_prices])
+page = st.navigation(
+    [
+        total_dataframe,
+        filtered_dataframe,
+        analyst_prices,
+        spreads
+    ]
+)
 
 # Run the selected page
 page.run()
