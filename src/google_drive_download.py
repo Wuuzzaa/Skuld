@@ -25,6 +25,7 @@ PARENT_FOLDER_ID = PATH_ON_GOOGLE_DRIVE
 LOCAL_TZ = "Europe/Berlin"
 UPDATE_TIMES = [time(10, 15), time(16, 15)]
 
+
 def get_credentials():
     """Reads the Service Account credentials from Streamlit secrets (in the [service_account] section)
     and creates a Credentials object.
@@ -34,6 +35,7 @@ def get_credentials():
         service_account_dict,
         scopes=["https://www.googleapis.com/auth/drive"]
     )
+
 
 def find_file_id_by_name(file_name, parent_folder_id=None):
     """Searches for a file with the given name on Google Drive and returns its ID.
@@ -62,6 +64,7 @@ def find_file_id_by_name(file_name, parent_folder_id=None):
     except HttpError as error:
         log_error(f"An error occurred: {error}")
         return None
+
 
 def download_feather_from_drive(file_id):
     """Downloads the Feather file from Google Drive.
@@ -95,6 +98,7 @@ def download_feather_from_drive(file_id):
         log_error(f"An error occurred: {error}")
         return None
 
+
 def get_update_datetime(local_update_time: time, tz_name=LOCAL_TZ) -> datetime:
     """Creates a timezone-aware datetime for the given update time (e.g. 10:15 or 16:15)
     in the local timezone and converts it to UTC.
@@ -103,10 +107,12 @@ def get_update_datetime(local_update_time: time, tz_name=LOCAL_TZ) -> datetime:
     local_dt = datetime.combine(today_local, local_update_time, tzinfo=ZoneInfo(tz_name))
     return local_dt.astimezone(ZoneInfo("UTC"))
 
+
 def file_last_modified(path) -> datetime:
     """Returns the last modification time of the file as a timezone-aware UTC datetime.
     """
     return datetime.fromtimestamp(os.path.getmtime(path), tz=ZoneInfo("UTC"))
+
 
 def should_update_file(local_file, update_times, tz_name=LOCAL_TZ) -> bool:
     """Determines whether the local file should be updated.
@@ -125,6 +131,7 @@ def should_update_file(local_file, update_times, tz_name=LOCAL_TZ) -> bool:
             if now >= update_dt_utc and last_mod < update_dt_utc:
                 return True
     return False
+
 
 @st.cache_data(ttl=1800, show_spinner="Loading updated data...")
 def load_updated_data():
