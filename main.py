@@ -6,9 +6,12 @@ from src.merge_feather_dataframes_data import merge_data_dataframes
 from src.util import create_all_project_folders, get_option_expiry_dates
 from src.yfinance_analyst_price_targets import scrape_yahoo_finance_analyst_price_targets
 from config import *
+from src.google_drive_upload import upload_merged_data
+from src.dividend_radar import process_dividend_data
 
 
-def main(testmode=False):
+
+def main(testmode=True):
     create_all_project_folders()
 
     print("#"*80)
@@ -47,6 +50,12 @@ def main(testmode=False):
     print("Get price and technical indicators - Done")
 
     print("#" * 80)
+    print("Dividend Radar")
+    print("#" * 80)
+    process_dividend_data(path_outputfile=PATH_DIVIDEND_RADAR)
+    print("Dividend Radar Done") 
+
+    print("#" * 80)
     print("Merge all feather dataframe files")
     print("#" * 80)
     merge_data_dataframes()
@@ -57,7 +66,19 @@ def main(testmode=False):
     print("#" * 80)
     feature_construction()
     type_casting()
-    print("Feature engineering - Done")
+    print("Feature engineering - Done") 
+
+
+
+
+    # Upload the merged Feather file to Google Drive after feature construction is completed
+    print("#" * 80)
+    print("Upload file to Google Drive")
+    print("#" * 80)
+    upload_merged_data() 
+    print("Upload file to Google Drive - Done")
+    
+
 
     print("RUN DONE")
 
