@@ -41,7 +41,5 @@ def get_option_expiry_dates():
             expiry_dates.add(future_date)
 
     expiry_dates_list = sorted(int(d.strftime('%Y%m%d')) for d in expiry_dates)
-    print('expiry_dates:')
-    print(expiry_dates_list)
 
     return expiry_dates_list
