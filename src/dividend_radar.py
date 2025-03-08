@@ -8,7 +8,6 @@ from config import *
 from src.custom_logging import log_info, log_error, log_write, show_log_messages
 
 
-
 def download_xlsx_file():
     """
     Downloads the XLSX file from the dividend radar webpage.
@@ -50,9 +49,8 @@ def download_xlsx_file():
     log_info("XLSX file downloaded successfully.")
     return file_response.content
 
+
 def process_dividend_data(path_outputfile):
-    
-    
     log_info("Starting dividend data extraction process.")
     content = download_xlsx_file()
     if not content:
@@ -65,6 +63,7 @@ def process_dividend_data(path_outputfile):
         # Maybe this need to be changed in the feature due to file changes or similar
         df = pd.read_excel(io.BytesIO(content), sheet_name="All", header=2)
         log_info("Excel file read successfully.")
+
     except Exception as e:
         log_error(f"Error reading the Excel file: {e}")
         show_log_messages()
@@ -90,6 +89,7 @@ def process_dividend_data(path_outputfile):
     try:
         df.to_feather(str(path_outputfile))
         log_info(f"DataFrame saved as {path_outputfile}.")
+
     except Exception as e:
         log_error(f"Error saving as Feather: {e}")
     
