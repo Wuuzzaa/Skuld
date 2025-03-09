@@ -14,8 +14,8 @@ st.title("SKULD - Option Viewer")
 # load dataframe
 @st.cache_data
 def load_dataframe():
-    #df = load_updated_data()
-    df = pd.read_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
+    df = load_updated_data()
+    #df = pd.read_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER) # run without google file up-download
     return df
 
 
