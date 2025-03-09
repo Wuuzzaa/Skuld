@@ -1,6 +1,7 @@
 import pandas as pd
 from config import *
 
+
 def merge_data_dataframes():
     # Merge Option Data and Price/Indicator Data
     print("Merging Option Data and Price/Indicator Data")

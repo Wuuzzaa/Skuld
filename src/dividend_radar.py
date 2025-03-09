@@ -1,4 +1,3 @@
-import streamlit as st
 import pandas as pd
 import requests
 from lxml import html
@@ -16,7 +15,7 @@ def download_xlsx_file():
     "https://www.portfolio-insight.com/dividend-radar", extracts the first XLSX link using XPath,
     and returns the file content as bytes.
     """
-    page_url = "https://www.portfolio-insight.com/dividend-radar"
+    page_url = URL_DIVIDEND_RADAR
     headers = {"User-Agent": "Mozilla/5.0"}
     response = requests.get(page_url, headers=headers)
     
@@ -53,6 +52,7 @@ def download_xlsx_file():
 def process_dividend_data(path_outputfile):
     log_info("Starting dividend data extraction process.")
     content = download_xlsx_file()
+
     if not content:
         log_error("Failed to download XLSX file. Aborting process.")
         show_log_messages()
@@ -81,10 +81,7 @@ def process_dividend_data(path_outputfile):
     
     log_info(f"Columns after processing: {df.columns.tolist()}")
     log_info(f"Number of rows read: {len(df)}")
-    
-    # Display the entire DataFrame in a scrollable table.
-    st.dataframe(df)
-    
+
     # Save the DataFrame as a Feather file using the provided output path.
     try:
         df.to_feather(str(path_outputfile))
