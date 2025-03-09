@@ -74,18 +74,18 @@ PATH_DATAFRAME_DATA_MERGED_FEATHER = PATH_DATA / 'merged_df.feather'
 PATH_DATAFRAME_DATA_ANALYST_PRICE_TARGET_FEATHER = PATH_DATA / 'price_target_df.feather'
 
 #Dividend Radar
-PATH_DIVIDEND_RADAR = PATH_DATA / 'dividend_radar'
+URL_DIVIDEND_RADAR = "https://www.portfolio-insight.com/dividend-radar"
+PATH_DIVIDEND_RADAR = PATH_DATA / 'dividend_radar.feather'
 
 print(BASE_DIR)
 print(PATH_OPTION_DATA_TRADINGVIEW)
-
 
 #Google Upload Config
 
 PATH_ON_GOOGLE_DRIVE = "1ahLHST1IEUDf03TT3hEdbVm1r7rcxJcu"
 FILENAME_GOOGLE_DRIVE = "merged_data.feather"
-#PATH_FOR_SERVICE_ACCOUNT_FILE = "service_account.json"
-PATH_FOR_SERVICE_ACCOUNT_FILE = r"C:\Python\google_upload2\service_account.json"
+PATH_FOR_SERVICE_ACCOUNT_FILE = "service_account.json"
+#PATH_FOR_SERVICE_ACCOUNT_FILE = r"C:\Python\google_upload2\service_account.json"
 
 # FOLDERPATHS relative to main.py
 FOLDERPATHS = \
@@ -93,6 +93,7 @@ FOLDERPATHS = \
         PATH_DATA,
         PATH_OPTION_DATA_TRADINGVIEW
     ]
+
 # set the columns needed for further work
 DATAFRAME_DATA_MERGED_COLUMNS = [
     "symbol",
@@ -207,7 +208,10 @@ DATAFRAME_DATA_MERGED_COLUMNS = [
     # "BB.lower",
     # "BB.upper",
     # "AO[2]",
- #Dividend Radar, 
+
+    ##################
+    #Dividend Radar ,
+    ##################
     "Company",
     "FV",
     "Sector",
@@ -244,8 +248,7 @@ DATAFRAME_DATA_MERGED_COLUMNS = [
     "P/E",
     "P/BV",
     "PEG",
-    "Industry",   
-
+    "Industry",
 ]
 
 # JMS Settings

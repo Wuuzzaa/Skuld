@@ -10,7 +10,6 @@ from src.google_drive_upload import upload_merged_data
 from src.dividend_radar import process_dividend_data
 
 
-
 def main(testmode=True):
     create_all_project_folders()
 
@@ -68,17 +67,12 @@ def main(testmode=True):
     type_casting()
     print("Feature engineering - Done") 
 
-
-
-
     # Upload the merged Feather file to Google Drive after feature construction is completed
     print("#" * 80)
     print("Upload file to Google Drive")
     print("#" * 80)
     upload_merged_data() 
     print("Upload file to Google Drive - Done")
-    
-
 
     print("RUN DONE")
 
