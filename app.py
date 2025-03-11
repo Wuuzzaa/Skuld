@@ -26,7 +26,7 @@ if 'df' not in st.session_state:
 total_dataframe = st.Page("pages/total_dataframe.py", title="Total Data")
 filtered_dataframe = st.Page("pages/filtered_dataframe.py", title="Filtered Data")
 analyst_prices = st.Page("pages/analyst_prices.py", title="Analyst Prices")
-dividend_page = st.Page("pages/dividend.py", title="Dividend Page")
+dividend_page = st.Page("pages/dividend_page.py", title="Dividend Page")
 log_messages = st.Page("pages/log_messages.py", title="Log messages") 
 
 
