@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from config import *
 from src.google_drive_download import load_updated_data
-from src.custom_logging import show_log_messages, log_info # Adjust the module name as needed
+from src.custom_logging import *
 import sys
 
 # Check if "--local" is passed as a command-line argument
@@ -22,12 +22,13 @@ st.title("SKULD - Option Viewer")
 def load_dataframe():
     # Local Mode
     if use_local_data:
-        st.warning("Using local dataset instead of Google Drive data!")
+        log_write("Using local dataset instead of Google Drive data!")
         return pd.read_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
 
     # Online Mode with Googledrive data
     else:
         return load_updated_data()
+
 
 if 'df' not in st.session_state:
     st.session_state['df'] = load_dataframe()

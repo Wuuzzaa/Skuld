@@ -5,6 +5,7 @@ import streamlit as st
 import pandas as pd
 from src.spreads_calculation import get_spreads
 from src.util import get_option_expiry_dates
+from src.custom_logging import *
 
 # Titel
 st.subheader("Spreads")
@@ -40,4 +41,5 @@ with st.status("Calculating... Please wait.", expanded=True) as status:
     status.update(label="Calculation complete!", state="complete", expanded=True)
 
 # show the spreads
+log_info(f"Spreads calculated for: {expiration_date} and delta {delta_target} with spread width {spread_width}")
 st.dataframe(get_spreads(st.session_state['df'], expiration_date, delta_target, spread_width), use_container_width=True)

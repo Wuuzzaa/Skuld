@@ -77,8 +77,8 @@ PATH_DATAFRAME_DATA_ANALYST_PRICE_TARGET_FEATHER = PATH_DATA / 'price_target_df.
 URL_DIVIDEND_RADAR = "https://www.portfolio-insight.com/dividend-radar"
 PATH_DIVIDEND_RADAR = PATH_DATA / 'dividend_radar.feather'
 
-print(BASE_DIR)
-print(PATH_OPTION_DATA_TRADINGVIEW)
+# App Logfile
+PATH_APP_LOGFILE = BASE_DIR / 'app.log'
 
 #Google Upload Config
 
@@ -254,4 +254,7 @@ DATAFRAME_DATA_MERGED_COLUMNS = [
 # JMS Settings
 JMS_TP_GOAL = 0.6
 JMS_MENTAL_STOP = 2
+
+
+
 
