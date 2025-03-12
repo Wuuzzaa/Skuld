@@ -3,6 +3,12 @@ import pandas as pd
 from config import *
 from src.google_drive_download import load_updated_data
 from src.custom_logging import show_log_messages, log_info # Adjust the module name as needed
+import sys
+
+# Check if "--local" is passed as a command-line argument
+# start in terminal with: streamlit run app.py -- --local
+# note the -- --local NOT --local this would be interpreted as a streamlit argument
+use_local_data = "--local" in sys.argv
 
 # Layout
 st.set_page_config(layout="wide")
@@ -14,12 +20,14 @@ st.title("SKULD - Option Viewer")
 # load dataframe
 @st.cache_data
 def load_dataframe():
-    df = load_updated_data()
+    # Local Mode
+    if use_local_data:
+        st.warning("Using local dataset instead of Google Drive data!")
+        return pd.read_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
 
-    # Local run without google file up-download
-    # df = pd.read_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
-    return df
-
+    # Online Mode with Googledrive data
+    else:
+        return load_updated_data()
 
 if 'df' not in st.session_state:
     st.session_state['df'] = load_dataframe()
