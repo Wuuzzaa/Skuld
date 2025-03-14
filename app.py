@@ -39,7 +39,9 @@ total_dataframe = st.Page("pages/total_dataframe.py", title="Total Data")
 filtered_dataframe = st.Page("pages/filtered_dataframe.py", title="Filtered Data")
 analyst_prices = st.Page("pages/analyst_prices.py", title="Analyst Prices")
 spreads = st.Page("pages/spreads.py", title="Spreads")
+iron_condors = st.Page("pages/iron_condors.py", title="Iron Condors")
 log_messages = st.Page("pages/log_messages.py", title="Log messages")
+documentation = st.Page("pages/documentation.py", title="Documentation")
 
 # Set up navigation
 page = st.navigation(
@@ -48,9 +50,13 @@ page = st.navigation(
         filtered_dataframe,
         analyst_prices,
         spreads,
-        log_messages
+        iron_condors,
+        log_messages,
+        documentation
     ]
 )
 
 # Run the selected page
 page.run()
+
+
