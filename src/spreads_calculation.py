@@ -106,17 +106,18 @@ def __check_valid_spread_options(sell_option, buy_option):
 def __calc_JMS_preparatory_values(spread, is_iron_condor=False):
     prep_values = {}
 
+    prep_values["tp_goal"] = JMS_TP_GOAL
+    prep_values["mental_stop"] = JMS_MENTAL_STOP
+
     # the iron condor win probability is 1 - short call delta - short put delta.
     # Where both deltas are absolute.
     if is_iron_condor:
-        #todo adjust for iron condors
-        prep_values["win_prob"] = 1 - abs(spread['Call Spread Short Delta']) - abs(spread['Put Spread Short Delta'])
+        prep_values["win_prob"] = 1 - abs(spread['call_spread_sell_delta']) - abs(spread['put_spread_sell_delta'])
+
     else:
         prep_values["win_prob"] = 1 - abs(spread['sell_delta'])
 
     prep_values["loss_prob"] = 1 - prep_values["win_prob"]
-    prep_values["tp_goal"] = JMS_TP_GOAL
-    prep_values["mental_stop"] = JMS_MENTAL_STOP
     prep_values["potential_win"] = spread["max_profit"] * prep_values["tp_goal"]
     prep_values["potential_loss"] = spread["max_profit"] * prep_values["mental_stop"]
     prep_values["win_fraction"] = prep_values["potential_win"] / spread["bpr"]
@@ -127,7 +128,7 @@ def __calc_JMS_preparatory_values(spread, is_iron_condor=False):
     return prep_values
 
 
-def __calc_JMS(spread, is_iron_condor=False):
+def calc_JMS(spread, is_iron_condor=False):
     """
     Calulates Joachims Milchmädchenrechnungs Score.
     Based on the Delta of the short option a mental stop loss and a take profit goal.
@@ -140,6 +141,7 @@ def __calc_JMS(spread, is_iron_condor=False):
     loss_value = prep_values["expected_loss_value"]
     jms = (win_value - loss_value) / spread["bpr"] * 100  # *100 for better readability
     jms = round(jms, 2)
+
     return jms
 
 
@@ -206,7 +208,7 @@ def __create_spread(sell_option, buy_option):
     spread = pd.Series(data)
 
     # add jms and jms kelly to spread values
-    spread['jms'] = __calc_JMS(spread, is_iron_condor=False)
+    spread['jms'] = calc_JMS(spread, is_iron_condor=False)
     spread['jms_kelly'] = __calc_JMS_kelly_criterion(spread, is_iron_condor=False)
 
     return spread
@@ -239,6 +241,10 @@ def get_spreads(df, expiration_date, delta_target, spread_width):
 
 
 if __name__ == "__main__":
+    """
+    Keep the main for testing purposes
+    """
+
     df = pd.read_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
     expiration_date = '2025-03-14'
     delta_target = 0.2
