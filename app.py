@@ -31,7 +31,7 @@ log_messages = st.Page("pages/log_messages.py", title="Log messages")
 
 
 # Set up navigation
-page = st.navigation([total_dataframe, filtered_dataframe, analyst_prices,log_messages])
+page = st.navigation([total_dataframe, filtered_dataframe, dividend_page, analyst_prices,log_messages])
 
 # Run the selected page
 page.run()
