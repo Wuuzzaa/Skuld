@@ -2,89 +2,157 @@ import streamlit as st
 import pandas as pd
 from st_aggrid import AgGrid, GridOptionsBuilder
 
-# Page Title and Subheader
+# Page Title and Subheader in main area
 st.title("SKULD - Option Viewer")
 st.subheader("Dividenden-Radar")
 
 # -----------------------------------------------------------
-# Detailed Chowder Number Explanation
+# Detailed Explanation of the Chowder Number and its Calculation
 st.markdown("""
 ### What Is the Chowder Number?
 
-The **Chowder Number** is a concept popularized in the dividend growth investing community. 
-It is typically calculated as the sum of a stock's **current dividend yield** and its 
-**5-year average dividend yield** (used here as a proxy for the dividend growth rate). 
-The idea behind this calculation is that a high Chowder Number not only reflects a good yield 
-but also suggests the potential for future dividend increases.
+The **Chowder Number** is a screening metric popular in the dividend growth investing community.
+It is typically calculated as the sum of a stock's **current dividend yield** and its **5-year average dividend yield**.
+Here, the 5-year average dividend yield is used as a proxy for the dividend growth rate.
 
-Rules of thumb:
+**Calculation:**  
+Chowder Number = Dividend Yield + 5-Year Average Dividend Yield
+
+**Rules of Thumb:**  
 - For stocks with a **dividend yield of 3% or higher**, a Chowder Number above **14** is preferred.
 - For stocks with a **dividend yield below 3%**, a Chowder Number above **15** is considered favorable.
 
-This metric serves as a quick screening tool to identify dividend-paying stocks that may warrant further research.
+This metric helps quickly identify dividend-paying stocks that may warrant further research.
 """)
 # -----------------------------------------------------------
 
-# Create a mock DataFrame with some example data
-data = {
-    "Company": ["A", "B", "C", "D"],
-    "Div Yield": [2.5, 3.2, 4.1, 2.8],
-    "5Y Avg Yield": [1.0, 2.0, 1.5, 2.5],
-    "Price": [100, 150, 200, 120],
-    "Sector": ["Tech", "Finance", "Health", "Utilities"]
-}
-df = pd.DataFrame(data)
+# -------------------------
+# Sidebar Controls (left side)
+# -------------------------
+st.sidebar.header("Filter Controls")
 
-# Replace spaces in column names with hyphens for consistency
-df.columns = df.columns.str.replace(" ", "-")
+# Threshold sliders moved to the sidebar
+thresh_high = st.sidebar.slider("Min Chowder Number (Div-Yield ≥ 3)", min_value=0, max_value=30, value=14, step=1)
+thresh_low  = st.sidebar.slider("Min Chowder Number (Div-Yield < 3)", min_value=0, max_value=30, value=15, step=1)
 
 # Button to calculate the Chowder Number
-if st.button("Calculate Chowder Number"):
-    # Calculate Chowder-Number as the sum of Div-Yield and 5Y-Avg-Yield
-    # (This is a common approximation; you may adjust the formula if needed.)
-    df["Chowder-Number"] = df["Div-Yield"] + df["5Y-Avg-Yield"]
-    st.success("Chowder Number calculated and added to the DataFrame!")
+calc_button = st.sidebar.button("Calculate Chowder Number")
 
-# Toggle button for applying a fixed filter
-if "chowder_filter_on" not in st.session_state:
-    st.session_state["chowder_filter_on"] = False
+# Checkbox to apply the Chowder filter
+apply_filter = st.sidebar.checkbox("Apply Chowder Filter", value=False)
 
-if st.button("Toggle Chowder Filter"):
-    st.session_state["chowder_filter_on"] = not st.session_state["chowder_filter_on"]
+# -------------------------
+# DataFrame Handling
+# -------------------------
+# Load the DataFrame from session state
+if "df" in st.session_state:
+    df = st.session_state["df"]
+else:
+    st.error("DataFrame not found in session state.")
+    st.stop()
 
-# Fixed thresholds for filtering
-thresh_high = 14
-thresh_low = 15
+# Clean column names: replace spaces with hyphens for consistency
+df.columns = df.columns.str.replace(" ", "-")
 
-# Apply filtering only if the Chowder-Number column exists
-if "Chowder-Number" in df.columns:
-    if st.session_state["chowder_filter_on"]:
-        condition = (
-            ((df["Div-Yield"] >= 3) & (df["Chowder-Number"] > thresh_high)) |
-            ((df["Div-Yield"] < 3) & (df["Chowder-Number"] > thresh_low))
-        )
-        df_display = df[condition]
+# Calculate Chowder Number if the sidebar button is pressed
+if calc_button:
+    if "Div-Yield" in df.columns and "5Y-Avg-Yield" in df.columns:
+        df["Chowder-Number"] = df["Div-Yield"] + df["5Y-Avg-Yield"]
+        st.success("Chowder Number calculated and added to the DataFrame!")
+        st.session_state["df"] = df
     else:
-        df_display = df.copy()
+        st.error("Required columns 'Div-Yield' and '5Y-Avg-Yield' not found.")
+
+# Apply filtering if checkbox is selected and Chowder-Number exists
+if apply_filter and "Chowder-Number" in df.columns:
+    condition = (
+        ((df["Div-Yield"] >= 3) & (df["Chowder-Number"] > thresh_high)) |
+        ((df["Div-Yield"] < 3) & (df["Chowder-Number"] > thresh_low))
+    )
+    df_display = df[condition]
 else:
     df_display = df.copy()
 
-# Build AgGrid configuration with conditional row coloring
+# -------------------------
+# AgGrid Configuration
+# -------------------------
+# Define tooltips for each column header (using cleaned names)
+column_tooltips = {
+    "Company": "Name of the company",
+    "FV": "Fair value of the stock",
+    "Sector": "Sector in which the company operates",
+    "No-Years": "Number of years included in analysis",
+    "Price": "Current stock price",
+    "Div-Yield": "Dividend yield percentage",
+    "5Y-Avg-Yield": "5-year average dividend yield percentage",
+    "Current-Div": "Current dividend payment amount",
+    "Annualized": "Annualized dividend rate",
+    "Previous-Div": "Previous dividend payment",
+    "Ex-Date": "Ex-dividend date",
+    "Pay-Date": "Dividend payment date",
+    "Low": "Lowest stock price in the period",
+    "High": "Highest stock price in the period",
+    "DGR-1Y": "Dividend growth rate over 1 year",
+    "DGR-3Y": "Dividend growth rate over 3 years",
+    "DGR-5Y": "Dividend growth rate over 5 years",
+    "DGR-10Y": "Dividend growth rate over 10 years",
+    "TTR-1Y": "Total return over 1 year",
+    "TTR-3Y": "Total return over 3 years",
+    "Fair-Value": "Calculated fair value of the stock",
+    "FV-%": "Percentage difference from fair value",
+    "Streak-Basis": "Basis for calculating dividend streaks",
+    "Chowder-Number": "Sum of Div-Yield and 5Y-Avg-Yield, a quick screening measure",
+    "EPS-1Y": "Earnings per share for the past year",
+    "Revenue-1Y": "Revenue over the past year",
+    "NPM": "Net profit margin",
+    "CF/Share": "Cash flow per share",
+    "ROE": "Return on equity",
+    "Current-R": "Current ratio of the company",
+    "Debt/Capital": "Debt-to-capital ratio",
+    "ROTC": "Return on total capital",
+    "P/E": "Price-to-earnings ratio",
+    "P/BV": "Price-to-book value ratio",
+    "PEG": "Price/earnings to growth ratio",
+    "Industry": "Industry in which the company operates"
+}
+
+# Build AgGrid configuration
 gb = GridOptionsBuilder.from_dataframe(df_display)
+for col in df_display.columns:
+    if col in column_tooltips:
+        gb.configure_column(col, headerTooltip=column_tooltips[col])
+    else:
+        gb.configure_column(col)
+
+# Configure conditional row coloring with enhanced logging
 gb.configure_grid_options(getRowStyle=f"""
 function(params) {{
-    if ((params.data["Div-Yield"] >= 3 && params.data["Chowder-Number"] > {thresh_high}) ||
-        (params.data["Div-Yield"] < 3 && params.data["Chowder-Number"] > {thresh_low})) {{
-        return {{'background-color': 'lightgreen'}};
-    }} else {{
-        return {{'background-color': '#fdd'}};
+    try {{
+        console.log(new Date().toISOString(), "Row data:", params.data);
+        var divYield = params.data["Div-Yield"];
+        var chowderNumber = params.data["Chowder-Number"];
+        console.log(new Date().toISOString(), "Div-Yield:", divYield, "Chowder-Number:", chowderNumber);
+        if ((divYield >= 3 && chowderNumber > {thresh_high}) ||
+            (divYield < 3 && chowderNumber > {thresh_low})) {{
+            console.log(new Date().toISOString(), "Row passes filter. Coloring lightgreen.");
+            return {{"background-color": "lightgreen"}};
+        }} else {{
+            console.log(new Date().toISOString(), "Row fails filter. Coloring #fdd.");
+            return {{"background-color": "#fdd"}};
+        }}
+    }} catch(err) {{
+        console.error(new Date().toISOString(), "Error in getRowStyle:", err);
+        return {{"background-color": "#fff"}};
     }}
 }}
 """)
 gridOptions = gb.build()
 
+# -------------------------
+# Display the DataFrame via AgGrid in the main area
+# -------------------------
 st.subheader("Total DataFrame")
-if st.session_state["chowder_filter_on"]:
+if apply_filter:
     st.write("**Filtered DataFrame** (Chowder rules applied)")
 else:
     st.write("**Original (unfiltered) DataFrame**")
