@@ -63,55 +63,8 @@ if st.session_state["chowder_filter_on"]:
 else:
     df_display = df.copy()
 
-# Define tooltips for each column header (matching hyphenated names)
-column_tooltips = {
-    "Company": "Name of the company",
-    "FV": "Fair value of the stock",
-    "Sector": "Sector in which the company operates",
-    "No-Years": "Number of years included in analysis",
-    "Price": "Current stock price",
-    "Div-Yield": "Dividend yield percentage",
-    "5Y-Avg-Yield": "5-year average dividend yield percentage",
-    "Current-Div": "Current dividend payment amount",
-    "Annualized": "Annualized dividend rate",
-    "Previous-Div": "Previous dividend payment",
-    "Ex-Date": "Ex-dividend date",
-    "Pay-Date": "Dividend payment date",
-    "Low": "Lowest stock price in the period",
-    "High": "Highest stock price in the period",
-    "DGR-1Y": "Dividend growth rate over 1 year",
-    "DGR-3Y": "Dividend growth rate over 3 years",
-    "DGR-5Y": "Dividend growth rate over 5 years",
-    "DGR-10Y": "Dividend growth rate over 10 years",
-    "TTR-1Y": "Total return over 1 year",
-    "TTR-3Y": "Total return over 3 years",
-    "Fair-Value": "Calculated fair value of the stock",
-    "FV-%": "Percentage difference from fair value",
-    "Streak-Basis": "Basis for calculating dividend streaks",
-    "Chowder-Number": "Combines dividend yield with the dividend growth rate",
-    "EPS-1Y": "Earnings per share for the past year",
-    "Revenue-1Y": "Revenue over the past year",
-    "NPM": "Net profit margin",
-    "CF/Share": "Cash flow per share",
-    "ROE": "Return on equity",
-    "Current-R": "Current ratio of the company",
-    "Debt/Capital": "Debt-to-capital ratio",
-    "ROTC": "Return on total capital",
-    "P/E": "Price-to-earnings ratio",
-    "P/BV": "Price-to-book value ratio",
-    "PEG": "Price/earnings to growth ratio",
-    "Industry": "Industry in which the company operates"
-}
-
-# Build grid options for AgGrid
+# Build AgGrid configuration (no tooltips)
 gb = GridOptionsBuilder.from_dataframe(df_display)
-
-# Configure column tooltips
-for col in df_display.columns:
-    if col in column_tooltips:
-        gb.configure_column(col, headerTooltip=column_tooltips[col])
-    else:
-        gb.configure_column(col)
 
 # Conditional row coloring based on Chowder criteria
 gb.configure_grid_options(getRowStyle=f"""
@@ -127,12 +80,11 @@ function(params) {{
 
 gridOptions = gb.build()
 
-# Subheader for the displayed DataFrame
 st.subheader("Total DataFrame")
 if st.session_state["chowder_filter_on"]:
     st.write("**Filtered DataFrame** (Chowder rules applied)")
 else:
     st.write("**Original (unfiltered) DataFrame**")
 
-# Display the interactive grid
+# Display the interactive grid (no tooltips)
 AgGrid(df_display, gridOptions=gridOptions, enable_enterprise_modules=False, fit_columns_on_grid_load=True)
