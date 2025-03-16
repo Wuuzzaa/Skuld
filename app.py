@@ -40,6 +40,7 @@ filtered_dataframe = st.Page("pages/filtered_dataframe.py", title="Filtered Data
 analyst_prices = st.Page("pages/analyst_prices.py", title="Analyst Prices")
 spreads = st.Page("pages/spreads.py", title="Spreads")
 iron_condors = st.Page("pages/iron_condors.py", title="Iron Condors")
+multi_indicator_direction = st.Page("pages/strategy_multi_indicator_score_direction.py", title="Multi-Indicator Direction")
 log_messages = st.Page("pages/log_messages.py", title="Log messages")
 documentation = st.Page("pages/documentation.py", title="Documentation")
 
@@ -51,6 +52,7 @@ page = st.navigation(
         analyst_prices,
         spreads,
         iron_condors,
+        multi_indicator_direction,
         log_messages,
         documentation
     ]
