@@ -10,10 +10,6 @@ from src.custom_logging import log_info, log_error, log_write, show_log_messages
 def download_xlsx_file():
     """
     Downloads the XLSX file from the dividend radar webpage.
-    
-    This function fetches the webpage at 
-    "https://www.portfolio-insight.com/dividend-radar", extracts the first XLSX link using XPath,
-    and returns the file content as bytes.
     """
     page_url = "https://www.portfolio-insight.com/dividend-radar"
     headers = {"User-Agent": "Mozilla/5.0"}
@@ -50,7 +46,7 @@ def download_xlsx_file():
 
 def process_dividend_data(path_outputfile):
     """
-    Downloads and processes the XLSX file from the dividend radar webpage, 
+    Downloads and processes the XLSX file from the dividend radar webpage,
     then displays the processed DataFrame and saves it as a Feather file.
     """
     log_info("Starting dividend data extraction process.")
@@ -82,10 +78,9 @@ def process_dividend_data(path_outputfile):
     log_info(f"Columns after processing: {df.columns.tolist()}")
     log_info(f"Number of rows read: {len(df)}")
     
-    # Alternative Darstellung: Verwende st.table(df) statt st.dataframe(df)
-    st.table(df)  # Statische Tabellenanzeige
-    # Alternativ kannst du auch st.write(df) verwenden:
-    # st.write(df)
+    # Alternative Darstellung: Verwende st.write(df) zur Anzeige des DataFrames.
+    st.write("DataFrame-Inhalt:")
+    st.write(df)
     
     # Save the DataFrame as a Feather file using the provided output path.
     try:
