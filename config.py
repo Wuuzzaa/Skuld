@@ -238,7 +238,7 @@ DATAFRAME_DATA_MERGED_COLUMNS = [
     "NPM",
     "CF/Share",
     "ROE",
-    "Current R",
+    "Current-R",
     "Debt/Capital",
     "ROTC",
     "P/E",
