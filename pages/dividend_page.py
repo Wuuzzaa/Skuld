@@ -30,8 +30,8 @@ It is typically calculated as the sum of a stock's **current dividend yield** an
 Here, the 5-year average dividend yield is used as a proxy for the dividend growth rate.
 
 **Rules of Thumb:**  
-- **Group 1:** For stocks with a dividend yield of **3% or higher**, a Chowder Number above the configured threshold is preferred.  
-- **Group 2:** For stocks with a dividend yield **below 3%**, a Chowder Number above the configured threshold is considered favorable.
+- **Group 1:** For stocks with a dividend yield of **3% or higher**, a Chowder Number above the configured threshold 14 is preferred.  
+- **Group 2:** For stocks with a dividend yield **below 3%**, a Chowder Number above the configured threshold 15 is considered favorable.
 
 This metric helps quickly identify dividend-paying stocks that may warrant further research.
 """)
