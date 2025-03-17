@@ -42,6 +42,7 @@ spreads = st.Page("pages/spreads.py", title="Spreads")
 iron_condors = st.Page("pages/iron_condors.py", title="Iron Condors")
 multi_indicator_direction = st.Page("pages/strategy_multi_indicator_score_direction.py", title="Multi-Indicator Direction")
 log_messages = st.Page("pages/log_messages.py", title="Log messages")
+dividend_page = st.Page("pages/dividend_page.py", title="Dividend Page")
 documentation = st.Page("pages/documentation.py", title="Documentation")
 
 # Set up navigation
@@ -54,11 +55,10 @@ page = st.navigation(
         iron_condors,
         multi_indicator_direction,
         log_messages,
+        dividend_page,
         documentation
     ]
 )
 
 # Run the selected page
 page.run()
-
-
