@@ -13,12 +13,14 @@ col_rsi_long, col_rsi_short, col_bb = st.columns(3)
 col_stoch_long, col_stoch_short, col_vwma = st.columns(3)
 col_macd, col_adx, col_min_score = st.columns(3)
 
+
 def parse_number(value):
     """Attempts to parse a number from the input. Returns None if empty or invalid."""
     try:
         return int(value) if value.strip() else None
     except ValueError:
         return None
+
 
 # Inputs with value ranges and optional None values
 with col_rsi_long:
