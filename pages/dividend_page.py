@@ -19,7 +19,6 @@ if st.sidebar.button("Toggle Group 2"):
     st.session_state["show_group2"] = not st.session_state["show_group2"]
 
 # Page Title and Subheader
-st.title("SKULD - Option Viewer")
 st.subheader("Dividenden-Radar")
 
 st.markdown("""
@@ -71,8 +70,8 @@ if not selected_columns:
     st.stop()
 
 # For display, use the selected columns from the original filtered groups
-group1_display = group1_df[selected_columns]
-group2_display = group2_df[selected_columns]
+group1_display = group1_df[selected_columns].drop_duplicates()
+group2_display = group2_df[selected_columns].drop_duplicates()
 
 tooltips = {"symbol": "Stock symbol"}
 
