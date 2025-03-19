@@ -2,6 +2,9 @@ import streamlit as st
 import pandas as pd
 from st_aggrid import AgGrid, GridOptionsBuilder
 
+# Import the force_data_download function from your module
+from src.dividend_radar import force_data_download  # Adjust module path accordingly
+
 # Sidebar: custom threshold inputs for each group
 custom_thresh_group1 = st.sidebar.number_input("Custom Threshold for Group 1 (Div-Yield ≥ 3)", value=14, step=1)
 custom_thresh_group2 = st.sidebar.number_input("Custom Threshold for Group 2 (Div-Yield < 3)", value=15, step=1)
@@ -18,9 +21,14 @@ if st.sidebar.button("Toggle Group 1"):
 if st.sidebar.button("Toggle Group 2"):
     st.session_state["show_group2"] = not st.session_state["show_group2"]
 
+# Sidebar: button to force data download
+if st.sidebar.button("Force Data Download"):
+    force_data_download("dividend_data.feather")
+    st.sidebar.success("Force data download completed.")
+
 # Page Title and Subheader
 st.title("SKULD - Option Viewer")
-st.subheader("Dividenden-Radar")
+st.subheader("Dividend Radar")
 
 st.markdown("""
 ### What Is the Chowder Number?
