@@ -89,7 +89,3 @@ def process_dividend_data(path_outputfile):
     except Exception as e:
         log_error(f"Error saving as Feather: {e}")
 
-if __name__ == '__main__':
-    # Pfad zur Speicherung der Feather-Datei
-    path_outputfile = "dividend_data.feather"
-    process_dividend_data(path_outputfile)
