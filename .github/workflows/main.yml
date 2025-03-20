@@ -31,4 +31,4 @@ jobs:
           SERVICE_ACCOUNT_JSON: ${{ secrets.SERVICE_ACCOUNT_JSON }}
 
       - name: Run main script
-        run: python main.py --testmode False
+        run: python main.py --testmode False --upload_df_google_drive True
