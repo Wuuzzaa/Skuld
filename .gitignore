@@ -176,3 +176,4 @@ cython_debug/
 /data - Kopie/
 .streamlit/secrets.toml
 
+/service_account.json
