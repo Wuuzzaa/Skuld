@@ -79,7 +79,7 @@ def main(testmode=False, upload_df_google_drive=True):
 
 
 if __name__ == '__main__':
-    main(testmode=True, upload_df_google_drive=False)
+    main(testmode=True, upload_df_google_drive=True)
 
 
 
