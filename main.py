@@ -1,3 +1,4 @@
+import argparse
 from src.feature_engineering import feature_construction, type_casting
 from src.optiondata_feathers_to_df_merge import combine_feather_files
 from src.tradingview_optionchain_scrapper import scrape_option_data
@@ -11,6 +12,12 @@ from src.dividend_radar import process_dividend_data
 
 
 def main(testmode=False, upload_df_google_drive=True):
+    print("#" * 80)
+    print(f"Run main.py with setting:\n"
+          f"testmode: {testmode}\n"
+          f"upload_df_google_drive: {upload_df_google_drive}\n")
+    print("#" * 80)
+
     create_all_project_folders()
 
     print("#"*80)
@@ -79,7 +86,15 @@ def main(testmode=False, upload_df_google_drive=True):
 
 
 if __name__ == '__main__':
-    main(testmode=True, upload_df_google_drive=True)
+    parser = argparse.ArgumentParser(description="Run the main script with optional parameters.")
+    parser.add_argument("--testmode", type=lambda x: x.lower() == 'true', default=False,
+                        help="Run in test mode (default: False)")
+    parser.add_argument("--upload_df_google_drive", type=lambda x: x.lower() == 'true', default=True,
+                        help="Upload data to Google Drive (default: True)")
+
+    args = parser.parse_args()
+
+    main(testmode=args.testmode, upload_df_google_drive=args.upload_df_google_drive)
 
 
 
