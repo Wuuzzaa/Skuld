@@ -175,5 +175,5 @@ cython_debug/
 /testbert.py 
 /data - Kopie/
 .streamlit/secrets.toml
-
 /service_account.json
+/.streamlit/
