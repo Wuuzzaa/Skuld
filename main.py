@@ -10,7 +10,7 @@ from src.google_drive_upload import upload_merged_data
 from src.dividend_radar import process_dividend_data
 
 
-def main(testmode=False, upload_df_google_drive=True):
+def main(testmode=True, upload_df_google_drive=True):
     create_all_project_folders()
 
     print("#"*80)
@@ -79,4 +79,4 @@ def main(testmode=False, upload_df_google_drive=True):
 
 
 if __name__ == '__main__':
-    main(testmode=True, upload_df_google_drive=False)
+    main(testmode=True, upload_df_google_drive=True)

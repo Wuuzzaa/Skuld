@@ -84,8 +84,8 @@ print(PATH_OPTION_DATA_TRADINGVIEW)
 
 PATH_ON_GOOGLE_DRIVE = "1ahLHST1IEUDf03TT3hEdbVm1r7rcxJcu"
 FILENAME_GOOGLE_DRIVE = "merged_data.feather"
-PATH_FOR_SERVICE_ACCOUNT_FILE = "service_account.json"
-#PATH_FOR_SERVICE_ACCOUNT_FILE = r"C:\Python\google_upload2\service_account.json"
+#PATH_FOR_SERVICE_ACCOUNT_FILE = "service_account.json"
+PATH_FOR_SERVICE_ACCOUNT_FILE = r"C:\Python\google_upload2\service_account.json"
 
 # FOLDERPATHS relative to main.py
 FOLDERPATHS = \
