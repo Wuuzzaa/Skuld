@@ -4,12 +4,15 @@ from pathlib import Path
 # Basepath relativ to basefolder
 BASE_DIR = Path(__file__).resolve().parent
 
+# Filename merged dataframe the final file for the streamlit app
+FILENAME_MERGED_DATAFRAME = 'merged_df.feather'
+
 # Datafolder
 PATH_DATA = BASE_DIR / 'data'
 PATH_OPTION_DATA_TRADINGVIEW = PATH_DATA / 'json' / 'option_data_tradingview'
 PATH_DATAFRAME_OPTION_DATA_FEATHER = PATH_DATA / 'option_data.feather'
 PATH_DATAFRAME_PRICE_AND_INDICATOR_DATA_FEATHER = PATH_DATA / 'price_and_indicators.feather'
-PATH_DATAFRAME_DATA_MERGED_FEATHER = PATH_DATA / 'merged_df.feather'
+PATH_DATAFRAME_DATA_MERGED_FEATHER = PATH_DATA / FILENAME_MERGED_DATAFRAME
 PATH_DATAFRAME_DATA_ANALYST_PRICE_TARGET_FEATHER = PATH_DATA / 'price_target_df.feather'
 
 # Dividend Radar
@@ -24,7 +27,7 @@ PATH_SYMBOLS_EXCHANGE_FILE = BASE_DIR / 'symbols_exchange.xlsx'
 
 #Google Upload Config
 PATH_ON_GOOGLE_DRIVE = "1ahLHST1IEUDf03TT3hEdbVm1r7rcxJcu"
-FILENAME_GOOGLE_DRIVE = "merged_data.feather"
+FILENAME_GOOGLE_DRIVE = FILENAME_MERGED_DATAFRAME
 PATH_FOR_SERVICE_ACCOUNT_FILE = "service_account.json"
 
 # FOLDERPATHS relative to main.py
