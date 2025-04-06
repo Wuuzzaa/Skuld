@@ -1,25 +1,64 @@
 import streamlit as st
 import pandas as pd
+import os
 from st_aggrid import AgGrid, GridOptionsBuilder
+
+# Import the force_data_download function from your module
+from src.dividend_radar import force_data_download  # Adjust module path accordingly
+from config import PATH_DIVIDEND_RADAR  # Path to the dividend file (e.g., dividend_data.feather)
 
 # Sidebar: custom threshold inputs for each group
 custom_thresh_group1 = st.sidebar.number_input("Custom Threshold for Group 1 (Div-Yield ≥ 3)", value=14, step=1)
 custom_thresh_group2 = st.sidebar.number_input("Custom Threshold for Group 2 (Div-Yield < 3)", value=15, step=1)
 
-# Sidebar: toggle buttons for each group
-if "show_group1" not in st.session_state:
-    st.session_state["show_group1"] = True
-if "show_group2" not in st.session_state:
-    st.session_state["show_group2"] = True
+# Sidebar: Statt zwei einzelner Toggle-Buttons wird hier ein multiselect genutzt
+selected_groups = st.sidebar.multiselect(
+    "show chowder Numbers:",
+    options=["Group 1", "Group 2"],
+    default=["Group 1", "Group 2"]
+)
 
-if st.sidebar.button("Toggle Group 1"):
-    st.session_state["show_group1"] = not st.session_state["show_group1"]
+# Sidebar: button to force data download
+if st.sidebar.button("Force Data Download"):
+    force_data_download(PATH_DIVIDEND_RADAR)
+    st.sidebar.success("Force data download completed.")
 
-if st.sidebar.button("Toggle Group 2"):
-    st.session_state["show_group2"] = not st.session_state["show_group2"]
+# Sidebar: radio to select display mode
+display_option = st.sidebar.radio(
+    "Select display mode:",
+    ["Show Only Option Strategy Relevant Data", "Show Full Dividend File"]
+)
+
+# Determine available columns based on display mode
+if display_option == "Show Full Dividend File":
+    if os.path.exists(PATH_DIVIDEND_RADAR):
+        try:
+            full_dividend_df_temp = pd.read_feather(PATH_DIVIDEND_RADAR)
+            full_dividend_df_temp.columns = full_dividend_df_temp.columns.str.lower().str.strip()
+            available_columns = list(full_dividend_df_temp.columns)
+        except Exception as e:
+            st.sidebar.error("Error reading full dividend file: " + str(e))
+            available_columns = []
+    else:
+        available_columns = []
+else:
+    if "df" in st.session_state:
+        available_columns = list(st.session_state["df"].columns)
+    else:
+        available_columns = []
+
+default_options = [col.lower() for col in ["symbol", "Div-Yield", "Chowder-Number", "Fair-Value"]]
+default_columns = [col for col in available_columns if col in default_options]
+
+selected_columns = st.sidebar.multiselect("Select columns to display", options=available_columns, default=default_columns)
+if not selected_columns:
+    st.error("Please select at least one column.")
+    st.stop()
 
 # Page Title and Subheader
 st.subheader("Dividenden-Radar")
+tooltips = {"symbol": "Stock symbol"}
+
 
 st.markdown("""
 ### What Is the Chowder Number?
@@ -30,86 +69,107 @@ Here, the 5-year average dividend yield is used as a proxy for the dividend grow
 
 **Rules of Thumb:**  
 - **Group 1:** For stocks with a dividend yield of **3% or higher**, a Chowder Number above the configured threshold 14 is preferred.  
-- **Group 2:** For stocks with a dividend yield **below 3%**, a Chowder Number above the configured threshold 15 is considered favorable.
+- **Group 2:** For stocks with a dividend yield **below 3**, a Chowder Number above the configured threshold 15 is considered favorable.
 
 This metric helps quickly identify dividend-paying stocks that may warrant further research.
 """)
 
-# DataFrame Handling: load the original DataFrame from session state
-if "df" in st.session_state:
-    df = st.session_state["df"].copy()  # work on a copy to avoid SettingWithCopyWarning
-else:
-    st.error("DataFrame not found in session state.")
-    st.stop()
+side_bar_config = {
+    "toolPanels": [
+        {
+            "id": "columns",
+            "labelDefault": "Columns",
+            "labelKey": "columns",
+            "iconKey": "columns",
+            "toolPanel": "agColumnsToolPanel"
+        }
+    ],
+    "defaultToolPanel": "columns"
+}
 
-# Clean column names: replace spaces with hyphens
-df.columns = df.columns.str.replace(" ", "-")
+default_filter_params = {
+    'filter': True,
+    'sortable': True,
+    'resizable': True,
+    'floatingFilter': True,
+    'filterParams': {
+        'filterOptions': ['contains', 'notContains', 'equals', 'notEqual', 'startsWith', 'endsWith']
+    }
+}
 
-# (Optional) Drop an unwanted column, e.g., "analyst_mean_target", if present
-if "analyst_mean_target" in df.columns:
-    df = df.drop(columns=["analyst_mean_target"])
-
-# Convert key columns to numeric
-df["Div-Yield"] = pd.to_numeric(df["Div-Yield"], errors="coerce")
-df["Chowder-Number"] = pd.to_numeric(df["Chowder-Number"], errors="coerce")
-
-# Filter the DataFrame into two groups using the custom thresholds:
-# Group 1: Div-Yield ≥ 3 and Chowder-Number > custom_thresh_group1
-# Group 2: Div-Yield < 3 and Chowder-Number > custom_thresh_group2
-group1_df = df[(df["Div-Yield"] >= 3) & (df["Chowder-Number"] > custom_thresh_group1)]
-group2_df = df[(df["Div-Yield"] < 3) & (df["Chowder-Number"] > custom_thresh_group2)]
-
-# Sidebar: Multi-select for columns to display.
-# Default selection: only "symbol", "Div-Yield", and "Chowder-Number"
-all_columns = df.columns.tolist()
-default_columns = ["symbol", "Div-Yield", "Chowder-Number"]
-selected_columns = st.sidebar.multiselect("Select columns to display", options=all_columns, default=default_columns)
-
-if not selected_columns:
-    st.error("Please select at least one column.")
-    st.stop()
-
-# For display, use the selected columns from the original filtered groups
-group1_display = group1_df[selected_columns].drop_duplicates()
-group2_display = group2_df[selected_columns].drop_duplicates()
-
-tooltips = {"symbol": "Stock symbol"}
-
-# Display Group 1 if toggled on
-if st.session_state["show_group1"]:
-    st.subheader(f"Group 1: Div-Yield ≥ 3 & Chowder Number > {custom_thresh_group1}")
-    try:
-        gb1 = GridOptionsBuilder.from_dataframe(group1_display)
-        for col in group1_display.columns:
-            if col in tooltips:
-                gb1.configure_column(col, headerTooltip=tooltips[col])
+if display_option == "Show Full Dividend File":
+    st.subheader("Full Dividend File")
+    if os.path.exists(PATH_DIVIDEND_RADAR):
+        try:
+            full_dividend_df = pd.read_feather(PATH_DIVIDEND_RADAR)
+            full_dividend_df.columns = full_dividend_df.columns.str.lower().str.strip()
+            display_columns = [col for col in selected_columns if col in full_dividend_df.columns]
+            if "symbol" in full_dividend_df.columns and "symbol" not in display_columns:
+                display_columns.insert(0, "symbol")
+            if not display_columns:
+                st.warning("None of the selected columns are available in the full dividend file. Displaying all columns instead.")
+                full_display = full_dividend_df
             else:
-                gb1.configure_column(col)
-        gridOptions1 = gb1.build()
-        AgGrid(group1_display, gridOptions=gridOptions1, enable_enterprise_modules=False, fit_columns_on_grid_load=True)
-    except Exception as e:
-        st.error(f"AgGrid display error in Group 1: {e}")
-        st.table(group1_display)
+                full_display = full_dividend_df[display_columns]
+            gb_full = GridOptionsBuilder.from_dataframe(full_display)
+            gb_full.configure_default_column(**default_filter_params)
+            gb_full.configure_side_bar(side_bar_config)
+            for col in full_display.columns:
+                if col in tooltips:
+                    gb_full.configure_column(col, headerTooltip=tooltips[col])
+                else:
+                    gb_full.configure_column(col)
+            gridOptions_full = gb_full.build()
+            AgGrid(full_display, gridOptions=gridOptions_full, key=f"full_dividend_{'_'.join(selected_columns)}",
+                   enable_enterprise_modules=False, fit_columns_on_grid_load=True)
+        except Exception as e:
+            st.error(f"AgGrid display error for full dividend file: {e}")
+            st.table(full_dividend_df)
+    else:
+        st.warning("Full dividend file not found. Please ensure the dividend data has been downloaded.")
 else:
-    st.write("Group 1 is hidden.")
+    # Show Only Option Strategy Relevant Data
+    if "df" not in st.session_state:
+        st.error("DataFrame not found in session state.")
+        st.stop()
 
-# Display Group 2 if toggled on
-if st.session_state["show_group2"]:
-    st.subheader(f"Group 2: Div-Yield < 3 & Chowder Number > {custom_thresh_group2}")
-    try:
-        gb2 = GridOptionsBuilder.from_dataframe(group2_display)
-        for col in group2_display.columns:
-            if col in tooltips:
-                gb2.configure_column(col, headerTooltip=tooltips[col])
-            else:
-                gb2.configure_column(col)
-        gridOptions2 = gb2.build()
-        AgGrid(group2_display, gridOptions=gridOptions2, enable_enterprise_modules=False, fit_columns_on_grid_load=True)
-    except Exception as e:
-        st.error(f"AgGrid display error in Group 2: {e}")
-        st.table(group2_display)
-else:
-    st.write("Group 2 is hidden.")
+    df = st.session_state["df"].copy()
+    df.columns = df.columns.str.replace(" ", "-")
+    df = df.drop_duplicates(subset=["symbol"])
+    if "analyst_mean_target" in df.columns:
+        df = df.drop(columns=["analyst_mean_target"])
+    df["Div-Yield"] = pd.to_numeric(df["Div-Yield"], errors="coerce")
+    df["Chowder-Number"] = pd.to_numeric(df["Chowder-Number"], errors="coerce")
 
-if not st.session_state["show_group1"] and not st.session_state["show_group2"]:
-    st.write("No group selected.")
+    group1_df = df[(df["Div-Yield"] >= 3) & (df["Chowder-Number"] > custom_thresh_group1)]
+    group2_df = df[(df["Div-Yield"] < 3) & (df["Chowder-Number"] > custom_thresh_group2)]
+
+    # Kombinieren der Ergebnisse basierend auf der Auswahl
+    dfs = []
+    if "Group 1" in selected_groups:
+        dfs.append(group1_df)
+    if "Group 2" in selected_groups:
+        dfs.append(group2_df)
+
+    if dfs:
+        combined_df = pd.concat(dfs)
+        combined_df = combined_df.drop_duplicates(subset=["symbol"])
+        st.subheader("Chowder Numbers")
+        combined_display = combined_df[[col for col in selected_columns if col in combined_df.columns]]
+        try:
+            gb = GridOptionsBuilder.from_dataframe(combined_display)
+            gb.configure_default_column(**default_filter_params)
+            gb.configure_side_bar(side_bar_config)
+            for col in combined_display.columns:
+                if col in tooltips:
+                    gb.configure_column(col, headerTooltip=tooltips[col])
+                else:
+                    gb.configure_column(col)
+            gridOptions = gb.build()
+            AgGrid(combined_display, gridOptions=gridOptions,
+                   enable_enterprise_modules=False, fit_columns_on_grid_load=True)
+        except Exception as e:
+            st.error(f"AgGrid display error: {e}")
+            st.table(combined_display)
+    else:
+        st.write("No group selected.")

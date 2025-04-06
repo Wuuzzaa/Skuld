@@ -48,7 +48,7 @@ def log_debug(message: str):
 
 
 def show_log_messages():
-    """Displays all collected log messages in Streamlit."""
+    """Display all collected log messages."""
     if "log_messages" not in st.session_state:
         return
     for level, msg in st.session_state["log_messages"]:

@@ -92,9 +92,42 @@ def process_dividend_data(path_outputfile):
         log_info(f"DataFrame saved as {path_outputfile}.")
 
     except Exception as e:
-        log_error(f"Error saving as Feather: {e}")
+        log_error(f"Error saving as Feather: {e}") 
 
-if __name__ == '__main__':
-    # Pfad zur Speicherung der Feather-Datei
-    path_outputfile = "dividend_data.feather"
-    process_dividend_data(path_outputfile)
+def force_data_download(path_outputfile):
+    """
+    Forces the download of dividend data and overwrites the existing Feather file.
+    This function can be called from another Python module (e.g., as a callback for a Streamlit button).
+    """
+    log_info("Forcing dividend data download and overwriting the Feather file.")
+    
+    content = download_xlsx_file()
+    if not content:
+        log_error("Error downloading the XLSX file during forced download.")
+        return
+
+    try:
+        # Read the "All" sheet, assuming the header is in the third row (index 2).
+        df = pd.read_excel(io.BytesIO(content), sheet_name="All", header=2)
+        log_info("Excel file read successfully during forced download.")
+    except Exception as e:
+        log_error(f"Error reading the Excel file during forced download: {e}")
+        return
+
+    # Remove columns whose names start with "Unnamed:".
+    unnamed_cols = [col for col in df.columns if col.startswith("Unnamed:")]
+    if unnamed_cols:
+        df.drop(columns=unnamed_cols, inplace=True)
+        log_info(f"Removed 'Unnamed' columns: {unnamed_cols}")
+
+    # Clean column names by stripping whitespace and replacing internal spaces with hyphens.
+    df.columns = df.columns.str.strip().str.replace(r"\s+", "-", regex=True)
+    log_info("Cleaned column names during forced download.")
+
+    # Save the DataFrame as a Feather file, overwriting the existing file if necessary.
+    try:
+        df.to_feather(str(path_outputfile))
+        log_info(f"DataFrame saved successfully as {path_outputfile} (overwritten).")
+    except Exception as e:
+        log_error(f"Error saving DataFrame as Feather during forced download: {e}")
+
