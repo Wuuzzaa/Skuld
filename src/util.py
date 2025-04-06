@@ -20,8 +20,8 @@ def get_option_expiry_dates():
     today = date.today()
     expiry_dates = set()
 
-    # Monthly expiration dates: Third Friday of the next 12 months
-    for i in range(12):
+    # Monthly expiration dates: Third Friday of the next 4 months
+    for i in range(4):
         year = today.year + (today.month + i - 1) // 12  # Adjust the year if the month exceeds 12
         month = (today.month + i - 1) % 12 + 1  # Keep the month between 1 and 12
 
