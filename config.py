@@ -1,71 +1,10 @@
+import pandas as pd
 from pathlib import Path
 
-SYMBOLS_EXCHANGE = {
-    "AAPL": 'NASDAQ',
-    "AMD": 'NASDAQ',
-    "AMZN": 'NASDAQ',
-    "AVGO": 'NASDAQ',
-    "BA": 'NYSE',
-    "BABA": 'NYSE',
-    "BIDU": 'NASDAQ',
-    "C": 'NYSE',
-    "CAT": 'NYSE',
-    "COF": 'NYSE',
-    "COST": 'NASDAQ',
-    "CRM": 'NYSE',
-    "CRWD": 'NASDAQ',
-    "CSCO": 'NASDAQ',
-    "DIA": 'AMEX',
-    "DIS": 'NYSE',
-    "EEM": 'AMEX',
-    "GE": 'NYSE',
-    "GLD": 'AMEX',
-    "GM": 'NYSE',
-    "GOOG": 'NASDAQ',
-    "GS": 'NYSE',
-    "HD": 'NYSE',
-    "IBM": 'NYSE',
-    "IWM": 'AMEX',
-    "JPM": 'NYSE',
-    "LOW": 'NYSE',
-    "MCD": 'NYSE',
-    "META": 'NASDAQ',
-    "MMM": 'NYSE',
-    "MRVL": 'NASDAQ',
-    "MSFT": 'NASDAQ',
-    "MU": 'NASDAQ',
-    "NFLX": 'NASDAQ',
-    "NVDA": 'NASDAQ',
-    "ORCL": 'NYSE',
-    "PG": 'NYSE',
-    "QCOM": 'NASDAQ',
-    "QQQ": 'NASDAQ',
-    "SBUX": 'NASDAQ',
-    "SHOP": 'NYSE',
-    "SMH": 'NASDAQ',
-    "SPY": 'AMEX',
-    "SQ": 'NYSE',
-    "TGT": 'NYSE',
-    "TLT": 'NASDAQ',
-    "TSLA": 'NASDAQ',
-    "UBER": 'NYSE',
-    "USO": 'AMEX',
-    "V": 'NYSE',
-    "WFC": 'NYSE',
-    "WMT": 'NYSE',
-    "X": 'NYSE',
-    "XBI": 'AMEX',
-    "XLU": 'AMEX',
-    "XOM": 'NYSE',
-    "XOP": 'AMEX',
-}
-
-SYMBOLS = list(SYMBOLS_EXCHANGE.keys())
-
-# Basisverzeichnis relativ zur main.py oder der config.py
+# Basepath relativ to basefolder
 BASE_DIR = Path(__file__).resolve().parent
 
-# Datenverzeichnis
+# Datafolder
 PATH_DATA = BASE_DIR / 'data'
 PATH_OPTION_DATA_TRADINGVIEW = PATH_DATA / 'json' / 'option_data_tradingview'
 PATH_DATAFRAME_OPTION_DATA_FEATHER = PATH_DATA / 'option_data.feather'
@@ -73,15 +12,17 @@ PATH_DATAFRAME_PRICE_AND_INDICATOR_DATA_FEATHER = PATH_DATA / 'price_and_indicat
 PATH_DATAFRAME_DATA_MERGED_FEATHER = PATH_DATA / 'merged_df.feather'
 PATH_DATAFRAME_DATA_ANALYST_PRICE_TARGET_FEATHER = PATH_DATA / 'price_target_df.feather'
 
-#Dividend Radar
+# Dividend Radar
 URL_DIVIDEND_RADAR = "https://www.portfolio-insight.com/dividend-radar"
 PATH_DIVIDEND_RADAR = PATH_DATA / 'dividend_radar.feather'
 
 # App Logfile
 PATH_APP_LOGFILE = BASE_DIR / 'app.log'
 
-#Google Upload Config
+# Symbols excel file
+PATH_SYMBOLS_EXCHANGE_FILE = BASE_DIR / 'symbols_exchange.xlsx'
 
+#Google Upload Config
 PATH_ON_GOOGLE_DRIVE = "1ahLHST1IEUDf03TT3hEdbVm1r7rcxJcu"
 FILENAME_GOOGLE_DRIVE = "merged_data.feather"
 PATH_FOR_SERVICE_ACCOUNT_FILE = "service_account.json"
@@ -92,6 +33,12 @@ FOLDERPATHS = \
         PATH_DATA,
         PATH_OPTION_DATA_TRADINGVIEW
     ]
+
+# Symbols and exchange
+df =pd.read_excel(PATH_SYMBOLS_EXCHANGE_FILE)
+SYMBOLS_EXCHANGE = dict(zip(df['symbol'], df['exchange']))
+
+SYMBOLS = list(SYMBOLS_EXCHANGE.keys())
 
 # set the columns needed for further work
 DATAFRAME_DATA_MERGED_COLUMNS = [
