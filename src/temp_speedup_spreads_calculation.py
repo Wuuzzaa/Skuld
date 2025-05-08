@@ -1,6 +1,40 @@
 import pandas
 import pandas as pd
+from math import sqrt
+from scipy.stats import norm
+from datetime import datetime
 from config import *
+
+
+def calculate_pop(underlying_price, strike_price, days_to_expiration, implied_volatility, is_call=True):
+    """
+    Calculates the Probability of Profit (POP) for an option using the normal distribution.
+
+    Parameters:
+    - underlying_price (float): Current price of the underlying asset
+    - strike_price (float): Option's strike price
+    - days_to_expiration (int): Number of days until expiration
+    - implied_volatility (float): Implied volatility (e.g., 0.25 for 25%)
+    - is_call (bool): True for call options, False for puts
+
+    Returns:
+    - pop (float): Probability (between 0 and 1) that the option will expire in-the-money
+    """
+
+    # Convert annual volatility to daily and calculate standard deviation
+    time_fraction = sqrt(days_to_expiration / 365)
+    std_dev = implied_volatility * underlying_price * time_fraction
+
+    if std_dev == 0:
+        return 1.0 if (underlying_price > strike_price if is_call else underlying_price < strike_price) else 0.0
+
+    # Calculate the z-score
+    z = (strike_price - underlying_price) / std_dev
+
+    # Calculate POP based on option type
+    pop = norm.cdf(z) if is_call else 1 - norm.cdf(z)
+
+    return round(pop, 4)
 
 
 def __load_df_option_columns_only(df, expiration_date):
@@ -18,7 +52,8 @@ def __load_df_option_columns_only(df, expiration_date):
         "theoPrice",
         "theta",
         "vega",
-        "option"
+        "option",
+        "close"
     ]
 
     # filter expiration date and only needed columns for the spreads
@@ -67,8 +102,8 @@ def add_buy_options(df, sell_puts, sell_calls, spread_width):
     put_spreads = sell_puts.merge(
         puts,
         how="left",
-        left_on=["symbol", sell_puts["strike"] - spread_width],
-        right_on=["symbol", "strike"],
+        left_on=["symbol", "close", sell_puts["strike"] - spread_width],
+        right_on=["symbol", "close", "strike"],
         suffixes=("_sell", "_buy")
     )
 
@@ -78,8 +113,8 @@ def add_buy_options(df, sell_puts, sell_calls, spread_width):
     call_spreads = sell_calls.merge(
         calls,
         how="left",
-        left_on=["symbol", sell_calls["strike"] + spread_width],
-        right_on=["symbol", "strike"],
+        left_on=["symbol", "close", sell_calls["strike"] + spread_width],
+        right_on=["symbol", "close", "strike"],
         suffixes=("_sell", "_buy")
     )
 
@@ -115,6 +150,7 @@ def get_spreads(df, expiration_date, delta_target, spread_width):
 
     spreads = pd.concat([puts, calls], ignore_index=True)
 
+    # clear memory
     del puts, calls, sell_puts, sell_calls
 
     # spread values calculation
@@ -122,11 +158,67 @@ def get_spreads(df, expiration_date, delta_target, spread_width):
     spreads["max_profit"] = 100 * (spreads["bid_sell"] - spreads["ask_buy"])
     spreads["bpr"] = spreads["spread_width"] * 100 - spreads["max_profit"]
     spreads["profit_to_bpr"] = spreads["max_profit"] / spreads["bpr"]
-    spreads["spread_theta"] = spreads["theta_sell"] -spreads["theta_buy"]
+    spreads["spread_theta"] = spreads["theta_sell"] - spreads["theta_buy"]
     spreads["pop_delta"] = 1 - abs(spreads["delta_sell"])
     spreads["ev_pop_delta"] = (spreads["pop_delta"] * spreads["max_profit"]) - ((1 - spreads["pop_delta"]) * spreads["bpr"])
 
-    return spreads
+    today = pd.Timestamp(datetime.today().date())
+
+    # apply() mit Konvertierung von option_type_sell und Berechnung von days_to_expiration
+    spreads['pop'] = spreads.apply(lambda row: calculate_pop(
+        row['close'],
+        row['strike_sell'],
+        (row['expiration_date_sell'] - today).days,
+        row['iv_sell'],
+        row['option-type_sell'].lower() == 'call'  # True wenn Call, sonst False
+    ), axis=1)
+
+    spreads["ev_pop"] = (spreads["pop"] * spreads["max_profit"]) - ((1 - spreads["pop"]) * spreads["bpr"])
+
+    # remove not needed columns for streamlit data view
+    spreads_columns = [
+        'symbol',
+        #'strike',
+        #'expiration_date_sell',
+        'option-type_sell',
+        'strike_sell',
+        #'ask_sell',
+        'bid_sell',
+        'delta_sell',
+        #'gamma_sell',
+        'iv_sell',
+        #'rho_sell',
+        #'theoPrice_sell',
+        #'theta_sell',
+        #'vega_sell',
+        'option_sell',
+        #'delta_diff',
+        #'expiration_date_buy',
+        #'option-type_buy',
+        'strike_buy',
+        'ask_buy',
+        #'bid_buy',
+        'delta_buy',
+        #'gamma_buy',
+        #'iv_buy',
+        #'rho_buy',
+        #'theoPrice_buy',
+        #'theta_buy',
+        #'vega_buy',
+        'option_buy',
+        'spread_width',
+        'max_profit',
+        'bpr',
+        'profit_to_bpr',
+        'spread_theta',
+        'pop_delta',
+        'ev_pop_delta',
+        'pop',
+        'ev_pop',
+        'close'
+    ]
+
+    return spreads[spreads_columns]
 
 
 if __name__ == "__main__":
