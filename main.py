@@ -20,15 +20,14 @@ def main(testmode=False, upload_df_google_drive=True):
 
     create_all_project_folders()
 
-    # todo activate again think the api blocked for a day or so 09.05.2025
-    # print("#"*80)
-    # print("Get Yahoo Finance data")
-    # print("#" * 80)
-    # if testmode:
-    #     scrape_yahoo_finance_analyst_price_targets(SYMBOLS[:3])
-    # else:
-    #     scrape_yahoo_finance_analyst_price_targets(SYMBOLS)
-    # print("Get Yahoo Finance data - Done")
+    print("#"*80)
+    print("Get Yahoo Finance data")
+    print("#" * 80)
+    if testmode:
+        scrape_yahoo_finance_analyst_price_targets(SYMBOLS[:3])
+    else:
+        scrape_yahoo_finance_analyst_price_targets(SYMBOLS)
+    print("Get Yahoo Finance data - Done")
 
     print("#" * 80)
     print("Get option data")
