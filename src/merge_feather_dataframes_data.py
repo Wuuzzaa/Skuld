@@ -19,6 +19,11 @@ def merge_data_dataframes():
     df_dividend_data = pd.read_feather(PATH_DIVIDEND_RADAR)
     df_merged = pd.merge(df_merged, df_dividend_data, how='left', left_on='symbol', right_on='Symbol')
 
+    # Join Earning Dates
+    print("Joining Earning Dates")
+    df_earning_dates = pd.read_feather(PATH_DATAFRAME_EARNING_DATES_FEATHER)
+    df_merged = pd.merge(df_merged, df_earning_dates, how='left', left_on='symbol', right_on='symbol')
+
     # Store merged DataFrame to file
     print(f"Storing merged DataFrame to: {PATH_DATAFRAME_DATA_MERGED_FEATHER}")
     df_merged[DATAFRAME_DATA_MERGED_COLUMNS].to_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
