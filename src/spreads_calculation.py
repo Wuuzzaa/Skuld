@@ -53,7 +53,8 @@ def __load_df_option_columns_only(df, expiration_date):
         "theta",
         "vega",
         "option",
-        "close"
+        "close",
+        "earnings_date"
     ]
 
     # filter expiration date and only needed columns for the spreads
@@ -153,6 +154,7 @@ def get_spreads(df, expiration_date, delta_target, spread_width):
     del puts, calls, sell_puts, sell_calls
 
     # spread values calculation
+    spreads["earnings_date"] = spreads['earnings_date_sell']
     spreads['option_type'] = spreads['option-type_sell']
     spreads["spread_width"] = abs(spreads['strike_sell'] - spreads['strike_buy'])
     spreads["max_profit"] = 100 * (spreads["bid_sell"] - spreads["ask_buy"])
@@ -176,6 +178,7 @@ def get_spreads(df, expiration_date, delta_target, spread_width):
     # remove not needed columns for streamlit data view
     spreads_columns = [
         'symbol',
+        'earnings_date',
         'close',
         'option_type',
         #'strike',
