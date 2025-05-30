@@ -14,6 +14,8 @@ PATH_DATAFRAME_OPTION_DATA_FEATHER = PATH_DATA / 'option_data.feather'
 PATH_DATAFRAME_PRICE_AND_INDICATOR_DATA_FEATHER = PATH_DATA / 'price_and_indicators.feather'
 PATH_DATAFRAME_DATA_MERGED_FEATHER = PATH_DATA / FILENAME_MERGED_DATAFRAME
 PATH_DATAFRAME_DATA_ANALYST_PRICE_TARGET_FEATHER = PATH_DATA / 'price_target_df.feather'
+PATH_DATAFRAME_EARNING_DATES_FEATHER = PATH_DATA / 'earning_dates.feather'
+
 
 # Dividend Radar
 URL_DIVIDEND_RADAR = "https://www.portfolio-insight.com/dividend-radar"
@@ -157,6 +159,7 @@ DATAFRAME_DATA_MERGED_COLUMNS = [
     "BB.lower",
     "BB.upper",
     # "AO[2]",
+    "earnings_date",
 
     ##################
     #Dividend Radar ,

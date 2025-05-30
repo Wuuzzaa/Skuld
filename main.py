@@ -5,6 +5,7 @@ from src.tradingview_optionchain_scrapper import scrape_option_data
 from src.price_and_technical_analysis_data_scrapper import scrape_and_save_price_and_technical_indicators
 from src.merge_feather_dataframes_data import merge_data_dataframes
 from src.util import create_all_project_folders, get_option_expiry_dates
+from src.yahooquery_earning_dates import scrape_earning_dates
 from src.yfinance_analyst_price_targets import scrape_yahoo_finance_analyst_price_targets
 from config import *
 from src.google_drive_upload import upload_merged_data
@@ -19,6 +20,8 @@ def main(testmode=False, upload_df_google_drive=True):
     print("#" * 80)
 
     create_all_project_folders()
+
+    # todo add symbol and exchange update here. Currently it just runs manually.
 
     print("#"*80)
     print("Get Yahoo Finance data")
@@ -59,7 +62,13 @@ def main(testmode=False, upload_df_google_drive=True):
     print("Dividend Radar")
     print("#" * 80)
     process_dividend_data(path_outputfile=PATH_DIVIDEND_RADAR)
-    print("Dividend Radar Done") 
+    print("Dividend Radar Done")
+
+    print("#" * 80)
+    print("Earning Dates")
+    print("#" * 80)
+    scrape_earning_dates()
+    print("Earning Dates Done")
 
     print("#" * 80)
     print("Merge all feather dataframe files")
@@ -81,7 +90,6 @@ def main(testmode=False, upload_df_google_drive=True):
         print("#" * 80)
         upload_merged_data()
         print("Upload file to Google Drive - Done")
-
 
     print("RUN DONE")
 
