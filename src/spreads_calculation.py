@@ -78,9 +78,17 @@ def get_sell_options_by_delta_target(df, delta_target):
     puts["delta_diff"] = (puts["delta"] - (-delta_target)).abs()
     calls["delta_diff"] = (calls["delta"] - delta_target).abs()
 
+    # DEBUG
+    # nan_counts = puts["delta_diff"].isna().groupby(puts["symbol"]).sum()
+    # nan_counts = nan_counts[nan_counts > 0]
+    #
+    # if not nan_counts.empty:
+    #     print("Symbole mit NaN in delta_diff:")
+    #     print(nan_counts)
+
     # Find the best matching option (smallest delta_diff) per symbol
-    sell_puts = puts.loc[puts.groupby("symbol")["delta_diff"].idxmin()]
-    sell_calls = calls.loc[calls.groupby("symbol")["delta_diff"].idxmin()]
+    sell_puts = puts.loc[puts.groupby("symbol")["delta_diff"].idxmin().dropna()]
+    sell_calls = calls.loc[calls.groupby("symbol")["delta_diff"].idxmin().dropna()]
 
     return sell_puts, sell_calls
 
@@ -231,7 +239,7 @@ if __name__ == "__main__":
     import time
 
     df = pd.read_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
-    expiration_date = '2025-05-23'
+    expiration_date = '2025-05-30'
     delta_target = 0.2
     spread_width = 5
 
