@@ -3,6 +3,8 @@ import re
 import requests
 import pandas as pd
 
+from src.util import opra_to_osi
+
 BASE_URL_OPTION_DATA = "https://scanner.tradingview.com/options/scan2?label-product=symbols-options"
 
 
@@ -64,6 +66,9 @@ def scrape_option_data(symbol, expiration_date, exchange, folderpath):
 
         if response.json()['totalCount'] > 0:
             df = _response_json_to_df(data=response.json(), symbol=symbol, exchange=exchange, expiration_date=expiration_date)
+
+            # add the OSI-Format for option names to be able to merge it later on.
+            df["option_osi"] = df["option"].apply(opra_to_osi)
             df.to_feather(folderpath / f"{symbol}_{expiration_date}.feather")
         else:
             print("No data was found")

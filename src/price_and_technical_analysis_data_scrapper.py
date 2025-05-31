@@ -3,10 +3,15 @@ from config import *
 from tradingview_ta import TA_Handler, Interval, Exchange
 
 
-def scrape_and_save_price_and_technical_indicators(path_outputfile):
+def scrape_and_save_price_and_technical_indicators(testmode):
+    # check testmode
+    if testmode:
+        items = list(SYMBOLS_EXCHANGE.items())[:5]
+    else:
+        items = SYMBOLS_EXCHANGE.items()
     results = []
 
-    for symbol, exchange in SYMBOLS_EXCHANGE.items():
+    for symbol, exchange in items:
         try:
             analysis = TA_Handler(
                 symbol=symbol,
@@ -36,7 +41,7 @@ def scrape_and_save_price_and_technical_indicators(path_outputfile):
     # make a dataframe from the results
     df = pd.DataFrame(results)
 
-    df.to_feather(path_outputfile)
+    df.to_feather(PATH_DATAFRAME_PRICE_AND_INDICATOR_DATA_FEATHER)
 
 
 
