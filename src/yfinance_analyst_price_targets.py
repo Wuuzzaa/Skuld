@@ -4,7 +4,7 @@ import pandas as pd
 import time
 
 
-def scrape_yahoo_finance_analyst_price_targets(symbols):
+def scrape_yahoo_finance_analyst_price_targets(testmode):
     print("#"*80)
     print(f"Scraping analyst price targets on Yahoo Finance...")
     print("#"*80)
@@ -13,6 +13,12 @@ def scrape_yahoo_finance_analyst_price_targets(symbols):
 
     # Yahoo Finance API Rate Limits:
     # https://help.yahooinc.com/dsp-api/docs/rate-limits
+
+    # check Testmode
+    if testmode:
+        symbols = SYMBOLS[:5]
+    else:
+        symbols = SYMBOLS
 
     for symbol in symbols:
         print(f"Scraping {symbol} on Yahoo Finance...")

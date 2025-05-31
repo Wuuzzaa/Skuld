@@ -24,6 +24,23 @@ def merge_data_dataframes():
     df_earning_dates = pd.read_feather(PATH_DATAFRAME_EARNING_DATES_FEATHER)
     df_merged = pd.merge(df_merged, df_earning_dates, how='left', left_on='symbol', right_on='symbol')
 
+    # Join Yahoo Option Chain
+    print("Joining Yahoo Option Chain")
+    df_yahooquery_option_chain = pd.read_feather(PATH_DATAFRAME_YAHOOQUERY_OPTION_CHAIN_FEATHER, columns=['contractSymbol', 'option_volume', 'option_open_interest'])
+    df_merged = pd.merge(df_merged, df_yahooquery_option_chain, how='left', left_on='option_osi', right_on='contractSymbol')
+
+
     # Store merged DataFrame to file
     print(f"Storing merged DataFrame to: {PATH_DATAFRAME_DATA_MERGED_FEATHER}")
     df_merged[DATAFRAME_DATA_MERGED_COLUMNS].to_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
+
+
+if __name__ == '__main__':
+    import time
+
+    start = time.time()
+    merge_data_dataframes()
+    end = time.time()
+    duration = end - start
+
+    print(f"\nDurchlaufzeit: {duration:.4f} Sekunden")

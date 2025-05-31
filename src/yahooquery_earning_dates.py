@@ -4,8 +4,13 @@ from config import *
 import pandas as pd
 
 
-def scrape_earning_dates():
-    tickers = Ticker(SYMBOLS, asynchronous=True)
+def scrape_earning_dates(testmode):
+    # check testmode
+    if testmode:
+        tickers = Ticker(SYMBOLS[:5], asynchronous=True)
+    else:
+        tickers = Ticker(SYMBOLS, asynchronous=True)
+
     earnings_dates = {}
 
     for symbol, data in tickers.calendar_events.items():

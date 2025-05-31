@@ -1,4 +1,5 @@
 import calendar
+import re
 from pathlib import Path
 from config import FOLDERPATHS
 from datetime import date, timedelta
@@ -43,3 +44,48 @@ def get_option_expiry_dates():
     expiry_dates_list = sorted(int(d.strftime('%Y%m%d')) for d in expiry_dates)
 
     return expiry_dates_list
+
+def opra_to_osi(opra_code):
+    """
+    Converts an OPRA option code into the standard OSI format.
+
+    OPRA format (used by many APIs and market data providers) looks like:
+        OPRA:<SYMBOL><YY><MM><DD><C/P><STRIKE>
+        Example: 'OPRA:AAPL250606C110.0'
+
+    OSI format (used by OCC and exchanges) looks like:
+        <SYMBOL><YY><MM><DD><C/P><STRIKE (8 digits, implied 3 decimals)>
+        Example: 'AAPL250606C00110000'
+
+    Parameters:
+        opra_code (str): The OPRA-style option symbol (e.g. 'OPRA:AAPL250606C110.0')
+
+    Returns:
+        str: The corresponding OSI code (e.g. 'AAPL250606C00110000')
+
+    Raises:
+        ValueError: If the input does not match the expected OPRA format.
+
+    Example:
+        >>> opra_to_osi("OPRA:AAPL250606C110.0")
+        'AAPL250606C00110000'
+    """
+
+    # Remove optional "OPRA:" prefix if present
+    if opra_code.startswith("OPRA:"):
+        opra_code = opra_code[5:]
+
+    # Extract components: Symbol, Date (YYMMDD), Option Type, and Strike
+    match = re.match(r'^([A-Z]+)(\d{2})(\d{2})(\d{2})([CP])([\d.]+)$', opra_code)
+    if not match:
+        raise ValueError("Invalid OPRA format: " + opra_code)
+
+    symbol, year, month, day, opt_type, strike_str = match.groups()
+
+    # Convert strike price to OSI format (e.g. 110.0 → 00110000)
+    strike_float = float(strike_str)
+    strike_osi = f"{int(strike_float * 1000):08d}"  # 8-digit string with leading zeros
+
+    # Combine parts into OSI format
+    osi_code = f"{symbol}{year}{month}{day}{opt_type}{strike_osi}"
+    return osi_code
