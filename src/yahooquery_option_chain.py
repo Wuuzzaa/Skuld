@@ -11,6 +11,7 @@ def get_yahooquery_option_chain(testmode):
     else:
         tickers = Ticker(SYMBOLS, asynchronous=True)
 
+    # request data
     df = tickers.option_chain
 
     # symbol expiration_date and option-type from index to column
