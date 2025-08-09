@@ -133,7 +133,7 @@ def add_buy_options(df, sell_puts, sell_calls, spread_width):
 def get_spreads(df, expiration_date, delta_target, spread_width):
     """
     Workflow:
-    - filter expiration date and drop not needed columns
+    - filter expiration date and drop unnecessary columns
     - select the sell options via delta
     - select the buy options via puts and spread width
     - calculate the spread
@@ -183,7 +183,7 @@ def get_spreads(df, expiration_date, delta_target, spread_width):
     ), axis=1)
     spreads["ev_pop"] = (spreads["pop"] * spreads["max_profit"]) - ((1 - spreads["pop"]) * spreads["bpr"])
 
-    # remove not needed columns for streamlit data view
+    # remove unnecessary columns for streamlit data view
     spreads_columns = [
         'symbol',
         'earnings_date',
