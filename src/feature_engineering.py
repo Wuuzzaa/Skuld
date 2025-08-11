@@ -1,4 +1,7 @@
+import math
+
 import pandas as pd
+import numpy as np
 from config import *
 
 
@@ -13,6 +16,13 @@ def feature_construction():
     print("add the percent value of the delta between analyst and close price")
     df["target-close%"] = round(df["target-close$"] / df["close"] * 100, 2)
 
+    print("add Days to expiration: dte")
+    today = pd.Timestamp.today().normalize()
+    df['dte'] = (df['expiration_date'] - today).dt.days
+
+    print("add expected move")
+    df['expected_move'] = df['close'] * df['iv'] * np.sqrt(df['dte'] / 365)
+
     # store data back again
     df.to_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
 
@@ -26,3 +36,7 @@ def type_casting():
 
     # store data back again
     df.to_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
+
+
+if __name__ == "__main__":
+    feature_construction()

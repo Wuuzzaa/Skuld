@@ -99,6 +99,8 @@ def main(testmode=False, upload_df_google_drive=True):
 
 
 if __name__ == '__main__':
+    # python main.py --testmode false --upload_df_google_drive false
+
     parser = argparse.ArgumentParser(description="Run the main script with optional parameters.")
     parser.add_argument("--testmode", type=lambda x: x.lower() == 'true', default=False,
                         help="Run in test mode (default: False)")
