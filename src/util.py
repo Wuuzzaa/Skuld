@@ -17,6 +17,47 @@ def create_all_project_folders():
             print(f"Folder already exists: {folder_path}")
 
 
+# def get_option_expiry_dates():
+#     today = date.today()
+#     expiry_dates = set()
+#
+#     # Monthly expiration dates: Third Friday of the next 4 months
+#     for i in range(4):
+#         year = today.year + (today.month + i - 1) // 12  # Adjust the year if the month exceeds 12
+#         month = (today.month + i - 1) % 12 + 1  # Keep the month between 1 and 12
+#
+#         # Get the month's calendar weeks
+#         month_cal = calendar.monthcalendar(year, month)
+#         # The third Friday is in the third week (if not available, take the fourth week)
+#         third_friday = month_cal[2][4] if month_cal[2][4] != 0 else month_cal[3][4]
+#         expiry_date = date(year, month, third_friday)
+#
+#         if expiry_date >= today:  # Only future dates
+#             expiry_dates.add(expiry_date)
+#
+#     # Weekly expiration dates: Every Friday for the next 60 days
+#     for i in range(60):
+#         future_date = today + timedelta(days=i)
+#         if future_date.weekday() == 4:  # Friday
+#             expiry_dates.add(future_date)
+#
+#     expiry_dates_list = sorted(int(d.strftime('%Y%m%d')) for d in expiry_dates)
+#
+#     return expiry_dates_list
+
+
+def get_third_friday(year, month):
+    """Calculate the third Friday of a given month"""
+    # Find the first day of the month
+    first_day = date(year, month, 1)
+    # Find the first Friday
+    days_until_friday = (4 - first_day.weekday()) % 7
+    first_friday = first_day + timedelta(days=days_until_friday)
+    # The third Friday is 14 days later
+    third_friday = first_friday + timedelta(days=14)
+    return third_friday
+
+
 def get_option_expiry_dates():
     today = date.today()
     expiry_dates = set()
@@ -26,11 +67,7 @@ def get_option_expiry_dates():
         year = today.year + (today.month + i - 1) // 12  # Adjust the year if the month exceeds 12
         month = (today.month + i - 1) % 12 + 1  # Keep the month between 1 and 12
 
-        # Get the month's calendar weeks
-        month_cal = calendar.monthcalendar(year, month)
-        # The third Friday is in the third week (if not available, take the fourth week)
-        third_friday = month_cal[2][4] if month_cal[2][4] != 0 else month_cal[3][4]
-        expiry_date = date(year, month, third_friday)
+        expiry_date = get_third_friday(year, month)
 
         if expiry_date >= today:  # Only future dates
             expiry_dates.add(expiry_date)
@@ -40,6 +77,30 @@ def get_option_expiry_dates():
         future_date = today + timedelta(days=i)
         if future_date.weekday() == 4:  # Friday
             expiry_dates.add(future_date)
+
+    # Additional third Fridays: first third Friday after 180 and 360 days
+    for target_days in [180, 360]:
+        target_date = today + timedelta(days=target_days)
+
+        # Start from the target month and look for the first third Friday after target_date
+        current_month = target_date.month
+        current_year = target_date.year
+
+        found = False
+        while not found:
+            # Get the third Friday of the current month
+            expiry_date = get_third_friday(current_year, current_month)
+
+            # If this third Friday is after the target date, we found our expiry
+            if expiry_date > target_date:
+                expiry_dates.add(expiry_date)
+                found = True
+            else:
+                # Move to next month
+                current_month += 1
+                if current_month > 12:
+                    current_month = 1
+                    current_year += 1
 
     expiry_dates_list = sorted(int(d.strftime('%Y%m%d')) for d in expiry_dates)
 
@@ -89,3 +150,7 @@ def opra_to_osi(opra_code):
     # Combine parts into OSI format
     osi_code = f"{symbol}{year}{month}{day}{opt_type}{strike_osi}"
     return osi_code
+
+if __name__ == "__main__":
+    expiry_dates = get_option_expiry_dates()
+    pass
