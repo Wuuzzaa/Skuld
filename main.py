@@ -1,5 +1,5 @@
 import argparse
-from src.feature_engineering import feature_construction, type_casting
+from src.feature_engineering import feature_construction
 from src.optiondata_feathers_to_df_merge import combine_feather_files
 from src.tradingview_optionchain_scrapper import scrape_option_data
 from src.price_and_technical_analysis_data_scrapper import scrape_and_save_price_and_technical_indicators
@@ -84,8 +84,7 @@ def main(testmode=False, upload_df_google_drive=True):
     print("Feature engineering")
     print("#" * 80)
     feature_construction()
-    type_casting()
-    print("Feature engineering - Done") 
+    print("Feature engineering - Done")
 
     # Upload the merged Feather file to Google Drive after feature construction is completed
     if upload_df_google_drive:
