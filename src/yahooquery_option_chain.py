@@ -34,7 +34,7 @@ def get_yahooquery_option_chain(testmode):
 if __name__ == '__main__':
 
     start = time.time()
-    get_yahooquery_option_chain()
+    get_yahooquery_option_chain(testmode=False)
     end = time.time()
     duration = end - start
 
