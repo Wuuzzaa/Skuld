@@ -37,6 +37,40 @@ def calculate_pop(underlying_price, strike_price, days_to_expiration, implied_vo
     return round(pop, 4)
 
 
+def calculate_expected_move(underlying_price, days_to_expiration, implied_volatility):
+    """
+    Calculates the Expected Move for an underlying asset based on implied volatility.
+    
+    The Expected Move represents the potential price range of an underlying asset 
+    over a given period, derived from implied volatility.
+
+    Parameters:
+    - underlying_price (float): Current price of the underlying asset
+    - days_to_expiration (int): Number of days until expiration
+    - implied_volatility (float): Implied volatility (e.g., 0.25 for 25%)
+
+    Returns:
+    - dict: Dictionary containing 'dollar' (absolute move in $) and 'percent' (percentage move)
+    """
+    
+    if underlying_price <= 0 or days_to_expiration <= 0 or implied_volatility <= 0:
+        return {'dollar': 0.0, 'percent': 0.0}
+    
+    # Convert annual volatility to the time period
+    time_fraction = sqrt(days_to_expiration / 365)
+    
+    # Calculate expected move in dollar terms (1 standard deviation)
+    expected_move_dollar = implied_volatility * underlying_price * time_fraction
+    
+    # Calculate expected move in percentage terms
+    expected_move_percent = (expected_move_dollar / underlying_price) * 100
+    
+    return {
+        'dollar': round(expected_move_dollar, 2),
+        'percent': round(expected_move_percent, 2)
+    }
+
+
 def __load_df_option_columns_only(df, expiration_date):
     option_columns = [
         "symbol",
@@ -182,6 +216,16 @@ def get_spreads(df, expiration_date, delta_target, spread_width):
         row['option-type_sell'].lower() == 'call'  # True wenn Call, sonst False
     ), axis=1)
     spreads["ev_pop"] = (spreads["pop"] * spreads["max_profit"]) - ((1 - spreads["pop"]) * spreads["bpr"])
+    
+    # Calculate expected move
+    expected_moves = spreads.apply(lambda row: calculate_expected_move(
+        row['close'],
+        (row['expiration_date_sell'] - today).days,
+        row['iv_sell']
+    ), axis=1)
+    
+    spreads['expected_move_dollar'] = expected_moves.apply(lambda x: x['dollar'])
+    spreads['expected_move_percent'] = expected_moves.apply(lambda x: x['percent'])
 
     # remove not needed columns for streamlit data view
     spreads_columns = [
@@ -226,6 +270,8 @@ def get_spreads(df, expiration_date, delta_target, spread_width):
         'ev_pop_delta',
         'pop',
         'ev_pop',
+        'expected_move_dollar',
+        'expected_move_percent',
     ]
 
     return spreads[spreads_columns]

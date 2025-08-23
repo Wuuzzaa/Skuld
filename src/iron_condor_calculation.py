@@ -30,6 +30,10 @@ def get_iron_condors(df, expiration_date, delta_target, spread_width):
     iron_condors['ev_pop'] = (iron_condors['max_profit'] * iron_condors['pop']) - ((1-iron_condors['pop']) * iron_condors['bpr'])
     iron_condors['close'] = iron_condors['put_close']  # put and call close are the same
     iron_condors['profit_to_bpr'] = iron_condors['max_profit'] / iron_condors['bpr']
+    
+    # Add expected move - use put values since underlying is the same for put and call
+    iron_condors['expected_move_dollar'] = iron_condors['put_expected_move_dollar']
+    iron_condors['expected_move_percent'] = iron_condors['put_expected_move_percent']
 
     # get symbol as column again and numric index of the df
     iron_condors.reset_index(inplace=True)
@@ -44,6 +48,8 @@ def get_iron_condors(df, expiration_date, delta_target, spread_width):
         'bpr',
         'pop',
         'ev_pop',
+        'expected_move_dollar',
+        'expected_move_percent',
 
         # 'put_close',
         # 'put_option_type',
