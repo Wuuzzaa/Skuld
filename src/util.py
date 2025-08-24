@@ -1,7 +1,14 @@
 import calendar
 import re
+import sys
+import os
 from pathlib import Path
-from config import FOLDERPATHS
+
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from config import *
+from config_utils import validate_config
 from datetime import date, timedelta
 
 
@@ -15,35 +22,6 @@ def create_all_project_folders():
             print(f"Created folder: {folder_path}")
         else:
             print(f"Folder already exists: {folder_path}")
-
-
-# def get_option_expiry_dates():
-#     today = date.today()
-#     expiry_dates = set()
-#
-#     # Monthly expiration dates: Third Friday of the next 4 months
-#     for i in range(4):
-#         year = today.year + (today.month + i - 1) // 12  # Adjust the year if the month exceeds 12
-#         month = (today.month + i - 1) % 12 + 1  # Keep the month between 1 and 12
-#
-#         # Get the month's calendar weeks
-#         month_cal = calendar.monthcalendar(year, month)
-#         # The third Friday is in the third week (if not available, take the fourth week)
-#         third_friday = month_cal[2][4] if month_cal[2][4] != 0 else month_cal[3][4]
-#         expiry_date = date(year, month, third_friday)
-#
-#         if expiry_date >= today:  # Only future dates
-#             expiry_dates.add(expiry_date)
-#
-#     # Weekly expiration dates: Every Friday for the next 60 days
-#     for i in range(60):
-#         future_date = today + timedelta(days=i)
-#         if future_date.weekday() == 4:  # Friday
-#             expiry_dates.add(future_date)
-#
-#     expiry_dates_list = sorted(int(d.strftime('%Y%m%d')) for d in expiry_dates)
-#
-#     return expiry_dates_list
 
 
 def get_third_friday(year, month):
@@ -61,50 +39,68 @@ def get_third_friday(year, month):
 def get_option_expiry_dates():
     today = date.today()
     expiry_dates = set()
+    active_mode = validate_config()
 
-    # Monthly expiration dates: Third Friday of the next 4 months
-    for i in range(4):
-        year = today.year + (today.month + i - 1) // 12  # Adjust the year if the month exceeds 12
-        month = (today.month + i - 1) % 12 + 1  # Keep the month between 1 and 12
+    if active_mode == "GENERAL_TEST_MODE":
+        # Standardlogik, aber am Ende auf GENERAL_TEST_MODE_MAX_EXPIRY_DATES begrenzen
+        # (z.B. Standard-Optionen + ggf. LEAPS, je nach gewünschtem Verhalten)
+        # Hier: Standard-Optionen
+        # Monthly expiration dates
+        for i in range(STANDARD_MONTHLY_OPTIONS_MONTHS):
+            year = today.year + (today.month + i - 1) // 12  # Adjust the year if the month exceeds 12
+            month = (today.month + i - 1) % 12 + 1  # Keep the month between 1 and 12
 
-        expiry_date = get_third_friday(year, month)
+            expiry_date = get_third_friday(year, month)
 
-        if expiry_date >= today:  # Only future dates
-            expiry_dates.add(expiry_date)
-
-    # Weekly expiration dates: Every Friday for the next 60 days
-    for i in range(60):
-        future_date = today + timedelta(days=i)
-        if future_date.weekday() == 4:  # Friday
-            expiry_dates.add(future_date)
-
-    # Additional third Fridays: first third Friday after 180 and 360 days
-    for target_days in [180, 360]:
-        target_date = today + timedelta(days=target_days)
-
-        # Start from the target month and look for the first third Friday after target_date
-        current_month = target_date.month
-        current_year = target_date.year
-
-        found = False
-        while not found:
-            # Get the third Friday of the current month
-            expiry_date = get_third_friday(current_year, current_month)
-
-            # If this third Friday is after the target date, we found our expiry
-            if expiry_date > target_date:
+            if expiry_date >= today:  # Only future dates
                 expiry_dates.add(expiry_date)
-                found = True
-            else:
-                # Move to next month
-                current_month += 1
-                if current_month > 12:
-                    current_month = 1
-                    current_year += 1
 
-    expiry_dates_list = sorted(int(d.strftime('%Y%m%d')) for d in expiry_dates)
+        # Weekly expiration dates
+        for i in range(STANDARD_WEEKLY_OPTIONS_DAYS):
+            future_date = today + timedelta(days=i)
+            if future_date.weekday() == 4:  # Friday
+                expiry_dates.add(future_date)
 
-    return expiry_dates_list
+        expiry_dates_list = sorted(expiry_dates)
+        # Begrenzen auf die gewünschte Anzahl
+        expiry_dates_list = expiry_dates_list[:GENERAL_TEST_MODE_MAX_EXPIRY_DATES]
+
+        return [int(d.strftime('%Y%m%d')) for d in expiry_dates_list]
+
+    elif active_mode == "EXTENDED_LEAPS_MODE":
+        # All Fridays in the range from MIN_DAYS to MAX_DAYS
+        for i in range(MARRIED_PUT_EXTENDED_LEAPS_MIN_DAYS, MARRIED_PUT_EXTENDED_LEAPS_MAX_DAYS + 1):
+            future_date = today + timedelta(days=i)
+            if future_date.weekday() == 4:  # Friday
+                expiry_dates.add(future_date)
+
+        # Zusätzliche dritte Freitage: erster dritter Freitag nach 180 und 360 Tagen
+        for target_days in [180, 360]:
+            target_date = today + timedelta(days=target_days)
+
+            # Starte im Zielmonat und suche nach dem ersten dritten Freitag nach target_date
+            current_month = target_date.month
+            current_year = target_date.year
+
+            found = False
+            while not found:
+                # Hole den dritten Freitag des aktuellen Monats
+                expiry_date = get_third_friday(current_year, current_month)
+
+                # Wenn dieser dritte Freitag nach dem Zieltermin liegt, haben wir unser Ablaufdatum gefunden
+                if expiry_date > target_date:
+                    expiry_dates.add(expiry_date)
+                    found = True
+                else:
+                    # Gehe zum nächsten Monat
+                    current_month += 1
+                    if current_month > 12:
+                        current_month = 1
+                        current_year += 1
+
+        expiry_dates_list = sorted(int(d.strftime('%Y%m%d')) for d in expiry_dates)
+
+        return expiry_dates_list
 
 def opra_to_osi(opra_code):
     """

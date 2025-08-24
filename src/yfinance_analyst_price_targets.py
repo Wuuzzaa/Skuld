@@ -1,31 +1,37 @@
+import sys
+import os
+
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from config import *
+from config_utils import validate_config
 import yfinance as yf
 import pandas as pd
 import time
 
 
-def scrape_yahoo_finance_analyst_price_targets(testmode):
-    print("#"*80)
-    print(f"Scraping analyst price targets on Yahoo Finance...")
-    print("#"*80)
+def scrape_yahoo_finance_analyst_price_targets():
+    print("#" * 80)
+    print("Scraping analyst price targets on Yahoo Finance...")
+    print("#" * 80)
 
     results = []
 
-    # Yahoo Finance API Rate Limits:
-    # https://help.yahooinc.com/dsp-api/docs/rate-limits
-
-    # check Testmode
-    if testmode:
-        symbols = SYMBOLS[:5]
+    # Testmode-Logik und Logging zentral aus der Config
+    active_mode = validate_config()
+    if active_mode == "GENERAL_TEST_MODE":
+        symbols = SYMBOLS[:GENERAL_TEST_MODE_MAX_SYMBOLS]
+        print(f"[TESTMODE] Es werden nur {GENERAL_TEST_MODE_MAX_SYMBOLS} Symbole verarbeitet.")
     else:
         symbols = SYMBOLS
+        print(f"[PRODUKTIV] Es werden alle {len(SYMBOLS)} Symbole verarbeitet.")
 
     for symbol in symbols:
         print(f"Scraping {symbol} on Yahoo Finance...")
         data = yf.Ticker(symbol)
 
         # Get mean or set None if the yahoo finance has no data.
-        # Mostly no data for index of resources
         try:
             mean_target = data.analyst_price_targets.get("mean", None)
         except Exception as e:

@@ -1,4 +1,10 @@
 import pandas as pd
+import sys
+import os
+
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from config import *
 
 
@@ -17,6 +23,8 @@ def merge_data_dataframes():
     # Join Dividend File Data
     print("Joining Dividend File Data")
     df_dividend_data = pd.read_feather(PATH_DIVIDEND_RADAR)
+    print("Dividend columns:", df_dividend_data.columns.tolist())
+    print("Has Classification?", 'Classification' in df_dividend_data.columns)
     df_merged = pd.merge(df_merged, df_dividend_data, how='left', left_on='symbol', right_on='Symbol')
 
     # Join Earning Dates
@@ -45,4 +53,4 @@ if __name__ == '__main__':
     end = time.time()
     duration = end - start
 
-    print(f"\nDurchlaufzeit: {duration:.4f} Sekunden")
+    print(f"\nDurchlaufzeit: {duration:.4f} Sekunden") 

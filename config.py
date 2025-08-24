@@ -31,7 +31,9 @@ PATH_SYMBOLS_EXCHANGE_FILE = BASE_DIR / 'symbols_exchange.xlsx'
 #Google Upload Config
 PATH_ON_GOOGLE_DRIVE = "1ahLHST1IEUDf03TT3hEdbVm1r7rcxJcu"
 FILENAME_GOOGLE_DRIVE = FILENAME_MERGED_DATAFRAME
-PATH_FOR_SERVICE_ACCOUNT_FILE = "service_account.json"
+#PATH_FOR_SERVICE_ACCOUNT_FILE = "service_account.json"
+
+PATH_FOR_SERVICE_ACCOUNT_FILE = r'C:\Python\google_upload2\service_account.json' 
 
 # FOLDERPATHS relative to main.py
 FOLDERPATHS = \
@@ -209,6 +211,76 @@ DATAFRAME_DATA_MERGED_COLUMNS = [
 # JMS Settings
 JMS_TP_GOAL = 0.6
 JMS_MENTAL_STOP = 2
+
+
+# =============================================================================
+# DATA COLLECTION CONFIGURATION - HIERARCHICAL PRIORITY SYSTEM
+# =============================================================================
+
+"""
+DATA COLLECTION PRIORITY HIERARCHY (higher priority overrides lower):
+
+1. GENERAL_TEST_MODE (highest priority)
+   - Overrides ALL other settings when enabled
+   - Collects only first 5 symbols × first 3 expiry dates
+   - For development and debugging
+
+2. MARRIED_PUT_TEST_MODE (medium priority) 
+   - Overrides standard options when enabled
+   - Collects ALL symbols but only specific LEAPS range
+   - For married put strategy development
+   - Cannot run together with GENERAL_TEST_MODE
+
+3. EXTENDED_LEAPS_MODE (medium priority)
+   - Overrides BASIC_LEAPS when enabled
+   - Collects standard options + all third Fridays in range
+   - For comprehensive LEAPS analysis
+
+4. BASIC_LEAPS_MODE (low priority)
+   - Default behavior when no test modes active
+   - Collects standard options + first third Friday after target days
+   - Standard production mode
+
+5. STANDARD_OPTIONS_ONLY (lowest priority)
+   - Baseline: weekly + monthly options only
+   - Always included unless overridden by test modes
+"""
+
+# =============================================================================
+# 1. GENERAL TEST MODE (HIGHEST PRIORITY - OVERRIDES ALL)
+# =============================================================================
+GENERAL_TEST_MODE_ENABLED = True          # Master override for development
+GENERAL_TEST_MODE_MAX_SYMBOLS = 7          # Limit symbols in test mode
+GENERAL_TEST_MODE_MAX_EXPIRY_DATES = 3     # Limit expiry dates in test mode
+
+# =============================================================================
+# 2. MARRIED PUT TEST MODE (MEDIUM PRIORITY - LEAPS ONLY)
+# =============================================================================
+MARRIED_PUT_TEST_MODE_ENABLED = False      # Test mode for married put development
+MARRIED_PUT_TEST_MODE_MIN_DAYS = 200       # Only collect options after this many days
+MARRIED_PUT_TEST_MODE_MAX_DAYS = 360       # Only collect options before this many days
+# Note: Collects ALL symbols but only LEAPS in specified range
+
+# =============================================================================
+# 3. EXTENDED LEAPS MODE (MEDIUM PRIORITY - OVERRIDES BASIC LEAPS)
+# =============================================================================
+MARRIED_PUT_EXTENDED_LEAPS_ENABLED = False # Collect ALL third Fridays in range
+MARRIED_PUT_EXTENDED_LEAPS_MIN_DAYS = 90   # Minimum days for extended LEAPS
+MARRIED_PUT_EXTENDED_LEAPS_MAX_DAYS = 270  # Maximum days for extended LEAPS
+
+# =============================================================================
+# 4. BASIC LEAPS MODE (LOW PRIORITY - DEFAULT PRODUCTION)
+# =============================================================================
+MARRIED_PUT_BASIC_LEAPS_ENABLED = False     # Basic LEAPS collection
+MARRIED_PUT_BASIC_LEAPS_TARGET_DAYS = [180, 360]  # First third Friday after these days
+
+# =============================================================================
+# 5. STANDARD OPTIONS (LOWEST PRIORITY - ALWAYS INCLUDED UNLESS OVERRIDDEN)
+# =============================================================================
+STANDARD_WEEKLY_OPTIONS_DAYS = 60          # Every Friday for next N days
+STANDARD_MONTHLY_OPTIONS_MONTHS = 4        # Third Friday of next N months
+
+# =============================================================================
 
 
 

@@ -181,3 +181,4 @@ cython_debug/
 /Tasty List.pdf
 /.idea/codeStyles/codeStyleConfig.xml
 /experiments/
+src/.streamlit/secrets.toml
