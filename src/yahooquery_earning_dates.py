@@ -1,21 +1,31 @@
+import sys
+import os
+
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from yahooquery import Ticker
 from datetime import datetime
 from config import *
+from config_utils import validate_config
 import pandas as pd
 
 
-def scrape_earning_dates(testmode):
-    # check testmode
-    if testmode:
-        tickers = Ticker(SYMBOLS[:5], asynchronous=True)
+def scrape_earning_dates():
+    active_mode = validate_config()
+    if active_mode == "GENERAL_TEST_MODE":
+        symbols = SYMBOLS[:GENERAL_TEST_MODE_MAX_SYMBOLS]
+        print(f"[TESTMODE] Only {GENERAL_TEST_MODE_MAX_SYMBOLS} symbols will be processed.")
     else:
-        tickers = Ticker(SYMBOLS, asynchronous=True)
+        symbols = SYMBOLS
+        print(f"[PRODUCTION] All {len(SYMBOLS)} symbols will be processed.")
 
+    tickers = Ticker(symbols, asynchronous=True)
     earnings_dates = {}
 
     for symbol, data in tickers.calendar_events.items():
         try:
-            raw_date = data['earnings']['earningsDate'][0][:10]  # z.B. '2025-07-30'
+            raw_date = data['earnings']['earningsDate'][0][:10]  # e.g. '2025-07-30'
             date_obj = datetime.strptime(raw_date, "%Y-%m-%d")
             formatted_date = date_obj.strftime("%d.%m.%Y")
             earnings_dates[symbol] = formatted_date
@@ -36,7 +46,7 @@ if __name__ == '__main__':
 
     duration = end - start
 
-    print(f"\nDurchlaufzeit: {duration:.4f} Sekunden")
+    print(f"\nRuntime: {duration:.4f} seconds")
 
-    # Durchlaufzeit: 8.5962 Sekunden Async
-    # Durchlaufzeit: 61.5521 Sekunden Sync
+    # Runtime: 8.5962 seconds Async
+    # Runtime: 61.5521
