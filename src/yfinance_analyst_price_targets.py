@@ -18,7 +18,7 @@ def scrape_yahoo_finance_analyst_price_targets():
 
     results = []
 
-    # Testmode-Logik und Logging zentral aus der Config
+    # Test mode logic and logging centrally from config
     active_mode = validate_config()
     if active_mode == "GENERAL_TEST_MODE":
         symbols = SYMBOLS[:GENERAL_TEST_MODE_MAX_SYMBOLS]
@@ -48,7 +48,7 @@ def scrape_yahoo_finance_analyst_price_targets():
         results.append({"symbol": symbol, "analyst_mean_target": mean_target})
 
         # 1 request per second api rate limit
-        # time.sleep(1)
+        time.sleep(1)
 
     df = pd.DataFrame(results)
     df.to_feather(PATH_DATAFRAME_DATA_ANALYST_PRICE_TARGET_FEATHER)

@@ -12,7 +12,7 @@ from yahooquery import Ticker
 
 
 def get_yahooquery_option_chain():
-    # Testmode-Logik und Logging zentral aus der Config
+    # Test mode logic and logging centrally from config
     active_mode = validate_config()
     if active_mode == "GENERAL_TEST_MODE":
         symbols = SYMBOLS[:GENERAL_TEST_MODE_MAX_SYMBOLS]
