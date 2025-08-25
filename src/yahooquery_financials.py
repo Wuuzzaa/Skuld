@@ -38,4 +38,4 @@ if __name__ == '__main__':
     end = time.time()
     duration = end - start
 
-    print(f"\nDurchlaufzeit: {duration:.4f} Sekunden")
+    print(f"\nRuntime: {duration:.4f} seconds")

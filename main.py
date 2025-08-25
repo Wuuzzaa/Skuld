@@ -20,9 +20,9 @@ def main(upload_df_google_drive=True):
     print("#" * 80)
     
     active_mode = validate_config()
-    print(f"[INFO] Aktiver Modus: {active_mode}")
+    print(f"[INFO] Active Mode: {active_mode}")
     if active_mode == "GENERAL_TEST_MODE":
-        print(f"[INFO] Max Symbole: {GENERAL_TEST_MODE_MAX_SYMBOLS}, Max Expiry Dates: {GENERAL_TEST_MODE_MAX_EXPIRY_DATES}")
+        print(f"[INFO] Max Symbols: {GENERAL_TEST_MODE_MAX_SYMBOLS}, Max Expiry Dates: {GENERAL_TEST_MODE_MAX_EXPIRY_DATES}")
     print(f"upload_df_google_drive: {upload_df_google_drive}\n")
     print("#" * 80)
 
@@ -43,13 +43,21 @@ def main(upload_df_google_drive=True):
     symbols_to_use = SYMBOLS
     
     # Apply config-based limitations
-    if GENERAL_TEST_MODE_ENABLED:
-        print("[CONFIG] Aktiver Modus: GENERAL TEST MODE")
+    active_mode = validate_config()
+    if active_mode == "GENERAL_TEST_MODE":
+        print("[CONFIG] Active Mode: GENERAL TEST MODE")
         expiry_dates = expiry_dates[:GENERAL_TEST_MODE_MAX_EXPIRY_DATES]
         symbols_to_use = SYMBOLS[:GENERAL_TEST_MODE_MAX_SYMBOLS]
         print(f"GENERAL TEST MODE: Limited to {len(symbols_to_use)} symbols and {len(expiry_dates)} expiry dates")
+    elif active_mode == "MARRIED_PUT_TEST_MODE":
+        print(f"[CONFIG] Active Mode: {active_mode}")
+        if MARRIED_PUT_TEST_MODE_MAX_SYMBOLS is not None:
+            symbols_to_use = SYMBOLS[:MARRIED_PUT_TEST_MODE_MAX_SYMBOLS]
+            print(f"MARRIED PUT TEST MODE: Limited to {len(symbols_to_use)} symbols")
+        else:
+            print(f"MARRIED PUT TEST MODE: Using all {len(symbols_to_use)} symbols")
     else:
-        print("[CONFIG] Aktiver Modus: PRODUKTIV (kein Testmode)")
+        print(f"[CONFIG] Active Mode: {active_mode}")
 
     print(f"Collecting data for {len(symbols_to_use)} symbols and {len(expiry_dates)} expiry dates")
     
@@ -86,19 +94,19 @@ def main(upload_df_google_drive=True):
     print("Has Classification?", 'Classification' in df_div.columns)
     if 'Classification' in df_div.columns:
         print("Classification values:", df_div['Classification'].value_counts())
-    print("Dividend Radar Done")
+    print("Dividend Radar - Done")
 
     print("#" * 80)
     print("Earning Dates")
     print("#" * 80)
     scrape_earning_dates()
-    print("Earning Dates Done")
+    print("Earning Dates - Done")
 
     print("#" * 80)
-    print("Yahooquery Option Chain")
+    print("Yahoo Query Option Chain")
     print("#" * 80)
     get_yahooquery_option_chain()
-    print("Yahooquery Option Chain Done")
+    print("Yahoo Query Option Chain - Done")
 
     print("#" * 80)
     print("Merge all feather dataframe files")
@@ -126,13 +134,11 @@ def main(upload_df_google_drive=True):
         upload_merged_data()
         print("Upload file to Google Drive - Done")
 
-    print("RUN DONE")
+    print("RUN COMPLETED")
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Run the main script with optional parameters.")
-    parser.add_argument("--testmode", type=lambda x: x.lower() == 'true', default=False,
-                        help="Run in test mode (default: False)")
     parser.add_argument("--upload_df_google_drive", type=lambda x: x.lower() == 'true', default=True,
                         help="Upload data to Google Drive (default: True)")
 

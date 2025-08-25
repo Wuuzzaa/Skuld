@@ -120,7 +120,7 @@ if __name__ == '__main__':
     # todo make this run with symbols containing a "."
     symbols = [s for s in symbols if '.' not in s]
 
-    print(f"symbols after merge(without '.' in symbolname): {len(symbols)}")
+    print(f"symbols after merge (without '.' in symbolname): {len(symbols)}")
 
     symbols_exchange = get_symbols_exchange_dict(symbols)
 

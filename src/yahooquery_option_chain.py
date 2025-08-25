@@ -16,10 +16,17 @@ def get_yahooquery_option_chain():
     active_mode = validate_config()
     if active_mode == "GENERAL_TEST_MODE":
         symbols = SYMBOLS[:GENERAL_TEST_MODE_MAX_SYMBOLS]
-        print(f"[TESTMODE] Es werden nur {GENERAL_TEST_MODE_MAX_SYMBOLS} Symbole verarbeitet.")
+        print(f"[TESTMODE] Only {GENERAL_TEST_MODE_MAX_SYMBOLS} symbols will be processed.")
+    elif active_mode == "MARRIED_PUT_TEST_MODE":
+        if MARRIED_PUT_TEST_MODE_MAX_SYMBOLS is not None:
+            symbols = SYMBOLS[:MARRIED_PUT_TEST_MODE_MAX_SYMBOLS]
+            print(f"[MARRIED_PUT_TEST_MODE] Only {MARRIED_PUT_TEST_MODE_MAX_SYMBOLS} symbols will be processed.")
+        else:
+            symbols = SYMBOLS
+            print(f"[MARRIED_PUT_TEST_MODE] All {len(SYMBOLS)} symbols will be processed.")
     else:
         symbols = SYMBOLS
-        print(f"[PRODUKTIV] Es werden alle {len(SYMBOLS)} Symbole verarbeitet.")
+        print(f"[PRODUCTION] All {len(SYMBOLS)} symbols will be processed.")
 
     tickers = Ticker(symbols, asynchronous=True)
 
@@ -46,4 +53,4 @@ if __name__ == '__main__':
     end = time.time()
     duration = end - start
 
-    print(f"\nDurchlaufzeit: {duration:.4f} Sekunden")
+    print(f"\nRuntime: {duration:.4f} seconds")
