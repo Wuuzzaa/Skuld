@@ -16,6 +16,13 @@ def scrape_and_save_price_and_technical_indicators():
     if active_mode == "GENERAL_TEST_MODE":
         items = list(SYMBOLS_EXCHANGE.items())[:GENERAL_TEST_MODE_MAX_SYMBOLS]
         print(f"[TESTMODE] Only {GENERAL_TEST_MODE_MAX_SYMBOLS} symbols will be processed.")
+    elif active_mode == "MARRIED_PUT_TEST_MODE":
+        if MARRIED_PUT_TEST_MODE_MAX_SYMBOLS is not None:
+            items = list(SYMBOLS_EXCHANGE.items())[:MARRIED_PUT_TEST_MODE_MAX_SYMBOLS]
+            print(f"[MARRIED_PUT_TEST_MODE] Only {MARRIED_PUT_TEST_MODE_MAX_SYMBOLS} symbols will be processed.")
+        else:
+            items = SYMBOLS_EXCHANGE.items()
+            print(f"[MARRIED_PUT_TEST_MODE] All {len(SYMBOLS_EXCHANGE)} symbols will be processed.")
     else:
         items = SYMBOLS_EXCHANGE.items()
         print(f"[PRODUCTION] All {len(SYMBOLS_EXCHANGE)} symbols will be processed.")

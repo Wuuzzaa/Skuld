@@ -22,10 +22,17 @@ def scrape_yahoo_finance_analyst_price_targets():
     active_mode = validate_config()
     if active_mode == "GENERAL_TEST_MODE":
         symbols = SYMBOLS[:GENERAL_TEST_MODE_MAX_SYMBOLS]
-        print(f"[TESTMODE] Es werden nur {GENERAL_TEST_MODE_MAX_SYMBOLS} Symbole verarbeitet.")
+        print(f"[TESTMODE] Only {GENERAL_TEST_MODE_MAX_SYMBOLS} symbols will be processed.")
+    elif active_mode == "MARRIED_PUT_TEST_MODE":
+        if MARRIED_PUT_TEST_MODE_MAX_SYMBOLS is not None:
+            symbols = SYMBOLS[:MARRIED_PUT_TEST_MODE_MAX_SYMBOLS]
+            print(f"[MARRIED_PUT_TEST_MODE] Only {MARRIED_PUT_TEST_MODE_MAX_SYMBOLS} symbols will be processed.")
+        else:
+            symbols = SYMBOLS
+            print(f"[MARRIED_PUT_TEST_MODE] All {len(SYMBOLS)} symbols will be processed.")
     else:
         symbols = SYMBOLS
-        print(f"[PRODUKTIV] Es werden alle {len(SYMBOLS)} Symbole verarbeitet.")
+        print(f"[PRODUCTION] All {len(SYMBOLS)} symbols will be processed.")
 
     for symbol in symbols:
         print(f"Scraping {symbol} on Yahoo Finance...")

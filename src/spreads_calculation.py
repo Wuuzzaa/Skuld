@@ -83,7 +83,7 @@ def get_sell_options_by_delta_target(df, delta_target):
     # nan_counts = nan_counts[nan_counts > 0]
     #
     # if not nan_counts.empty:
-    #     print("Symbole mit NaN in delta_diff:")
+    #     print("Symbols with NaN in delta_diff:")
     #     print(nan_counts)
 
     # Find the best matching option (smallest delta_diff) per symbol
@@ -248,7 +248,7 @@ if __name__ == "__main__":
     ende = time.time()
 
     print(spreads_df.head())
-    print(f"Laufzeit: {ende - start:.6f} Sekunden")
+    print(f"Runtime: {ende - start:.6f} seconds")
 
-    # iterative Lösung: Laufzeit: 53.084366 Sekunden
+    # iterative solution: Runtime: 53.084366 seconds
     pass

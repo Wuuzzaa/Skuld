@@ -249,17 +249,18 @@ DATA COLLECTION PRIORITY HIERARCHY (higher priority overrides lower):
 # =============================================================================
 # 1. GENERAL TEST MODE (HIGHEST PRIORITY - OVERRIDES ALL)
 # =============================================================================
-GENERAL_TEST_MODE_ENABLED = True          # Master override for development
+GENERAL_TEST_MODE_ENABLED = False          # Master override for development
 GENERAL_TEST_MODE_MAX_SYMBOLS = 7          # Limit symbols in test mode
 GENERAL_TEST_MODE_MAX_EXPIRY_DATES = 3     # Limit expiry dates in test mode
 
 # =============================================================================
 # 2. MARRIED PUT TEST MODE (MEDIUM PRIORITY - LEAPS ONLY)
 # =============================================================================
-MARRIED_PUT_TEST_MODE_ENABLED = False      # Test mode for married put development
-MARRIED_PUT_TEST_MODE_MIN_DAYS = 200       # Only collect options after this many days
+MARRIED_PUT_TEST_MODE_ENABLED = True      # Test mode for married put development
+MARRIED_PUT_TEST_MODE_MAX_SYMBOLS = 10     # Limit symbols in married put test mode (set to None for all symbols)
+MARRIED_PUT_TEST_MODE_MIN_DAYS = 300       # Only collect options after this many days
 MARRIED_PUT_TEST_MODE_MAX_DAYS = 360       # Only collect options before this many days
-# Note: Collects ALL symbols but only LEAPS in specified range
+# Note: Collects limited/all symbols but only LEAPS in specified range
 
 # =============================================================================
 # 3. EXTENDED LEAPS MODE (MEDIUM PRIORITY - OVERRIDES BASIC LEAPS)
@@ -271,7 +272,7 @@ MARRIED_PUT_EXTENDED_LEAPS_MAX_DAYS = 270  # Maximum days for extended LEAPS
 # =============================================================================
 # 4. BASIC LEAPS MODE (LOW PRIORITY - DEFAULT PRODUCTION)
 # =============================================================================
-MARRIED_PUT_BASIC_LEAPS_ENABLED = False     # Basic LEAPS collection
+MARRIED_PUT_BASIC_LEAPS_ENABLED = True     # Basic LEAPS collection
 MARRIED_PUT_BASIC_LEAPS_TARGET_DAYS = [180, 360]  # First third Friday after these days
 
 # =============================================================================

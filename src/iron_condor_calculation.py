@@ -101,4 +101,4 @@ if __name__ == "__main__":
     ende = time.time()
 
     print(iron_condors.head())
-    print(f"Laufzeit: {ende - start:.6f} Sekunden")
+    print(f"Runtime: {ende - start:.6f} seconds")

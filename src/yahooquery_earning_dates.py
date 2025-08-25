@@ -16,6 +16,13 @@ def scrape_earning_dates():
     if active_mode == "GENERAL_TEST_MODE":
         symbols = SYMBOLS[:GENERAL_TEST_MODE_MAX_SYMBOLS]
         print(f"[TESTMODE] Only {GENERAL_TEST_MODE_MAX_SYMBOLS} symbols will be processed.")
+    elif active_mode == "MARRIED_PUT_TEST_MODE":
+        if MARRIED_PUT_TEST_MODE_MAX_SYMBOLS is not None:
+            symbols = SYMBOLS[:MARRIED_PUT_TEST_MODE_MAX_SYMBOLS]
+            print(f"[MARRIED_PUT_TEST_MODE] Only {MARRIED_PUT_TEST_MODE_MAX_SYMBOLS} symbols will be processed.")
+        else:
+            symbols = SYMBOLS
+            print(f"[MARRIED_PUT_TEST_MODE] All {len(SYMBOLS)} symbols will be processed.")
     else:
         symbols = SYMBOLS
         print(f"[PRODUCTION] All {len(SYMBOLS)} symbols will be processed.")

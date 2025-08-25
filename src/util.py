@@ -67,6 +67,16 @@ def get_option_expiry_dates():
 
         return [int(d.strftime('%Y%m%d')) for d in expiry_dates_list]
 
+    elif active_mode == "MARRIED_PUT_TEST_MODE":
+        # MARRIED PUT TEST MODE: All Fridays in the range from MIN_DAYS to MAX_DAYS
+        for i in range(MARRIED_PUT_TEST_MODE_MIN_DAYS, MARRIED_PUT_TEST_MODE_MAX_DAYS + 1):
+            future_date = today + timedelta(days=i)
+            if future_date.weekday() == 4:  # Friday
+                expiry_dates.add(future_date)
+
+        expiry_dates_list = sorted(int(d.strftime('%Y%m%d')) for d in expiry_dates)
+        return expiry_dates_list
+
     elif active_mode == "EXTENDED_LEAPS_MODE":
         # All Fridays in the range from MIN_DAYS to MAX_DAYS
         for i in range(MARRIED_PUT_EXTENDED_LEAPS_MIN_DAYS, MARRIED_PUT_EXTENDED_LEAPS_MAX_DAYS + 1):
