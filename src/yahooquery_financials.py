@@ -1,15 +1,35 @@
 import pandas as pd
 import time
+import sys
+import os
+
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from config import *
+from config_utils import validate_config
 from yahooquery import Ticker
 
 
-def get_yahooquery_financials(testmode):
-    # check testmode
-    if testmode:
-        tickers = Ticker(SYMBOLS[:5], asynchronous=True)
+def get_yahooquery_financials():
+    # Use centralized config validation instead of testmode parameter
+    active_mode = validate_config()
+    
+    if active_mode == "GENERAL_TEST_MODE":
+        print(f"[TESTMODE] Only {GENERAL_TEST_MODE_MAX_SYMBOLS} symbols will be processed.")
+        symbols_to_use = SYMBOLS[:GENERAL_TEST_MODE_MAX_SYMBOLS]
+    elif active_mode == "MARRIED_PUT_TEST_MODE":
+        if MARRIED_PUT_TEST_MODE_MAX_SYMBOLS is not None:
+            print(f"[MARRIED_PUT_TEST_MODE] Only {MARRIED_PUT_TEST_MODE_MAX_SYMBOLS} symbols will be processed.")
+            symbols_to_use = SYMBOLS[:MARRIED_PUT_TEST_MODE_MAX_SYMBOLS]
+        else:
+            print(f"[MARRIED_PUT_TEST_MODE] All {len(SYMBOLS)} symbols will be processed.")
+            symbols_to_use = SYMBOLS
     else:
-        tickers = Ticker(SYMBOLS, asynchronous=True)
+        print(f"[PRODUCTION] All {len(SYMBOLS)} symbols will be processed.")
+        symbols_to_use = SYMBOLS
+    
+    tickers = Ticker(symbols_to_use, asynchronous=True)
 
     # request data
     df = tickers.all_financial_data()
@@ -17,13 +37,13 @@ def get_yahooquery_financials(testmode):
     # symbol as column not index
     df.reset_index(inplace=True)
 
-    # sicherstellen, dass asOfDate ein Datetime-Typ ist
+    # ensure asOfDate is a datetime type
     df['asOfDate'] = pd.to_datetime(df['asOfDate'])
 
-    # index der jeweils neuesten Zeile je symbol finden
+    # find index of the most recent row per symbol
     idx = df.groupby('symbol')['asOfDate'].idxmax()
 
-    # gefilterten DataFrame erzeugen
+    # create filtered DataFrame
     df = df.loc[idx].reset_index(drop=True)
 
     # store dataframe
@@ -34,7 +54,7 @@ def get_yahooquery_financials(testmode):
 if __name__ == '__main__':
 
     start = time.time()
-    get_yahooquery_financials(testmode=False)
+    get_yahooquery_financials()
     end = time.time()
     duration = end - start
 

@@ -42,9 +42,9 @@ def get_option_expiry_dates():
     active_mode = validate_config()
 
     if active_mode == "GENERAL_TEST_MODE":
-        # Standardlogik, aber am Ende auf GENERAL_TEST_MODE_MAX_EXPIRY_DATES begrenzen
-        # (z.B. Standard-Optionen + ggf. LEAPS, je nach gewünschtem Verhalten)
-        # Hier: Standard-Optionen
+        # Standard logic, but limited to GENERAL_TEST_MODE_MAX_EXPIRY_DATES at the end
+        # (e.g. standard options + possibly LEAPS, depending on desired behavior)
+        # Here: Standard options
         # Monthly expiration dates
         for i in range(STANDARD_MONTHLY_OPTIONS_MONTHS):
             year = today.year + (today.month + i - 1) // 12  # Adjust the year if the month exceeds 12
@@ -62,7 +62,7 @@ def get_option_expiry_dates():
                 expiry_dates.add(future_date)
 
         expiry_dates_list = sorted(expiry_dates)
-        # Begrenzen auf die gewünschte Anzahl
+        # Limit to the desired number
         expiry_dates_list = expiry_dates_list[:GENERAL_TEST_MODE_MAX_EXPIRY_DATES]
 
         return [int(d.strftime('%Y%m%d')) for d in expiry_dates_list]
@@ -84,25 +84,25 @@ def get_option_expiry_dates():
             if future_date.weekday() == 4:  # Friday
                 expiry_dates.add(future_date)
 
-        # Zusätzliche dritte Freitage: erster dritter Freitag nach 180 und 360 Tagen
+        # Additional third Fridays: first third Friday after 180 and 360 days
         for target_days in [180, 360]:
             target_date = today + timedelta(days=target_days)
 
-            # Starte im Zielmonat und suche nach dem ersten dritten Freitag nach target_date
+            # Start in the target month and search for the first third Friday after target_date
             current_month = target_date.month
             current_year = target_date.year
 
             found = False
             while not found:
-                # Hole den dritten Freitag des aktuellen Monats
+                # Get the third Friday of the current month
                 expiry_date = get_third_friday(current_year, current_month)
 
-                # Wenn dieser dritte Freitag nach dem Zieltermin liegt, haben wir unser Ablaufdatum gefunden
+                # If this third Friday is after the target date, we found our expiry date
                 if expiry_date > target_date:
                     expiry_dates.add(expiry_date)
                     found = True
                 else:
-                    # Gehe zum nächsten Monat
+                    # Go to the next month
                     current_month += 1
                     if current_month > 12:
                         current_month = 1

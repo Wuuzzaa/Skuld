@@ -179,7 +179,7 @@ def get_spreads(df, expiration_date, delta_target, spread_width):
         row['strike_sell'],
         (row['expiration_date_sell'] - today).days,
         row['iv_sell'],
-        row['option-type_sell'].lower() == 'call'  # True wenn Call, sonst False
+        row['option-type_sell'].lower() == 'call'  # True if Call, otherwise False
     ), axis=1)
     spreads["ev_pop"] = (spreads["pop"] * spreads["max_profit"]) - ((1 - spreads["pop"]) * spreads["bpr"])
 

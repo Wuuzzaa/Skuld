@@ -1,13 +1,13 @@
 import pandas as pd
 from pathlib import Path
 
-# Basepath relativ to basefolder
+# Base path relative to base folder
 BASE_DIR = Path(__file__).resolve().parent
 
 # Filename merged dataframe the final file for the streamlit app
 FILENAME_MERGED_DATAFRAME = 'merged_df.feather'
 
-# Datafolder
+# Data folder
 PATH_DATA = BASE_DIR / 'data'
 PATH_OPTION_DATA_TRADINGVIEW = PATH_DATA / 'json' / 'option_data_tradingview'
 PATH_DATAFRAME_OPTION_DATA_FEATHER = PATH_DATA / 'option_data.feather'
@@ -257,9 +257,9 @@ GENERAL_TEST_MODE_MAX_EXPIRY_DATES = 3     # Limit expiry dates in test mode
 # 2. MARRIED PUT TEST MODE (MEDIUM PRIORITY - LEAPS ONLY)
 # =============================================================================
 MARRIED_PUT_TEST_MODE_ENABLED = True      # Test mode for married put development
-MARRIED_PUT_TEST_MODE_MAX_SYMBOLS = 10     # Limit symbols in married put test mode (set to None for all symbols)
-MARRIED_PUT_TEST_MODE_MIN_DAYS = 300       # Only collect options after this many days
-MARRIED_PUT_TEST_MODE_MAX_DAYS = 360       # Only collect options before this many days
+MARRIED_PUT_TEST_MODE_MAX_SYMBOLS = 3     # Limit symbols in married put test mode (set to None for all symbols)
+MARRIED_PUT_TEST_MODE_MIN_DAYS = 120       # Only collect options after this many days
+MARRIED_PUT_TEST_MODE_MAX_DAYS = 250       # Only collect options before this many days
 # Note: Collects limited/all symbols but only LEAPS in specified range
 
 # =============================================================================

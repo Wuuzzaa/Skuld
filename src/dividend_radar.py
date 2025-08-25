@@ -53,7 +53,7 @@ def download_xlsx_file():
     return file_response.content
 
 
-# -------------------- Helpers für Klassifizierung --------------------
+# -------------------- Helpers for classification --------------------
 def _read_excel_sheet(content, sheet, header_row=2):
     """Read one sheet from Excel bytes and clean column names."""
     df = pd.read_excel(io.BytesIO(content), sheet_name=sheet, header=header_row)
