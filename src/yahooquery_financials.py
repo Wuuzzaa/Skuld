@@ -7,27 +7,13 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import *
-from config_utils import validate_config
+from config_utils import validate_config, get_filtered_symbols_with_logging
 from yahooquery import Ticker
 
 
 def get_yahooquery_financials():
     # Use centralized config validation instead of testmode parameter
-    active_mode = validate_config()
-    
-    if active_mode == "GENERAL_TEST_MODE":
-        print(f"[TESTMODE] Only {GENERAL_TEST_MODE_MAX_SYMBOLS} symbols will be processed.")
-        symbols_to_use = SYMBOLS[:GENERAL_TEST_MODE_MAX_SYMBOLS]
-    elif active_mode == "MARRIED_PUT_TEST_MODE":
-        if MARRIED_PUT_TEST_MODE_MAX_SYMBOLS is not None:
-            print(f"[MARRIED_PUT_TEST_MODE] Only {MARRIED_PUT_TEST_MODE_MAX_SYMBOLS} symbols will be processed.")
-            symbols_to_use = SYMBOLS[:MARRIED_PUT_TEST_MODE_MAX_SYMBOLS]
-        else:
-            print(f"[MARRIED_PUT_TEST_MODE] All {len(SYMBOLS)} symbols will be processed.")
-            symbols_to_use = SYMBOLS
-    else:
-        print(f"[PRODUCTION] All {len(SYMBOLS)} symbols will be processed.")
-        symbols_to_use = SYMBOLS
+    symbols_to_use, active_mode = get_filtered_symbols_with_logging("Yahoo Financials")
     
     tickers = Ticker(symbols_to_use, asynchronous=True)
 

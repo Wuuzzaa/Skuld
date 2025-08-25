@@ -5,7 +5,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import *
-from config_utils import validate_config
+from config_utils import validate_config, get_filtered_symbols_with_logging
 import yfinance as yf
 import pandas as pd
 import time
@@ -19,20 +19,7 @@ def scrape_yahoo_finance_analyst_price_targets():
     results = []
 
     # Test mode logic and logging centrally from config
-    active_mode = validate_config()
-    if active_mode == "GENERAL_TEST_MODE":
-        symbols = SYMBOLS[:GENERAL_TEST_MODE_MAX_SYMBOLS]
-        print(f"[TESTMODE] Only {GENERAL_TEST_MODE_MAX_SYMBOLS} symbols will be processed.")
-    elif active_mode == "MARRIED_PUT_TEST_MODE":
-        if MARRIED_PUT_TEST_MODE_MAX_SYMBOLS is not None:
-            symbols = SYMBOLS[:MARRIED_PUT_TEST_MODE_MAX_SYMBOLS]
-            print(f"[MARRIED_PUT_TEST_MODE] Only {MARRIED_PUT_TEST_MODE_MAX_SYMBOLS} symbols will be processed.")
-        else:
-            symbols = SYMBOLS
-            print(f"[MARRIED_PUT_TEST_MODE] All {len(SYMBOLS)} symbols will be processed.")
-    else:
-        symbols = SYMBOLS
-        print(f"[PRODUCTION] All {len(SYMBOLS)} symbols will be processed.")
+    symbols, active_mode = get_filtered_symbols_with_logging("Yahoo Finance Analyst Price Targets")
 
     for symbol in symbols:
         print(f"Scraping {symbol} on Yahoo Finance...")
