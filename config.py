@@ -17,6 +17,7 @@ PATH_DATAFRAME_DATA_ANALYST_PRICE_TARGET_FEATHER = PATH_DATA / 'price_target_df.
 PATH_DATAFRAME_EARNING_DATES_FEATHER = PATH_DATA / 'earning_dates.feather'
 PATH_DATAFRAME_YAHOOQUERY_OPTION_CHAIN_FEATHER = PATH_DATA / 'yahooquery_option_chain.feather'
 PATH_DATAFRAME_YAHOOQUERY_FINANCIAL_FEATHER = PATH_DATA / 'yahooquery_financial.feather'
+PATH_DATAFRAME_YAHOOQUERY_FINANCIAL_PROCESSED_FEATHER = PATH_DATA / 'yahooquery_financial_processed.feather'
 
 # Dividend Radar
 URL_DIVIDEND_RADAR = "https://www.portfolio-insight.com/dividend-radar"
@@ -206,6 +207,30 @@ DATAFRAME_DATA_MERGED_COLUMNS = [
     "P/BV",
     "PEG",
     "Industry",
+    # Fundamentals
+    "MarketCap",
+    "EnterpriseValue", 
+    "TotalRevenue",
+    "TotalAssets",
+    "NetIncome",
+    "EBITDA",
+    "FreeCashFlow",
+    "OperatingCashFlow",
+    "StockholdersEquity",
+    "TotalDebt",
+    "CurrentAssets",
+    "CurrentLiabilities",
+    "TangibleBookValue",
+    "OrdinarySharesNumber", 
+    "BasicEPS",
+    "DilutedEPS",
+    "CashDividendsPaid",
+    "PE_Ratio",
+    "PB_Ratio", 
+    "DebtEquity_Ratio",
+    "ROE_Fund",
+    "ROA",
+    "DividendYield_Calc"
 ]
 
 # JMS Settings
@@ -249,14 +274,14 @@ DATA COLLECTION PRIORITY HIERARCHY (higher priority overrides lower):
 # =============================================================================
 # 1. GENERAL TEST MODE (HIGHEST PRIORITY - OVERRIDES ALL)
 # =============================================================================
-GENERAL_TEST_MODE_ENABLED = False          # Master override for development
-GENERAL_TEST_MODE_MAX_SYMBOLS = 7          # Limit symbols in test mode
+GENERAL_TEST_MODE_ENABLED = True          # Master override for development
+GENERAL_TEST_MODE_MAX_SYMBOLS = 3          # Limit symbols in test mode
 GENERAL_TEST_MODE_MAX_EXPIRY_DATES = 3     # Limit expiry dates in test mode
 
 # =============================================================================
 # 2. MARRIED PUT TEST MODE (MEDIUM PRIORITY - LEAPS ONLY)
 # =============================================================================
-MARRIED_PUT_TEST_MODE_ENABLED = True      # Test mode for married put development
+MARRIED_PUT_TEST_MODE_ENABLED = False      # Test mode for married put development
 MARRIED_PUT_TEST_MODE_MAX_SYMBOLS = 4     # Limit symbols in married put test mode (set to None for all symbols)
 MARRIED_PUT_TEST_MODE_MIN_DAYS = 120       # Only collect options after this many days
 MARRIED_PUT_TEST_MODE_MAX_DAYS = 250       # Only collect options before this many days

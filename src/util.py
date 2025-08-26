@@ -12,6 +12,59 @@ from config_utils import validate_config
 from datetime import date, timedelta
 
 
+def clean_temporary_files():
+    """
+    Clean all temporary data files before starting a new pipeline run.
+    This ensures fresh, consistent data and prevents mixing old/new data.
+    """
+    print("🧹 Cleaning temporary files before new run...")
+    
+    # List of all temporary data files to clean
+    temp_files = [
+        PATH_DATAFRAME_OPTION_DATA_FEATHER,
+        PATH_DATAFRAME_PRICE_AND_INDICATOR_DATA_FEATHER,
+        PATH_DATAFRAME_DATA_ANALYST_PRICE_TARGET_FEATHER,
+        PATH_DATAFRAME_EARNING_DATES_FEATHER,
+        PATH_DATAFRAME_YAHOOQUERY_OPTION_CHAIN_FEATHER,
+        PATH_DATAFRAME_YAHOOQUERY_FINANCIAL_FEATHER,
+        PATH_DATAFRAME_YAHOOQUERY_FINANCIAL_PROCESSED_FEATHER,
+        PATH_DATAFRAME_DATA_MERGED_FEATHER,
+        PATH_DIVIDEND_RADAR,
+    ]
+    
+    # Additional CSV files (if they exist)
+    csv_files = [
+        PATH_DATA / 'yahooquery_financial.csv',
+        PATH_DATA / 'yahooquery_financial_processed.csv',
+    ]
+    
+    cleaned_count = 0
+    for file_path in temp_files + csv_files:
+        try:
+            if Path(file_path).exists():
+                Path(file_path).unlink()
+                print(f"   ✅ Deleted: {Path(file_path).name}")
+                cleaned_count += 1
+        except Exception as e:
+            print(f"   ⚠️  Could not delete {Path(file_path).name}: {e}")
+    
+    # Clean JSON option data directory
+    if PATH_OPTION_DATA_TRADINGVIEW.exists():
+        json_files = list(PATH_OPTION_DATA_TRADINGVIEW.glob("*.json"))
+        for json_file in json_files:
+            try:
+                json_file.unlink()
+                cleaned_count += 1
+            except Exception as e:
+                print(f"   ⚠️  Could not delete {json_file.name}: {e}")
+        
+        if json_files:
+            print(f"   ✅ Deleted {len(json_files)} JSON option files")
+    
+    print(f"🧹 Cleanup complete: {cleaned_count} files removed")
+    print()
+
+
 def create_all_project_folders():
     print("Creating all project folders if needed...")
 
