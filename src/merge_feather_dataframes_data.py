@@ -37,11 +37,35 @@ def merge_data_dataframes():
     df_yahooquery_option_chain = pd.read_feather(PATH_DATAFRAME_YAHOOQUERY_OPTION_CHAIN_FEATHER, columns=['contractSymbol', 'option_volume', 'option_open_interest'])
     df_merged = pd.merge(df_merged, df_yahooquery_option_chain, how='left', left_on='option_osi', right_on='contractSymbol')
 
-    # todo merge yahoo query financials
+    # NEW: Join Yahoo Fundamentals (processed)
+    print("Joining Yahoo Fundamentals")
+    try:
+        fundamentals_path = PATH_DATA / 'yahooquery_financial_processed.feather'
+        df_fundamentals = pd.read_feather(fundamentals_path)
+        print(f"Loaded fundamentals: {df_fundamentals.shape}")
+        print(f"Fundamental symbols: {list(df_fundamentals['symbol'].unique())}")
+        
+        # Merge fundamentals
+        df_merged = pd.merge(df_merged, df_fundamentals, how='left', on='symbol')
+        print(f"After fundamentals merge: {df_merged.shape}")
+        
+    except FileNotFoundError:
+        print("WARNING: Processed fundamentals not found, skipping fundamentals merge")
+    except Exception as e:
+        print(f"ERROR merging fundamentals: {e}")
 
-    # Store merged DataFrame to file
+    # Store merged DataFrame to file - only include columns that actually exist
     print(f"Storing merged DataFrame to: {PATH_DATAFRAME_DATA_MERGED_FEATHER}")
-    df_merged[DATAFRAME_DATA_MERGED_COLUMNS].to_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
+    
+    # Filter to only include columns that exist in the dataframe
+    available_columns = [col for col in DATAFRAME_DATA_MERGED_COLUMNS if col in df_merged.columns]
+    missing_columns = [col for col in DATAFRAME_DATA_MERGED_COLUMNS if col not in df_merged.columns]
+    
+    if missing_columns:
+        print(f"NOTE: {len(missing_columns)} configured columns not found in data: {missing_columns[:5]}..." if len(missing_columns) > 5 else f"NOTE: Missing columns: {missing_columns}")
+    
+    print(f"Saving {len(available_columns)} available columns out of {len(DATAFRAME_DATA_MERGED_COLUMNS)} configured")
+    df_merged[available_columns].to_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
 
 
 

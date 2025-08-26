@@ -7,6 +7,7 @@ from config import (
     SYMBOLS,
     SYMBOLS_EXCHANGE,
     GENERAL_TEST_MODE_MAX_SYMBOLS,
+    GENERAL_TEST_MODE_MAX_EXPIRY_DATES,
 )
 
 def validate_config():
@@ -24,6 +25,42 @@ def validate_config():
         return "BASIC_LEAPS_MODE"
     else:
         return "STANDARD_OPTIONS_ONLY"
+
+
+def get_filtered_symbols_and_dates_with_logging(expiry_dates=None, context_name="Processing"):
+    """
+    Centralized symbol AND expiry date filtering based on active configuration mode.
+    
+    Args:
+        expiry_dates (list): List of expiry dates to filter
+        context_name (str): Context for logging (e.g., "Data Collection")
+    
+    Returns:
+        tuple: (symbols_list, filtered_expiry_dates, active_mode)
+    """
+    active_mode = validate_config()
+    
+    if active_mode == "GENERAL_TEST_MODE":
+        symbols = SYMBOLS[:GENERAL_TEST_MODE_MAX_SYMBOLS]
+        if expiry_dates:
+            filtered_expiry_dates = expiry_dates[:GENERAL_TEST_MODE_MAX_EXPIRY_DATES]
+        else:
+            filtered_expiry_dates = expiry_dates
+        print(f"[GENERAL_TEST_MODE] Limited to {len(symbols)} symbols and {len(filtered_expiry_dates) if filtered_expiry_dates else 'all'} expiry dates")
+    elif active_mode == "MARRIED_PUT_TEST_MODE":
+        if MARRIED_PUT_TEST_MODE_MAX_SYMBOLS is not None:
+            symbols = SYMBOLS[:MARRIED_PUT_TEST_MODE_MAX_SYMBOLS]
+            print(f"[MARRIED_PUT_TEST_MODE] Limited to {len(symbols)} symbols")
+        else:
+            symbols = SYMBOLS
+            print(f"[MARRIED_PUT_TEST_MODE] Using all {len(symbols)} symbols")
+        filtered_expiry_dates = expiry_dates  # No expiry limitation for married put mode
+    else:
+        symbols = SYMBOLS
+        filtered_expiry_dates = expiry_dates
+        print(f"[{active_mode}] Using all {len(symbols)} symbols and {len(filtered_expiry_dates) if filtered_expiry_dates else 'all'} expiry dates")
+    
+    return symbols, filtered_expiry_dates, active_mode
 
 
 def get_filtered_symbols_with_logging(context_name="Processing"):

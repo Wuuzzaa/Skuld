@@ -4,14 +4,15 @@ from src.optiondata_feathers_to_df_merge import combine_feather_files
 from src.tradingview_optionchain_scrapper import scrape_option_data
 from src.price_and_technical_analysis_data_scrapper import scrape_and_save_price_and_technical_indicators
 from src.merge_feather_dataframes_data import merge_data_dataframes
-from src.util import create_all_project_folders, get_option_expiry_dates
+from src.util import create_all_project_folders, get_option_expiry_dates, clean_temporary_files
 from src.yahooquery_earning_dates import scrape_earning_dates
 from src.yahooquery_option_chain import get_yahooquery_option_chain
+from src.yahooquery_financials import generate_fundamental_data
 from src.yfinance_analyst_price_targets import scrape_yahoo_finance_analyst_price_targets
 from config import *
 from src.google_drive_upload import upload_merged_data
 from src.dividend_radar import process_dividend_data
-from config_utils import validate_config
+from config_utils import validate_config, get_filtered_symbols_and_dates_with_logging
 
 
 
@@ -26,6 +27,9 @@ def main(upload_df_google_drive=True):
     print(f"upload_df_google_drive: {upload_df_google_drive}\n")
     print("#" * 80)
 
+    # CLEAN temporary files from previous runs
+    clean_temporary_files()
+
     create_all_project_folders()
 
     print("#"*80)
@@ -38,30 +42,15 @@ def main(upload_df_google_drive=True):
     print("Get option data")
     print("#" * 80)
 
-    # NEW: Config-driven data collection instead of hardcoded testmode
+    # NEW: Centralized config-driven data collection
     expiry_dates = get_option_expiry_dates()
-    symbols_to_use = SYMBOLS
-    
-    # Apply config-based limitations
-    active_mode = validate_config()
-    if active_mode == "GENERAL_TEST_MODE":
-        print("[CONFIG] Active Mode: GENERAL TEST MODE")
-        expiry_dates = expiry_dates[:GENERAL_TEST_MODE_MAX_EXPIRY_DATES]
-        symbols_to_use = SYMBOLS[:GENERAL_TEST_MODE_MAX_SYMBOLS]
-        print(f"GENERAL TEST MODE: Limited to {len(symbols_to_use)} symbols and {len(expiry_dates)} expiry dates")
-    elif active_mode == "MARRIED_PUT_TEST_MODE":
-        print(f"[CONFIG] Active Mode: {active_mode}")
-        if MARRIED_PUT_TEST_MODE_MAX_SYMBOLS is not None:
-            symbols_to_use = SYMBOLS[:MARRIED_PUT_TEST_MODE_MAX_SYMBOLS]
-            print(f"MARRIED PUT TEST MODE: Limited to {len(symbols_to_use)} symbols")
-        else:
-            print(f"MARRIED PUT TEST MODE: Using all {len(symbols_to_use)} symbols")
-    else:
-        print(f"[CONFIG] Active Mode: {active_mode}")
+    symbols_to_use, filtered_expiry_dates, active_mode = get_filtered_symbols_and_dates_with_logging(
+        expiry_dates, "Option Data Collection"
+    )
 
-    print(f"Collecting data for {len(symbols_to_use)} symbols and {len(expiry_dates)} expiry dates")
+    print(f"Collecting data for {len(symbols_to_use)} symbols and {len(filtered_expiry_dates)} expiry dates")
     
-    for expiration_date in expiry_dates:
+    for expiration_date in filtered_expiry_dates:
         for symbol in symbols_to_use:
             scrape_option_data(
                 symbol=symbol,
@@ -107,6 +96,12 @@ def main(upload_df_google_drive=True):
     print("#" * 80)
     get_yahooquery_option_chain()
     print("Yahoo Query Option Chain - Done")
+
+    print("#" * 80)
+    print("Yahoo Query Fundamentals")
+    print("#" * 80)
+    generate_fundamental_data()
+    print("Yahoo Query Fundamentals - Done")
 
     print("#" * 80)
     print("Merge all feather dataframe files")

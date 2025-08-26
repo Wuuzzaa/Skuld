@@ -37,6 +37,7 @@ if 'df' not in st.session_state:
 # Define pages
 total_dataframe = st.Page("pages/total_dataframe.py", title="Total Data")
 filtered_dataframe = st.Page("pages/filtered_dataframe.py", title="Filtered Data")
+married_put_screener = st.Page("pages/married_put_screener.py", title="Married Put Screener")
 analyst_prices = st.Page("pages/analyst_prices.py", title="Analyst Prices")
 spreads = st.Page("pages/spreads.py", title="Spreads")
 iron_condors = st.Page("pages/iron_condors.py", title="Iron Condors")
@@ -50,6 +51,7 @@ page = st.navigation(
     [
         total_dataframe,
         filtered_dataframe,
+        married_put_screener,
         analyst_prices,
         spreads,
         iron_condors,

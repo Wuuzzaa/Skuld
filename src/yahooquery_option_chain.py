@@ -15,14 +15,48 @@ def get_yahooquery_option_chain():
     # Test mode logic and logging centrally from config
     symbols, active_mode = get_filtered_symbols_with_logging("Yahoo Option Chain")
 
-    tickers = Ticker(symbols, asynchronous=True)
+    all_option_data = []
+    successful_symbols = []
+    failed_symbols = []
 
-    # request data
-    df = tickers.option_chain
+    for symbol in symbols:
+        try:
+            print(f"Fetching option chain for {symbol}...")
+            ticker = Ticker(symbol)
+            df = ticker.option_chain
+            
+            if df is not None and not df.empty:
+                # symbol expiration_date and option-type from index to column
+                df = df.reset_index()
+                all_option_data.append(df)
+                successful_symbols.append(symbol)
+                print(f"SUCCESS {symbol}: {len(df)} options found")
+            else:
+                print(f"WARNING {symbol}: No option data available")
+                failed_symbols.append(symbol)
+                
+        except Exception as e:
+            print(f"ERROR {symbol}: Error fetching options - {str(e)}")
+            failed_symbols.append(symbol)
+        
+        # Small delay to avoid rate limiting
+        time.sleep(0.1)
 
-    # symbol expiration_date and option-type from index to column
-    df = df.reset_index()
+    if not all_option_data:
+        print("WARNING: No option data found for any symbols")
+        return
+    
+    # Combine all data
+    df = pd.concat(all_option_data, ignore_index=True)
+    
+    print(f"\n=== SUMMARY ===")
+    print(f"Successfully processed: {len(successful_symbols)} symbols")
+    print(f"Failed: {len(failed_symbols)} symbols")
+    if failed_symbols:
+        print(f"Failed symbols: {failed_symbols}")
+    print(f"Total options collected: {len(df)}")
 
+    # Process the combined data
     df = df.rename(columns={
         'symbol': 'symbol',
         'expiration': 'expiration_date',
@@ -32,6 +66,7 @@ def get_yahooquery_option_chain():
     })
 
     df.to_feather(PATH_DATAFRAME_YAHOOQUERY_OPTION_CHAIN_FEATHER)
+    print(f"SUCCESS: Yahoo option chain data saved to: {PATH_DATAFRAME_YAHOOQUERY_OPTION_CHAIN_FEATHER}")
 
 
 if __name__ == '__main__':
