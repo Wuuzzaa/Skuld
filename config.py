@@ -18,6 +18,7 @@ PATH_DATAFRAME_EARNING_DATES_FEATHER = PATH_DATA / 'earning_dates.feather'
 PATH_DATAFRAME_YAHOOQUERY_OPTION_CHAIN_FEATHER = PATH_DATA / 'yahooquery_option_chain.feather'
 PATH_DATAFRAME_YAHOOQUERY_FINANCIAL_FEATHER = PATH_DATA / 'yahooquery_financial.feather'
 PATH_DATAFRAME_YAHOOQUERY_FINANCIAL_PROCESSED_FEATHER = PATH_DATA / 'yahooquery_financial_processed.feather'
+PATH_DATAFRAME_LIVE_STOCK_PRICES_FEATHER = PATH_DATA / 'live_stock_prices.feather'
 
 # Dividend Radar
 URL_DIVIDEND_RADAR = "https://www.portfolio-insight.com/dividend-radar"
@@ -72,10 +73,10 @@ DATAFRAME_DATA_MERGED_COLUMNS = [
     "time",
     "exchange",
     "volume",
-    "open",
-    "high",
-    "low",
-    "close",
+    #"open",
+    #"high",
+    #"low",
+    #"close",
     "change",
     "analyst_mean_target",
     # "recommendation_buy_amount",
@@ -174,7 +175,7 @@ DATAFRAME_DATA_MERGED_COLUMNS = [
     "FV",
     "Sector",
     "No-Years",
-    "Price",
+    #"Price",
     "Div-Yield",
     "5Y-Avg-Yield",
     "Current-Div",
@@ -182,32 +183,34 @@ DATAFRAME_DATA_MERGED_COLUMNS = [
     "Annualized",
     "Previous-Div",
     "Ex-Date",
-    "Pay-Date",
-    "Low",
-    "High",
-    "DGR-1Y",
-    "DGR-3Y",
-    "DGR-5Y",
-    "DGR-10Y",
+ #   "Pay-Date",
+    #"Low",
+    #"High",
+    #"DGR-1Y",
+    #"DGR-3Y",
+    #"DGR-5Y",
+    #"DGR-10Y",
     "TTR-1Y",
     "TTR-3Y",
     "Fair-Value",
-    "FV-%",
-    "Streak-Basis",
+    #"FV-%",
+    #"Streak-Basis",
     "Chowder-Number",
     "EPS-1Y",
     "Revenue-1Y",
     "NPM",
     "CF/Share",
-    "ROE",
-    "Current-R",
-    "Debt/Capital",
-    "ROTC",
-    "P/E",
-    "P/BV",
-    "PEG",
+    #"ROE",
+    #"Current-R",
+    #"Debt/Capital",
+    #"ROTC",
+    #"P/E",
+    #"P/BV",
+    #"PEG",
     "Industry",
+    ##################
     # Fundamentals
+    ##################
     "MarketCap",
     "EnterpriseValue", 
     "TotalRevenue",
@@ -223,14 +226,21 @@ DATAFRAME_DATA_MERGED_COLUMNS = [
     "TangibleBookValue",
     "OrdinarySharesNumber", 
     "BasicEPS",
-    "DilutedEPS",
-    "CashDividendsPaid",
-    "PE_Ratio",
-    "PB_Ratio", 
-    "DebtEquity_Ratio",
-    "ROE_Fund",
+    #"DilutedEPS",
+    #"CashDividendsPaid",
+    #"PE_Ratio",
+    #"PB_Ratio", 
+    #"DebtEquity_Ratio",
+    #"ROE_Fund",
     "ROA",
-    "DividendYield_Calc"
+  #  "DividendYield_Calc",
+    ################## 
+    # Live Stock Price Columns (added during data collection)
+    ##################
+    "live_stock_price",
+    #"live_price_timestamp", 
+    #"live_price_available", 
+    #"current_stock_price"  # Unified price column (live or fallback)
 ]
 
 # JMS Settings
@@ -239,72 +249,45 @@ JMS_MENTAL_STOP = 2
 
 
 # =============================================================================
-# DATA COLLECTION CONFIGURATION - HIERARCHICAL PRIORITY SYSTEM
+# SIMPLIFIED DATA COLLECTION CONFIGURATION
 # =============================================================================
 
-"""
-DATA COLLECTION PRIORITY HIERARCHY (higher priority overrides lower):
 
-1. GENERAL_TEST_MODE (highest priority)
-   - Overrides ALL other settings when enabled
-   - Collects only first 5 symbols × first 3 expiry dates
-   - For development and debugging
-
-2. MARRIED_PUT_TEST_MODE (medium priority) 
-   - Overrides standard options when enabled
-   - Collects ALL symbols but only specific LEAPS range
-   - For married put strategy development
-   - Cannot run together with GENERAL_TEST_MODE
-
-3. EXTENDED_LEAPS_MODE (medium priority)
-   - Overrides BASIC_LEAPS when enabled
-   - Collects standard options + all third Fridays in range
-   - For comprehensive LEAPS analysis
-
-4. BASIC_LEAPS_MODE (low priority)
-   - Default behavior when no test modes active
-   - Collects standard options + first third Friday after target days
-   - Standard production mode
-
-5. STANDARD_OPTIONS_ONLY (lowest priority)
-   - Baseline: weekly + monthly options only
-   - Always included unless overridden by test modes
-"""
+# Symbol selection
+SYMBOL_SELECTION = {
+    "mode": "max",                   # "all", "list", "file", "max"
+    "symbols": ["AAPL"],             # Used when mode="list"
+    "file_path": None,               # Used when mode="file"
+    "max_symbols": 10,               # Used when mode="max" or as limit for "all"
+    "use_max_limit": True            # If True, applies max_symbols limit to any mode
+}
 
 # =============================================================================
-# 1. GENERAL TEST MODE (HIGHEST PRIORITY - OVERRIDES ALL)
+# OPTIONS COLLECTION RULES (processed in order)
 # =============================================================================
-GENERAL_TEST_MODE_ENABLED = True          # Master override for development
-GENERAL_TEST_MODE_MAX_SYMBOLS = 3          # Limit symbols in test mode
-GENERAL_TEST_MODE_MAX_EXPIRY_DATES = 3     # Limit expiry dates in test mode
-
-# =============================================================================
-# 2. MARRIED PUT TEST MODE (MEDIUM PRIORITY - LEAPS ONLY)
-# =============================================================================
-MARRIED_PUT_TEST_MODE_ENABLED = False      # Test mode for married put development
-MARRIED_PUT_TEST_MODE_MAX_SYMBOLS = 4     # Limit symbols in married put test mode (set to None for all symbols)
-MARRIED_PUT_TEST_MODE_MIN_DAYS = 120       # Only collect options after this many days
-MARRIED_PUT_TEST_MODE_MAX_DAYS = 250       # Only collect options before this many days
-# Note: Collects limited/all symbols but only LEAPS in specified range
-
-# =============================================================================
-# 3. EXTENDED LEAPS MODE (MEDIUM PRIORITY - OVERRIDES BASIC LEAPS)
-# =============================================================================
-MARRIED_PUT_EXTENDED_LEAPS_ENABLED = False # Collect ALL third Fridays in range
-MARRIED_PUT_EXTENDED_LEAPS_MIN_DAYS = 90   # Minimum days for extended LEAPS
-MARRIED_PUT_EXTENDED_LEAPS_MAX_DAYS = 270  # Maximum days for extended LEAPS
-
-# =============================================================================
-# 4. BASIC LEAPS MODE (LOW PRIORITY - DEFAULT PRODUCTION)
-# =============================================================================
-MARRIED_PUT_BASIC_LEAPS_ENABLED = True     # Basic LEAPS collection
-MARRIED_PUT_BASIC_LEAPS_TARGET_DAYS = [180, 360]  # First third Friday after these days
-
-# =============================================================================
-# 5. STANDARD OPTIONS (LOWEST PRIORITY - ALWAYS INCLUDED UNLESS OVERRIDDEN)
-# =============================================================================
-STANDARD_WEEKLY_OPTIONS_DAYS = 60          # Every Friday for next N days
-STANDARD_MONTHLY_OPTIONS_MONTHS = 4        # Third Friday of next N months
+OPTIONS_COLLECTION_RULES = [
+    {
+        "name": "weekly_short_term",
+        "enabled": True,
+        "days_range": [1, 60],            # Today + 1 to 60 days
+        "frequency": "every_friday",      # "every_friday", "monthly_3rd_friday", "quarterly_3rd_friday"
+        "description": "Weekly options for next 2 months"
+    },
+    {
+        "name": "monthly_medium_term", 
+        "enabled": False,
+        "days_range": [61, 180],
+        "frequency": "monthly_3rd_friday",
+        "description": "Monthly options 2-6 months out"
+    },
+    {
+        "name": "leaps_long_term",
+        "enabled": False,                 # Disabled by default
+        "days_range": [180, 365],         # Current married put range
+        "frequency": "every_friday",      # Changed from monthly_3rd_friday to every_friday
+        "description": "LEAPS options for married put strategies"
+    }
+]
 
 # =============================================================================
 

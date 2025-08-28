@@ -4,7 +4,7 @@ from src.optiondata_feathers_to_df_merge import combine_feather_files
 from src.tradingview_optionchain_scrapper import scrape_option_data
 from src.price_and_technical_analysis_data_scrapper import scrape_and_save_price_and_technical_indicators
 from src.merge_feather_dataframes_data import merge_data_dataframes
-from src.util import create_all_project_folders, get_option_expiry_dates, clean_temporary_files
+from src.util import create_all_project_folders, get_option_expiry_dates, clean_temporary_files, clean_all_data_files
 from src.yahooquery_earning_dates import scrape_earning_dates
 from src.yahooquery_option_chain import get_yahooquery_option_chain
 from src.yahooquery_financials import generate_fundamental_data
@@ -12,23 +12,30 @@ from src.yfinance_analyst_price_targets import scrape_yahoo_finance_analyst_pric
 from config import *
 from src.google_drive_upload import upload_merged_data
 from src.dividend_radar import process_dividend_data
-from config_utils import validate_config, get_filtered_symbols_and_dates_with_logging
-
-
+from config_utils import get_filtered_symbols_and_dates_with_logging
+import pandas as pd
 
 
 def main(upload_df_google_drive=True):
     print("#" * 80)
+    print(f"Starting Data Collection Pipeline")
+    print(f"Symbol selection mode: {SYMBOL_SELECTION['mode']}")
     
-    active_mode = validate_config()
-    print(f"[INFO] Active Mode: {active_mode}")
-    if active_mode == "GENERAL_TEST_MODE":
-        print(f"[INFO] Max Symbols: {GENERAL_TEST_MODE_MAX_SYMBOLS}, Max Expiry Dates: {GENERAL_TEST_MODE_MAX_EXPIRY_DATES}")
+    # Show configuration summary
+    enabled_rules = [rule for rule in OPTIONS_COLLECTION_RULES if rule.get("enabled", False)]
+    print(f"[INFO] Enabled collection rules: {len(enabled_rules)}")
+    for rule in enabled_rules:
+        print(f"  - {rule['name']}: {rule['days_range']} days, {rule['frequency']}")
+    
+    if SYMBOL_SELECTION.get("use_max_limit", False) and "max_symbols" in SYMBOL_SELECTION:
+        print(f"[INFO] Symbol limit: {SYMBOL_SELECTION['max_symbols']}")
+    
     print(f"upload_df_google_drive: {upload_df_google_drive}\n")
     print("#" * 80)
 
     # CLEAN temporary files from previous runs
-    clean_temporary_files()
+    # Use clean_all_data_files() for complete cleanup, clean_temporary_files() for normal cleanup
+    clean_temporary_files()  # Change to clean_all_data_files() if you want complete cleanup
 
     create_all_project_folders()
 
@@ -43,14 +50,19 @@ def main(upload_df_google_drive=True):
     print("#" * 80)
 
     # NEW: Centralized config-driven data collection
-    expiry_dates = get_option_expiry_dates()
-    symbols_to_use, filtered_expiry_dates, active_mode = get_filtered_symbols_and_dates_with_logging(
-        expiry_dates, "Option Data Collection"
+    # Get expiry dates as strings in YYYY-MM-DD format for filtering
+    from config_utils import generate_expiry_dates_from_rules
+    expiry_date_strings = generate_expiry_dates_from_rules()
+    symbols_to_use, filtered_expiry_dates = get_filtered_symbols_and_dates_with_logging(
+        expiry_date_strings, "Option Data Collection"
     )
-
-    print(f"Collecting data for {len(symbols_to_use)} symbols and {len(filtered_expiry_dates)} expiry dates")
     
-    for expiration_date in filtered_expiry_dates:
+    # Convert filtered dates back to integers for scraping functions
+    expiry_dates_int = [int(date_str.replace("-", "")) for date_str in filtered_expiry_dates]
+
+    print(f"Collecting data for {len(symbols_to_use)} symbols and {len(expiry_dates_int)} expiry dates")
+    
+    for expiration_date in expiry_dates_int:
         for symbol in symbols_to_use:
             scrape_option_data(
                 symbol=symbol,
@@ -104,7 +116,7 @@ def main(upload_df_google_drive=True):
     print("Yahoo Query Fundamentals - Done")
 
     print("#" * 80)
-    print("Merge all feather dataframe files")
+    print("Merge all feather dataframe files (with live prices)")
     print("#" * 80)
     merge_data_dataframes()
     # Debug: Check merged data
@@ -120,8 +132,6 @@ def main(upload_df_google_drive=True):
     #type_casting()
     print("Feature engineering - Done")
 
-
-
     if upload_df_google_drive:
         print("#" * 80)
         print("Upload file to Google Drive")
@@ -129,13 +139,14 @@ def main(upload_df_google_drive=True):
         upload_merged_data()
         print("Upload file to Google Drive - Done")
 
-    print("RUN COMPLETED")
+    print("#" * 80)
+    print("Data collection pipeline completed successfully!")
+    print("#" * 80)
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Run the main script with optional parameters.")
-    parser.add_argument("--upload_df_google_drive", type=lambda x: x.lower() == 'true', default=True,
-                        help="Upload data to Google Drive (default: True)")
-
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Run data collection pipeline")
+    parser.add_argument("--no-upload", action="store_true", help="Skip Google Drive upload")
     args = parser.parse_args()
-    main(upload_df_google_drive=args.upload_df_google_drive)
+    
+    main(upload_df_google_drive=not args.no_upload)

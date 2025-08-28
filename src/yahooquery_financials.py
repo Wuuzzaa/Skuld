@@ -8,7 +8,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import *
-from config_utils import validate_config, get_filtered_symbols_with_logging
+from config_utils import get_filtered_symbols_with_logging
 from yahooquery import Ticker
 
 
@@ -160,7 +160,7 @@ def prepare_fundamentals_for_merge(df_full_fundamentals):
 
 def get_yahooquery_financials():
     # Use centralized config validation instead of testmode parameter
-    symbols_to_use, active_mode = get_filtered_symbols_with_logging("Yahoo Financials")
+    symbols_to_use = get_filtered_symbols_with_logging("Yahoo Financials")
     
     tickers = Ticker(symbols_to_use, asynchronous=True)
 
@@ -204,7 +204,7 @@ def generate_fundamental_data():
     Uses MULTIPLE yahooquery endpoints to get complete fundamentals including MarketCap
     """
     # Test mode logic and logging centrally from config
-    symbols, active_mode = get_filtered_symbols_with_logging("Yahoo Fundamentals")
+    symbols = get_filtered_symbols_with_logging("Yahoo Fundamentals")
     
     print("Processing fundamentals: selecting essential metrics and calculating ratios...")
     

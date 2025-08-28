@@ -6,6 +6,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import *
+from src.live_stock_price_collector import fetch_current_prices
 
 
 def merge_data_dataframes():
@@ -54,6 +55,24 @@ def merge_data_dataframes():
     except Exception as e:
         print(f"ERROR merging fundamentals: {e}")
 
+    # Join Live Stock Prices (fetch on-the-fly)
+    print("Fetching and joining live stock prices (on-the-fly)")
+    try:
+        # Get unique symbols present in the merged dataframe
+        symbols_for_prices = df_merged['symbol'].dropna().astype(str).unique().tolist()
+        print(f"Fetching live prices for {len(symbols_for_prices)} unique symbols")
+
+        df_live_prices = fetch_current_prices(symbols_for_prices)
+        print(f"Fetched live prices: {df_live_prices.shape}")
+        print(f"Live price symbols: {df_live_prices['symbol'].nunique()}")
+
+        # Merge live prices into the main dataframe
+        df_merged = pd.merge(df_merged, df_live_prices, how='left', on='symbol')
+        print(f"After live prices merge: {df_merged.shape}")
+
+    except Exception as e:
+        print(f"ERROR fetching/merging live stock prices: {e}")
+
     # Store merged DataFrame to file - only include columns that actually exist
     print(f"Storing merged DataFrame to: {PATH_DATAFRAME_DATA_MERGED_FEATHER}")
     
@@ -66,6 +85,18 @@ def merge_data_dataframes():
     
     print(f"Saving {len(available_columns)} available columns out of {len(DATAFRAME_DATA_MERGED_COLUMNS)} configured")
     df_merged[available_columns].to_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
+    
+    # Print final statistics
+    print(f"\n📊 Final DataFrame Statistics:")
+    print(f"   Total rows: {len(df_merged):,}")
+    print(f"   Total columns: {len(available_columns)}")
+    print(f"   Unique symbols: {df_merged['symbol'].nunique()}")
+    
+    # Check if live prices were successfully merged
+    if 'live_stock_price' in df_merged.columns:
+        live_price_coverage = df_merged['live_stock_price'].notna().sum()
+        coverage_pct = (live_price_coverage / len(df_merged)) * 100
+        print(f"   Live price coverage: {live_price_coverage:,} rows ({coverage_pct:.1f}%)")
 
 
 

@@ -7,12 +7,12 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from yahooquery import Ticker
 from datetime import datetime
 from config import *
-from config_utils import validate_config, get_filtered_symbols_with_logging
+from config_utils import get_filtered_symbols_with_logging
 import pandas as pd
 
 
 def scrape_earning_dates():
-    symbols, active_mode = get_filtered_symbols_with_logging("Yahoo Earning Dates")
+    symbols = get_filtered_symbols_with_logging("Yahoo Earning Dates")
 
     tickers = Ticker(symbols, asynchronous=True)
     earnings_dates = {}
