@@ -9,7 +9,8 @@ import requests
 import pandas as pd
 
 from src.util import opra_to_osi
-from config_utils import validate_config 
+from config import *
+from config_utils import get_symbols_from_config 
 
 BASE_URL_OPTION_DATA = "https://scanner.tradingview.com/options/scan2?label-product=symbols-options"
 

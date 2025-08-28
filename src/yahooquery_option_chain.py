@@ -7,13 +7,13 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import *
-from config_utils import validate_config, get_filtered_symbols_with_logging
+from config_utils import get_filtered_symbols_with_logging
 from yahooquery import Ticker
 
 
 def get_yahooquery_option_chain():
     # Test mode logic and logging centrally from config
-    symbols, active_mode = get_filtered_symbols_with_logging("Yahoo Option Chain")
+    symbols = get_filtered_symbols_with_logging("Yahoo Option Chain")
 
     all_option_data = []
     successful_symbols = []
@@ -67,6 +67,28 @@ def get_yahooquery_option_chain():
 
     df.to_feather(PATH_DATAFRAME_YAHOOQUERY_OPTION_CHAIN_FEATHER)
     print(f"SUCCESS: Yahoo option chain data saved to: {PATH_DATAFRAME_YAHOOQUERY_OPTION_CHAIN_FEATHER}")
+
+
+def get_live_stock_prices(symbols):
+    """Get live stock prices for unique symbols only"""
+    unique_symbols = list(set(symbols))
+    prices = {}
+    
+    for symbol in unique_symbols:
+        try:
+            # Use yfinance to get current price
+            import yfinance as yf
+            ticker = yf.Ticker(symbol)
+            hist = ticker.history(period="1d")
+            if not hist.empty:
+                prices[symbol] = hist['Close'].iloc[-1]
+            else:
+                prices[symbol] = None
+        except Exception as e:
+            print(f"Error getting price for {symbol}: {e}")
+            prices[symbol] = None
+    
+    return prices
 
 
 if __name__ == '__main__':

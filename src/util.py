@@ -8,7 +8,7 @@ from pathlib import Path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import *
-from config_utils import validate_config
+from config_utils import generate_expiry_dates_from_rules
 from datetime import date, timedelta
 
 
@@ -29,6 +29,7 @@ def clean_temporary_files():
         PATH_DATAFRAME_YAHOOQUERY_FINANCIAL_FEATHER,
         PATH_DATAFRAME_YAHOOQUERY_FINANCIAL_PROCESSED_FEATHER,
         PATH_DATAFRAME_DATA_MERGED_FEATHER,
+        PATH_DATAFRAME_LIVE_STOCK_PRICES_FEATHER,  # Added missing live stock prices
         PATH_DIVIDEND_RADAR,
     ]
     
@@ -50,18 +51,72 @@ def clean_temporary_files():
     
     # Clean JSON option data directory
     if PATH_OPTION_DATA_TRADINGVIEW.exists():
+        # Delete both JSON and feather files
         json_files = list(PATH_OPTION_DATA_TRADINGVIEW.glob("*.json"))
-        for json_file in json_files:
+        feather_files = list(PATH_OPTION_DATA_TRADINGVIEW.glob("*.feather"))
+        all_option_files = json_files + feather_files
+        
+        for file in all_option_files:
             try:
-                json_file.unlink()
+                file.unlink()
                 cleaned_count += 1
             except Exception as e:
-                print(f"   ⚠️  Could not delete {json_file.name}: {e}")
+                print(f"   ⚠️  Could not delete {file.name}: {e}")
         
-        if json_files:
-            print(f"   ✅ Deleted {len(json_files)} JSON option files")
+        if all_option_files:
+            print(f"   ✅ Deleted {len(json_files)} JSON and {len(feather_files)} feather option files")
     
     print(f"🧹 Cleanup complete: {cleaned_count} files removed")
+    print()
+
+
+def clean_all_data_files():
+    """
+    Clean ALL data files in the data/ directory.
+    Use this for a complete fresh start.
+    """
+    print("🧹 COMPLETE DATA CLEANUP - Removing ALL data files...")
+    
+    cleaned_count = 0
+    
+    # Remove all .feather files
+    feather_files = list(PATH_DATA.glob("*.feather"))
+    for file_path in feather_files:
+        try:
+            file_path.unlink()
+            print(f"   ✅ Deleted: {file_path.name}")
+            cleaned_count += 1
+        except Exception as e:
+            print(f"   ⚠️  Could not delete {file_path.name}: {e}")
+    
+    # Remove all .csv files
+    csv_files = list(PATH_DATA.glob("*.csv"))
+    for file_path in csv_files:
+        try:
+            file_path.unlink()
+            print(f"   ✅ Deleted: {file_path.name}")
+            cleaned_count += 1
+        except Exception as e:
+            print(f"   ⚠️  Could not delete {file_path.name}: {e}")
+    
+    # Clean option data directory (both JSON and feather files)
+    if PATH_OPTION_DATA_TRADINGVIEW.exists():
+        # Delete both JSON and feather files  
+        json_files = list(PATH_OPTION_DATA_TRADINGVIEW.glob("*.json"))
+        feather_files = list(PATH_OPTION_DATA_TRADINGVIEW.glob("*.feather"))
+        all_option_files = json_files + feather_files
+        
+        for file in all_option_files:
+            try:
+                file.unlink()
+                cleaned_count += 1
+            except Exception as e:
+                print(f"   ⚠️  Could not delete {file.name}: {e}")
+        
+        if all_option_files:
+            print(f"   ✅ Deleted {len(json_files)} JSON and {len(feather_files)} feather option files")
+    
+    print(f"🧹 COMPLETE CLEANUP: {cleaned_count} files removed")
     print()
 
 
@@ -90,80 +145,27 @@ def get_third_friday(year, month):
 
 
 def get_option_expiry_dates():
-    today = date.today()
-    expiry_dates = set()
-    active_mode = validate_config()
-
-    if active_mode == "GENERAL_TEST_MODE":
-        # Standard logic, but limited to GENERAL_TEST_MODE_MAX_EXPIRY_DATES at the end
-        # (e.g. standard options + possibly LEAPS, depending on desired behavior)
-        # Here: Standard options
-        # Monthly expiration dates
-        for i in range(STANDARD_MONTHLY_OPTIONS_MONTHS):
-            year = today.year + (today.month + i - 1) // 12  # Adjust the year if the month exceeds 12
-            month = (today.month + i - 1) % 12 + 1  # Keep the month between 1 and 12
-
-            expiry_date = get_third_friday(year, month)
-
-            if expiry_date >= today:  # Only future dates
-                expiry_dates.add(expiry_date)
-
-        # Weekly expiration dates
-        for i in range(STANDARD_WEEKLY_OPTIONS_DAYS):
-            future_date = today + timedelta(days=i)
-            if future_date.weekday() == 4:  # Friday
-                expiry_dates.add(future_date)
-
-        expiry_dates_list = sorted(expiry_dates)
-        # Limit to the desired number
-        expiry_dates_list = expiry_dates_list[:GENERAL_TEST_MODE_MAX_EXPIRY_DATES]
-
-        return [int(d.strftime('%Y%m%d')) for d in expiry_dates_list]
-
-    elif active_mode == "MARRIED_PUT_TEST_MODE":
-        # MARRIED PUT TEST MODE: All Fridays in the range from MIN_DAYS to MAX_DAYS
-        for i in range(MARRIED_PUT_TEST_MODE_MIN_DAYS, MARRIED_PUT_TEST_MODE_MAX_DAYS + 1):
-            future_date = today + timedelta(days=i)
-            if future_date.weekday() == 4:  # Friday
-                expiry_dates.add(future_date)
-
-        expiry_dates_list = sorted(int(d.strftime('%Y%m%d')) for d in expiry_dates)
-        return expiry_dates_list
-
-    elif active_mode == "EXTENDED_LEAPS_MODE":
-        # All Fridays in the range from MIN_DAYS to MAX_DAYS
-        for i in range(MARRIED_PUT_EXTENDED_LEAPS_MIN_DAYS, MARRIED_PUT_EXTENDED_LEAPS_MAX_DAYS + 1):
-            future_date = today + timedelta(days=i)
-            if future_date.weekday() == 4:  # Friday
-                expiry_dates.add(future_date)
-
-        # Additional third Fridays: first third Friday after 180 and 360 days
-        for target_days in [180, 360]:
-            target_date = today + timedelta(days=target_days)
-
-            # Start in the target month and search for the first third Friday after target_date
-            current_month = target_date.month
-            current_year = target_date.year
-
-            found = False
-            while not found:
-                # Get the third Friday of the current month
-                expiry_date = get_third_friday(current_year, current_month)
-
-                # If this third Friday is after the target date, we found our expiry date
-                if expiry_date > target_date:
-                    expiry_dates.add(expiry_date)
-                    found = True
-                else:
-                    # Go to the next month
-                    current_month += 1
-                    if current_month > 12:
-                        current_month = 1
-                        current_year += 1
-
-        expiry_dates_list = sorted(int(d.strftime('%Y%m%d')) for d in expiry_dates)
-
-        return expiry_dates_list
+    """
+    Get option expiry dates based on enabled collection rules.
+    
+    Returns:
+        list: List of expiry dates in YYYYMMDD integer format
+    """
+    print("Generating expiry dates from collection rules...")
+    
+    # Get dates from the new rule-based system
+    expiry_date_strings = generate_expiry_dates_from_rules()
+    
+    # Convert from "YYYY-MM-DD" strings to YYYYMMDD integers
+    expiry_dates_int = []
+    for date_str in expiry_date_strings:
+        # Convert "2024-06-21" to 20240621
+        date_int = int(date_str.replace("-", ""))
+        expiry_dates_int.append(date_int)
+    
+    print(f"Generated {len(expiry_dates_int)} expiry dates from {len([r for r in OPTIONS_COLLECTION_RULES if r.get('enabled')])} enabled rules")
+    
+    return sorted(expiry_dates_int)
 
 def opra_to_osi(opra_code):
     """

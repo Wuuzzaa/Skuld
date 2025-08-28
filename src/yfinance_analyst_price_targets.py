@@ -5,7 +5,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import *
-from config_utils import validate_config, get_filtered_symbols_with_logging
+from config_utils import get_filtered_symbols_with_logging
 import yfinance as yf
 import pandas as pd
 import time
@@ -19,7 +19,7 @@ def scrape_yahoo_finance_analyst_price_targets():
     results = []
 
     # Test mode logic and logging centrally from config
-    symbols, active_mode = get_filtered_symbols_with_logging("Yahoo Finance Analyst Price Targets")
+    symbols = get_filtered_symbols_with_logging("Yahoo Finance Analyst Price Targets")
 
     for symbol in symbols:
         print(f"Scraping {symbol} on Yahoo Finance...")

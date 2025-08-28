@@ -7,25 +7,16 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import *
 from tradingview_ta import TA_Handler, Interval, Exchange
-from config_utils import validate_config
+from config_utils import get_filtered_symbols_with_logging
 
 
 def scrape_and_save_price_and_technical_indicators():
-    # Test mode logic and logging based on config
-    active_mode = validate_config()
-    if active_mode == "GENERAL_TEST_MODE":
-        items = list(SYMBOLS_EXCHANGE.items())[:GENERAL_TEST_MODE_MAX_SYMBOLS]
-        print(f"[TESTMODE] Only {GENERAL_TEST_MODE_MAX_SYMBOLS} symbols will be processed.")
-    elif active_mode == "MARRIED_PUT_TEST_MODE":
-        if MARRIED_PUT_TEST_MODE_MAX_SYMBOLS is not None:
-            items = list(SYMBOLS_EXCHANGE.items())[:MARRIED_PUT_TEST_MODE_MAX_SYMBOLS]
-            print(f"[MARRIED_PUT_TEST_MODE] Only {MARRIED_PUT_TEST_MODE_MAX_SYMBOLS} symbols will be processed.")
-        else:
-            items = SYMBOLS_EXCHANGE.items()
-            print(f"[MARRIED_PUT_TEST_MODE] All {len(SYMBOLS_EXCHANGE)} symbols will be processed.")
-    else:
-        items = SYMBOLS_EXCHANGE.items()
-        print(f"[PRODUCTION] All {len(SYMBOLS_EXCHANGE)} symbols will be processed.")
+    # Get symbols with new configuration system
+    symbols = get_filtered_symbols_with_logging("Technical Analysis Scraping")
+    
+    # Build items list for processing
+    items = [(symbol, SYMBOLS_EXCHANGE.get(symbol, "NASDAQ")) for symbol in symbols]
+    
     results = []
 
     for symbol, exchange in items:
