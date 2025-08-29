@@ -12,6 +12,7 @@ from src.yfinance_analyst_price_targets import scrape_yahoo_finance_analyst_pric
 from config import *
 from src.google_drive_upload import upload_merged_data
 from src.dividend_radar import process_dividend_data
+from src.dividend_stability_analysis import generate_dividend_stability_analysis
 from config_utils import get_filtered_symbols_and_dates_with_logging
 import pandas as pd
 
@@ -114,6 +115,12 @@ def main(upload_df_google_drive=True):
     print("#" * 80)
     generate_fundamental_data()
     print("Yahoo Query Fundamentals - Done")
+
+    print("#" * 80)
+    print("Dividend Stability Analysis")
+    print("#" * 80)
+    generate_dividend_stability_analysis()
+    print("Dividend Stability Analysis - Done")
 
     print("#" * 80)
     print("Merge all feather dataframe files (with live prices)")
