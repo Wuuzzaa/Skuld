@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import sys
 import os
 
@@ -55,6 +56,23 @@ def merge_data_dataframes():
     except Exception as e:
         print(f"ERROR merging fundamentals: {e}")
 
+    # Join Dividend Stability Analysis
+    print("Joining Dividend Stability Analysis")
+    try:
+        stability_path = PATH_DATA / 'dividend_stability_analysis.feather'
+        df_stability = pd.read_feather(stability_path)
+        print(f"Loaded dividend stability: {df_stability.shape}")
+        print(f"Stability symbols: {list(df_stability['symbol'].unique())}")
+        
+        # Merge stability analysis
+        df_merged = pd.merge(df_merged, df_stability, how='left', on='symbol')
+        print(f"After stability merge: {df_merged.shape}")
+        
+    except FileNotFoundError:
+        print("WARNING: Dividend stability analysis not found, skipping stability merge")
+    except Exception as e:
+        print(f"ERROR merging dividend stability: {e}")
+
     # Join Live Stock Prices (fetch on-the-fly)
     print("Fetching and joining live stock prices (on-the-fly)")
     try:
@@ -72,6 +90,81 @@ def merge_data_dataframes():
 
     except Exception as e:
         print(f"ERROR fetching/merging live stock prices: {e}")
+
+    # Calculate Option Pricing Columns (IntrinsicValue & ExtrinsicValue for ALL options)
+    print("Calculating option pricing columns for ALL options (Calls & Puts)")
+    try:
+        # Convert columns to numeric for calculations
+        df_merged['strike'] = pd.to_numeric(df_merged['strike'], errors='coerce')
+        df_merged['live_stock_price'] = pd.to_numeric(df_merged['live_stock_price'], errors='coerce')
+        df_merged['theoPrice'] = pd.to_numeric(df_merged['theoPrice'], errors='coerce')
+        
+        # Identify Call and Put options from option column (e.g., "AAPL250905C110.0" or "AAPL250905P110.0")
+        # Extract option type from option string
+        df_merged['option_type_from_symbol'] = df_merged['option'].str.extract(r'([CP])', expand=False)
+        
+        # Also check the 'option-type' column if it exists
+        if 'option-type' in df_merged.columns:
+            # Create unified option type
+            df_merged['unified_option_type'] = df_merged['option-type'].fillna(df_merged['option_type_from_symbol'])
+        else:
+            df_merged['unified_option_type'] = df_merged['option_type_from_symbol']
+        
+        # Identify calls and puts
+        is_call = df_merged['unified_option_type'].isin(['call', 'Call', 'CALL', 'C', 'c'])
+        is_put = df_merged['unified_option_type'].isin(['put', 'Put', 'PUT', 'P', 'p'])
+        
+        # Calculate IntrinsicValue for both Calls and Puts
+        valid_data = (
+            pd.notna(df_merged['strike']) & 
+            pd.notna(df_merged['live_stock_price']) &
+            (is_call | is_put)  # Only for actual options
+        )
+        
+        # For CALLS: IntrinsicValue = max(stock_price - strike, 0)
+        # For PUTS:  IntrinsicValue = max(strike - stock_price, 0)
+        df_merged['IntrinsicValue'] = np.where(
+            valid_data & is_call,
+            np.maximum(df_merged['live_stock_price'] - df_merged['strike'], 0.0),
+            np.where(
+                valid_data & is_put,
+                np.maximum(df_merged['strike'] - df_merged['live_stock_price'], 0.0),
+                np.nan
+            )
+        )
+        
+        # Calculate ExtrinsicValue = max(theoPrice - IntrinsicValue, 0) for ALL options
+        valid_extrinsic = (
+            (is_call | is_put) &
+            pd.notna(df_merged['theoPrice']) & 
+            pd.notna(df_merged['IntrinsicValue'])
+        )
+        
+        df_merged['ExtrinsicValue'] = np.where(
+            valid_extrinsic,
+            np.maximum(df_merged['theoPrice'] - df_merged['IntrinsicValue'], 0.0),
+            np.nan
+        )
+        
+        # Print calculation statistics
+        call_count = is_call.sum()
+        put_count = is_put.sum()
+        intrinsic_count = df_merged['IntrinsicValue'].notna().sum()
+        extrinsic_count = df_merged['ExtrinsicValue'].notna().sum()
+        
+        print(f"   Call options found: {call_count:,}")
+        print(f"   Put options found: {put_count:,}")
+        print(f"   IntrinsicValue calculated: {intrinsic_count:,}")
+        print(f"   ExtrinsicValue calculated: {extrinsic_count:,}")
+        
+        # Clean up temporary columns
+        df_merged.drop(['option_type_from_symbol', 'unified_option_type'], axis=1, inplace=True, errors='ignore')
+        
+    except Exception as e:
+        print(f"ERROR calculating option pricing columns: {e}")
+        # Add empty columns if calculation fails
+        df_merged['IntrinsicValue'] = np.nan
+        df_merged['ExtrinsicValue'] = np.nan
 
     # Store merged DataFrame to file - only include columns that actually exist
     print(f"Storing merged DataFrame to: {PATH_DATAFRAME_DATA_MERGED_FEATHER}")

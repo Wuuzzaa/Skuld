@@ -76,7 +76,7 @@ DATAFRAME_DATA_MERGED_COLUMNS = [
     #"open",
     #"high",
     #"low",
-    #"close",
+    "close",
     "change",
     "analyst_mean_target",
     # "recommendation_buy_amount",
@@ -217,15 +217,16 @@ DATAFRAME_DATA_MERGED_COLUMNS = [
     "TotalAssets",
     "NetIncome",
     "EBITDA",
-    "FreeCashFlow",
-    "OperatingCashFlow",
-    "StockholdersEquity",
+    #"FreeCashFlow",
+    #"OperatingCashFlow",
+    #"StockholdersEquity",
     "TotalDebt",
     "CurrentAssets",
-    "CurrentLiabilities",
-    "TangibleBookValue",
-    "OrdinarySharesNumber", 
-    "BasicEPS",
+    "Yahoo_DividendYield",
+    #"CurrentLiabilities",
+    #"TangibleBookValue",
+    #"OrdinarySharesNumber", 
+    #"BasicEPS",
     #"DilutedEPS",
     #"CashDividendsPaid",
     #"PE_Ratio",
@@ -234,6 +235,7 @@ DATAFRAME_DATA_MERGED_COLUMNS = [
     #"ROE_Fund",
     "ROA",
   #  "DividendYield_Calc",
+
     ################## 
     # Live Stock Price Columns (added during data collection)
     ##################
@@ -241,6 +243,30 @@ DATAFRAME_DATA_MERGED_COLUMNS = [
     #"live_price_timestamp", 
     #"live_price_available", 
     #"current_stock_price"  # Unified price column (live or fallback)
+
+    ##################
+    # Option Pricing Columns (calculated during merge for ALL options)
+    ##################
+    "IntrinsicValue",      # Calls: max(stock - strike, 0) | Puts: max(strike - stock, 0)
+    "ExtrinsicValue",      # max(theoPrice - IntrinsicValue, 0) for all options
+
+    ##################
+    # Dividend Stability Analysis (for Married Put strategies)
+    ##################
+    #"dividend_stability_label",        # "STABLE", "OK_CHECK_REQUIRED", "NOT_STABLE"
+    #"dividend_stability_score",        # 0-7 score
+    #"dividend_regularity_ratio",       # % years with payments
+    #"median_payments_per_year",        # Payment frequency (numeric)
+    "dividend_frequency_type",         # "Quarterly", "Semi-annual", "Annual", "Irregular"
+    "dividend_frequency_consistency",  # 0-1 consistency score
+    #"dividend_cuts_count",             # Number of YoY cuts
+    "dividend_streak_years",           # Years without cuts
+    #"dividend_cagr",                   # 10-year Compound Annual Growth Rate (CAGR) of dividends
+    #"dividend_volatility",             # Volatility measure
+    #"payout_ratio_stable",            # % years with sustainable payout
+    #"fcf_coverage_adequate",          # FCF coverage quality
+    #"earnings_coverage",              # Earnings coverage ratio
+    #"analysis_notes"                  # Detailed reasoning
 ]
 
 # JMS Settings
@@ -255,11 +281,11 @@ JMS_MENTAL_STOP = 2
 
 # Symbol selection
 SYMBOL_SELECTION = {
-    "mode": "max",                   # "all", "list", "file", "max"
+    "mode": "list",                   # "all", "list", "file", "max"
     "symbols": ["AAPL"],             # Used when mode="list"
     "file_path": None,               # Used when mode="file"
     "max_symbols": 10,               # Used when mode="max" or as limit for "all"
-    "use_max_limit": True            # If True, applies max_symbols limit to any mode
+    "use_max_limit": False            # If True, applies max_symbols limit to any mode
 }
 
 # =============================================================================

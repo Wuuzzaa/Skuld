@@ -255,8 +255,11 @@ def generate_fundamental_data():
                     'MarketCap': summary.get('marketCap'),
                     'Volume': summary.get('volume'),
                     'AverageVolume': summary.get('averageVolume'),
-                    'DividendYield': summary.get('dividendYield'),
-                    'PayoutRatio': summary.get('payoutRatio')
+                    'Yahoo_DividendYield': summary.get('dividendYield'),
+                    'DividendRate': summary.get('dividendRate'),
+                    'TrailingAnnualDividendRate': summary.get('trailingAnnualDividendRate'),
+                    'PayoutRatio': summary.get('payoutRatio'),
+                    'ExDividendDate': summary.get('exDividendDate')
                 })
             
             all_fundamental_data.append(symbol_data)
