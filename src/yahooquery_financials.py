@@ -201,92 +201,129 @@ def get_yahooquery_financials():
 def generate_fundamental_data():
     """
     Main function to generate fundamental data - called from main.py
-    Uses MULTIPLE yahooquery endpoints to get complete fundamentals including MarketCap
+    Uses ALL available yahooquery endpoints to get COMPLETE fundamentals (200+ columns)
     """
     # Test mode logic and logging centrally from config
     symbols = get_filtered_symbols_with_logging("Yahoo Fundamentals")
     
-    print("Processing fundamentals: selecting essential metrics and calculating ratios...")
+    print("Processing fundamentals: collecting ALL available metrics from multiple endpoints...")
     
-    # Get comprehensive fundamentals data from MULTIPLE endpoints
+    # Method 1: Get ALL financial data using all_financial_data (200+ columns)
+    print("Fetching comprehensive financial data using all_financial_data()...")
+    tickers = Ticker(symbols, asynchronous=True)
+    df_all_financial = tickers.all_financial_data()
+    
+    if df_all_financial is not None and not df_all_financial.empty:
+        # Reset index to make symbol a column
+        df_all_financial.reset_index(inplace=True)
+        
+        # Get latest data per symbol
+        if 'asOfDate' in df_all_financial.columns:
+            df_all_financial['asOfDate'] = pd.to_datetime(df_all_financial['asOfDate'])
+            idx = df_all_financial.groupby('symbol')['asOfDate'].idxmax()
+            df_financial_latest = df_all_financial.loc[idx].reset_index(drop=True)
+        else:
+            df_financial_latest = df_all_financial.groupby('symbol').last().reset_index()
+        
+        print(f"✅ Collected {df_financial_latest.shape[1]} columns from all_financial_data")
+    else:
+        # Fallback: create empty dataframe with symbol column
+        df_financial_latest = pd.DataFrame({'symbol': symbols})
+        print("⚠️  all_financial_data returned empty - using fallback")
+    
+    # Method 2: Add additional data from specific endpoints for completeness
     all_fundamental_data = []
     
     for symbol in symbols:
         try:
-            print(f"Fetching comprehensive fundamentals for {symbol}...")
+            print(f"Enhancing data for {symbol} with additional endpoints...")
             ticker = Ticker(symbol)
             
-            # Get data from MULTIPLE endpoints (like quick_fundamentals_lookup.py)
-            key_stats = ticker.key_stats
-            financial_data = ticker.financial_data  
-            summary_detail = ticker.summary_detail
+            # Start with financial data if available
+            if symbol in df_financial_latest['symbol'].values:
+                symbol_data = df_financial_latest[df_financial_latest['symbol'] == symbol].iloc[0].to_dict()
+            else:
+                symbol_data = {'symbol': symbol}
             
-            # Extract data for this symbol
-            symbol_data = {'symbol': symbol}
+            # Add KEY_STATS data
+            try:
+                key_stats = ticker.key_stats
+                if symbol in key_stats and isinstance(key_stats[symbol], dict):
+                    stats = key_stats[symbol]
+                    # Add all key_stats with prefix to avoid conflicts
+                    for key, value in stats.items():
+                        symbol_data[f'KeyStats_{key}'] = value
+                    
+                    # Calculate Forward EPS Growth using earnings_trend
+                    try:
+                        earnings_trend = ticker.earnings_trend
+                        if symbol in earnings_trend and 'trend' in earnings_trend[symbol]:
+                            trend = earnings_trend[symbol]['trend']
+                            next_year = next((x for x in trend if x['period'] == '+1y'), None)
+                            if next_year and 'earningsEstimate' in next_year:
+                                eps_next_year = next_year['earningsEstimate'].get('avg')
+                                trailing_eps = stats.get('trailingEps')
+                                
+                                if trailing_eps and eps_next_year and trailing_eps > 0:
+                                    symbol_data['Forward_EPS_Growth_Percent'] = ((eps_next_year - trailing_eps) / trailing_eps) * 100
+                    except Exception as e:
+                        print(f"  Warning: Could not get EPS growth for {symbol}: {e}")
+            except Exception as e:
+                print(f"  Warning: Could not get key_stats for {symbol}: {e}")
             
-            # From KEY_STATS (enterpriseValue, etc.)
-            if symbol in key_stats and isinstance(key_stats[symbol], dict):
-                stats = key_stats[symbol]
-                symbol_data.update({
-                    'EnterpriseValue': stats.get('enterpriseValue'),
-                    'ForwardPE': stats.get('forwardPE'),
-                    'TrailingEps': stats.get('trailingEps'),
-                    'PriceToBook': stats.get('priceToBook')
-                })
+            # Add SUMMARY_DETAIL data  
+            try:
+                summary_detail = ticker.summary_detail
+                if symbol in summary_detail and isinstance(summary_detail[symbol], dict):
+                    summary = summary_detail[symbol]
+                    # Add all summary_detail with prefix to avoid conflicts
+                    for key, value in summary.items():
+                        symbol_data[f'Summary_{key}'] = value
+            except Exception as e:
+                print(f"  Warning: Could not get summary_detail for {symbol}: {e}")
             
-            # From FINANCIAL_DATA (revenue, ebitda, etc.)
-            if symbol in financial_data and isinstance(financial_data[symbol], dict):
-                fin_data = financial_data[symbol]
-                symbol_data.update({
-                    'TotalRevenue': fin_data.get('totalRevenue'),
-                    'EBITDA': fin_data.get('ebitda'),
-                    'FreeCashFlow': fin_data.get('freeCashflow'),
-                    'TotalDebt': fin_data.get('totalDebt'),
-                    'NetIncome': fin_data.get('netIncomeToCommon'),
-                    'ROE': fin_data.get('returnOnEquity'),
-                    'ROA': fin_data.get('returnOnAssets'),
-                    'CurrentPrice': fin_data.get('currentPrice')
-                })
-            
-            # From SUMMARY_DETAIL (MarketCap!!!)
-            if symbol in summary_detail and isinstance(summary_detail[symbol], dict):
-                summary = summary_detail[symbol]
-                symbol_data.update({
-                    'MarketCap': summary.get('marketCap'),
-                    'Volume': summary.get('volume'),
-                    'AverageVolume': summary.get('averageVolume'),
-                    'Yahoo_DividendYield': summary.get('dividendYield'),
-                    'DividendRate': summary.get('dividendRate'),
-                    'TrailingAnnualDividendRate': summary.get('trailingAnnualDividendRate'),
-                    'PayoutRatio': summary.get('payoutRatio'),
-                    'ExDividendDate': summary.get('exDividendDate')
-                })
+            # Add FINANCIAL_DATA 
+            try:
+                financial_data = ticker.financial_data
+                if symbol in financial_data and isinstance(financial_data[symbol], dict):
+                    fin_data = financial_data[symbol]
+                    # Add all financial_data with prefix to avoid conflicts
+                    for key, value in fin_data.items():
+                        symbol_data[f'FinData_{key}'] = value
+            except Exception as e:
+                print(f"  Warning: Could not get financial_data for {symbol}: {e}")
             
             all_fundamental_data.append(symbol_data)
             
         except Exception as e:
-            print(f"Error fetching fundamentals for {symbol}: {e}")
+            print(f"Error enhancing data for {symbol}: {e}")
+            # Add minimal data for failed symbols
+            all_fundamental_data.append({'symbol': symbol})
         
-        time.sleep(0.5)  # Rate limiting
+        time.sleep(0.3)  # Rate limiting
     
     if not all_fundamental_data:
         print("No fundamental data collected")
         return
     
-    # Create DataFrame from collected data
+    # Create comprehensive DataFrame from all collected data
     df_all_fundamentals = pd.DataFrame(all_fundamental_data)
     
-    # Save full raw data
+    print(f"✅ Final dataset: {df_all_fundamentals.shape} with {df_all_fundamentals.shape[1]} total columns")
+    print(f"   Columns include: financial_data, key_stats, summary_detail, financial_data endpoints")
+    
+    # Save full raw data (ALL columns)
     df_all_fundamentals.to_feather(PATH_DATAFRAME_YAHOOQUERY_FINANCIAL_FEATHER)
     print(f"Full fundamentals saved: {PATH_DATAFRAME_YAHOOQUERY_FINANCIAL_FEATHER}")
     
-    # Process for essential metrics and calculate additional ratios
+    # Process for essential metrics (for UI display)
     df_processed = prepare_fundamentals_for_merge_v2(df_all_fundamentals)
     
-    # Save processed data
+    # Save processed data (essential columns for display)
     df_processed.to_feather(PATH_DATAFRAME_YAHOOQUERY_FINANCIAL_PROCESSED_FEATHER)
     print(f"Processed fundamentals saved: {PATH_DATAFRAME_YAHOOQUERY_FINANCIAL_PROCESSED_FEATHER}")
-    print(f"Ready for merge: {df_processed.shape} ({df_processed.shape[1]} columns)")
+    print(f"Ready for merge: {df_processed.shape} ({df_processed.shape[1]} display columns)")
+    print(f"Available for filtering: {df_all_fundamentals.shape[1]} total columns")
 
 
 if __name__ == "__main__":

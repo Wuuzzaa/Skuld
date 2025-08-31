@@ -209,32 +209,316 @@ DATAFRAME_DATA_MERGED_COLUMNS = [
     #"PEG",
     "Industry",
     ##################
-    # Fundamentals
+    # Fundamentals - ALLE 286 verfügbaren Spalten (nur wichtigste eingeblendet)
     ##################
+    
+    # === CORE DISPLAY COLUMNS (aktuell sichtbar) ===
     "MarketCap",
-    "EnterpriseValue", 
-    "TotalRevenue",
-    "TotalAssets",
+    "TotalRevenue", 
     "NetIncome",
     "EBITDA",
-    #"FreeCashFlow",
-    #"OperatingCashFlow",
-    #"StockholdersEquity",
-    "TotalDebt",
-    "CurrentAssets",
-    "Yahoo_DividendYield",
+    #"Yahoo_DividendYield",  # Will be mapped from Summary_dividendYield
+    #"ROA",  # Available as FinData_returnOnAssets
+    
+    # === META COLUMNS ===
+    #"symbol",  # Always included automatically
+    #"asOfDate",
+    #"periodType", 
+    #"currencyCode",
+    
+    # === FINANCIAL STATEMENTS - Balance Sheet ===
+    #"AccountsPayable",
+    #"AccountsReceivable", 
+    #"AccumulatedDepreciation",
+    #"AvailableForSaleSecurities",
+    #"CapitalStock",
+    #"CashAndCashEquivalents",
+    #"CashCashEquivalentsAndShortTermInvestments",
+    #"CashEquivalents",
+    #"CashFinancial",
+    #"CommercialPaper",
+    #"CommonStock",
+    #"CommonStockEquity",
+    #"CurrentAssets",
+    #"CurrentDebt",
+    #"CurrentDebtAndCapitalLeaseObligation",
+    #"CurrentDeferredLiabilities",
+    #"CurrentDeferredRevenue", 
     #"CurrentLiabilities",
+    #"DeferredIncomeTax",
+    #"DeferredTax",
+    #"GrossPPE",
+    #"IncomeTaxPayable",
+    #"Inventory",
+    #"InvestedCapital",
+    #"InvestmentinFinancialAssets",
+    #"InvestmentsAndAdvances",
+    #"LandAndImprovements",
+    #"Leases",
+    #"LongTermDebt",
+    #"LongTermDebtAndCapitalLeaseObligation",
+    #"MachineryFurnitureEquipment",
+    #"NetDebt",
+    #"NetPPE",
+    #"NetTangibleAssets",
+    #"NonCurrentDeferredAssets",
+    #"NonCurrentDeferredTaxesAssets",
+    #"OrdinarySharesNumber",
+    #"OtherCurrentAssets",
+    #"OtherCurrentBorrowings",
+    #"OtherCurrentLiabilities",
+    #"OtherInvestments",
+    #"OtherNonCurrentAssets",
+    #"OtherNonCurrentLiabilities",
+    #"OtherProperties",
+    #"OtherReceivables",
+    #"OtherShortTermInvestments",
+    #"Payables",
+    #"PayablesAndAccruedExpenses",
+    #"Properties",
+    #"Receivables",
+    #"RetainedEarnings",
+    #"ShareIssued",
+    #"StockholdersEquity",
     #"TangibleBookValue",
-    #"OrdinarySharesNumber", 
+    #"TotalAssets",
+    #"TotalCapitalization",
+    #"TotalDebt",
+    #"TotalEquityGrossMinorityInterest",
+    #"TotalLiabilitiesNetMinorityInterest",
+    #"TotalNonCurrentAssets",
+    #"TotalNonCurrentLiabilitiesNetMinorityInterest",
+    #"TotalTaxPayable",
+    #"TradeandOtherPayablesNonCurrent",
+    #"TreasurySharesNumber",
+    #"WorkingCapital",
+    
+    # === FINANCIAL STATEMENTS - Income Statement ===
+    #"BasicAverageShares",
     #"BasicEPS",
+    #"CostOfRevenue",
+    #"DilutedAverageShares", 
     #"DilutedEPS",
+    #"DilutedNIAvailtoComStockholders",
+    #"EBIT",
+    #"EnterpriseValue",
+    #"EnterprisesValueEBITDARatio",
+    #"EnterprisesValueRevenueRatio",
+    #"FreeCashFlow",
+    #"GainsLossesNotAffectingRetainedEarnings",
+    #"GrossProfit",
+    #"InterestExpense",
+    #"InterestExpenseNonOperating",
+    #"InterestIncome", 
+    #"InterestIncomeNonOperating",
+    #"NetIncomeCommonStockholders",
+    #"NetIncomeContinuousOperations",
+    #"NetIncomeFromContinuingAndDiscontinuedOperation",
+    #"NetIncomeFromContinuingOperationNetMinorityInterest",
+    #"NetIncomeFromContinuingOperations",
+    #"NetIncomeIncludingNoncontrollingInterests",
+    #"NetInterestIncome",
+    #"NetNonOperatingInterestIncomeExpense",
+    #"NormalizedEBITDA",
+    #"NormalizedIncome",
+    #"OperatingExpense",
+    #"OperatingIncome",
+    #"OperatingRevenue",
+    #"OtherIncomeExpense",
+    #"OtherNonOperatingIncomeExpenses",
+    #"PretaxIncome",
+    #"ReconciledCostOfRevenue",
+    #"ReconciledDepreciation",
+    #"ResearchAndDevelopment",
+    #"SellingGeneralAndAdministration",
+    #"StockBasedCompensation",
+    #"TaxEffectOfUnusualItems",
+    #"TaxProvision",
+    #"TaxRateForCalcs",
+    #"TotalExpenses",
+    #"TotalOperatingIncomeAsReported",
+    
+    # === FINANCIAL STATEMENTS - Cash Flow ===
+    #"BeginningCashPosition",
+    #"CapitalExpenditure",
+    #"CapitalLeaseObligations",
     #"CashDividendsPaid",
-    #"PE_Ratio",
-    #"PB_Ratio", 
-    #"DebtEquity_Ratio",
-    #"ROE_Fund",
-    "ROA",
-  #  "DividendYield_Calc",
+    #"CashFlowFromContinuingFinancingActivities",
+    #"CashFlowFromContinuingInvestingActivities", 
+    #"CashFlowFromContinuingOperatingActivities",
+    #"ChangeInAccountPayable",
+    #"ChangeInCashSupplementalAsReported",
+    #"ChangeInInventory",
+    #"ChangeInOtherCurrentAssets",
+    #"ChangeInOtherCurrentLiabilities",
+    #"ChangeInOtherWorkingCapital",
+    #"ChangeInPayable",
+    #"ChangeInPayablesAndAccruedExpense",
+    #"ChangeInReceivables",
+    #"ChangeInWorkingCapital",
+    #"ChangesInAccountReceivables",
+    #"ChangesInCash",
+    #"CommonStockDividendPaid",
+    #"CommonStockIssuance",
+    #"CommonStockPayments",
+    #"CurrentCapitalLeaseObligation",
+    #"DepreciationAmortizationDepletion",
+    #"DepreciationAndAmortization",
+    #"EndCashPosition",
+    #"FinancingCashFlow",
+    #"IncomeTaxPaidSupplementalData",
+    #"InterestPaidSupplementalData",
+    #"InvestingCashFlow",
+    #"IssuanceOfCapitalStock",
+    #"IssuanceOfDebt",
+    #"LongTermCapitalLeaseObligation",
+    #"LongTermDebtIssuance",
+    #"LongTermDebtPayments",
+    #"NetBusinessPurchaseAndSale",
+    #"NetCommonStockIssuance",
+    #"NetInvestmentPurchaseAndSale",
+    #"NetIssuancePaymentsOfDebt",
+    #"NetLongTermDebtIssuance",
+    #"NetOtherFinancingCharges",
+    #"NetOtherInvestingChanges",
+    #"NetPPEPurchaseAndSale",
+    #"NetShortTermDebtIssuance",
+    #"OperatingCashFlow",
+    #"OtherEquityAdjustments",
+    #"OtherNonCashItems",
+    #"PurchaseOfBusiness",
+    #"PurchaseOfInvestment",
+    #"PurchaseOfPPE",
+    #"RepaymentOfDebt",
+    #"RepurchaseOfCapitalStock",
+    #"SaleOfInvestment",
+    
+    # === KEY STATS (KeyStats_ prefix) ===
+    #"KeyStats_maxAge",
+    #"KeyStats_priceHint",
+    #"KeyStats_enterpriseValue",
+    #"KeyStats_forwardPE",
+    #"KeyStats_profitMargins",
+    #"KeyStats_floatShares",
+    #"KeyStats_sharesOutstanding",
+    #"KeyStats_sharesShort",
+    #"KeyStats_sharesShortPriorMonth",
+    #"KeyStats_sharesShortPreviousMonthDate",
+    #"KeyStats_dateShortInterest",
+    #"KeyStats_sharesPercentSharesOut",
+    #"KeyStats_heldPercentInsiders",
+    #"KeyStats_heldPercentInstitutions",
+    #"KeyStats_shortRatio",
+    #"KeyStats_shortPercentOfFloat",
+    #"KeyStats_beta",
+    #"KeyStats_impliedSharesOutstanding",
+    #"KeyStats_category",
+    #"KeyStats_bookValue",
+    #"KeyStats_priceToBook",
+    #"KeyStats_fundFamily",
+    #"KeyStats_legalType",
+    #"KeyStats_lastFiscalYearEnd",
+    #"KeyStats_nextFiscalYearEnd",
+    #"KeyStats_mostRecentQuarter",
+    #"KeyStats_earningsQuarterlyGrowth",
+    #"KeyStats_netIncomeToCommon",
+    #"KeyStats_trailingEps",
+    #"KeyStats_forwardEps",
+    #"KeyStats_lastSplitFactor",
+    #"KeyStats_lastSplitDate",
+    #"KeyStats_enterpriseToRevenue",
+    #"KeyStats_enterpriseToEbitda",
+    #"KeyStats_52WeekChange",
+    #"KeyStats_SandP52WeekChange",
+    #"KeyStats_lastDividendValue",
+    #"KeyStats_lastDividendDate",
+    #"KeyStats_latestShareClass", 
+    #"KeyStats_leadInvestor",
+    
+    # === EPS GROWTH (Custom Calculated) ===
+    "Forward_EPS_Growth_Percent",  # Main screening metric
+    
+    # === SUMMARY DETAIL (Summary_ prefix) ===
+    #"Summary_maxAge",
+    #"Summary_priceHint",
+    #"Summary_previousClose",
+    #"Summary_open",
+    #"Summary_dayLow",
+    #"Summary_dayHigh",
+    #"Summary_regularMarketPreviousClose",
+    #"Summary_regularMarketOpen",
+    #"Summary_regularMarketDayLow",
+    #"Summary_regularMarketDayHigh",
+    #"Summary_dividendRate",
+    #"Summary_dividendYield",  # Maps to Yahoo_DividendYield
+    #"Summary_exDividendDate",
+    #"Summary_payoutRatio",
+    #"Summary_fiveYearAvgDividendYield",
+    #"Summary_beta",
+    #"Summary_trailingPE",
+    #"Summary_forwardPE",
+    #"Summary_volume",
+    #"Summary_regularMarketVolume",
+    #"Summary_averageVolume",
+    #"Summary_averageVolume10days",
+    #"Summary_averageDailyVolume10Day",
+    #"Summary_bid",
+    #"Summary_ask",
+    #"Summary_bidSize",
+    #"Summary_askSize",
+    #"Summary_marketCap",
+    #"Summary_fiftyTwoWeekLow",
+    #"Summary_fiftyTwoWeekHigh",
+    #"Summary_priceToSalesTrailing12Months",
+    #"Summary_fiftyDayAverage",
+    #"Summary_twoHundredDayAverage",
+    #"Summary_trailingAnnualDividendRate",
+    #"Summary_trailingAnnualDividendYield",
+    #"Summary_currency",
+    #"Summary_fromCurrency",
+    #"Summary_toCurrency",
+    #"Summary_lastMarket",
+    #"Summary_coinMarketCapLink",
+    #"Summary_algorithm",
+    #"Summary_tradeable",
+    
+    # === FINANCIAL DATA (FinData_ prefix) ===
+    #"FinData_maxAge",
+    #"FinData_currentPrice",
+    #"FinData_targetHighPrice",
+    #"FinData_targetLowPrice",
+    #"FinData_targetMeanPrice",
+    #"FinData_targetMedianPrice",
+    #"FinData_recommendationMean",
+    #"FinData_recommendationKey",
+    #"FinData_numberOfAnalystOpinions",
+    #"FinData_totalCash",
+    #"FinData_totalCashPerShare",
+    #"FinData_ebitda",
+    #"FinData_totalDebt",
+    #"FinData_quickRatio",
+    #"FinData_currentRatio",
+    #"FinData_totalRevenue",
+    #"FinData_debtToEquity",
+    #"FinData_revenuePerShare",
+    #"FinData_returnOnAssets",  # Maps to ROA
+    #"FinData_returnOnEquity",
+    #"FinData_grossProfits",
+    #"FinData_freeCashflow",
+    #"FinData_operatingCashflow",
+    #"FinData_earningsGrowth",      # Alternative EPS Growth
+    #"FinData_revenueGrowth", 
+    #"FinData_grossMargins",
+    #"FinData_ebitdaMargins",
+    #"FinData_operatingMargins",
+    #"FinData_profitMargins",
+    #"FinData_financialCurrency",
+    
+    # === CALCULATED RATIOS (from prepare_fundamentals_for_merge_v2) ===
+    #"PE_Ratio_Calc",
+    #"PS_Ratio",
+    #"DebtToMarketCap",
+    #"EV_EBITDA_Approx",
 
     ################## 
     # Live Stock Price Columns (added during data collection)
@@ -251,6 +535,30 @@ DATAFRAME_DATA_MERGED_COLUMNS = [
     "ExtrinsicValue",      # max(theoPrice - IntrinsicValue, 0) for all options
 
     ##################
+    # Married Put KPIs (precise dividend-adjusted calculations for 100-share positions)
+    ##################
+    "MP_SharesQuantity",           # Number of shares in position (100)
+    "MP_StockInvestment",          # 100 shares × stock price
+    "MP_PutInvestment",            # 100 puts × put premium
+    "MP_TotalInvestment",          # Total capital required for position
+    "MP_IntrinsicValue",           # Total put intrinsic value for position
+    "MP_TimeValue",                # Total put time value for position
+    "MP_EstimatedDividends",       # Total dividends for 100 shares during holding
+    "MP_MaxRisk_Net",              # Max risk AFTER dividend reduction (100 shares)
+    "MP_RiskPercent_Net",          # Risk as % of total capital (with dividends)
+    "MP_Breakeven_Net",            # Breakeven price per share (with dividends)
+    "MP_BreakevenUpside_Net",      # Required stock movement % (with dividends)
+    "MP_DividendRiskReduction",    # Dollar risk reduction from dividends (100 shares)
+    "MP_DividendImpactPercent",    # Percentage risk reduction from dividends
+    #"MP_TotalFees",               # Trading fees (buy stock, buy put, exit)
+    #"MP_QuarterlyDividend",       # Estimated quarterly dividend
+    #"MP_DividendPayments",        # Number of payments during holding
+    #"MP_MaxRisk_Gross",           # Max risk WITHOUT dividends
+    #"MP_RiskPercent_Gross",       # Risk % without dividends
+    #"MP_Breakeven_Gross",         # Breakeven without dividends
+    #"MP_BreakevenUpside_Gross",   # Required movement % without dividends
+
+    ##################
     # Dividend Stability Analysis (for Married Put strategies)
     ##################
     #"dividend_stability_label",        # "STABLE", "OK_CHECK_REQUIRED", "NOT_STABLE"
@@ -258,9 +566,9 @@ DATAFRAME_DATA_MERGED_COLUMNS = [
     #"dividend_regularity_ratio",       # % years with payments
     #"median_payments_per_year",        # Payment frequency (numeric)
     "dividend_frequency_type",         # "Quarterly", "Semi-annual", "Annual", "Irregular"
-    "dividend_frequency_consistency",  # 0-1 consistency score
+    #"dividend_frequency_consistency",  # 0-1 consistency score
     #"dividend_cuts_count",             # Number of YoY cuts
-    "dividend_streak_years",           # Years without cuts
+    #"dividend_streak_years",           # Years without cuts
     #"dividend_cagr",                   # 10-year Compound Annual Growth Rate (CAGR) of dividends
     #"dividend_volatility",             # Volatility measure
     #"payout_ratio_stable",            # % years with sustainable payout
@@ -294,7 +602,7 @@ SYMBOL_SELECTION = {
 OPTIONS_COLLECTION_RULES = [
     {
         "name": "weekly_short_term",
-        "enabled": True,
+        "enabled": False,
         "days_range": [1, 60],            # Today + 1 to 60 days
         "frequency": "every_friday",      # "every_friday", "monthly_3rd_friday", "quarterly_3rd_friday"
         "description": "Weekly options for next 2 months"
@@ -308,7 +616,7 @@ OPTIONS_COLLECTION_RULES = [
     },
     {
         "name": "leaps_long_term",
-        "enabled": False,                 # Disabled by default
+        "enabled": True,                 # Disabled by default
         "days_range": [180, 365],         # Current married put range
         "frequency": "every_friday",      # Changed from monthly_3rd_friday to every_friday
         "description": "LEAPS options for married put strategies"
