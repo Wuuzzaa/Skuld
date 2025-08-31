@@ -29,17 +29,5 @@ def feature_construction():
     # store data back again
     df.to_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
 
-
-# def type_casting():
-#     # load data
-#     df = pd.read_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
-#
-#     # cast expiration_date column from int to datetime
-#     df["expiration_date"] = pd.to_datetime(df["expiration_date"].astype(str), format="%Y%m%d")
-#
-#     # store data back again
-#     df.to_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
-
-
 if __name__ == "__main__":
     feature_construction()
