@@ -1,372 +1,315 @@
 """
-Married Put KPI Calculations - Working Version
+Married Put KPIs - Standalone Module
 
-This module provides comprehensive KPI calculations for married put strategies.
-Compatible with the enhanced dataframe structure that includes universal 
-IntrinsicValue and ExtrinsicValue calculations.
+Calculates precise married put strategy KPIs with real dividend modeling.
+This module is called separately, NOT during the merge process.
+
+Usage:
+    python src/married_put_kpis.py
+
+The module:
+1. Loads the merged dataframe
+2. Applies married put calculations ONLY to PUT options  
+3. Saves results back to the merged dataframe
+4. Shows detailed analysis for all calculated positions
 """
 
 import pandas as pd
 import numpy as np
+import sys
+import os
 from datetime import datetime, timedelta
+
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from config import *
+from src.married_put_dividend_kpis import calculate_precise_married_put_with_dividends
 
 
 def calculate_all_married_put_kpis(df_combined, live_prices_dict=None, fee_per_trade=3.5):
     """
-    Calculate all married put KPIs for the combined dataframe.
+    Compatibility wrapper for Streamlit app.
+    
+    Calculate married put KPIs for a given dataframe (used by pages/iv_filter.py).
+    This is a simplified version that works with the dataframe directly.
     
     Args:
         df_combined: Combined dataframe with stock and option data
-        live_prices_dict: Dictionary with current stock prices (optional)
+        live_prices_dict: Dictionary with current stock prices (optional, unused)
         fee_per_trade: Trading fee per transaction (default: $3.5)
     
     Returns:
-        DataFrame with all KPI columns added
+        DataFrame with married put KPI columns added
     """
     if df_combined.empty:
         return df_combined
     
-    print(f"Starting KPI calculation for {len(df_combined)} rows...")
-    
-    # Make a copy to avoid modifying the original
-    df = df_combined.copy()
-    
-    # Calculate basic protection metrics
-    df = calculate_protection_level(df)
-    df = calculate_cost_of_protection(df, fee_per_trade)
-    df = calculate_cost_of_protection_percentage(df)
-    
-    # Calculate risk and reward metrics
-    df = calculate_max_profit(df, fee_per_trade)
-    df = calculate_max_profit_percentage(df)
-    df = calculate_max_risk(df, fee_per_trade)
-    df = calculate_max_risk_percentage(df)
-    
-    # Calculate time-based metrics
-    df = calculate_days_to_expiration(df)
-    df = calculate_annualized_protection_cost(df)
-    df = calculate_breakeven_price(df, fee_per_trade)
-    
-    # Calculate advanced metrics
-    df = calculate_upside_capture_ratio(df)
-    df = calculate_time_decay_risk(df)
-    df = calculate_implied_protection_yield(df)
-    df = calculate_dividend_capture_potential(df)
-    df = calculate_portfolio_hedge_efficiency(df)
-    df = calculate_margin_impact(df)
-    df = calculate_risk_reward_ratio(df)
-    
-    # Calculate enhanced metrics with fees and dividends
-    df = calculate_cost_of_protection_with_fees(df, fee_per_trade)
-    df = calculate_max_risk_with_fees_and_dividends(df, fee_per_trade)
-    df = calculate_max_risk_percentage_with_fees_and_dividends(df, fee_per_trade)
-    
-    print(f"KPI calculation completed successfully for {len(df)} rows")
-    return df
-
-
-def calculate_protection_level(df):
-    """Calculate the protection level (strike price as % of current stock price)"""
-    df = df.copy()
-    df['ProtectionLevel'] = (df['strike'] / df['close']) * 100
-    return df
-
-
-def calculate_cost_of_protection(df, fee_per_trade=3.5):
-    """Calculate the absolute cost of protection (premium + fees)"""
-    df = df.copy()
-    df['CostOfProtection'] = df['ask'] + fee_per_trade
-    return df
-
-
-def calculate_cost_of_protection_percentage(df):
-    """Calculate cost of protection as percentage of stock price"""
-    df = df.copy()
-    df['CostOfProtectionPercentage'] = (df['CostOfProtection'] / df['close']) * 100
-    return df
-
-
-def calculate_max_profit(df, fee_per_trade=1.0):
-    """Calculate maximum profit potential (unlimited upside minus protection cost)"""
-    df = df.copy()
-    # For married puts, max profit is theoretically unlimited
-    # We calculate profit at 10% stock appreciation as a reference
-    stock_appreciation_10pct = df['close'] * 1.10
-    df['MaxProfit'] = stock_appreciation_10pct - df['close'] - df['ask'] - (2 * fee_per_trade)
-    return df
-
-
-def calculate_max_profit_percentage(df):
-    """Calculate maximum profit as percentage of initial investment"""
-    df = df.copy()
-    initial_investment = df['close'] + df['ask']
-    df['MaxProfitPercentage'] = (df['MaxProfit'] / initial_investment) * 100
-    return df
-
-
-def calculate_max_risk(df, fee_per_trade=1.0):
-    """Calculate maximum risk (stock falls to strike price)"""
-    df = df.copy()
-    df['MaxRisk'] = df['close'] - df['strike'] + df['ask'] + (2 * fee_per_trade)
-    return df
-
-
-def calculate_max_risk_percentage(df):
-    """Calculate maximum risk as percentage of initial investment"""
-    df = df.copy()
-    initial_investment = df['close'] + df['ask']
-    df['MaxRiskPercentage'] = (df['MaxRisk'] / initial_investment) * 100
-    return df
-
-
-def calculate_days_to_expiration(df):
-    """Calculate days until option expiration"""
-    df = df.copy()
     try:
-        # Try different column names for expiration date
-        expiration_col = None
-        for col in ['expiration', 'expiration_date', 'exp_date', 'maturity']:
-            if col in df.columns:
-                expiration_col = col
-                break
+        print(f"Calculating married put KPIs for {len(df_combined)} rows...")
         
-        if expiration_col is None:
-            print("Warning: No expiration date column found")
-            df['DaysToExpiration'] = 30  # Default fallback
-            return df
+        # Apply the precise married put calculations
+        result_df = calculate_precise_married_put_with_dividends(df_combined, fee_per_trade=fee_per_trade)
         
-        # Convert to datetime
-        df['expiration'] = pd.to_datetime(df[expiration_col], errors='coerce')
+        # Count successful calculations
+        mp_calculated = result_df['MP_MaxRisk_Net'].notna().sum() if 'MP_MaxRisk_Net' in result_df.columns else 0
+        print(f"✅ Calculated married put KPIs for {mp_calculated} PUT options")
         
-        # Calculate days to expiration
-        current_date = pd.Timestamp.now()
-        df['DaysToExpiration'] = (df['expiration'] - current_date).dt.days
-        
-        # Convert to standard int to avoid numpy.int64 issues
-        df['DaysToExpiration'] = df['DaysToExpiration'].astype('int32')
-        
-        # Set minimum to 0 for expired options
-        df['DaysToExpiration'] = df['DaysToExpiration'].clip(lower=0)
+        return result_df
         
     except Exception as e:
-        print(f"Error calculating days to expiration: {e}")
-        df['DaysToExpiration'] = 30  # Default fallback
+        print(f"Error in calculate_all_married_put_kpis: {e}")
+        # Return original dataframe if calculation fails
+        return df_combined
+
+
+def apply_married_put_kpis_to_merged_data(fee_per_trade=3.5):
+    """
+    Load merged dataframe, apply married put KPIs, and save results.
+    """
+    print("=" * 80)
+    print("MARRIED PUT KPIs - STANDALONE CALCULATION")
+    print("=" * 80)
     
-    return df
-
-
-def calculate_annualized_protection_cost(df):
-    """Calculate annualized cost of protection"""
-    df = df.copy()
     try:
-        days_to_expiry = np.maximum(df['DaysToExpiration'], 1)  # Avoid division by zero
-        df['AnnualizedProtectionCost'] = (df['CostOfProtectionPercentage'] * 365) / days_to_expiry
-    except Exception as e:
-        print(f"Error calculating annualized protection cost: {e}")
-        df['AnnualizedProtectionCost'] = 0
-    
-    return df
-
-
-def calculate_risk_reward_ratio(df):
-    """Calculate risk-reward ratio"""
-    df = df.copy()
-    df['RiskRewardRatio'] = np.where(
-        df['MaxProfit'] > 0,
-        df['MaxRisk'] / df['MaxProfit'],
-        np.inf
-    )
-    return df
-
-
-def calculate_breakeven_price(df, fee_per_trade=1.0):
-    """Calculate breakeven stock price"""
-    df = df.copy()
-    df['BreakevenPrice'] = df['close'] + df['ask'] + (2 * fee_per_trade)
-    return df
-
-
-def calculate_upside_capture_ratio(df):
-    """Calculate upside capture ratio (how much upside is captured)"""
-    df = df.copy()
-    # For married puts, upside is captured 1:1 after breakeven
-    df['UpsideCaptureRatio'] = 100.0  # 100% upside capture after breakeven
-    return df
-
-
-def calculate_time_decay_risk(df):
-    """Calculate time decay risk (theta impact)"""
-    df = df.copy()
-    try:
-        # Approximate theta as percentage of premium per day
-        days_to_expiry = np.maximum(df['DaysToExpiration'], 1)
-        df['TimeDecayRisk'] = (df['ask'] * 0.05) / days_to_expiry
-    except Exception as e:
-        print(f"Error calculating time decay risk: {e}")
-        df['TimeDecayRisk'] = 0
-    
-    return df
-
-
-def calculate_implied_protection_yield(df):
-    """Calculate implied protection yield"""
-    df = df.copy()
-    try:
-        df['ImpliedProtectionYield'] = df['AnnualizedProtectionCost']
-    except Exception as e:
-        print(f"Error calculating implied protection yield: {e}")
-        df['ImpliedProtectionYield'] = 0
-    
-    return df
-
-
-def calculate_dividend_capture_potential(df):
-    """Calculate dividend capture potential during option period"""
-    df = df.copy()
-    try:
-        # Use actual dividend yield if available, otherwise estimate
-        if 'dividend_yield' in df.columns:
-            dividend_yield = df['dividend_yield']
-        else:
-            dividend_yield = 2.0  # Default 2% annual yield
+        # Load the merged dataframe
+        print(f"📊 Loading merged dataframe from: {PATH_DATAFRAME_DATA_MERGED_FEATHER}")
+        df_merged = pd.read_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
+        print(f"   Loaded {len(df_merged):,} rows with {len(df_merged.columns)} columns")
         
-        years_to_expiry = df['DaysToExpiration'] / 365
-        df['DividendCapturePotential'] = dividend_yield * years_to_expiry
+        # Show current data overview
+        symbols = df_merged['symbol'].nunique()
+        puts = df_merged['option-type'].str.lower().eq('put').sum() if 'option-type' in df_merged.columns else 0
+        puts_alt = df_merged['option'].str.contains('P', na=False).sum() if 'option' in df_merged.columns else 0
+        total_puts = max(puts, puts_alt)
+        
+        print(f"   Found {symbols} unique symbols")
+        print(f"   Found {total_puts:,} PUT options for married put analysis")
+        
+        if total_puts == 0:
+            print("❌ No PUT options found in merged data. Cannot calculate married put KPIs.")
+            return None
+        
+        # Apply married put calculations
+        print(f"\n🔄 Calculating Married Put KPIs with fee_per_trade=${fee_per_trade}...")
+        df_with_mp = calculate_precise_married_put_with_dividends(df_merged, fee_per_trade=fee_per_trade)
+        
+        # Check results
+        mp_calculated = df_with_mp['MP_MaxRisk_Net'].notna().sum()
+        
+        if mp_calculated == 0:
+            print("❌ No married put KPIs were calculated. Check data and calculation logic.")
+            return None
+        
+        print(f"✅ Successfully calculated married put KPIs for {mp_calculated:,} PUT options")
+        
+        # Save results back to merged dataframe
+        print(f"\n💾 Saving updated dataframe with married put KPIs...")
+        
+        # Filter to only include configured columns that exist
+        available_columns = [col for col in DATAFRAME_DATA_MERGED_COLUMNS if col in df_with_mp.columns]
+        missing_columns = [col for col in DATAFRAME_DATA_MERGED_COLUMNS if col not in df_with_mp.columns]
+        
+        if missing_columns:
+            print(f"   NOTE: {len(missing_columns)} configured columns not in data: {missing_columns[:3]}..." if len(missing_columns) > 3 else f"   NOTE: Missing columns: {missing_columns}")
+        
+        # Save the updated dataframe
+        df_with_mp[available_columns].to_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
+        print(f"   Saved {len(available_columns)} columns to: {PATH_DATAFRAME_DATA_MERGED_FEATHER}")
+        
+        # Show detailed analysis of calculated married put positions
+        show_married_put_analysis(df_with_mp)
+        
+        return df_with_mp
+        
+    except FileNotFoundError:
+        print(f"❌ Merged dataframe not found at: {PATH_DATAFRAME_DATA_MERGED_FEATHER}")
+        print("   Please run the data collection and merge process first.")
+        return None
+        
     except Exception as e:
-        print(f"Error calculating dividend capture potential: {e}")
-        df['DividendCapturePotential'] = 0
+        print(f"❌ Error applying married put KPIs: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
+def show_married_put_analysis(df):
+    """
+    Show detailed analysis of calculated married put positions.
+    """
+    print("\n" + "=" * 80)
+    print("MARRIED PUT ANALYSIS RESULTS")
+    print("=" * 80)
     
-    return df
-
-
-def calculate_portfolio_hedge_efficiency(df):
-    """Calculate hedge efficiency for portfolio protection"""
-    df = df.copy()
+    # Filter to only put options with calculated KPIs
+    mp_data = df[df['MP_MaxRisk_Net'].notna()].copy()
+    
+    if len(mp_data) == 0:
+        print("No married put data to analyze.")
+        return
+    
+    # Group by symbol for summary
     try:
-        # Hedge efficiency as protection level relative to cost
-        df['PortfolioHedgeEfficiency'] = df['ProtectionLevel'] / df['CostOfProtectionPercentage']
-    except Exception as e:
-        print(f"Error calculating portfolio hedge efficiency: {e}")
-        df['PortfolioHedgeEfficiency'] = 0
+        symbol_summary = mp_data.groupby('symbol').agg({
+            'MP_MaxRisk_Net': ['count', 'mean', 'min', 'max'],
+            'MP_RiskPercent_Net': 'mean',
+            'MP_EstimatedDividends': 'mean',
+            'MP_DividendImpactPercent': 'mean',
+            'strike': ['min', 'max'],
+            'live_stock_price': 'first'
+        }).round(2)
+        
+        symbol_summary.columns = ['Put_Count', 'Avg_Risk', 'Min_Risk', 'Max_Risk', 
+                                 'Avg_Risk_Pct', 'Avg_Dividends', 'Avg_Div_Impact',
+                                 'Min_Strike', 'Max_Strike', 'Stock_Price']
+        
+        print(f"\n📊 SUMMARY BY SYMBOL ({len(symbol_summary)} symbols with PUT options):")
+        print("=" * 120)
+        
+        for symbol, row in symbol_summary.iterrows():
+            print(f"\n{symbol} (Stock: ${row['Stock_Price']:.2f})")
+            print(f"  Put Options Analyzed: {int(row['Put_Count'])}")
+            print(f"  Strike Range: ${row['Min_Strike']:.0f} - ${row['Max_Strike']:.0f}")
+            print(f"  Average Max Risk (Net): ${row['Avg_Risk']:.2f} ({row['Avg_Risk_Pct']:.1f}% of capital)")
+            print(f"  Risk Range: ${row['Min_Risk']:.2f} - ${row['Max_Risk']:.2f}")
+            print(f"  Average Dividends: ${row['Avg_Dividends']:.2f}")
+            print(f"  Average Dividend Risk Reduction: {row['Avg_Div_Impact']:.1f}%")
     
-    return df
-
-
-def calculate_margin_impact(df):
-    """Calculate margin impact of the married put strategy"""
-    df = df.copy()
+    except Exception as e:
+        print(f"Error in symbol summary: {e}")
+        
+    # Show top 10 best married put opportunities (lowest risk percentage)
     try:
-        # Married puts can reduce margin requirements
-        df['MarginImpact'] = df['close'] * 0.25  # 25% margin relief
+        print(f"\n🎯 TOP 10 BEST MARRIED PUT OPPORTUNITIES (Lowest Risk %):")
+        print("=" * 120)
+        
+        best_opportunities = mp_data.nsmallest(10, 'MP_RiskPercent_Net')[
+            ['symbol', 'strike', 'live_stock_price', 'ask', 'MP_MaxRisk_Net', 
+             'MP_RiskPercent_Net', 'MP_EstimatedDividends', 'MP_DividendImpactPercent',
+             'MP_BreakevenUpside_Net']
+        ].round(2)
+        
+        for i, (_, row) in enumerate(best_opportunities.iterrows(), 1):
+            stock_price = row.get('live_stock_price', 'N/A')
+            if pd.isna(stock_price):
+                stock_price = 'N/A'
+            else:
+                stock_price = f"${stock_price:.2f}"
+                
+            print(f"\n{i:2d}. {row['symbol']} ${row['strike']:.0f} PUT")
+            print(f"    Stock: {stock_price} | Put Premium: ${row['ask']:.2f}")
+            print(f"    Max Risk: ${row['MP_MaxRisk_Net']:.2f} ({row['MP_RiskPercent_Net']:.1f}% of capital)")
+            
+            if pd.notna(row['MP_BreakevenUpside_Net']):
+                print(f"    Breakeven: +{row['MP_BreakevenUpside_Net']:.1f}% stock move required")
+            else:
+                print(f"    Breakeven: N/A")
+                
+            print(f"    Dividends: ${row['MP_EstimatedDividends']:.2f} ({row['MP_DividendImpactPercent']:.1f}% risk reduction)")
+            
     except Exception as e:
-        print(f"Error calculating margin impact: {e}")
-        df['MarginImpact'] = 0
+        print(f"Error in top opportunities analysis: {e}")
     
-    return df
+    # Show dividend impact statistics
+    try:
+        print(f"\n💰 DIVIDEND IMPACT ANALYSIS:")
+        print("=" * 80)
+        
+        has_dividends = mp_data[mp_data['MP_EstimatedDividends'] > 0]
+        no_dividends = mp_data[mp_data['MP_EstimatedDividends'] <= 0]
+        
+        print(f"Stocks with Dividends: {len(has_dividends):,} positions")
+        if len(has_dividends) > 0:
+            print(f"  Average Dividend Income: ${has_dividends['MP_EstimatedDividends'].mean():.2f}")
+            print(f"  Average Risk Reduction: {has_dividends['MP_DividendImpactPercent'].mean():.1f}%")
+            print(f"  Best Dividend Impact: {has_dividends['MP_DividendImpactPercent'].max():.1f}%")
+        
+        print(f"\nStocks without Dividends: {len(no_dividends):,} positions")
+        if len(no_dividends) > 0:
+            print(f"  Average Risk: {no_dividends['MP_RiskPercent_Net'].mean():.1f}% of capital")
+        
+        # Overall statistics
+        print(f"\n📈 OVERALL MARRIED PUT STATISTICS:")
+        print("=" * 80)
+        print(f"Total PUT options analyzed: {len(mp_data):,}")
+        print(f"Average Max Risk (Net): ${mp_data['MP_MaxRisk_Net'].mean():.2f}")
+        print(f"Average Risk Percentage: {mp_data['MP_RiskPercent_Net'].mean():.1f}% of capital")
+        print(f"Average Dividend Income: ${mp_data['MP_EstimatedDividends'].mean():.2f}")
+        print(f"Average Dividend Risk Reduction: {mp_data['MP_DividendImpactPercent'].mean():.1f}%")
+        print(f"Best Risk Percentage: {mp_data['MP_RiskPercent_Net'].min():.1f}%")
+        print(f"Highest Dividend Impact: {mp_data['MP_DividendImpactPercent'].max():.1f}%")
+        
+    except Exception as e:
+        print(f"Error in dividend impact analysis: {e}")
 
 
-def calculate_cost_of_protection_with_fees(df, fee_per_trade=1.0):
-    """Calculate cost of protection including all trading fees"""
-    df = df.copy()
-    # Total fees for complete strategy: buy stock + buy put + sell stock + exercise put
-    total_fees = 4 * fee_per_trade
+def get_married_put_kpis_for_symbol(symbol, strike_filter=None):
+    """
+    Get married put KPIs for a specific symbol.
     
-    df['CostOfProtectionWithFees'] = df['ask'] + total_fees
-    df['CostOfProtectionWithFeesPercentage'] = (df['CostOfProtectionWithFees'] / df['close']) * 100
-    return df
-
-
-def calculate_max_risk_with_fees_and_dividends(df, fee_per_trade=1.0):
-    """Calculate maximum risk including fees and potential dividend benefits"""
-    df = df.copy()
-    
-    # Total trading fees
-    total_fees = 4 * fee_per_trade
-    
-    # Basic max risk: stock decline to strike + premium + fees
-    basic_max_risk = df['close'] - df['strike'] + df['ask'] + total_fees
-    
-    # Subtract potential dividend income
-    if 'DividendCapturePotential' in df.columns:
-        dividend_benefit = (df['DividendCapturePotential'] / 100) * df['close']
-    else:
-        # Estimate dividend benefit
-        years_to_expiry = df.get('DaysToExpiration', 30) / 365
-        dividend_benefit = (2.0 / 100) * df['close'] * years_to_expiry
-    
-    df['MaxRiskWithFeesAndDividends'] = np.maximum(basic_max_risk - dividend_benefit, 0)
-    return df
-
-
-def calculate_max_risk_percentage_with_fees_and_dividends(df, fee_per_trade=1.0):
-    """Calculate maximum risk percentage including fees and dividends"""
-    df = df.copy()
-    
-    if 'MaxRiskWithFeesAndDividends' not in df.columns:
-        df = calculate_max_risk_with_fees_and_dividends(df, fee_per_trade)
-    
-    # Calculate as percentage of total investment
-    initial_investment = df['close'] + df['ask'] + (2 * fee_per_trade)
-    df['MaxRiskPercentageWithFeesAndDividends'] = (df['MaxRiskWithFeesAndDividends'] / initial_investment) * 100
-    return df
-
-
-def format_currency(value):
-    """Format value as currency"""
-    if pd.isna(value):
-        return "N/A"
-    return f"${value:.2f}"
-
-
-def format_percentage(value):
-    """Format value as percentage"""
-    if pd.isna(value):
-        return "N/A"
-    return f"{value:.2f}%"
-
-
-def get_kpi_summary(df_row):
-    """Get a formatted summary of KPIs for a single row"""
-    summary = {
-        'Symbol': df_row.get('symbol', 'N/A'),
-        'Strike': format_currency(df_row.get('strike', 0)),
-        'Stock Price': format_currency(df_row.get('close', 0)),
-        'Protection Level': format_percentage(df_row.get('ProtectionLevel', 0)),
-        'Cost of Protection': format_currency(df_row.get('CostOfProtection', 0)),
-        'Cost %': format_percentage(df_row.get('CostOfProtectionPercentage', 0)),
-        'Max Risk': format_currency(df_row.get('MaxRisk', 0)),
-        'Max Risk %': format_percentage(df_row.get('MaxRiskPercentage', 0)),
-        'Days to Expiry': f"{df_row.get('DaysToExpiration', 0):.0f} days",
-        'Annualized Cost': format_percentage(df_row.get('AnnualizedProtectionCost', 0)),
-        'Hedge Efficiency': f"{df_row.get('PortfolioHedgeEfficiency', 0):.2f}",
-        'Intrinsic Value': format_currency(df_row.get('IntrinsicValue', 0)),
-        'Extrinsic Value': format_currency(df_row.get('ExtrinsicValue', 0))
-    }
-    return summary
+    Args:
+        symbol (str): Stock symbol (e.g., 'AAPL')
+        strike_filter (float, optional): Show only specific strike price
+    """
+    try:
+        df = pd.read_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
+        
+        # Filter for the symbol and put options with calculated KPIs
+        symbol_data = df[
+            (df['symbol'] == symbol) & 
+            (df['MP_MaxRisk_Net'].notna())
+        ].copy()
+        
+        if strike_filter:
+            symbol_data = symbol_data[symbol_data['strike'] == strike_filter]
+        
+        if len(symbol_data) == 0:
+            print(f"No married put KPIs found for {symbol}" + (f" strike ${strike_filter}" if strike_filter else ""))
+            return None
+        
+        # Show detailed results
+        print(f"\n🎯 MARRIED PUT KPIs for {symbol}" + (f" ${strike_filter} PUT" if strike_filter else ""))
+        print("=" * 80)
+        
+        for _, row in symbol_data.iterrows():
+            stock_price = row.get('live_stock_price', row.get('close', 'N/A'))
+            if pd.isna(stock_price):
+                stock_price = 'N/A'
+            else:
+                stock_price = f"${stock_price:.2f}"
+                
+            print(f"\nStrike: ${row['strike']:.0f} PUT")
+            print(f"Stock Price: {stock_price}")
+            print(f"Put Premium: ${row['ask']:.2f}")
+            print(f"Intrinsic Value: ${row['MP_IntrinsicValue']:.2f}")
+            print(f"Time Value: ${row['MP_TimeValue']:.2f}")
+            print(f"Total Outlay: ${row['MP_TotalOutlay']:.2f}")
+            print(f"Estimated Dividends: ${row['MP_EstimatedDividends']:.2f}")
+            print(f"Max Risk (Net): ${row['MP_MaxRisk_Net']:.2f} ({row['MP_RiskPercent_Net']:.1f}% of capital)")
+            print(f"Breakeven: ${row['MP_Breakeven_Net']:.2f} (+{row['MP_BreakevenUpside_Net']:.1f}%)")
+            print(f"Dividend Risk Reduction: ${row['MP_DividendRiskReduction']:.2f} ({row['MP_DividendImpactPercent']:.1f}%)")
+        
+        return symbol_data
+        
+    except Exception as e:
+        print(f"Error getting married put KPIs for {symbol}: {e}")
+        return None
 
 
 if __name__ == "__main__":
-    print("🔧 Married Put KPI Calculation Module")
-    print("====================================")
-    print("Main function: calculate_all_married_put_kpis(df)")
-    print("This module calculates comprehensive KPIs for married put strategies.")
+    # Run the married put KPI calculation
+    result = apply_married_put_kpis_to_merged_data(fee_per_trade=3.5)
     
-    # Test with sample data
-    print("\n🧪 Testing with sample data...")
-    sample_data = {
-        'symbol': ['AAPL', 'MSFT'],
-        'strike': [150.0, 300.0],
-        'close': [160.0, 320.0],
-        'ask': [5.50, 12.00],
-        'expiration': ['2024-03-15', '2024-06-21'],
-        'IntrinsicValue': [0.0, 0.0],  # OTM puts
-        'ExtrinsicValue': [5.50, 12.00]
-    }
+    if result is not None:
+        print(f"\n✅ Married Put KPI calculation completed successfully!")
+        print(f"   Updated merged dataframe saved with {len(result)} rows")
+        
+        # Example: Show specific symbol analysis
+        print(f"\n" + "=" * 80)
+        print("EXAMPLE: Detailed analysis for AAPL (if available)")
+        print("=" * 80)
+        get_married_put_kpis_for_symbol('AAPL')
     
-    test_df = pd.DataFrame(sample_data)
-    try:
-        result = calculate_all_married_put_kpis(test_df)
-        print("✅ Test successful!")
-        print(f"Calculated {len([col for col in result.columns if col.endswith(('Level', 'Cost', 'Risk', 'Ratio', 'Efficiency'))])} KPI columns")
-    except Exception as e:
-        print(f"❌ Test failed: {e}")
+    else:
+        print(f"\n❌ Married Put KPI calculation failed!")
