@@ -2,6 +2,8 @@ import numpy as np
 import pandas as pd
 from typing import List, Dict, Tuple
 
+#todo parameter für commisionen hinzufügen bei erwartungswert
+#todo parameter für iv korrektur in abhänigkeit von dte und index vs aktienoption hinzufügen
 
 class UniversalOptionsMonteCarloSimulator:
     """
@@ -391,7 +393,7 @@ def print_strategy_analysis(simulator: UniversalOptionsMonteCarloSimulator,
     # Simulation Details
     print(f"\n🎲 SIMULATION DETAILS:")
     print(f"   Ø Simulierter Preis:      ${results['avg_simulated_price']:>8.2f}")
-    print(f"   Preis-Standardabw.:       ${results['simulated_price_std']:>8.2f}")
+    print(f"   Preis-Standardabw. Expected Move:       ${results['simulated_price_std']:>8.2f}")
 
     print("=" * 90)
 
@@ -405,7 +407,7 @@ if __name__ == "__main__":
     # Simulator initialisieren
     simulator = UniversalOptionsMonteCarloSimulator(
         current_price=227.00,
-        volatility=0.35,
+        volatility= 0.35,#0.336,
         dte=54,
         risk_free_rate=0.03,
         dividend_yield=0.00,
@@ -415,26 +417,34 @@ if __name__ == "__main__":
 
     # Iron Condor
     iron_condor_options = [
+        # Long Put
         {
             'strike': 200,
-            'premium': 2.50,
+            'premium': 2.50,#2.50,
             'is_call': False,
-            'is_long': True},  # Long Put
+            'is_long': True
+        },
+        # Short Put
         {
             'strike': 210,
-            'premium': 4.85,
+            'premium': 5, #4.85
             'is_call': False,
-            'is_long': False},  # Short Put
+            'is_long': False
+        },
+        # Short Call
         {
             'strike': 250,
-            'premium': 4.69,
+            'premium': 5,#4.69,
             'is_call': True,
-            'is_long': False},  # Short Call
+            'is_long': False
+        },
+        # Long Call
         {
             'strike': 260,
             'premium': 2.85,
             'is_call': True,
-            'is_long': True}  # Long Call
+            'is_long': True
+        }
     ]
 
     # Analyse durchführen
