@@ -2,6 +2,8 @@ import re
 import sys
 import os
 
+from src.database import insert_into_table
+
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -77,6 +79,14 @@ def scrape_option_data(symbol, expiration_date, exchange, folderpath):
             # add the OSI-Format for option names to be able to merge it later on.
             df["option_osi"] = df["option"].apply(opra_to_osi)
             df.to_feather(folderpath / f"{symbol}_{expiration_date}.feather")
+            df.to_csv(folderpath / f"{symbol}_{expiration_date}.csv")
+            
+            # --- Database Persistence ---
+            insert_into_table(
+                table_name=TABLE_OPTION_DATA_TRADINGVIEW,
+                dataframe=df,
+                if_exists="append"
+            )
         else:
             print("No data was found")
     else:
