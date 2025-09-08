@@ -4,6 +4,8 @@ import time
 import sys
 import os
 
+from src.database import insert_into_table
+
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -288,7 +290,18 @@ def generate_fundamental_data():
     print(f"Processed fundamentals saved: {PATH_DATAFRAME_YAHOOQUERY_FINANCIAL_PROCESSED_FEATHER}")
     print(f"Ready for merge: {df_processed.shape} ({df_processed.shape[1]} columns)")
 
-
+    # --- Database Persistence ---
+    insert_into_table(
+        table_name=TABLE_FUNDAMENTAL_DATA_YAHOO,
+        dataframe=df_all_fundamentals,
+        if_exists="replace"
+    )
+    insert_into_table(
+        table_name=TABLE_FUNDAMENTAL_DATA_YAHOO_PROCESSED,
+        dataframe=df_processed,
+        if_exists="replace"
+    )
+    
 if __name__ == "__main__":
 
     start = time.time()

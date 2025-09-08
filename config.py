@@ -19,8 +19,23 @@ PATH_DATAFRAME_YAHOOQUERY_OPTION_CHAIN_FEATHER = PATH_DATA / 'yahooquery_option_
 PATH_DATAFRAME_YAHOOQUERY_FINANCIAL_FEATHER = PATH_DATA / 'yahooquery_financial.feather'
 PATH_DATAFRAME_YAHOOQUERY_FINANCIAL_PROCESSED_FEATHER = PATH_DATA / 'yahooquery_financial_processed.feather'
 PATH_DATAFRAME_LIVE_STOCK_PRICES_FEATHER = PATH_DATA / 'live_stock_prices.feather'
-
-# Dividend Radar
+ 
+# Database
+PATH_DATABASE = BASE_DIR / 'db/financial_data.db'
+# Tables
+TABLE_OPTION_DATA_TRADINGVIEW = 'OptionDataTradingView'
+TABLE_OPTION_DATA_YAHOO = 'OptionDataYahoo'
+TABLE_ANALYST_PRICE_TARGETS = 'AnalystPriceTargets'
+TABLE_EARNING_DATES = 'EarningDates'
+TABLE_FUNDAMENTAL_DATA_DIVIDEND_RADAR = 'FundamentalDataDividendRadar'
+TABLE_FUNDAMENTAL_DATA_YAHOO = 'FundamentalDataYahoo'
+TABLE_FUNDAMENTAL_DATA_YAHOO_PROCESSED = 'FundamentalDataYahooProcessed'
+TABLE_TECHNICAL_INDICATORS = 'TechnicalIndicators'
+#Views
+VIEW_OPTION_DATA = 'OptionData'
+VIEW_FUNDAMENTAL_DATA = 'FundamentalData'
+ 
+ # Dividend Radar
 URL_DIVIDEND_RADAR = "https://www.portfolio-insight.com/dividend-radar"
 PATH_DIVIDEND_RADAR = PATH_DATA / 'dividend_radar.feather'
 
