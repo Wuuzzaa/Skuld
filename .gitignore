@@ -186,4 +186,3 @@ Commands.txt
 .DS_Store
 db/SQL/supportability/
 db/financial_data.db
-db/SQL/views/select_view
