@@ -73,7 +73,7 @@ def run_migrations():
         if not inspector.has_table("DbVersion"):
             with connection.begin():
                 print("DbVersion table not found. Creating it...")
-                with open("data/db/SQL/tables/create_table/DbVersion.sql", "r") as f:
+                with open("db/SQL/tables/create_table/DbVersion.sql", "r") as f:
                     connection.execute(text(f.read()))
                 connection.execute(text("INSERT INTO DbVersion (version) VALUES (0)"))
                 print("DbVersion table created and initialized with version 0.")
@@ -83,7 +83,7 @@ def run_migrations():
             current_version = result[0]
         print(f"Current database version: {current_version}")
 
-        migrations_path = "data/db/SQL/migrations/"
+        migrations_path = "db/SQL/migrations/"
         if not os.path.exists(migrations_path):
             print(f"Migrations directory not found at {migrations_path}. Skipping migrations.")
             return
