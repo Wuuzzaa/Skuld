@@ -152,6 +152,7 @@ def main(upload_df_google_drive=True):
     print("Data collection pipeline completed successfully!")
     print("#" * 80)
 
+    # Beispiel
     df = select_into_dataframe("SELECT * FROM OptionDataMerged")
     print(f"Total rows in OptionDataMerged: {len(df)}")
 
