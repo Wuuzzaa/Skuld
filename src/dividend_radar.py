@@ -7,7 +7,7 @@ import io
 import sys
 import os
 
-from src.database import insert_into_table
+from src.database import insert_into_table, truncate_table
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -159,10 +159,11 @@ def process_dividend_data(path_outputfile):
         log_error(f"Error saving as Feather: {e}") 
 
     # --- Database Persistence ---
+    truncate_table(TABLE_FUNDAMENTAL_DATA_DIVIDEND_RADAR)
     insert_into_table(
         table_name=TABLE_FUNDAMENTAL_DATA_DIVIDEND_RADAR,
         dataframe=df,
-        if_exists="replace"
+        if_exists="append"
     )
 
 def force_data_download(path_outputfile):

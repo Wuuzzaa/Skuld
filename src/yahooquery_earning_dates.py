@@ -1,7 +1,7 @@
 import sys
 import os
 
-from src.database import insert_into_table
+from src.database import insert_into_table, truncate_table
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -32,10 +32,11 @@ def scrape_earning_dates():
     df = pd.DataFrame(list(earnings_dates.items()), columns=['symbol', 'earnings_date'])
     df.to_feather(PATH_DATAFRAME_EARNING_DATES_FEATHER)
     # --- Database Persistence ---
+    truncate_table(TABLE_EARNING_DATES)
     insert_into_table(
         table_name=TABLE_EARNING_DATES,
         dataframe=df,
-        if_exists="replace"
+        if_exists="append"
     )
 
 if __name__ == '__main__':

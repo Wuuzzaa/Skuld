@@ -4,7 +4,7 @@ import time
 import sys
 import os
 
-from src.database import insert_into_table
+from src.database import insert_into_table, truncate_table
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -328,11 +328,13 @@ def generate_fundamental_data():
     print(f"Available for filtering: {df_all_fundamentals.shape[1]} total columns")
 
     # --- Database Persistence ---
+    truncate_table(TABLE_FUNDAMENTAL_DATA_YAHOO)
     insert_into_table(
         table_name=TABLE_FUNDAMENTAL_DATA_YAHOO,
         dataframe=df_all_fundamentals,
         if_exists="replace"
     )
+    truncate_table(TABLE_FUNDAMENTAL_DATA_YAHOO_PROCESSED)
     insert_into_table(
         table_name=TABLE_FUNDAMENTAL_DATA_YAHOO_PROCESSED,
         dataframe=df_processed,

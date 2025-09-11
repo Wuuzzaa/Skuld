@@ -3,7 +3,7 @@ import time
 import sys
 import os
 
-from src.database import insert_into_table
+from src.database import insert_into_table, truncate_table
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -71,10 +71,11 @@ def get_yahooquery_option_chain():
     print(f"SUCCESS: Yahoo option chain data saved to: {PATH_DATAFRAME_YAHOOQUERY_OPTION_CHAIN_FEATHER}")
 
     # --- Database Persistence ---
+    truncate_table(TABLE_OPTION_DATA_YAHOO)
     insert_into_table(
         table_name=TABLE_OPTION_DATA_YAHOO,
         dataframe=df,
-        if_exists="replace"
+        if_exists="append"
     )
 
 def get_live_stock_prices(symbols):
