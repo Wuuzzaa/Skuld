@@ -1,6 +1,8 @@
 import sys
 import os
 
+from src.database import insert_into_table
+
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -40,3 +42,9 @@ def scrape_yahoo_finance_analyst_price_targets():
     df = pd.DataFrame(results)
     df.to_feather(PATH_DATAFRAME_DATA_ANALYST_PRICE_TARGET_FEATHER)
 
+    # --- Database Persistence ---
+    insert_into_table(
+        table_name=TABLE_ANALYST_PRICE_TARGETS,
+        dataframe=df,
+        if_exists="replace"
+    )
