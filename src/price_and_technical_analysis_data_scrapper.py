@@ -2,7 +2,7 @@ import pandas as pd
 import sys
 import os
 
-from src.database import insert_into_table
+from src.database import insert_into_table, truncate_table
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -54,9 +54,10 @@ def scrape_and_save_price_and_technical_indicators():
     df.to_feather(PATH_DATAFRAME_PRICE_AND_INDICATOR_DATA_FEATHER)
 
     # --- Database Persistence ---
+    truncate_table(TABLE_TECHNICAL_INDICATORS)
     insert_into_table(
         table_name=TABLE_TECHNICAL_INDICATORS,
         dataframe=df,
-        if_exists="replace"
+        if_exists="append"
     )
 
