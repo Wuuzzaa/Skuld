@@ -1,4 +1,5 @@
 import argparse
+from src.database import run_migrations, select_into_dataframe, truncate_table
 from src.feature_engineering import feature_construction
 from src.optiondata_feathers_to_df_merge import combine_feather_files
 from src.tradingview_optionchain_scrapper import scrape_option_data
@@ -18,6 +19,7 @@ import pandas as pd
 
 
 def main(upload_df_google_drive=True):
+    run_migrations()
     print("#" * 80)
     print(f"Starting Data Collection Pipeline")
     print(f"Symbol selection mode: {SYMBOL_SELECTION['mode']}")
@@ -62,7 +64,7 @@ def main(upload_df_google_drive=True):
     expiry_dates_int = [int(date_str.replace("-", "")) for date_str in filtered_expiry_dates]
 
     print(f"Collecting data for {len(symbols_to_use)} symbols and {len(expiry_dates_int)} expiry dates")
-    
+    truncate_table(TABLE_OPTION_DATA_TRADINGVIEW)
     for expiration_date in expiry_dates_int:
         for symbol in symbols_to_use:
             scrape_option_data(
@@ -150,6 +152,9 @@ def main(upload_df_google_drive=True):
     print("Data collection pipeline completed successfully!")
     print("#" * 80)
 
+    # Beispiel
+    df = select_into_dataframe("SELECT * FROM OptionDataMerged")
+    print(f"Total rows in OptionDataMerged: {len(df)}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run data collection pipeline")

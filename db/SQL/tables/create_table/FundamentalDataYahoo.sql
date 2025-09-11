@@ -1,0 +1,23 @@
+CREATE TABLE "FundamentalDataYahoo" (
+	symbol TEXT, 
+	"EnterpriseValue" BIGINT, 
+	"ForwardPE" FLOAT, 
+	"TrailingEps" FLOAT, 
+	"PriceToBook" FLOAT, 
+	"TotalRevenue" BIGINT, 
+	"EBITDA" BIGINT, 
+	"FreeCashFlow" BIGINT, 
+	"TotalDebt" BIGINT, 
+	"NetIncome" TEXT, 
+	"ROE" FLOAT, 
+	"ROA" FLOAT, 
+	"CurrentPrice" FLOAT, 
+	"MarketCap" BIGINT, 
+	"Volume" BIGINT, 
+	"AverageVolume" BIGINT, 
+	"Yahoo_DividendYield" FLOAT, 
+	"DividendRate" FLOAT, 
+	"TrailingAnnualDividendRate" FLOAT, 
+	"PayoutRatio" FLOAT, 
+	"ExDividendDate" TEXT
+)
