@@ -1,5 +1,27 @@
-DROP VIEW IF EXISTS OptionDataMerged;
+DROP TABLE IF EXISTS "StockPrice";
+CREATE TABLE "StockPrice" (
+	symbol TEXT, 
+	live_stock_price FLOAT, 
+	price_source TEXT, 
+	live_price_timestamp DATETIME
+);
 
+DROP VIEW IF EXISTS StockData;
+CREATE VIEW
+    StockData AS
+SELECT
+    a.symbol,
+    a.analyst_mean_target,
+    b.earnings_date,
+    c.live_stock_price,
+    c.price_source,
+    c.live_price_timestamp
+FROM
+    AnalystPriceTargets AS a
+    JOIN EarningDates AS b ON a.symbol = b.symbol
+    JOIN StockPrice AS c ON a.symbol = c.symbol;
+
+DROP VIEW IF EXISTS OptionDataMerged;
 CREATE VIEW OptionDataMerged AS
 SELECT 
 	-- Option Data
@@ -472,3 +494,5 @@ ON a.symbol = c.symbol
 JOIN 
     TechnicalIndicators as d
 ON a.symbol = d.symbol;
+
+

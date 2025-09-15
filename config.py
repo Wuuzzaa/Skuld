@@ -31,6 +31,7 @@ TABLE_FUNDAMENTAL_DATA_DIVIDEND_RADAR = 'FundamentalDataDividendRadar'
 TABLE_FUNDAMENTAL_DATA_YAHOO = 'FundamentalDataYahoo'
 TABLE_FUNDAMENTAL_DATA_YAHOO_PROCESSED = 'FundamentalDataYahooProcessed'
 TABLE_TECHNICAL_INDICATORS = 'TechnicalIndicators'
+TABLE_STOCK_PRICE = 'StockPrice'
 #Views
 VIEW_OPTION_DATA = 'OptionData'
 VIEW_FUNDAMENTAL_DATA = 'FundamentalData'

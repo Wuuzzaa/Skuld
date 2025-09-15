@@ -6,8 +6,9 @@ import os
 from datetime import datetime
 
 # Import config and helpers for backward compatibility
-from config import PATH_DATAFRAME_LIVE_STOCK_PRICES_FEATHER
+from config import PATH_DATAFRAME_LIVE_STOCK_PRICES_FEATHER, TABLE_STOCK_PRICE
 from config_utils import get_filtered_symbols_with_logging
+from src.database import insert_into_table, truncate_table
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -68,8 +69,17 @@ def fetch_current_prices(symbols, batch_size=50, delay=0.5):
         # small delay between batches to avoid bursts
         if i + batch_size < len(symbols):
             time.sleep(delay)
+    
+    df = pd.DataFrame(results)
 
-    return pd.DataFrame(results)
+    # --- Database Persistence ---
+    truncate_table(TABLE_STOCK_PRICE)
+    insert_into_table(
+        table_name=TABLE_STOCK_PRICE,
+        dataframe=df,
+        if_exists="append"
+    )
+    return df
 
 
 def merge_prices_to_dataframe(df, symbol_col='symbol', how='left', batch_size=50, delay=0.5):
