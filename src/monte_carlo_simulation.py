@@ -2,18 +2,21 @@ import numpy as np
 import pandas as pd
 from typing import List, Dict, Tuple
 
-#todo parameter für commisionen hinzufügen bei erwartungswert
-#todo parameter für iv korrektur in abhänigkeit von dte und index vs aktienoption hinzufügen
+
+
+# todo add parameter for iv correction depending on dte and index vs stock option
 
 class UniversalOptionsMonteCarloSimulator:
     """
-    Universelle Monte-Carlo-Simulation für beliebige Multi-Leg-Optionsstrategien
+    Universal Monte-Carlo simulation for arbitrary multi-leg options strategies
 
-    Die Logik ist einfach:
-    1. Jede Option hat bei Verfall nur ihren intrinsischen Wert
-    2. Long-Positionen: Zahle Prämie heute, erhalte intrinsischen Wert bei Verfall
-    3. Short-Positionen: Erhalte Prämie heute, zahle intrinsischen Wert bei Verfall
-    4. Erwartungswert = Durchschnitt aller möglichen Payoffs (abgezinst)
+    The logic is simple:
+    1. Each option has only its intrinsic value at expiration
+    2. Long positions: Pay premium today, receive intrinsic value at expiration
+    3. Short positions: Receive premium today, pay intrinsic value at expiration
+    4. Expected value = Average of all possible payoffs (discounted)
+    5. Transaction costs are applied per contract (covering 100 shares each)
+    6. Each entry in options list = exactly 1 contract
     """
 
     def __init__(self,
@@ -23,18 +26,20 @@ class UniversalOptionsMonteCarloSimulator:
                  risk_free_rate: float = 0.03,
                  dividend_yield: float = 0.00,
                  num_simulations: int = 100000,
-                 random_seed: int = None):
+                 random_seed: int = None,
+                 transaction_cost_per_contract: float = 0.65):
         """
-        Initialisiert den universellen Monte-Carlo-Simulator
+        Initialize the universal Monte-Carlo simulator
 
         Args:
-            current_price: Aktueller Aktienkurs
-            volatility: Implizite Volatilität (z.B. 0.35 für 35%)
-            dte: Tage bis Verfall
-            risk_free_rate: Risikofreier Zinssatz
-            dividend_yield: Dividendenrendite
-            num_simulations: Anzahl Monte-Carlo-Simulationen
-            random_seed: Seed für reproduzierbare Ergebnisse
+            current_price: Current stock price
+            volatility: Implied volatility (e.g., 0.35 for 35%)
+            dte: Days to expiration
+            risk_free_rate: Risk-free interest rate
+            dividend_yield: Dividend yield
+            num_simulations: Number of Monte-Carlo simulations
+            random_seed: Seed for reproducible results
+            transaction_cost_per_contract: Transaction cost per options contract (covers 100 shares)
         """
         self.current_price = current_price
         self.volatility = volatility
@@ -43,29 +48,30 @@ class UniversalOptionsMonteCarloSimulator:
         self.dividend_yield = dividend_yield
         self.num_simulations = num_simulations
         self.random_seed = random_seed
+        self.transaction_cost_per_contract = transaction_cost_per_contract
         self.time_to_expiration = dte / 365
 
-        # Random Seed setzen
+        # Set random seed
         if random_seed is not None:
             np.random.seed(random_seed)
 
     def simulate_stock_prices(self) -> np.ndarray:
         """
-        Simuliert Aktienpreise bei Verfall mit geometrischer Brown'scher Bewegung
+        Simulate stock prices at expiration using geometric Brownian motion
 
-        Verwendet risiko-neutrale Bewertung für Optionspreismodelle
+        Uses risk-neutral valuation for options pricing models
         """
-        # Für Monte-Carlo-Optionsbewertung: Risiko-neutrale Drift
+        # For Monte-Carlo option valuation: Risk-neutral drift
         drift = self.risk_free_rate - self.dividend_yield
 
-        # Reset Random Seed für konsistente Ergebnisse
+        # Reset random seed for consistent results
         if self.random_seed is not None:
             np.random.seed(self.random_seed)
 
-        # Normalverteilte Zufallsschocks
+        # Normally distributed random shocks
         random_shocks = np.random.standard_normal(self.num_simulations)
 
-        # Lognormale Preissimulation: S(T) = S(0) * exp((r-q-σ²/2)*T + σ*√T*ε)
+        # Lognormal price simulation: S(T) = S(0) * exp((r-q-σ²/2)*T + σ*√T*ε)
         log_returns = ((drift - 0.5 * self.volatility ** 2) * self.time_to_expiration +
                        self.volatility * np.sqrt(self.time_to_expiration) * random_shocks)
 
@@ -78,15 +84,15 @@ class UniversalOptionsMonteCarloSimulator:
                                          strike: float,
                                          is_call: bool) -> float:
         """
-        Berechnet intrinsischen Wert einer Option bei Verfall
+        Calculate intrinsic value of an option at expiration
 
         Args:
-            stock_price: Aktienkurs bei Verfall
-            strike: Strike-Preis der Option
-            is_call: True für Call, False für Put
+            stock_price: Stock price at expiration
+            strike: Strike price of the option
+            is_call: True for Call, False for Put
 
         Returns:
-            Intrinsischer Wert der Option
+            Intrinsic value of the option
         """
         if is_call:
             return max(stock_price - strike, 0)
@@ -100,61 +106,63 @@ class UniversalOptionsMonteCarloSimulator:
                                        is_call: bool,
                                        is_long: bool) -> np.ndarray:
         """
-        Berechnet Payoff für eine einzelne Option über alle Simulationen
+        Calculate payoff for a single option contract across all simulations
 
         Args:
-            simulated_prices: Array mit simulierten Aktienpreisen bei Verfall
-            strike: Strike-Preis der Option
-            premium: Gezahlte/erhaltene Prämie (immer positiv angeben)
-            is_call: True für Call-Option, False für Put-Option
-            is_long: True für Long-Position (gekauft), False für Short-Position (verkauft)
+            simulated_prices: Array of simulated stock prices at expiration
+            strike: Strike price of the option
+            premium: Premium paid/received per share (always positive)
+            is_call: True for Call option, False for Put option
+            is_long: True for Long position (bought), False for Short position (sold)
 
         Returns:
-            Array mit Payoffs für jede Simulation
+            Array of payoffs for each simulation for ONE contract (includes transaction costs)
         """
-        # Intrinsische Werte bei Verfall für alle Simulationen
+        # Intrinsic values at expiration for all simulations (per share)
         if is_call:
-            intrinsic_values = np.maximum(simulated_prices - strike, 0)
+            intrinsic_values_per_share = np.maximum(simulated_prices - strike, 0)
         else:
-            intrinsic_values = np.maximum(strike - simulated_prices, 0)
+            intrinsic_values_per_share = np.maximum(strike - simulated_prices, 0)
 
-        # Payoff-Berechnung je nach Position
+        # Convert to per-contract values (100 shares per contract)
+        intrinsic_values_per_contract = intrinsic_values_per_share * 100
+        premium_per_contract = premium * 100
+
+        # Payoff calculation depending on position (for 1 contract)
         if is_long:
-            # Long: Zahle Prämie heute, erhalte intrinsischen Wert bei Verfall
-            payoffs = intrinsic_values - premium
+            # Long: Pay premium today, receive intrinsic value at expiration, pay transaction costs
+            payoffs_per_contract = (intrinsic_values_per_contract -
+                                    premium_per_contract -
+                                    self.transaction_cost_per_contract)
         else:
-            # Short: Erhalte Prämie heute, zahle intrinsischen Wert bei Verfall
-            payoffs = premium - intrinsic_values
+            # Short: Receive premium today, pay intrinsic value at expiration, pay transaction costs
+            payoffs_per_contract = (premium_per_contract -
+                                    intrinsic_values_per_contract -
+                                    self.transaction_cost_per_contract)
 
-        return payoffs
+        return payoffs_per_contract
 
-    def analyze_strategy(self, options: List[Dict]) -> Dict:
+    def _calculate_strategy_payoffs(self, options: List[Dict]) -> Tuple[np.ndarray, np.ndarray, float]:
         """
-        Analysiert eine beliebige Multi-Leg-Optionsstrategie
+        Helper method to calculate strategy payoffs and initial cashflow
 
         Args:
-            options: Liste von Dictionaries, jedes mit:
-                    - 'strike': Strike-Preis
-                    - 'premium': Optionsprämie (immer positiv)
-                    - 'is_call': True für Call, False für Put
-                    - 'is_long': True für Long-Position, False für Short-Position
+            options: List of option dictionaries
 
         Returns:
-            Dictionary mit allen Analyseergebnissen
+            Tuple of (simulated_prices, total_payoffs, initial_cashflow)
         """
-        # Simuliere Aktienpreise bei Verfall
+        # Simulate stock prices at expiration
         simulated_prices = self.simulate_stock_prices()
 
-        # Gesamtpayoffs initialisieren
+        # Initialize total payoffs
         total_payoffs = np.zeros(self.num_simulations)
 
-        # Netto-Cashflow zu Beginn berechnen
+        # Calculate net cashflow at inception
         initial_cashflow = 0
 
-        # Berechne Payoff für jedes Options-Leg
-        leg_analysis = []
-        for i, option in enumerate(options):
-            # Einzelnes Leg analysieren
+        for option in options:
+            # Analyze single leg (always 1 contract)
             leg_payoffs = self.calculate_single_option_payoff(
                 simulated_prices=simulated_prices,
                 strike=option['strike'],
@@ -163,72 +171,203 @@ class UniversalOptionsMonteCarloSimulator:
                 is_long=option['is_long']
             )
 
-            # Zu Gesamtpayoff hinzufügen
+            # Add to total payoff
             total_payoffs += leg_payoffs
 
-            # Cashflow-Tracking
-            if option['is_long']:
-                initial_cashflow -= option['premium']  # Zahlen für Long
-            else:
-                initial_cashflow += option['premium']  # Erhalten für Short
+            # Cashflow tracking (for 1 contract)
+            premium_per_contract = option['premium'] * 100
+            transaction_cost_per_contract = self.transaction_cost_per_contract
 
-            # Leg-Details für Analyse speichern
+            if option['is_long']:
+                # Long: Pay premium + transaction costs
+                initial_cashflow -= (premium_per_contract + transaction_cost_per_contract)
+            else:
+                # Short: Receive premium - transaction costs
+                initial_cashflow += (premium_per_contract - transaction_cost_per_contract)
+
+        return simulated_prices, total_payoffs, initial_cashflow
+
+    def calculate_expected_value(self, options: List[Dict]) -> float:
+        """
+        Calculate only the expected value of the strategy (fast computation)
+
+        Args:
+            options: List of option dictionaries
+
+        Returns:
+            Expected value of the strategy (discounted to present value)
+        """
+        _, total_payoffs, _ = self._calculate_strategy_payoffs(options)
+
+        # Calculate expected value
+        expected_value_raw = np.mean(total_payoffs)
+
+        # Discount to present value
+        discount_factor = np.exp(-self.risk_free_rate * self.time_to_expiration)
+        expected_value = expected_value_raw * discount_factor
+
+        return expected_value
+
+    def find_breakeven_from_simulations(self,
+                                        simulated_prices: np.ndarray,
+                                        total_payoffs: np.ndarray) -> List[float]:
+        """
+        Find breakeven points using the actual simulated data
+
+        Args:
+            simulated_prices: Array of simulated stock prices
+            total_payoffs: Array of corresponding total payoffs
+
+        Returns:
+            List of estimated breakeven stock prices
+        """
+        # Create pairs of (price, payoff) and sort by price
+        price_payoff_pairs = list(zip(simulated_prices, total_payoffs))
+        price_payoff_pairs.sort(key=lambda x: x[0])
+
+        prices = np.array([x[0] for x in price_payoff_pairs])
+        payoffs = np.array([x[1] for x in price_payoff_pairs])
+
+        # Find sign changes in payoffs (breakeven crossings)
+        breakeven_points = []
+
+        for i in range(len(payoffs) - 1):
+            # Check if there's a sign change between consecutive points
+            if payoffs[i] * payoffs[i + 1] < 0:  # Different signs (crossing zero)
+                # Linear interpolation to find more precise breakeven point
+                price1, payoff1 = prices[i], payoffs[i]
+                price2, payoff2 = prices[i + 1], payoffs[i + 1]
+
+                # Linear interpolation: find price where payoff = 0
+                if payoff2 != payoff1:  # Avoid division by zero
+                    breakeven_price = price1 - payoff1 * (price2 - price1) / (payoff2 - payoff1)
+                    breakeven_points.append(breakeven_price)
+
+        # Remove duplicates and sort
+        if breakeven_points:
+            breakeven_points = sorted(set(round(bp, 2) for bp in breakeven_points))
+
+            # Cluster nearby points (within $1.00 of each other)
+            clustered = []
+            if breakeven_points:
+                current_cluster = [breakeven_points[0]]
+
+                for point in breakeven_points[1:]:
+                    if point - current_cluster[-1] <= 1.0:
+                        current_cluster.append(point)
+                    else:
+                        # Average the cluster
+                        clustered.append(round(np.mean(current_cluster), 2))
+                        current_cluster = [point]
+
+                # Add the last cluster
+                clustered.append(round(np.mean(current_cluster), 2))
+
+                return clustered
+
+        return breakeven_points
+
+    def analyze_strategy(self, options: List[Dict]) -> Dict:
+        """
+        Analyze an arbitrary multi-leg options strategy with full metrics
+
+        Args:
+            options: List of dictionaries, each containing:
+                    - 'strike': Strike price
+                    - 'premium': Option premium per share (always positive)
+                    - 'is_call': True for Call, False for Put
+                    - 'is_long': True for Long position, False for Short position
+                    Note: Each entry in the list represents exactly 1 contract
+
+        Returns:
+            Dictionary with all analysis results
+        """
+        # Get basic payoff calculations
+        simulated_prices, total_payoffs, initial_cashflow = self._calculate_strategy_payoffs(options)
+
+        # Calculate detailed leg analysis
+        leg_analysis = []
+        total_transaction_costs = 0
+        total_contracts = len(options)  # Each entry = 1 contract
+
+        for i, option in enumerate(options):
+            # Analyze single leg for detailed reporting
+            leg_payoffs = self.calculate_single_option_payoff(
+                simulated_prices=simulated_prices,
+                strike=option['strike'],
+                premium=option['premium'],
+                is_call=option['is_call'],
+                is_long=option['is_long']
+            )
+
+            # Cashflow calculations for reporting
+            premium_per_contract = option['premium'] * 100
+            transaction_cost_per_contract = self.transaction_cost_per_contract
+            total_transaction_costs += transaction_cost_per_contract
+
+            # Store leg details for analysis
             leg_info = {
                 'leg_number': i + 1,
                 'type': 'Call' if option['is_call'] else 'Put',
                 'position': 'Long' if option['is_long'] else 'Short',
                 'strike': option['strike'],
-                'premium': option['premium'],
+                'premium_per_share': option['premium'],
+                'premium_per_contract': premium_per_contract,
+                'transaction_cost': transaction_cost_per_contract,
                 'avg_payoff': np.mean(leg_payoffs),
-                'cashflow': -option['premium'] if option['is_long'] else option['premium']
+                'cashflow': (-premium_per_contract - transaction_cost_per_contract
+                             if option['is_long']
+                             else premium_per_contract - transaction_cost_per_contract)
             }
             leg_analysis.append(leg_info)
 
-        # Gesamtstatistiken berechnen
+        # Calculate overall statistics
         expected_value_raw = np.mean(total_payoffs)
 
-        # Abzinsung auf heutigen Wert
+        # Discount to present value
         discount_factor = np.exp(-self.risk_free_rate * self.time_to_expiration)
         expected_value = expected_value_raw * discount_factor
 
-        # Wahrscheinlichkeitsanalyse
+        # Probability analysis
         prob_profit = (total_payoffs > 0).mean() * 100
         prob_loss = (total_payoffs < 0).mean() * 100
-        prob_breakeven = (np.abs(total_payoffs) < 0.01).mean() * 100
+        prob_breakeven = (np.abs(total_payoffs) < 1.0).mean() * 100  # Within $1 of breakeven
 
-        # Risk-Metriken
+        # Risk metrics
         max_profit = np.max(total_payoffs)
         max_loss = np.min(total_payoffs)
         std_dev = np.std(total_payoffs)
 
-        # Percentile
+        # Percentiles
         percentiles = np.percentile(total_payoffs, [5, 10, 25, 50, 75, 90, 95])
 
-        # Breakeven-Punkte schätzen
-        breakeven_points = self._estimate_breakeven_points(options)
+        # Find breakeven points using simulation data
+        breakeven_points = self.find_breakeven_from_simulations(simulated_prices, total_payoffs)
 
         return {
-            # Hauptergebnisse
+            # Main results
             'expected_value': expected_value,
             'expected_value_raw': expected_value_raw,
             'discount_factor': discount_factor,
 
-            # Cashflow
+            # Cashflow (already includes transaction costs)
             'initial_cashflow': initial_cashflow,
             'net_debit': max(0, -initial_cashflow),
             'net_credit': max(0, initial_cashflow),
+            'total_transaction_costs': total_transaction_costs,
+            'total_contracts': total_contracts,
 
-            # Wahrscheinlichkeiten
+            # Probabilities
             'prob_profit': prob_profit,
             'prob_loss': prob_loss,
             'prob_breakeven': prob_breakeven,
 
-            # Risk-Metriken
+            # Risk metrics
             'max_profit': max_profit,
             'max_loss': max_loss,
             'std_dev': std_dev,
 
-            # Percentile
+            # Percentiles
             'percentiles': {
                 '5%': percentiles[0],
                 '10%': percentiles[1],
@@ -239,161 +378,112 @@ class UniversalOptionsMonteCarloSimulator:
                 '95%': percentiles[6]
             },
 
-            # Breakeven & Simulation
+            # Breakeven from simulations
             'breakeven_points': breakeven_points,
             'avg_simulated_price': np.mean(simulated_prices),
             'simulated_price_std': np.std(simulated_prices),
 
-            # Leg-Details
+            # Leg details
             'leg_analysis': leg_analysis,
             'num_legs': len(options)
         }
-
-    def _estimate_breakeven_points(self, options: List[Dict]) -> List[float]:
-        """
-        Schätzt Breakeven-Punkte durch Abtasten des Preisbereichs
-        """
-        # Erweiterten Preisbereich definieren
-        price_range = np.linspace(
-            self.current_price * 0.3,  # 30% unter aktuellem Preis
-            self.current_price * 1.7,  # 70% über aktuellem Preis
-            2000  # Höhere Auflösung für genauere Breakevens
-        )
-
-        breakeven_points = []
-
-        for price in price_range:
-            total_payoff = 0
-
-            # Payoff bei diesem spezifischen Preis berechnen
-            for option in options:
-                # Intrinsischer Wert
-                intrinsic = self.calculate_option_intrinsic_value(
-                    price, option['strike'], option['is_call']
-                )
-
-                # Leg-Payoff
-                if option['is_long']:
-                    leg_payoff = intrinsic - option['premium']
-                else:
-                    leg_payoff = option['premium'] - intrinsic
-
-                total_payoff += leg_payoff
-
-            # Breakeven-Toleranz: ±0.02
-            if abs(total_payoff) < 0.02:
-                breakeven_points.append(round(price, 2))
-
-        # Duplikate entfernen, sortieren und clustern
-        if breakeven_points:
-            # Cluster nahe beieinanderliegende Punkte
-            breakeven_points = sorted(set(breakeven_points))
-            clustered = []
-            current_cluster = [breakeven_points[0]]
-
-            for point in breakeven_points[1:]:
-                if point - current_cluster[-1] < 1.0:  # Weniger als $1 Unterschied
-                    current_cluster.append(point)
-                else:
-                    # Cluster-Durchschnitt nehmen
-                    clustered.append(round(sum(current_cluster) / len(current_cluster), 2))
-                    current_cluster = [point]
-
-            # Letzten Cluster hinzufügen
-            clustered.append(round(sum(current_cluster) / len(current_cluster), 2))
-            return clustered
-
-        return []
 
 
 def print_strategy_analysis(simulator: UniversalOptionsMonteCarloSimulator,
                             options: List[Dict],
                             strategy_name: str = "Multi-Leg Strategy") -> float:
     """
-    Druckt umfassende Analyse für beliebige Optionsstrategie
+    Print comprehensive analysis for arbitrary options strategy
     """
     results = simulator.analyze_strategy(options)
 
     print("=" * 90)
-    print(f"📊 MONTE-CARLO ANALYSE: {strategy_name.upper()}")
+    print(f"📊 MONTE-CARLO ANALYSIS: {strategy_name.upper()}")
     print("=" * 90)
 
-    # Marktparameter
-    print(f"\n📈 MARKTPARAMETER:")
-    print(f"   Aktueller Aktienkurs:     ${simulator.current_price:.2f}")
-    print(f"   Implizite Volatilität:    {simulator.volatility * 100:.1f}%")
-    print(f"   Tage bis Verfall:         {simulator.dte}")
-    print(f"   Risikofreier Zins:        {simulator.risk_free_rate * 100:.1f}%")
-    print(f"   Dividendenrendite:        {simulator.dividend_yield * 100:.1f}%")
+    # Market parameters
+    print(f"\n📈 MARKET PARAMETERS:")
+    print(f"   Current Stock Price:      ${simulator.current_price:.2f}")
+    print(f"   Implied Volatility:       {simulator.volatility * 100:.1f}%")
+    print(f"   Days to Expiration:       {simulator.dte}")
+    print(f"   Risk-free Rate:           {simulator.risk_free_rate * 100:.1f}%")
+    print(f"   Dividend Yield:           {simulator.dividend_yield * 100:.1f}%")
+    print(f"   Transaction Cost/Contract: ${simulator.transaction_cost_per_contract:.2f}")
 
-    # Simulationseinstellungen
+    # Simulation settings
     print(f"\n⚙️  SIMULATION:")
-    print(f"   Anzahl Simulationen:      {simulator.num_simulations:,}")
-    print(f"   Random Seed:              {simulator.random_seed or 'Zufällig'}")
-    print(f"   Abzinsungsfaktor:         {results['discount_factor']:.6f}")
+    print(f"   Number of Simulations:    {simulator.num_simulations:,}")
+    print(f"   Random Seed:              {simulator.random_seed or 'Random'}")
+    print(f"   Discount Factor:          {results['discount_factor']:.6f}")
 
-    # Strategiedetails
-    print(f"\n🏗️ STRATEGIE ({results['num_legs']} LEGS):")
+    # Strategy details
+    print(f"\n🏗️ STRATEGY ({results['num_legs']} LEGS, {results['total_contracts']} CONTRACTS):")
     print("-" * 90)
     for leg in results['leg_analysis']:
         cashflow_sign = "+" if leg['cashflow'] > 0 else ""
         print(f"   Leg {leg['leg_number']:>2}: {leg['position']:>5} {leg['type']:>4} "
-              f"@ ${leg['strike']:>6.0f} | Prämie: {cashflow_sign}${leg['cashflow']:>6.2f} | "
-              f"Ø Payoff: ${leg['avg_payoff']:>7.2f}")
+              f"@ ${leg['strike']:>6.0f} | "
+              f"Premium: ${leg['premium_per_share']:>5.2f}/share | "
+              f"Total: ${leg['premium_per_contract']:>7.0f} | "
+              f"T-Cost: ${leg['transaction_cost']:>5.2f} | "
+              f"Net: {cashflow_sign}${abs(leg['cashflow']):>7.0f}")
 
-    # Cashflow-Übersicht
+    # Cashflow overview
     print(f"\n💰 CASHFLOW:")
+    print(f"   Total Transaction Costs:  ${results['total_transaction_costs']:.2f}")
     if results['initial_cashflow'] > 0:
-        print(f"   Netto-Kredit erhalten:    +${results['net_credit']:.2f}")
+        print(f"   Net Credit Received:      +${results['net_credit']:.2f}")
     elif results['initial_cashflow'] < 0:
-        print(f"   Netto-Debit gezahlt:      -${results['net_debit']:.2f}")
+        print(f"   Net Debit Paid:           -${results['net_debit']:.2f}")
     else:
-        print(f"   Ausgeglichener Cashflow:  ${results['initial_cashflow']:.2f}")
+        print(f"   Balanced Cashflow:        ${results['initial_cashflow']:.2f}")
 
-    # Hauptergebnisse
-    print(f"\n🎯 MONTE-CARLO ERGEBNISSE:")
-    print(f"   Erwartungswert:           ${results['expected_value']:.2f}")
-    print(f"   Erwartungswert (roh):     ${results['expected_value_raw']:.2f}")
+    # Main results
+    print(f"\n🎯 MONTE-CARLO RESULTS:")
+    print(f"   Expected Value:           ${results['expected_value']:.2f}")
+    print(f"   Expected Value (raw):     ${results['expected_value_raw']:.2f}")
 
-    # Status-Interpretation
-    if results['expected_value'] > 0.5:
+    # Status interpretation
+    if results['expected_value'] > 5.0:
         status_icon = "💚"
-        status_text = f"POSITIV (+${results['expected_value']:.2f})"
-    elif results['expected_value'] < -0.5:
+        status_text = f"POSITIVE (+${results['expected_value']:.2f})"
+    elif results['expected_value'] < -5.0:
         status_icon = "🔴"
-        status_text = f"NEGATIV (${results['expected_value']:.2f})"
+        status_text = f"NEGATIVE (${results['expected_value']:.2f})"
     else:
         status_icon = "⚖️"
-        status_text = f"AUSGEGLICHEN (≈${results['expected_value']:.2f})"
+        status_text = f"BALANCED (≈${results['expected_value']:.2f})"
 
     print(f"   {status_icon} Status:                {status_text}")
 
-    # Wahrscheinlichkeiten
-    print(f"\n📊 WAHRSCHEINLICHKEITEN:")
-    print(f"   Gewinn:                   {results['prob_profit']:>6.1f}%")
-    print(f"   Verlust:                  {results['prob_loss']:>6.1f}%")
+    # Probabilities
+    print(f"\n📊 PROBABILITIES:")
+    print(f"   Profit:                   {results['prob_profit']:>6.1f}%")
+    print(f"   Loss:                     {results['prob_loss']:>6.1f}%")
     print(f"   Breakeven:                {results['prob_breakeven']:>6.1f}%")
 
-    # Risk-Reward
+    # Risk-reward
     print(f"\n⚖️  RISK-REWARD:")
-    print(f"   Maximaler Gewinn:         ${results['max_profit']:>8.2f}")
-    print(f"   Maximaler Verlust:        ${results['max_loss']:>8.2f}")
-    print(f"   Standardabweichung:       ${results['std_dev']:>8.2f}")
+    print(f"   Maximum Profit:           ${results['max_profit']:>8.2f}")
+    print(f"   Maximum Loss:             ${results['max_loss']:>8.2f}")
+    print(f"   Standard Deviation:       ${results['std_dev']:>8.2f}")
 
     if results['max_loss'] != 0:
         reward_risk = abs(results['max_profit'] / results['max_loss'])
         print(f"   Reward/Risk Ratio:        {reward_risk:>8.2f}")
 
-    # Breakeven-Punkte
+    # Breakeven points from simulation data
     if results['breakeven_points']:
-        print(f"\n⚡ BREAKEVEN-PUNKTE:")
+        print(f"\n⚡ BREAKEVEN POINTS (from simulations):")
         for i, bp in enumerate(results['breakeven_points'], 1):
             print(f"   Breakeven {i}:            ${bp:>8.2f}")
+    else:
+        print(f"\n⚡ BREAKEVEN POINTS: None found in simulation range")
 
-    # Simulation Details
+    # Simulation details
     print(f"\n🎲 SIMULATION DETAILS:")
-    print(f"   Ø Simulierter Preis:      ${results['avg_simulated_price']:>8.2f}")
-    print(f"   Preis-Standardabw. Expected Move:       ${results['simulated_price_std']:>8.2f}")
+    print(f"   Avg Simulated Price:      ${results['avg_simulated_price']:>8.2f}")
+    print(f"   Price Std Dev (Expected Move): ${results['simulated_price_std']:>8.2f}")
 
     print("=" * 90)
 
@@ -401,58 +491,64 @@ def print_strategy_analysis(simulator: UniversalOptionsMonteCarloSimulator,
 
 
 if __name__ == "__main__":
-    print("🧪 UNIVERSELLE MONTE-CARLO OPTIONSSIMULATION")
+    print("🧪 UNIVERSAL MONTE-CARLO OPTIONS SIMULATION")
     print("=" * 80)
 
-    # Simulator initialisieren
+    # Initialize simulator
     simulator = UniversalOptionsMonteCarloSimulator(
         current_price=227.00,
-        volatility= 0.35,#0.336,
+        volatility=0.35,  # 0.336,
         dte=54,
         risk_free_rate=0.03,
         dividend_yield=0.00,
         num_simulations=100000,
-        random_seed=42
+        random_seed=42,
+        transaction_cost_per_contract=0.65  # Typical transaction cost per options contract
     )
 
-    # Iron Condor
+    # Iron Condor - each entry = 1 contract
     iron_condor_options = [
         # Long Put
         {
             'strike': 200,
-            'premium': 2.50,#2.50,
+            'premium': 2.50,  # per share
             'is_call': False,
             'is_long': True
         },
         # Short Put
         {
             'strike': 210,
-            'premium': 5, #4.85
+            'premium': 4.85,  # per share
             'is_call': False,
             'is_long': False
         },
         # Short Call
         {
             'strike': 250,
-            'premium': 5,#4.69,
+            'premium': 4.69,  # per share
             'is_call': True,
             'is_long': False
         },
         # Long Call
         {
             'strike': 260,
-            'premium': 2.85,
+            'premium': 2.85,  # per share
             'is_call': True,
             'is_long': True
         }
     ]
 
-    # Analyse durchführen
+    # Demo: Quick expected value calculation
+    print("🚀 QUICK EXPECTED VALUE CALCULATION:")
+    expected_value_only = simulator.calculate_expected_value(iron_condor_options)
+    print(f"Expected Value: ${expected_value_only:.2f}")
+    print()
+
+    # Full analysis
     expected_value = print_strategy_analysis(
         simulator,
         iron_condor_options,
         "Iron Condor"
     )
 
-    print(f"\n🔢 FINALER ERWARTUNGSWERT: ${expected_value:.2f}")
-
+    print(f"\n🔢 FINAL EXPECTED VALUE: ${expected_value:.2f}")
