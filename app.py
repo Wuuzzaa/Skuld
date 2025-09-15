@@ -45,6 +45,7 @@ multi_indicator_direction = st.Page("pages/strategy_multi_indicator_score_direct
 log_messages = st.Page("pages/log_messages.py", title="Log messages")
 dividend_page = st.Page("pages/dividend_page.py", title="Dividend Page")
 documentation = st.Page("pages/documentation.py", title="Documentation")
+married_puts = st.Page("pages/married_puts.py", title="Married Puts")
 
 # Set up navigation
 page = st.navigation(
@@ -58,7 +59,8 @@ page = st.navigation(
         multi_indicator_direction,
         log_messages,
         dividend_page,
-        documentation
+        documentation, 
+        married_puts
     ]
 )
 
