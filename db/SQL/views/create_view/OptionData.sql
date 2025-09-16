@@ -2,6 +2,7 @@ DROP VIEW IF EXISTS OptionData;
 
 CREATE VIEW OptionData AS
 SELECT 
+	-- OptionDataTradingView
 	a.symbol, 
 	a."option-type", 
 	a.strike, 
@@ -19,6 +20,8 @@ SELECT
 	a.time, 
 	a.exchange, 
 	a.option_osi,
+
+	-- OptionDataYahoo
     b."contractSymbol",  
 	b.currency, 
 	b."lastPrice", 
@@ -29,13 +32,22 @@ SELECT
 	b."lastTradeDate", 
 	b."impliedVolatility", 
 	b."inTheMoney", 
-	b.option_volume
+	b.option_volume,
+
+	-- OptionPricingMetrics
+	c.premium_option_price,
+	c.intrinsic_value,
+	c.extrinsic_value,
+	c.moneyness
+
 FROM 
     OptionDataTradingView AS a
 JOIN 
     OptionDataYahoo as b
-ON a.option_osi = b.contractSymbol;
+ON a.option_osi = b.contractSymbol
     -- a.symbol = b.symbol
     -- and a.strike = b.strike
     -- and a.expiration_date = b.expiration_date -- expiration_date in different formats 20250905 vs 2025-09-05 00:00:00.000000	
     -- and a."option-type" = b."option-type"; -- option-type in different formats call vs calls
+JOIN OptionPricingMetrics as c
+ON a.option_osi = c.option_osi;
