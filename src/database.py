@@ -44,17 +44,35 @@ def insert_into_table(
     try:
         engine = get_database_engine()
         affected_rows = dataframe.to_sql(table_name, engine, if_exists=if_exists, index=False)
-        print("Successfully saved {affected_rows} to the database table {table_name}.")
+        print(f"Successfully saved {affected_rows} to the database table {table_name}.")
     except Exception as e:
         print(f"Error saving to the database table {table_name}: {e}")
 
     return affected_rows
 
-def select_into_dataframe(query: str):
+def select_into_dataframe(query: str = None, sql_file_path: str = None):
+    """
+    Executes a SQL query and returns the result as a DataFrame.
+    You can provide either a SQL query string or a path to a .sql file.
+
+    Parameters:
+    - query (str, optional): SQL query string to execute.
+    - sql_file_path (str, optional): Path to a .sql file containing the query.
+
+    Returns:
+    - pd.DataFrame: Result of the query.
+    """
     df = None
     try:
         engine = get_database_engine()
-        df = pd.read_sql(query, engine)
+        if sql_file_path is not None and os.path.isfile(sql_file_path):
+            with open(sql_file_path, 'r') as f:
+                sql = f.read()
+        elif query is not None:
+            sql = query
+        else:
+            raise ValueError("Either 'query' or 'sql_file_path' must be provided.")
+        df = pd.read_sql(sql, engine)
         print(df.head())
     except Exception as e:
         print(f"Error executing query {query}: {e}")
