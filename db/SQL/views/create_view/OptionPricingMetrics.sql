@@ -5,6 +5,10 @@ CREATE VIEW
 Select
     symbol,
     option_osi,
+    expiration_date_formatted,
+    CAST(
+        julianday (expiration_date_formatted) - julianday ('now') AS INTEGER
+    ) AS days_to_expiration,
     premium_option_price,
     intrinsic_value,
     premium_option_price - intrinsic_value as extrinsic_value,
@@ -14,6 +18,9 @@ FROM
         select
             a.symbol,
             a.option_osi,
+            date (
+                substr (a.expiration_date, 1, 4) || '-' || substr (a.expiration_date, 5, 2) || '-' || substr (a.expiration_date, 7, 2)
+            ) as expiration_date_formatted,
             a.strike,
             b.live_stock_price,
             case

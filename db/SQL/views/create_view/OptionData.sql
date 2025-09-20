@@ -6,7 +6,7 @@ SELECT
 	a.symbol, 
 	a."option-type", 
 	a.strike, 
-	a.expiration_date, 
+	a.expiration_date,
     a.ask, 
 	a.bid, 
 	a.delta, 
@@ -35,6 +35,8 @@ SELECT
 	b.option_volume,
 
 	-- OptionPricingMetrics
+	c.expiration_date_formatted,
+	c.days_to_expiration,
 	c.premium_option_price,
 	c.intrinsic_value,
 	c.extrinsic_value,

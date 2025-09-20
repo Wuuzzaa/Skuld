@@ -16,6 +16,7 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
 
 # Import our KPI calculation functions
+from src.database import select_into_dataframe
 from src.married_put_kpis_new import load_option_data, calculate_all_married_put_kpis
 
 # Page configuration
@@ -35,6 +36,9 @@ def load_married_put_data(shares=200):
     Returns:
         DataFrame with all calculated KPIs
     """
+    # Load calculated KPIs from the database
+    df = select_into_dataframe(sql_file_path='db/SQL/option_strategy/married_put/married_put.sql')
+    
     try:
         # Load option data from database
         option_data = load_option_data()
