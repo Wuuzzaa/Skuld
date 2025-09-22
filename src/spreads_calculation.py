@@ -4,6 +4,7 @@ from math import sqrt
 from scipy.stats import norm
 from datetime import datetime
 from config import *
+from src.monte_carlo_simulation import UniversalOptionsMonteCarloSimulator
 
 
 def calculate_pop(underlying_price, strike_price, days_to_expiration, implied_volatility, is_call=True):
@@ -54,7 +55,8 @@ def __load_df_option_columns_only(df, expiration_date):
         "vega",
         "option",
         "close",
-        "earnings_date"
+        "earnings_date",
+        "dte",
     ]
 
     # filter expiration date and only needed columns for the spreads
@@ -169,19 +171,51 @@ def get_spreads(df, expiration_date, delta_target, spread_width):
     spreads["bpr"] = spreads["spread_width"] * 100 - spreads["max_profit"]
     spreads["profit_to_bpr"] = spreads["max_profit"] / spreads["bpr"]
     spreads["spread_theta"] = spreads["theta_sell"] - spreads["theta_buy"]
-    spreads["pop_delta"] = 1 - abs(spreads["delta_sell"])
-    spreads["ev_pop_delta"] = (spreads["pop_delta"] * spreads["max_profit"]) - ((1 - spreads["pop_delta"]) * spreads["bpr"])
+    # spreads["pop_delta"] = 1 - abs(spreads["delta_sell"])
+    # spreads["ev_pop_delta"] = (spreads["pop_delta"] * spreads["max_profit"]) - ((1 - spreads["pop_delta"]) * spreads["bpr"])
+    #
+    # today = pd.Timestamp(datetime.today().date())
+    #
+    # spreads['pop'] = spreads.apply(lambda row: calculate_pop(
+    #     row['close'],
+    #     row['strike_sell'],
+    #     (row['expiration_date_sell'] - today).days,
+    #     row['iv_sell'],
+    #     row['option-type_sell'].lower() == 'call'  # True wenn Call, sonst False
+    # ), axis=1)
+    # spreads["ev_pop"] = (spreads["pop"] * spreads["max_profit"]) - ((1 - spreads["pop"]) * spreads["bpr"])
 
-    today = pd.Timestamp(datetime.today().date())
+    def calculate_expected_value_for_symbol(row):
+        monte_carlo_simulator = UniversalOptionsMonteCarloSimulator(
+            num_simulations=NUM_SIMULATIONS,
+            random_seed=RANDOM_SEED,
+            current_price=row['close'],
+            dte=row['dte_sell'],
+            volatility=row['iv_sell'],
+            risk_free_rate=RISK_FREE_RATE,
+            dividend_yield=0,  # todo insert the dividend from the symbol here
+        )
 
-    spreads['pop'] = spreads.apply(lambda row: calculate_pop(
-        row['close'],
-        row['strike_sell'],
-        (row['expiration_date_sell'] - today).days,
-        row['iv_sell'],
-        row['option-type_sell'].lower() == 'call'  # True wenn Call, sonst False
-    ), axis=1)
-    spreads["ev_pop"] = (spreads["pop"] * spreads["max_profit"]) - ((1 - spreads["pop"]) * spreads["bpr"])
+        options = [
+            # SELL OPTION
+            {
+                'strike': row['strike_sell'],
+                'premium': row['bid_sell'],
+                'is_call': True if row['option_type'] == 'call' else False,
+                'is_long': False
+            },
+            # BUY OPTION
+            {
+                'strike': row['strike_buy'],
+                'premium': row['ask_buy'],
+                'is_call': True if row['option_type'] == 'call' else False,
+                'is_long': True
+            }]
+
+        expected_value = monte_carlo_simulator.calculate_expected_value(options=options)
+        return expected_value
+
+    spreads["expected_value"] = spreads.apply(calculate_expected_value_for_symbol, axis=1)
 
     # remove unnecessary columns for streamlit data view
     spreads_columns = [
@@ -222,10 +256,11 @@ def get_spreads(df, expiration_date, delta_target, spread_width):
         'bpr',
         'profit_to_bpr',
         'spread_theta',
-        'pop_delta',
-        'ev_pop_delta',
-        'pop',
-        'ev_pop',
+        # 'pop_delta',
+        # 'ev_pop_delta',
+        # 'pop',
+        # 'ev_pop',
+        "expected_value",
     ]
 
     return spreads[spreads_columns]
@@ -239,7 +274,7 @@ if __name__ == "__main__":
     import time
 
     df = pd.read_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
-    expiration_date = '2025-05-30'
+    expiration_date = '2026-08-21'
     delta_target = 0.2
     spread_width = 5
 
