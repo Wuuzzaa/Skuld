@@ -605,11 +605,11 @@ JMS_MENTAL_STOP = 2
 
 # Symbol selection
 SYMBOL_SELECTION = {
-    "mode": "list",                   # "all", "list", "file", "max"
+    "mode": "max",                   # "all", "list", "file", "max"
     "symbols": ["AAPL"],             # Used when mode="list"
     "file_path": None,               # Used when mode="file"
-    "max_symbols": 10,               # Used when mode="max" or as limit for "all"
-    "use_max_limit": False            # If True, applies max_symbols limit to any mode
+    "max_symbols": 200,               # Used when mode="max" or as limit for "all"
+    "use_max_limit": True            # If True, applies max_symbols limit to any mode
 }
 
 # =============================================================================
@@ -633,8 +633,8 @@ OPTIONS_COLLECTION_RULES = [
     {
         "name": "leaps_long_term",
         "enabled": True,                 # Disabled by default
-        "days_range": [180, 365],         # Current married put range
-        "frequency": "every_friday",      # Changed from monthly_3rd_friday to every_friday
+        "days_range": [181, 365],         # Current married put range
+        "frequency": "monthly_3rd_friday",      # Changed from monthly_3rd_friday to every_friday
         "description": "LEAPS options for married put strategies"
     }
 ]
