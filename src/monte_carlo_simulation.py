@@ -25,7 +25,7 @@ class UniversalOptionsMonteCarloSimulator:
                  dividend_yield: float = 0.00,
                  num_simulations: int = 100000,
                  random_seed: int = None,
-                 transaction_cost_per_contract: float = 0.65,
+                 transaction_cost_per_contract: float = 3.5,
                  iv_correction: Union[str, float] = "auto"):
         """
         Initialize the universal Monte-Carlo simulator
@@ -100,8 +100,8 @@ class UniversalOptionsMonteCarloSimulator:
         # Combined correction factor
         total_correction = base_bias + dte_bias
 
-        # Realistic bounds: 3% minimum, 25% maximum
-        return max(0.03, min(0.25, total_correction))
+        # Realistic bounds: base_bias minimum, 25% maximum
+        return max(base_bias, min(0.25, total_correction))
 
     def _apply_iv_correction(self, market_iv: float, dte: int, correction_mode: Union[str, float]) -> float:
         """
@@ -583,6 +583,8 @@ if __name__ == "__main__":
     print("🧪 UNIVERSAL MONTE-CARLO OPTIONS SIMULATION")
     print("=" * 80)
 
+    num_simulations = 100000
+
     # Initialize simulator with IV correction
     simulator = UniversalOptionsMonteCarloSimulator(
         current_price=227.00,
@@ -590,10 +592,10 @@ if __name__ == "__main__":
         dte=54,
         risk_free_rate=0.03,
         dividend_yield=0.00,
-        num_simulations=100000,
+        num_simulations=num_simulations,
         random_seed=42,
-        transaction_cost_per_contract=0.65,
-        iv_correction="auto"  # Automatic IV correction based on research
+        transaction_cost_per_contract=3.5,
+        iv_correction="auto"
     )
 
     # Iron Condor - each entry = 1 contract
@@ -633,8 +635,12 @@ if __name__ == "__main__":
 
     # No correction
     simulator_no_corr = UniversalOptionsMonteCarloSimulator(
-        current_price=227.00, volatility=0.35, dte=54,
-        random_seed=42, iv_correction=0.0
+        current_price=227.00,
+        volatility=0.35,
+        dte=54,
+        random_seed=42,
+        iv_correction=0.0,
+        num_simulations=num_simulations
     )
     ev_no_corr = simulator_no_corr.calculate_expected_value(iron_condor_options)
     print(f"No IV correction:     ${ev_no_corr:.2f}")
@@ -645,8 +651,12 @@ if __name__ == "__main__":
 
     # Manual 15% correction
     simulator_manual = UniversalOptionsMonteCarloSimulator(
-        current_price=227.00, volatility=0.35, dte=54,
-        random_seed=42, iv_correction=0.15
+        current_price=227.00,
+        volatility=0.35,
+        dte=54,
+        random_seed=42,
+        iv_correction=0.15,
+        num_simulations=num_simulations
     )
     ev_manual = simulator_manual.calculate_expected_value(iron_condor_options)
     print(f"Manual 15% correction: ${ev_manual:.2f}")
