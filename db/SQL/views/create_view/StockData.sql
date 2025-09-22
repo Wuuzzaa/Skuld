@@ -4,12 +4,14 @@ CREATE VIEW
     StockData AS
 SELECT
     a.symbol,
-    a.analyst_mean_target,
+    a.live_stock_price,
+    a.price_source,
+    a.live_price_timestamp,
+    CASE WHEN b.symbol IS NOT NULL THEN TRUE ELSE FALSE END as has_earnings_date,
     b.earnings_date,
-    c.live_stock_price,
-    c.price_source,
-    c.live_price_timestamp
+    CASE WHEN c.symbol IS NOT NULL THEN TRUE ELSE FALSE END as has_analyst_price_target,
+    c.analyst_mean_target
 FROM
-    AnalystPriceTargets AS a
-    JOIN EarningDates AS b ON a.symbol = b.symbol
-    JOIN StockPrice AS c ON a.symbol = c.symbol;
+    StockPrice AS a
+    LEFT OUTER JOIN EarningDates AS b ON a.symbol = b.symbol
+    LEFT OUTER JOIN AnalystPriceTargets AS c ON a.symbol = c.symbol;

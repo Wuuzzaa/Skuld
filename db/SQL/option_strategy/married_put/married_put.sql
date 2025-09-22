@@ -60,7 +60,8 @@ FROM
                         FROM
                             OptionDataMerged
                         where
-                            "option-type" = 'put'
+                            has_fundamental_data_dividend_radar = true
+                            and "option-type" = 'puts'
                             --and classification = 'Champions'
                             and strike > live_stock_price * 1.2
                     )
