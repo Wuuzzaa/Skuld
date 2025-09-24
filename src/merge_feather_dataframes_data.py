@@ -56,22 +56,6 @@ def merge_data_dataframes():
     except Exception as e:
         print(f"ERROR merging fundamentals: {e}")
 
-    # Join Dividend Stability Analysis
-    print("Joining Dividend Stability Analysis")
-    try:
-        stability_path = PATH_DATA / 'dividend_stability_analysis.feather'
-        df_stability = pd.read_feather(stability_path)
-        print(f"Loaded dividend stability: {df_stability.shape}")
-        print(f"Stability symbols: {list(df_stability['symbol'].unique())}")
-        
-        # Merge stability analysis
-        df_merged = pd.merge(df_merged, df_stability, how='left', on='symbol')
-        print(f"After stability merge: {df_merged.shape}")
-        
-    except FileNotFoundError:
-        print("WARNING: Dividend stability analysis not found, skipping stability merge")
-    except Exception as e:
-        print(f"ERROR merging dividend stability: {e}")
 
     # Join Live Stock Prices (fetch on-the-fly)
     print("Fetching and joining live stock prices (on-the-fly)")

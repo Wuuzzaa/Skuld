@@ -46,6 +46,8 @@ log_messages = st.Page("pages/log_messages.py", title="Log messages")
 dividend_page = st.Page("pages/dividend_page.py", title="Dividend Page")
 documentation = st.Page("pages/documentation.py", title="Documentation")
 married_puts = st.Page("pages/married_puts.py", title="Married Puts")
+marrieds = st.Page("pages/option_analysis.py", title="Anaysis of Options")
+
 
 # Set up navigation
 page = st.navigation(
@@ -60,7 +62,8 @@ page = st.navigation(
         log_messages,
         dividend_page,
         documentation, 
-        married_puts
+        married_puts, 
+        marrieds
     ]
 )
 

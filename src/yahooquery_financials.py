@@ -14,150 +14,58 @@ from config_utils import get_filtered_symbols_with_logging
 from yahooquery import Ticker
 
 
-def prepare_fundamentals_for_merge_v2(df_fundamentals):
+def prepare_fundamentals_for_merge(df_fundamentals):
     """
     Process fundamentals from multiple yahooquery endpoints.
     Works with the new comprehensive data structure that includes MarketCap.
     """
     print(f"Available fundamental columns: {list(df_fundamentals.columns)}")
     
-    # Make a copy for processing
     df_processed = df_fundamentals.copy()
     
-    # Calculate additional ratios using available data
     if 'MarketCap' in df_processed.columns and 'NetIncome' in df_processed.columns:
         df_processed['PE_Ratio_Calc'] = np.where(
             (df_processed['NetIncome'] > 0) & (df_processed['MarketCap'] > 0),
             df_processed['MarketCap'] / df_processed['NetIncome'], np.nan)
-        print("✅ Calculated PE_Ratio_Calc using MarketCap and NetIncome")
+        print("Calculated PE_Ratio_Calc using MarketCap and NetIncome")
     else:
-        print("⚠️  Cannot calculate PE_Ratio_Calc - MarketCap or NetIncome not available")
+        print("Cannot calculate PE_Ratio_Calc - MarketCap or NetIncome not available")
         df_processed['PE_Ratio_Calc'] = np.nan
     
     if 'MarketCap' in df_processed.columns and 'TotalRevenue' in df_processed.columns:
         df_processed['PS_Ratio'] = np.where(
             (df_processed['TotalRevenue'] > 0) & (df_processed['MarketCap'] > 0),
             df_processed['MarketCap'] / df_processed['TotalRevenue'], np.nan)
-        print("✅ Calculated PS_Ratio using MarketCap and TotalRevenue")
+        print("Calculated PS_Ratio using MarketCap and TotalRevenue")
     else:
-        print("⚠️  Cannot calculate PS_Ratio - MarketCap or TotalRevenue not available")
+        print("Cannot calculate PS_Ratio - MarketCap or TotalRevenue not available")
         df_processed['PS_Ratio'] = np.nan
     
     if 'TotalDebt' in df_processed.columns and 'MarketCap' in df_processed.columns:
         df_processed['DebtToMarketCap'] = np.where(
             (df_processed['MarketCap'] > 0),
             df_processed['TotalDebt'] / df_processed['MarketCap'], np.nan)
-        print("✅ Calculated DebtToMarketCap ratio")
+        print("Calculated DebtToMarketCap ratio")
     else:
-        print("⚠️  Cannot calculate DebtToMarketCap - TotalDebt or MarketCap not available")
+        print("Cannot calculate DebtToMarketCap - TotalDebt or MarketCap not available")
         df_processed['DebtToMarketCap'] = np.nan
     
     if 'EBITDA' in df_processed.columns and 'MarketCap' in df_processed.columns:
         df_processed['EV_EBITDA_Approx'] = np.where(
             (df_processed['EBITDA'] > 0) & (df_processed['MarketCap'] > 0),
-            df_processed['MarketCap'] / df_processed['EBITDA'], np.nan)  # Simplified without net debt
-        print("✅ Calculated EV/EBITDA approximation")
+            df_processed['MarketCap'] / df_processed['EBITDA'], np.nan)
+        print("Calculated EV/EBITDA approximation")
     else:
-        print("⚠️  Cannot calculate EV/EBITDA - EBITDA or MarketCap not available")
+        print("Cannot calculate EV/EBITDA - EBITDA or MarketCap not available")
         df_processed['EV_EBITDA_Approx'] = np.nan
     
-    # Clean up any NaN-only columns
     for col in df_processed.columns:
         if df_processed[col].isna().all():
-            print(f"⚠️  Column '{col}' is all NaN - keeping for structure consistency")
+            print(f"Column '{col}' is all NaN - keeping for structure consistency")
     
     print(f"Processed fundamentals: {df_processed.shape} with {len(df_processed.columns)} columns")
     return df_processed
 
-
-def prepare_fundamentals_for_merge(df_full_fundamentals):
-    """
-    LEGACY FUNCTION - kept for backward compatibility
-    Select essential fundamentals and calculate ratios. 
-    Reduces from 238 columns to ~28 key metrics.
-    """
-    # ESSENTIAL RAW FUNDAMENTALS
-    essential_columns = {
-        'MarketCap': 'MarketCap', 'EnterpriseValue': 'EnterpriseValue',
-        'TotalRevenue': 'TotalRevenue', 'TotalAssets': 'TotalAssets',
-        'NetIncome': 'NetIncome', 'EBITDA': 'EBITDA',
-        'FreeCashFlow': 'FreeCashFlow', 'OperatingCashFlow': 'OperatingCashFlow',
-        'StockholdersEquity': 'StockholdersEquity', 'TotalDebt': 'TotalDebt',
-        'CurrentAssets': 'CurrentAssets', 'CurrentLiabilities': 'CurrentLiabilities',
-        'TangibleBookValue': 'TangibleBookValue', 'OrdinarySharesNumber': 'OrdinarySharesNumber',
-        'BasicEPS': 'BasicEPS', 'DilutedEPS': 'DilutedEPS',
-        'CashDividendsPaid': 'CashDividendsPaid',
-        'symbol': 'symbol', 'periodType': 'periodType'
-    }
-    
-    # Select available columns
-    available_columns = {k: v for k, v in essential_columns.items() 
-                        if v in df_full_fundamentals.columns}
-    
-    print(f"Available fundamental columns: {list(available_columns.keys())}")
-    print(f"Missing columns: {set(essential_columns.keys()) - set(available_columns.keys())}")
-    
-    df_selected = df_full_fundamentals[[col for col in available_columns.values()]].copy()
-    
-    # Calculate ratios only if required columns are available
-    if 'MarketCap' in df_selected.columns and 'NetIncome' in df_selected.columns:
-        df_selected['PE_Ratio'] = np.where(
-            (df_selected['NetIncome'] > 0) & (df_selected['MarketCap'] > 0),
-            df_selected['MarketCap'] / df_selected['NetIncome'], np.nan)
-    else:
-        print("Warning: Cannot calculate PE_Ratio - MarketCap or NetIncome not available")
-        df_selected['PE_Ratio'] = np.nan
-    
-    if 'MarketCap' in df_selected.columns and 'TangibleBookValue' in df_selected.columns:
-        df_selected['PB_Ratio'] = np.where(
-            (df_selected['TangibleBookValue'] > 0) & (df_selected['MarketCap'] > 0),
-            df_selected['MarketCap'] / df_selected['TangibleBookValue'], np.nan)
-    else:
-        print("Warning: Cannot calculate PB_Ratio - MarketCap or TangibleBookValue not available")
-        df_selected['PB_Ratio'] = np.nan
-    
-    if 'StockholdersEquity' in df_selected.columns and 'TotalDebt' in df_selected.columns:
-        df_selected['DebtEquity_Ratio'] = np.where(
-            (df_selected['StockholdersEquity'] > 0) & (df_selected['TotalDebt'] >= 0),
-            df_selected['TotalDebt'] / df_selected['StockholdersEquity'], np.nan)
-    else:
-        print("Warning: Cannot calculate DebtEquity_Ratio - StockholdersEquity or TotalDebt not available")
-        df_selected['DebtEquity_Ratio'] = np.nan
-    
-    if 'StockholdersEquity' in df_selected.columns and 'NetIncome' in df_selected.columns:
-        df_selected['ROE_Fund'] = np.where(
-            (df_selected['StockholdersEquity'] > 0),
-            df_selected['NetIncome'] / df_selected['StockholdersEquity'], np.nan)
-    else:
-        print("Warning: Cannot calculate ROE_Fund - StockholdersEquity or NetIncome not available")
-        df_selected['ROE_Fund'] = np.nan
-    
-    if 'TotalAssets' in df_selected.columns and 'NetIncome' in df_selected.columns:
-        df_selected['ROA'] = np.where(
-            (df_selected['TotalAssets'] > 0),
-            df_selected['NetIncome'] / df_selected['TotalAssets'], np.nan)
-    else:
-        print("Warning: Cannot calculate ROA - TotalAssets or NetIncome not available")
-        df_selected['ROA'] = np.nan
-    
-    if 'MarketCap' in df_selected.columns and 'CashDividendsPaid' in df_selected.columns:
-        df_selected['DividendYield_Calc'] = np.where(
-            (df_selected['MarketCap'] > 0) & (df_selected['CashDividendsPaid'] < 0),
-            abs(df_selected['CashDividendsPaid']) / df_selected['MarketCap'], np.nan)
-    else:
-        print("Warning: Cannot calculate DividendYield_Calc - MarketCap or CashDividendsPaid not available")
-        df_selected['DividendYield_Calc'] = np.nan
-    
-    # Get latest data per symbol
-    if 'annual' in df_selected['periodType'].values:
-        annual_data = df_selected[df_selected['periodType'] == 'annual']
-        latest_data = annual_data.groupby('symbol').last().reset_index()
-    else:
-        latest_data = df_selected.groupby('symbol').last().reset_index()
-    
-    # Drop meta columns
-    final_columns = [col for col in latest_data.columns if col != 'periodType']
-    return latest_data[final_columns]
 
 
 def get_yahooquery_financials():
@@ -200,10 +108,15 @@ def get_yahooquery_financials():
     
     return df_processed
 
-def generate_fundamental_data():
+def generate_fundamental_data(enable_diagnostics=False):
+
     """
     Main function to generate fundamental data - called from main.py
     Uses ALL available yahooquery endpoints to get COMPLETE fundamentals (200+ columns)
+    
+    Args:
+        enable_diagnostics (bool): If True, enables detailed column analysis logging
+                                 If False, runs normal processing without diagnostic output
     """
     # Test mode logic and logging centrally from config
     symbols = get_filtered_symbols_with_logging("Yahoo Fundamentals")
@@ -268,10 +181,10 @@ def generate_fundamental_data():
                                 
                                 if trailing_eps and eps_next_year and trailing_eps > 0:
                                     symbol_data['Forward_EPS_Growth_Percent'] = ((eps_next_year - trailing_eps) / trailing_eps) * 100
-                    except Exception as e:
-                        print(f"  Warning: Could not get EPS growth for {symbol}: {e}")
-            except Exception as e:
-                print(f"  Warning: Could not get key_stats for {symbol}: {e}")
+                    except Exception:
+                        pass
+            except Exception:
+                pass
             
             # Add SUMMARY_DETAIL data  
             try:
@@ -281,8 +194,8 @@ def generate_fundamental_data():
                     # Add all summary_detail with prefix to avoid conflicts
                     for key, value in summary.items():
                         symbol_data[f'Summary_{key}'] = value
-            except Exception as e:
-                print(f"  Warning: Could not get summary_detail for {symbol}: {e}")
+            except Exception:
+                pass
             
             # Add FINANCIAL_DATA 
             try:
@@ -292,14 +205,12 @@ def generate_fundamental_data():
                     # Add all financial_data with prefix to avoid conflicts
                     for key, value in fin_data.items():
                         symbol_data[f'FinData_{key}'] = value
-            except Exception as e:
-                print(f"  Warning: Could not get financial_data for {symbol}: {e}")
+            except Exception:
+                pass
             
             all_fundamental_data.append(symbol_data)
             
-        except Exception as e:
-            print(f"Error enhancing data for {symbol}: {e}")
-            # Add minimal data for failed symbols
+        except Exception:
             all_fundamental_data.append({'symbol': symbol})
         
         time.sleep(0.3)  # Rate limiting
@@ -310,24 +221,31 @@ def generate_fundamental_data():
     
     # Create comprehensive DataFrame from all collected data
     df_all_fundamentals = pd.DataFrame(all_fundamental_data)
-    
-    print(f"✅ Final dataset: {df_all_fundamentals.shape} with {df_all_fundamentals.shape[1]} total columns")
-    print(f"   Columns include: financial_data, key_stats, summary_detail, financial_data endpoints")
-    
-    # Save full raw data (ALL columns)
-    df_all_fundamentals.to_feather(PATH_DATAFRAME_YAHOOQUERY_FINANCIAL_FEATHER)
-    print(f"Full fundamentals saved: {PATH_DATAFRAME_YAHOOQUERY_FINANCIAL_FEATHER}")
-    
-    # Process for essential metrics (for UI display)
-    df_processed = prepare_fundamentals_for_merge_v2(df_all_fundamentals)
-    
-    # Save processed data (essential columns for display)
-    df_processed.to_feather(PATH_DATAFRAME_YAHOOQUERY_FINANCIAL_PROCESSED_FEATHER)
-    print(f"Processed fundamentals saved: {PATH_DATAFRAME_YAHOOQUERY_FINANCIAL_PROCESSED_FEATHER}")
-    print(f"Ready for merge: {df_processed.shape} ({df_processed.shape[1]} display columns)")
-    print(f"Available for filtering: {df_all_fundamentals.shape[1]} total columns")
 
-    # --- Database Persistence ---
+    # Apply fixes for known issues
+    if 'KeyStats_lastSplitDate' in df_all_fundamentals.columns:
+        df_all_fundamentals['KeyStats_lastSplitDate'] = df_all_fundamentals['KeyStats_lastSplitDate'].astype(str)
+    df_all_fundamentals = df_all_fundamentals.replace(
+        ['Infinity', '-Infinity', 'inf', '-inf', np.inf, -np.inf], 
+        np.nan
+    )
+    object_columns = df_all_fundamentals.select_dtypes(include='object').columns
+    for col in object_columns:
+        try:
+            df_all_fundamentals[col] = df_all_fundamentals[col].astype(str)
+        except Exception:
+            pass
+
+    try:
+        df_all_fundamentals.to_feather(PATH_DATAFRAME_YAHOOQUERY_FINANCIAL_FEATHER)
+    except Exception:
+        csv_path = PATH_DATAFRAME_YAHOOQUERY_FINANCIAL_FEATHER.with_suffix('.csv')
+        df_all_fundamentals.to_csv(csv_path, index=False)
+        return
+
+    df_processed = prepare_fundamentals_for_merge(df_all_fundamentals)
+    df_processed.to_feather(PATH_DATAFRAME_YAHOOQUERY_FINANCIAL_PROCESSED_FEATHER)
+
     truncate_table(TABLE_FUNDAMENTAL_DATA_YAHOO)
     insert_into_table(
         table_name=TABLE_FUNDAMENTAL_DATA_YAHOO,
@@ -341,6 +259,7 @@ def generate_fundamental_data():
         if_exists="replace"
     )
     
+
 if __name__ == "__main__":
 
     start = time.time()
