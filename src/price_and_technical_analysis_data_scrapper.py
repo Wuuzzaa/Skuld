@@ -16,12 +16,14 @@ def scrape_and_save_price_and_technical_indicators():
     # Get symbols with new configuration system
     symbols = get_filtered_symbols_with_logging("Technical Analysis Scraping")
     
-    # Build items list for processing
-    items = [(symbol, SYMBOLS_EXCHANGE.get(symbol, "NASDAQ")) for symbol in symbols]
-    
     results = []
 
-    for symbol, exchange in items:
+    # Use the exchange from SYMBOLS_EXCHANGE mapping (from Excel file)
+    for symbol in symbols:
+        exchange = SYMBOLS_EXCHANGE.get(symbol)
+        if not exchange:
+            print(f"WARNING: No exchange found for symbol {symbol}. Skipping.")
+            continue
         try:
             analysis = TA_Handler(
                 symbol=symbol,
@@ -36,17 +38,17 @@ def scrape_and_save_price_and_technical_indicators():
             # extract values
             indicators = data.indicators
             indicators["symbol"] = symbol
+            #indicators["exchange"] = exchange
             indicators["recommendation"] = data.summary["RECOMMENDATION"]
             indicators["recommendation_buy_amount"] = data.summary["BUY"]
             indicators["recommendation_neutral_amount"] = data.summary["NEUTRAL"]
             indicators["recommendation_sell_amount"] = data.summary["SELL"]
             # TODO: add price data here
 
-            # add results
             results.append(indicators)
 
         except Exception as e:
-            print(f"Error with symbol: {symbol}: {e}")
+            print(f"Error with symbol: {symbol}: {e}")  
 
     # make a dataframe from the results
     df = pd.DataFrame(results)

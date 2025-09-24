@@ -548,50 +548,10 @@ DATAFRAME_DATA_MERGED_COLUMNS = [
     # Option Pricing Columns (calculated during merge for ALL options)
     ##################
     "IntrinsicValue",      # Calls: max(stock - strike, 0) | Puts: max(strike - stock, 0)
-    "ExtrinsicValue",      # max(theoPrice - IntrinsicValue, 0) for all options
+    "ExtrinsicValue"     # max(theoPrice - IntrinsicValue, 0) for all options
 
-    ##################
-    # Married Put KPIs (precise dividend-adjusted calculations for 100-share positions)
-    ##################
-    "MP_SharesQuantity",           # Number of shares in position (100)
-    "MP_StockInvestment",          # 100 shares × stock price
-    "MP_PutInvestment",            # 100 puts × put premium
-    "MP_TotalInvestment",          # Total capital required for position
-    "MP_IntrinsicValue",           # Total put intrinsic value for position
-    "MP_TimeValue",                # Total put time value for position
-    "MP_EstimatedDividends",       # Total dividends for 100 shares during holding
-    "MP_MaxRisk_Net",              # Max risk AFTER dividend reduction (100 shares)
-    "MP_RiskPercent_Net",          # Risk as % of total capital (with dividends)
-    "MP_Breakeven_Net",            # Breakeven price per share (with dividends)
-    "MP_BreakevenUpside_Net",      # Required stock movement % (with dividends)
-    "MP_DividendRiskReduction",    # Dollar risk reduction from dividends (100 shares)
-    "MP_DividendImpactPercent",    # Percentage risk reduction from dividends
-    #"MP_TotalFees",               # Trading fees (buy stock, buy put, exit)
-    #"MP_QuarterlyDividend",       # Estimated quarterly dividend
-    #"MP_DividendPayments",        # Number of payments during holding
-    #"MP_MaxRisk_Gross",           # Max risk WITHOUT dividends
-    #"MP_RiskPercent_Gross",       # Risk % without dividends
-    #"MP_Breakeven_Gross",         # Breakeven without dividends
-    #"MP_BreakevenUpside_Gross",   # Required movement % without dividends
-
-    ##################
-    # Dividend Stability Analysis (for Married Put strategies)
-    ##################
-    #"dividend_stability_label",        # "STABLE", "OK_CHECK_REQUIRED", "NOT_STABLE"
-    #"dividend_stability_score",        # 0-7 score
-    #"dividend_regularity_ratio",       # % years with payments
-    #"median_payments_per_year",        # Payment frequency (numeric)
-    "dividend_frequency_type",         # "Quarterly", "Semi-annual", "Annual", "Irregular"
-    #"dividend_frequency_consistency",  # 0-1 consistency score
-    #"dividend_cuts_count",             # Number of YoY cuts
-    #"dividend_streak_years",           # Years without cuts
-    #"dividend_cagr",                   # 10-year Compound Annual Growth Rate (CAGR) of dividends
-    #"dividend_volatility",             # Volatility measure
-    #"payout_ratio_stable",            # % years with sustainable payout
-    #"fcf_coverage_adequate",          # FCF coverage quality
-    #"earnings_coverage",              # Earnings coverage ratio
-    #"analysis_notes"                  # Detailed reasoning
 ]
+
 
 # JMS Settings
 JMS_TP_GOAL = 0.6
@@ -605,7 +565,7 @@ JMS_MENTAL_STOP = 2
 
 # Symbol selection
 SYMBOL_SELECTION = {
-    "mode": "max",                   # "all", "list", "file", "max"
+    "mode": "list",                   # "all", "list", "file", "max"
     "symbols": ["AAPL"],             # Used when mode="list"
     "file_path": None,               # Used when mode="file"
     "max_symbols": 200,               # Used when mode="max" or as limit for "all"
@@ -618,29 +578,25 @@ SYMBOL_SELECTION = {
 OPTIONS_COLLECTION_RULES = [
     {
         "name": "weekly_short_term",
-        "enabled": False,
-        "days_range": [1, 60],            # Today + 1 to 60 days
+        "enabled": True,
+        "days_range": [1, 40],            # Today + 1 to 60 days
         "frequency": "every_friday",      # "every_friday", "monthly_3rd_friday", "quarterly_3rd_friday"
         "description": "Weekly options for next 2 months"
     },
     {
         "name": "monthly_medium_term", 
-        "enabled": False,
-        "days_range": [61, 180],
+        "enabled": True,
+        "days_range": [61, 120],
         "frequency": "monthly_3rd_friday",
         "description": "Monthly options 2-6 months out"
     },
     {
         "name": "leaps_long_term",
         "enabled": True,                 # Disabled by default
-        "days_range": [181, 365],         # Current married put range
-        "frequency": "monthly_3rd_friday",      # Changed from monthly_3rd_friday to every_friday
+        "days_range": [180, 365],         # Current married put range
+        "frequency": "every_friday",      # Changed from monthly_3rd_friday to every_friday
         "description": "LEAPS options for married put strategies"
     }
 ]
 
 # =============================================================================
-
-
-
-
