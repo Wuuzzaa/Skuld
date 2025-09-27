@@ -4,6 +4,33 @@ import re
 from bs4 import BeautifulSoup
 from config import *
 
+#todo parsen
+#todo speichern als feather
+#todo in main aufrufen
+#todo in datenmodell einbinden
+"""
+================================================================================
+ZUSAMMENFASSUNG ALLER OPTIONS-DATEN
+================================================================================
+Symbol  historical_volatilityimplied_volatility  iv_high             iv_low              iv_percentile       iv_rank             open_int_30d        put_call_oi_ratio   put_call_vol_ratio  todays_open_interesttodays_volume       volume_avg_30d      
+--------------------------------------------------------------------------------
+A       27.59%              29.38%              59.03%              21.99%              45%                 19.95%              31,668              0.72                0.25                28,035              169                 1,255               
+AA      38.05%              55.39%              100.57%             39.15%              84%                 26.44%              333,056             0.85                0.81                328,936             30,707              23,357              
+AAL     36.68%              53.80%              97.36%              35.00%              75%                 30.15%              3,105,697           1.82                1.51                2,970,066           129,254             127,055             
+AAPL    24.84%              24.41%              65.20%              15.97%              38%                 17.15%              5,674,393           0.68                0.38                5,815,209           1,253,094           1,130,220           
+AAT     24.08%              174.74%             174.74%             24.46%              99%                 100.00%             321                 0.19                0.00                362                 2                   10                  
+ABBV    16.51%              23.06%              51.27%              17.68%              42%                 16.01%              325,360             0.71                0.85                326,332             16,105              14,360              
+ABEV    20.17%              60.88%              248.79%             21.30%              68%                 17.40%              77,835              0.69                0.00                79,152              90                  323                 
+ABM     22.09%              30.55%              57.53%              19.41%              33%                 29.21%              1,110               0.42                0.00                781                 4                   118                 
+ABR     24.22%              39.10%              74.86%              18.09%              52%                 37.01%              226,676             1.03                0.35                228,117             12,295              8,980               
+ABT     15.82%              25.81%              42.50%              13.95%              86%                 41.53%              190,263             0.76                0.30                175,250             12,917              8,459               
+ACHR    44.65%              79.64%              170.98%             42.24%              34%                 29.05%              970,516             0.32                0.35                1,040,157           75,324              87,543              
+ACN     23.49%              30.34%              46.36%              17.15%              63%                 45.15%              139,678             0.79                0.83                173,882             27,230              24,059              
+ACNB    24.19%              85.72%              85.72%              24.43%              99%                 100.00%             466                 65.57               0.00                466                 1                   1                   
+ADC     14.36%              21.02%              36.31%              12.99%              68%                 34.46%              4,521               0.30                0.47                4,128               75                  74                  
+ADI     22.57%              30.24%              70.75%              23.01%              41%                 15.15%              97,815              0.73                1.45                93,768              4,241               4,228               
+
+"""
 
 def get_all_options_data(symbol):
     """
@@ -35,9 +62,9 @@ def get_all_options_data(symbol):
     session.headers.update(headers)
 
     try:
-        # Erst die Hauptseite besuchen (wie ein echter Benutzer)
-        main_page = session.get("https://www.barchart.com", timeout=15)
-        time.sleep(1)  # Kurze Pause
+        # # Erst die Hauptseite besuchen (wie ein echter Benutzer)
+        # main_page = session.get("https://www.barchart.com", timeout=15)
+        # time.sleep(1)  # Kurze Pause
 
         # Dann die spezifische Symbol-Seite
         response = session.get(url, timeout=15)
@@ -215,7 +242,7 @@ def get_multiple_symbols_complete(symbols):
                 print(f"  ✓ {symbol}: {found_count} Felder gefunden")
 
         # Längere Pause zwischen Anfragen um Rate Limiting zu vermeiden
-        pause_time = 2.0 + (i * 0.1)  # Graduell längere Pausen
+        pause_time = 1  # Graduell längere Pausen
         print(f"    💤 Pause: {pause_time:.1f}s")
         time.sleep(pause_time)
 
