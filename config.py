@@ -17,6 +17,8 @@ PATH_DATAFRAME_DATA_ANALYST_PRICE_TARGET_FEATHER = PATH_DATA / 'price_target_df.
 PATH_DATAFRAME_EARNING_DATES_FEATHER = PATH_DATA / 'earning_dates.feather'
 PATH_DATAFRAME_YAHOOQUERY_OPTION_CHAIN_FEATHER = PATH_DATA / 'yahooquery_option_chain.feather'
 PATH_DATAFRAME_YAHOOQUERY_FINANCIAL_FEATHER = PATH_DATA / 'yahooquery_financial.feather'
+PATH_DATAFRAME_BARCHART_FEATHER = PATH_DATA / 'barchart.feather'
+
 
 # Dividend Radar
 URL_DIVIDEND_RADAR = "https://www.portfolio-insight.com/dividend-radar"
