@@ -4,10 +4,9 @@ import re
 from bs4 import BeautifulSoup
 from config import *
 
-#todo parsen
-#todo speichern als feather
 #todo in main aufrufen
 #todo in datenmodell einbinden
+
 """
 ================================================================================
 ZUSAMMENFASSUNG ALLER OPTIONS-DATEN
@@ -32,10 +31,35 @@ ADI     22.57%              30.24%              70.75%              23.01%      
 
 """
 
-def get_all_options_data(symbol):
+def _parse_barchart(df):
+    # Prozentwerte als float (0.x) speichern
+    percent_cols = [
+        'historical_volatility', 'implied_volatility', 'iv_high', 'iv_low',
+        'iv_percentile', 'iv_rank'
+    ]
+    for col in percent_cols:
+        df[col] = df[col].str.replace('%', '').astype(float) / 100
+
+    # Kommas aus Zahlen entfernen und als int speichern
+    int_cols = [
+        'open_int_30d', 'todays_open_interest', 'todays_volume', 'volume_avg_30d'
+    ]
+    for col in int_cols:
+        df[col] = df[col].str.replace(',', '').astype(int)
+
+    # put_call_vol_ratio and put_call_oi_ratio as float from object
+    for col in ["put_call_vol_ratio", "put_call_oi_ratio"]:
+        df[col] = df[col].astype(float)
+
+    return df
+
+
+def _get_all_options_data(symbol):
     """
     Holt ALLE Options-Daten durch intelligente Label-Suche (mit Anti-Detection)
     """
+
+
     url = f"https://www.barchart.com/stocks/quotes/{symbol}/overview"
 
     # Erweiterte Headers um als echter Browser zu erscheinen
@@ -77,11 +101,11 @@ def get_all_options_data(symbol):
             "symbol": symbol}
 
         # Methode 1: Suche nach Label-Value Paaren
-        label_value_pairs = find_label_value_pairs(soup)
+        label_value_pairs = _find_label_value_pairs(soup)
         options_data.update(label_value_pairs)
 
         # Methode 2: Spezifische Tabellen-Suche
-        table_data = find_table_data(soup)
+        table_data = _find_table_data(soup)
         options_data.update(table_data)
 
         return options_data
@@ -105,7 +129,7 @@ def get_all_options_data(symbol):
             "error": str(e)}
 
 
-def find_label_value_pairs(soup):
+def _find_label_value_pairs(soup):
     """
     Findet Label-Value Paare durch Text-Analyse
     """
@@ -141,7 +165,7 @@ def find_label_value_pairs(soup):
 
             for label, key in target_labels.items():
                 if key not in results:  # Nur wenn noch nicht gefunden
-                    value = extract_value_near_label(container, label)
+                    value = _extract_value_near_label(container, label)
                     if value:
                         results[key] = value
                         print(f"    ✓ {label}: {value}")
@@ -149,7 +173,7 @@ def find_label_value_pairs(soup):
     return results
 
 
-def extract_value_near_label(container, label):
+def _extract_value_near_label(container, label):
     """
     Extrahiert Wert der nahe einem Label steht
     """
@@ -181,7 +205,7 @@ def extract_value_near_label(container, label):
     return None
 
 
-def find_table_data(soup):
+def _find_table_data(soup):
     """
     Findet Daten in Tabellen-Strukturen
     """
@@ -214,10 +238,17 @@ def find_table_data(soup):
     return results
 
 
-def get_multiple_symbols_complete(symbols):
+def scrape_barchart(testmode):
     """
     Holt komplette Daten für mehrere Symbole (mit Retry-Logic)
     """
+
+    # check testmode
+    if testmode:
+        symbols = SYMBOLS[:5]
+    else:
+        symbols = SYMBOLS
+
     all_results = []
     retry_list = []
 
@@ -225,7 +256,7 @@ def get_multiple_symbols_complete(symbols):
         print(f"\nVerarbeite {symbol} ({i + 1}/{len(symbols)})")
         print("-" * 40)
 
-        symbol_data = get_all_options_data(symbol)
+        symbol_data = _get_all_options_data(symbol)
 
         # Check für 403 Errors
         if symbol_data.get('error') == '403_forbidden':
@@ -241,8 +272,7 @@ def get_multiple_symbols_complete(symbols):
             else:
                 print(f"  ✓ {symbol}: {found_count} Felder gefunden")
 
-        # Längere Pause zwischen Anfragen um Rate Limiting zu vermeiden
-        pause_time = 1  # Graduell längere Pausen
+        pause_time = 1
         print(f"    💤 Pause: {pause_time:.1f}s")
         time.sleep(pause_time)
 
@@ -254,7 +284,7 @@ def get_multiple_symbols_complete(symbols):
 
         for symbol in retry_list:
             print(f"\nRetry: {symbol}")
-            symbol_data = get_all_options_data(symbol)
+            symbol_data = _get_all_options_data(symbol)
             all_results.append(symbol_data)
 
             found_count = len([k for k in symbol_data.keys() if k not in ['symbol', 'error']])
@@ -266,45 +296,20 @@ def get_multiple_symbols_complete(symbols):
             # Sehr lange Pause beim Retry
             time.sleep(10)
 
-    return all_results
+    # results as dataframe
+    df = pd.DataFrame(all_results)
 
+    # parsen
+    df = _parse_barchart(df)
 
-def print_summary_table(results):
-    """
-    Zeigt Zusammenfassung aller Ergebnisse als Tabelle
-    """
-    print("\n" + "=" * 80)
-    print("ZUSAMMENFASSUNG ALLER OPTIONS-DATEN")
-    print("=" * 80)
-
-    # Alle möglichen Keys sammeln
-    all_keys = set()
-    for result in results:
-        all_keys.update(result.keys())
-    all_keys.discard('symbol')
-    all_keys.discard('error')
-
-    # Header
-    print(f"{'Symbol':<8}", end="")
-    for key in sorted(all_keys):
-        print(f"{key:<20}", end="")
-    print()
-    print("-" * 80)
-
-    # Daten
-    for result in results:
-        symbol = result.get('symbol', 'Unknown')
-        print(f"{symbol:<8}", end="")
-
-        for key in sorted(all_keys):
-            value = result.get(key, 'N/A')
-            print(f"{str(value):<20}", end="")
-        print()
+    # store dataframe
+    df.to_feather(PATH_DATAFRAME_BARCHART_FEATHER)
 
 
 # Test mit Timer
 if __name__ == "__main__":
     import datetime
+    pd.set_option('display.max_columns', None)
 
     start_time = time.time()
     start_datetime = datetime.datetime.now()
@@ -314,26 +319,10 @@ if __name__ == "__main__":
     print("VOLLSTÄNDIGE OPTIONS-DATEN EXTRAKTION")
     print("=" * 60)
 
-    results = get_multiple_symbols_complete(SYMBOLS)
-
-    # Zeige detaillierte Ergebnisse
-    print_summary_table(results)
+    scrape_barchart(testmode=True)
 
     # Timer-Statistiken
     total_duration = time.time() - start_time
     end_datetime = datetime.datetime.now()
 
-    print(f"\n⏱️  GESAMT: {total_duration:.2f}s für {len(results)} Symbole")
-    print(f"⏱️  Durchschnitt: {total_duration / len(results):.2f}s pro Symbol")
-    print(f"🏁 Ende: {end_datetime.strftime('%H:%M:%S')}")
-
-    # Datenqualität-Check
-    successful_symbols = [r for r in results if 'error' not in r]
-    if successful_symbols:
-        avg_fields = sum(len(r) - 1 for r in successful_symbols) / len(successful_symbols)  # -1 für 'symbol' key
-        print(f"📊 Durchschnittlich {avg_fields:.1f} Datenfelder pro Symbol gefunden")
-
-    # Hochrechnung
-    projected_time = (total_duration / len(results)) * 1000
-    projected_minutes = projected_time / 60
-    print(f"📈 Hochrechnung für 1000 Symbole: ~{projected_minutes:.1f} Minuten")
+    print(f"\n⏱️  GESAMT: {total_duration:.2f}s ")
