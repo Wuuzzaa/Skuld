@@ -6,7 +6,7 @@ SELECT
 	-- OptionDataYahoo
 	a.symbol, 
 	a."option-type", 
-	a.expiration_date, 
+	DATE(a.expiration_date) as expiration_date, 
 	a.strike, 
 	a.bid, 
 	a.ask, 
@@ -38,9 +38,12 @@ SELECT
 	CASE WHEN c.contractSymbol IS NOT NULL THEN TRUE ELSE FALSE END as has_option_pricing_metrics,
 	c.days_to_expiration,
 	c.premium_option_price,
+	c.spread,
+    c.spread_ptc,
 	c.intrinsic_value,
 	c.extrinsic_value,
-	c.moneyness
+	c.strike_stock_price_difference,
+    c.strike_stock_price_difference_ptc
 FROM
 	OptionDataYahoo as a
 	LEFT OUTER JOIN OptionDataTradingView AS b ON a.contractSymbol = b.option_osi

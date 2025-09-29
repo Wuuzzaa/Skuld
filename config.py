@@ -565,10 +565,10 @@ JMS_MENTAL_STOP = 2
 
 # Symbol selection
 SYMBOL_SELECTION = {
-    "mode": "list",                   # "all", "list", "file", "max"
-    "symbols": ["AAPL"],             # Used when mode="list"
+    "mode": "all",                   # "all", "list", "file", "max"
+    "symbols": ["AAPL","MO"],             # Used when mode="list"
     "file_path": None,               # Used when mode="file"
-    "max_symbols": 200,               # Used when mode="max" or as limit for "all"
+    "max_symbols": 1000,               # Used when mode="max" or as limit for "all"
     "use_max_limit": True            # If True, applies max_symbols limit to any mode
 }
 
@@ -578,14 +578,14 @@ SYMBOL_SELECTION = {
 OPTIONS_COLLECTION_RULES = [
     {
         "name": "weekly_short_term",
-        "enabled": True,
+        "enabled": False,
         "days_range": [1, 40],            # Today + 1 to 60 days
         "frequency": "every_friday",      # "every_friday", "monthly_3rd_friday", "quarterly_3rd_friday"
         "description": "Weekly options for next 2 months"
     },
     {
         "name": "monthly_medium_term", 
-        "enabled": True,
+        "enabled": False,
         "days_range": [61, 120],
         "frequency": "monthly_3rd_friday",
         "description": "Monthly options 2-6 months out"
@@ -593,8 +593,8 @@ OPTIONS_COLLECTION_RULES = [
     {
         "name": "leaps_long_term",
         "enabled": True,                 # Disabled by default
-        "days_range": [180, 365],         # Current married put range
-        "frequency": "every_friday",      # Changed from monthly_3rd_friday to every_friday
+        "days_range": [180, 500],         # Current married put range
+        "frequency": "monthly_3rd_friday",      # Changed from monthly_3rd_friday to every_friday
         "description": "LEAPS options for married put strategies"
     }
 ]

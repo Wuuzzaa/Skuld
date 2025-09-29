@@ -7,7 +7,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import *
-from src.live_stock_price_collector import fetch_current_prices
+from src.live_stock_price_collector import fetch_current_prices, fetch_current_prices3
 
 
 def merge_data_dataframes():
@@ -45,7 +45,7 @@ def merge_data_dataframes():
         fundamentals_path = PATH_DATA / 'yahooquery_financial_processed.feather'
         df_fundamentals = pd.read_feather(fundamentals_path)
         print(f"Loaded fundamentals: {df_fundamentals.shape}")
-        print(f"Fundamental symbols: {list(df_fundamentals['symbol'].unique())}")
+        print(f"Fundamental symbols: {len(list(df_fundamentals['symbol'].unique()))}")
         
         # Merge fundamentals
         df_merged = pd.merge(df_merged, df_fundamentals, how='left', on='symbol')
@@ -64,7 +64,7 @@ def merge_data_dataframes():
         symbols_for_prices = df_merged['symbol'].dropna().astype(str).unique().tolist()
         print(f"Fetching live prices for {len(symbols_for_prices)} unique symbols")
 
-        df_live_prices = fetch_current_prices(symbols_for_prices)
+        df_live_prices = fetch_current_prices3()
         print(f"Fetched live prices: {df_live_prices.shape}")
         print(f"Live price symbols: {df_live_prices['symbol'].nunique()}")
 
