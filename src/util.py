@@ -212,6 +212,79 @@ def opra_to_osi(opra_code):
     osi_code = f"{symbol}{year}{month}{day}{opt_type}{strike_osi}"
     return osi_code
 
+def opra_to_symbol(opra_code):
+    """
+    Extracts symbol from OPRA option code.
+
+    OPRA format (used by many APIs and market data providers) looks like:
+        OPRA:<SYMBOL><YY><MM><DD><C/P><STRIKE>
+        Example: 'OPRA:AAPL250606C110.0'
+
+    Parameters:
+        opra_code (str): The OPRA-style option symbol (e.g. 'OPRA:AAPL250606C110.0')
+
+    Returns:
+        str: The corresponding OSI code (e.g. 'AAPL250606C00110000')
+
+    Raises:
+        ValueError: If the input does not match the expected OPRA format.
+
+    Example:
+        >>> opra_to_osi("OPRA:AAPL250606C110.0")
+        'AAPL'
+    """
+
+    # Remove optional "OPRA:" prefix if present
+    if opra_code.startswith("OPRA:"):
+        opra_code = opra_code[5:]
+
+    # Extract components: Symbol, Date (YYMMDD), Option Type, and Strike
+    match = re.match(r'^([A-Z]+)(\d{2})(\d{2})(\d{2})([CP])([\d.]+)$', opra_code)
+    if not match:
+        raise ValueError("Invalid OPRA format: " + opra_code)
+
+    symbol, year, month, day, opt_type, strike_str = match.groups()
+
+    return symbol
+
 if __name__ == "__main__":
     expiry_dates = get_option_expiry_dates()
     pass
+
+class Singleton:
+    """
+    A non-thread-safe helper class to ease implementing singletons.
+    This should be used as a decorator -- not a metaclass -- to the
+    class that should be a singleton.
+
+    The decorated class can define one `__init__` function that
+    takes only the `self` argument. Also, the decorated class cannot be
+    inherited from. Other than that, there are no restrictions that apply
+    to the decorated class.
+
+    To get the singleton instance, use the `instance` method. Trying
+    to use `__call__` will result in a `TypeError` being raised.
+
+    """
+
+    def __init__(self, decorated):
+        self._decorated = decorated
+
+    def instance(self):
+        """
+        Returns the singleton instance. Upon its first call, it creates a
+        new instance of the decorated class and calls its `__init__` method.
+        On all subsequent calls, the already created instance is returned.
+
+        """
+        try:
+            return self._instance
+        except AttributeError:
+            self._instance = self._decorated()
+            return self._instance
+
+    def __call__(self):
+        raise TypeError('Singletons must be accessed through `instance()`.')
+
+    def __instancecheck__(self, inst):
+        return isinstance(inst, self._decorated)

@@ -9,6 +9,9 @@ from datetime import datetime
 from config import PATH_DATAFRAME_LIVE_STOCK_PRICES_FEATHER, TABLE_STOCK_PRICE
 from config_utils import get_filtered_symbols_with_logging
 from src.database import insert_into_table, truncate_table
+from tradingview_screener import Query
+
+from src.yahooquery_scraper import YahooQueryScraper
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -81,6 +84,43 @@ def fetch_current_prices(symbols, batch_size=50, delay=0.5):
     )
     return df
 
+
+def ticker_to_symbol(ticker):
+    """Convert a ticker string like 'NASDAQ:AAPL' to 'AAPL'."""
+    if ':' in ticker:
+        return ticker.split(':', 1)[1]
+    return ticker
+
+def fetch_current_prices3():
+    """
+    Fetch current prices for a list of symbols using yfinance in batches.
+
+    Returns a DataFrame with columns: symbol, live_stock_price, price_source, live_price_timestamp
+    """
+    results = []
+
+    yahoo_query = YahooQueryScraper.instance()
+    data = yahoo_query.get_modules()
+
+
+    for symbol, symbol_data in data.items():
+        #https://yahooquery.dpguthrie.com/guide/ticker/modules/#price
+        price_data = symbol_data.get('price')
+        try:
+            results.append({'symbol': symbol, 'live_stock_price': price_data['regularMarketPrice'], 'price_source': price_data['regularMarketSource'], 'live_price_timestamp': price_data['regularMarketTime']})
+        except Exception as e:
+                results.append({'symbol': symbol, 'live_stock_price': None, 'price_source': f'error:{type(e).__name__}', 'live_price_timestamp': datetime.now()})
+    
+    df = pd.DataFrame(results)
+
+    # --- Database Persistence ---
+    truncate_table(TABLE_STOCK_PRICE)
+    insert_into_table(
+        table_name=TABLE_STOCK_PRICE,
+        dataframe=df,
+        if_exists="append"
+    )
+    return df
 
 def merge_prices_to_dataframe(df, symbol_col='symbol', how='left', batch_size=50, delay=0.5):
     """

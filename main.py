@@ -1,26 +1,28 @@
 import argparse
 from src.database import run_migrations, select_into_dataframe, truncate_table
 from src.feature_engineering import feature_construction
-from src.optiondata_feathers_to_df_merge import combine_feather_files
-from src.tradingview_optionchain_scrapper import scrape_option_data
+from src.tradingview_optionchain_scrapper import scrape_option_data_trading_view
 from src.price_and_technical_analysis_data_scrapper import scrape_and_save_price_and_technical_indicators
 from src.merge_feather_dataframes_data import merge_data_dataframes
-from src.util import create_all_project_folders, get_option_expiry_dates, clean_temporary_files, clean_all_data_files
-from src.yahooquery_earning_dates import scrape_earning_dates
-from src.yahooquery_option_chain import get_yahooquery_option_chain
-from src.yahooquery_financials import generate_fundamental_data
-from src.yfinance_analyst_price_targets import scrape_yahoo_finance_analyst_price_targets
+from src.util import create_all_project_folders, clean_temporary_files, clean_all_data_files
+from src.yahooquery_earning_dates import scrape_earning_dates, scrape_earning_dates2
+from src.yahooquery_option_chain import get_yahooquery_option_chain, get_yahooquery_option_chain2
+from src.yahooquery_financials import generate_fundamental_data, generate_fundamental_data2
+from src.yfinance_analyst_price_targets import scrape_yahoo_finance_analyst_price_targets, scrape_yahoo_finance_analyst_price_targets2, scrape_yahoo_finance_analyst_price_targets3
 from config import *
 from src.google_drive_upload import upload_merged_data
 from src.dividend_radar import process_dividend_data
 from config_utils import get_filtered_symbols_and_dates_with_logging
 import pandas as pd
+import time
 
 
 def main(upload_df_google_drive=True):
+    start_main = time.time()
     run_migrations()
     print("#" * 80)
     print(f"Starting Data Collection Pipeline")
+
     print(f"Symbol selection mode: {SYMBOL_SELECTION['mode']}")
     
     # Show configuration summary
@@ -42,10 +44,11 @@ def main(upload_df_google_drive=True):
     create_all_project_folders()
 
     print("#"*80)
-    print("Get Yahoo Finance data")
+    print("Get Yahoo Finance data - Analyst Price Targets")
+    start = time.time()
     print("#" * 80)
-    scrape_yahoo_finance_analyst_price_targets()
-    print("Get Yahoo Finance data - Done")
+    scrape_yahoo_finance_analyst_price_targets3()
+    print(f"Get Yahoo Finance data - Done - Runtime: {int(time.time() - start)}s")
 
     print("#" * 80)
     print("Get option data")
@@ -60,35 +63,26 @@ def main(upload_df_google_drive=True):
     )
     
     # Convert filtered dates back to integers for scraping functions
-    expiry_dates_int = [int(date_str.replace("-", "")) for date_str in filtered_expiry_dates]
+    # expiry_dates_int = [int(date_str.replace("-", "")) for date_str in filtered_expiry_dates]
 
-    print(f"Collecting data for {len(symbols_to_use)} symbols and {len(expiry_dates_int)} expiry dates")
-    truncate_table(TABLE_OPTION_DATA_TRADINGVIEW)
-    for expiration_date in expiry_dates_int:
-        for symbol in symbols_to_use:
-            scrape_option_data(
-                symbol=symbol,
-                expiration_date=expiration_date,
-                exchange=SYMBOLS_EXCHANGE[symbol],
-                folderpath=PATH_OPTION_DATA_TRADINGVIEW
-            )
+    # print(f"Collecting data from Trading View for {len(symbols_to_use)} symbols and {len(expiry_dates_int)} expiry dates")
+    print(f"Collecting data from Trading View for {len(symbols_to_use)} symbols and all expiration dates")
+    
+    start = time.time() 
+    scrape_option_data_trading_view(symbols_to_use)
 
-    print("Get option data - Done")
-
-    print("#" * 80)
-    print("Combine option data JSON to feather")
-    print("#" * 80)
-    combine_feather_files(folder_path=PATH_OPTION_DATA_TRADINGVIEW, data_feather_path=PATH_DATAFRAME_OPTION_DATA_FEATHER)
-    print("Combine option data JSON to feather - Done")
+    print(f"Get option data from Trading View - Done - Runtime: {int(time.time() - start)}s")
 
     print("#" * 80)
     print("Get price and technical indicators")
+    start = time.time() 
     print("#" * 80)
     scrape_and_save_price_and_technical_indicators()
-    print("Get price and technical indicators - Done")
+    print(f"Get price and technical indicators - Done - Runtime: {int(time.time() - start)}s")
 
     print("#" * 80)
     print("Dividend Radar")
+    start = time.time() 
     print("#" * 80)
     process_dividend_data(path_outputfile=PATH_DIVIDEND_RADAR)
     # Debug: Check if Classification exists in dividend data
@@ -97,57 +91,66 @@ def main(upload_df_google_drive=True):
     print("Has Classification?", 'Classification' in df_div.columns)
     if 'Classification' in df_div.columns:
         print("Classification values:", df_div['Classification'].value_counts())
-    print("Dividend Radar - Done")
+    print(f"Dividend Radar - Done - Runtime: {int(time.time() - start)}s")
 
     print("#" * 80)
     print("Earning Dates")
+    start = time.time() 
     print("#" * 80)
-    scrape_earning_dates()
-    print("Earning Dates - Done")
+    scrape_earning_dates2()
+    print(f"Earning Dates - Done - Runtime: {int(time.time() - start)}s")
 
     print("#" * 80)
     print("Yahoo Query Option Chain")
+    start = time.time() 
     print("#" * 80)
-    get_yahooquery_option_chain()
-    print("Yahoo Query Option Chain - Done")
+    get_yahooquery_option_chain2()
+    print(f"Yahoo Query Option Chain - Done - Runtime: {int(time.time() - start)}s")
 
     print("#" * 80)
     print("Yahoo Query Fundamentals")
+    start = time.time() 
     print("#" * 80)
-    generate_fundamental_data()
-    print("Yahoo Query Fundamentals - Done")
+    generate_fundamental_data2()
+    print(f"Yahoo Query Fundamentals - Done - Runtime: {int(time.time() - start)}s")
 
 
     print("#" * 80)
     print("Merge all feather dataframe files (with live prices)")
+    start = time.time() 
     print("#" * 80)
     merge_data_dataframes()
     # Debug: Check merged data
     df_merged = pd.read_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
-    print("Final columns:", df_merged.columns.tolist())
+    print("Final columns:", len(df_merged.columns.tolist()))
     print("Has Classification?", 'Classification' in df_merged.columns)
-    print("Merge all feather dataframe files - Done")
+    print(f"Merge all feather dataframe files - Done - Runtime: {int(time.time() - start)}s")
 
     print("#" * 80)
     print("Feature engineering")
+    start = time.time() 
     print("#" * 80)
     feature_construction()
-    print("Feature engineering - Done")
+    print(f"Feature engineering - Done - Runtime: {int(time.time() - start)}s")
 
     if upload_df_google_drive:
         print("#" * 80)
         print("Upload file to Google Drive")
+        start = time.time()
         print("#" * 80)
         upload_merged_data()
-        print("Upload file to Google Drive - Done")
+        print(f"Upload file to Google Drive - Done - Runtime: {int(time.time() - start)}s")
 
     print("#" * 80)
     print("Data collection pipeline completed successfully!")
+    end_main = time.time()
+    print(f"Runtime: {int(end_main - start_main)}s")
     print("#" * 80)
 
     # Beispiel
-    df = select_into_dataframe("SELECT * FROM OptionDataMerged")
-    print(f"Total rows in OptionDataMerged: {len(df)}")
+    df_count = select_into_dataframe("SELECT count(*) as option_count FROM OptionDataMerged;")
+    df = select_into_dataframe("SELECT * FROM OptionDataMerged LIMIT 5;")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run data collection pipeline")

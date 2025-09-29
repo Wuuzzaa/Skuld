@@ -26,10 +26,10 @@ def download_xlsx_file():
     response = requests.get(page_url, headers=headers)
     
     if response.status_code != 200:
-        log_error(f"Error loading the webpage. Status code: {response.status_code}")
+        # log_error(f"Error loading the webpage. Status code: {response.status_code}")
         return None
     
-    log_info("Webpage loaded successfully.")
+    # log_info("Webpage loaded successfully.")
     
     # Parse the HTML and find the first .xlsx link via XPath.
     tree = html.fromstring(response.content)
@@ -43,15 +43,15 @@ def download_xlsx_file():
     if file_url.startswith("/"):
         file_url = urljoin(page_url, file_url)
     
-    log_info(f"Found XLSX URL: {file_url}")
+    # log_info(f"Found XLSX URL: {file_url}")
     
     # Download the XLSX file.
     file_response = requests.get(file_url)
     if file_response.status_code != 200:
-        log_error("Error downloading the XLSX file.")
+        # log_error("Error downloading the XLSX file.")
         return None
     
-    log_info("XLSX file downloaded successfully.")
+    # log_info("XLSX file downloaded successfully.")
     return file_response.content
 
 
@@ -62,7 +62,7 @@ def _read_excel_sheet(content, sheet, header_row=2):
     unnamed_cols = [c for c in df.columns if isinstance(c, str) and c.startswith("Unnamed:")]
     if unnamed_cols:
         df = df.drop(columns=unnamed_cols)
-        log_info(f"Removed unnamed columns in '{sheet}': {unnamed_cols}")
+        # log_info(f"Removed unnamed columns in '{sheet}': {unnamed_cols}")
     df.columns = df.columns.astype(str).str.strip().str.replace(r"\s+", "-", regex=True)
     return df
 
@@ -120,41 +120,41 @@ def process_dividend_data(path_outputfile):
     Downloads and processes the XLSX file from the dividend radar webpage,
     adds a 'Classification' column from the category tabs, displays and saves as Feather.
     """
-    log_info("Starting dividend data extraction process.")
+    # log_info("Starting dividend data extraction process.")
     content = download_xlsx_file()
 
     if not content:
-        log_error("Failed to download XLSX file. Aborting process.")
-        show_log_messages()
+        # log_error("Failed to download XLSX file. Aborting process.")
+        # show_log_messages()
         return
     
     try:
         # Base: read 'All' sheet (header in third row)
         df = _read_excel_sheet(content, "All", header_row=2)
-        log_info("Excel 'All' sheet read successfully.")
+        # log_info("Excel 'All' sheet read successfully.")
     except Exception as e:
-        log_error(f"Error reading the Excel file: {e}")
-        show_log_messages()
+        # log_error(f"Error reading the Excel file: {e}")
+        # show_log_messages()
         return
 
     # Add classification from category tabs
     try:
         df = _add_classification(df, content)
-        log_info("Classification column added.")
+        # log_info("Classification column added.")
     except Exception as e:
-        log_error(f"Error during classification: {e}")
-        show_log_messages()
+        # log_error(f"Error during classification: {e}")
+        # show_log_messages()
         return
     
-    log_info(f"Columns after processing: {df.columns.tolist()}")
-    log_info(f"Number of rows read: {len(df)}")
+    # log_info(f"Columns after processing: {df.columns.tolist()}")
+    # log_info(f"Number of rows read: {len(df)}")
     
-    st.write("DataFrame-Inhalt:")
-    st.write(df)
+    # st.write("DataFrame-Inhalt:")
+    # st.write(df)
     
     try:
         df.to_feather(str(path_outputfile))
-        log_info(f"DataFrame saved as {path_outputfile}.")
+        # log_info(f"DataFrame saved as {path_outputfile}.")
     except Exception as e:
         log_error(f"Error saving as Feather: {e}") 
 
@@ -171,16 +171,16 @@ def force_data_download(path_outputfile):
     Forces the download of dividend data and overwrites the existing Feather file.
     Adds 'Classification' from category tabs before saving.
     """
-    log_info("Forcing dividend data download and overwriting the Feather file.")
+    # log_info("Forcing dividend data download and overwriting the Feather file.")
     
     content = download_xlsx_file()
     if not content:
-        log_error("Error downloading the XLSX file during forced download.")
+        # log_error("Error downloading the XLSX file during forced download.")
         return
 
     try:
         df = _read_excel_sheet(content, "All", header_row=2)
-        log_info("Excel 'All' sheet read successfully during forced download.")
+        # log_info("Excel 'All' sheet read successfully during forced download.")
         df = _add_classification(df, content)
         log_info("Classification column added (forced).")
     except Exception as e:

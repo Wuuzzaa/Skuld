@@ -1,3 +1,4 @@
+import time
 from typing import Literal
 import pandas as pd
 from sqlalchemy import create_engine, text, inspect
@@ -27,24 +28,26 @@ def truncate_table(table_name):
       for database connection.
     - table_name (str): The name of the table to truncate.
     """
+    start = time.time()
     engine = get_database_engine()
     with engine.begin() as connection:
         try:
             connection.execute(text(f"DELETE FROM {table_name}"))
-            print(f"Successfully truncated table: {table_name}")
+            print(f"Successfully truncated table: {table_name} in {round(time.time() - start,2)}s")
         except Exception as e:
             print(f"Error truncating table {table_name}: {e}")
 
 def insert_into_table(
         table_name: str,
-        dataframe,
+        dataframe: pd.DataFrame,
         if_exists: Literal["fail", "replace", "append"] = "append"
     ) -> int:
     affected_rows = 0
+    start = time.time() 
     try:
         engine = get_database_engine()
         affected_rows = dataframe.to_sql(table_name, engine, if_exists=if_exists, index=False)
-        print(f"Successfully saved {affected_rows} to the database table {table_name}.")
+        print(f"Successfully saved {affected_rows} to the database table {table_name} in {round(time.time() - start,2)}s.")
     except Exception as e:
         print(f"Error saving to the database table {table_name}: {e}")
 
@@ -64,6 +67,8 @@ def select_into_dataframe(query: str = None, sql_file_path: str = None):
     """
     df = None
     try:
+        print(f" executing query: {query}")
+        start = time.time() 
         engine = get_database_engine()
         if sql_file_path is not None and os.path.isfile(sql_file_path):
             with open(sql_file_path, 'r') as f:
@@ -72,7 +77,9 @@ def select_into_dataframe(query: str = None, sql_file_path: str = None):
             sql = query
         else:
             raise ValueError("Either 'query' or 'sql_file_path' must be provided.")
+        
         df = pd.read_sql(sql, engine)
+        print(f"Query executed successfully in {round(time.time() - start,2)}s. Top 5 rows:")
         print(df.head())
     except Exception as e:
         print(f"Error executing query {query}: {e}")
@@ -84,6 +91,7 @@ def run_migrations():
     Runs the database migration system.
     """
     print("Starting database migration...")
+    start = time.time() 
     engine = get_database_engine()
     inspector = inspect(engine)
 
@@ -137,3 +145,4 @@ def run_migrations():
             last_migration_version = int(pending_migrations[-1].split(".")[0])
             connection.execute(text(f"UPDATE DbVersion SET version = {last_migration_version}"))
             print(f"Database version updated to {last_migration_version}.")
+    print(f"Database migration completed in {round(time.time() - start,2)}s")
