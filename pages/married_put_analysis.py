@@ -236,15 +236,6 @@ if 'married_put_df' in st.session_state and not st.session_state['married_put_df
             )
         }
     )
-    
-    # Download button
-    csv = display_df.to_csv(index=False)
-    st.download_button(
-        label="Download as CSV",
-        data=csv,
-        file_name=f"married_put_analysis_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
-        mime="text/csv"
-    )
 
 else:
     st.info("Click 'Load/Refresh Data' to see the married put analysis")
