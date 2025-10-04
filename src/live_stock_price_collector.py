@@ -9,7 +9,7 @@ from datetime import datetime
 from config import PATH_DATAFRAME_LIVE_STOCK_PRICES_FEATHER, TABLE_STOCK_PRICE
 from config_utils import get_filtered_symbols_with_logging
 from src.database import insert_into_table, truncate_table
-from tradingview_screener import Query
+
 
 from src.yahooquery_scraper import YahooQueryScraper
 
