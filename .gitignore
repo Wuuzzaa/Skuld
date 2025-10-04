@@ -181,3 +181,8 @@ cython_debug/
 /Tasty List.pdf
 /.idea/codeStyles/codeStyleConfig.xml
 /experiments/
+src/.streamlit/secrets.toml
+Commands.txt
+.DS_Store
+db/SQL/supportability/
+db/financial_data.db

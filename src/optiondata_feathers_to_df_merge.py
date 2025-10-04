@@ -13,9 +13,20 @@ def combine_feather_files(folder_path, data_feather_path):
             df = pd.read_feather(file_path)
             dataframes.append(df)
 
-    # Concatenate all DataFrames into a single DataFrame
-    combined_df = pd.concat(dataframes)
+    # Check if we have any dataframes to concatenate
+    if not dataframes:
+        print("No .feather files found to combine. Creating empty DataFrame.")
+        # Create an empty DataFrame with expected columns for options data
+        combined_df = pd.DataFrame(columns=[
+            'ask', 'bid', 'delta', 'gamma', 'iv', 'option-type', 'rho', 'strike', 
+            'theoPrice', 'theta', 'vega', 'option', 'time', 'symbol', 'exchange', 
+            'expiration_date', 'option_osi'
+        ])
+    else:
+        # Concatenate all DataFrames into a single DataFrame
+        combined_df = pd.concat(dataframes, ignore_index=True)
 
     # store df
     combined_df.to_feather(data_feather_path)
+    print(f"Combined {len(dataframes)} feather files into {data_feather_path}")
 

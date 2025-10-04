@@ -31,7 +31,7 @@ def get_iron_condors(df, expiration_date, delta_target, spread_width):
     iron_condors['close'] = iron_condors['put_close']  # put and call close are the same
     iron_condors['profit_to_bpr'] = iron_condors['max_profit'] / iron_condors['bpr']
 
-    # get symbol as column again and numric index of the df
+    # get symbol as column again and numeric index of the df
     iron_condors.reset_index(inplace=True)
 
     # select which columns should be returned to streamlit view
@@ -101,4 +101,4 @@ if __name__ == "__main__":
     ende = time.time()
 
     print(iron_condors.head())
-    print(f"Laufzeit: {ende - start:.6f} Sekunden")
+    print(f"Runtime: {ende - start:.6f} seconds")
