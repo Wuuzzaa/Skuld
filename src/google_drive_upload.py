@@ -1,4 +1,10 @@
 import google.auth
+import sys
+import os
+
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
@@ -80,7 +86,7 @@ def upload_merged_data():
     Executes the upload of the merged Feather file to Google Drive.
     This function encapsulates the upload step and internally calls upload_feather_to_drive.
     """
-    # Beispiel-Pfade/Variablen: Ersetze sie durch deine Konstanten oder Variablen
+    # Example paths/variables: Replace them with your constants or variables
     service_account_file = PATH_FOR_SERVICE_ACCOUNT_FILE  # Path to the Service Account JSON file
     parent_folder_id = PATH_ON_GOOGLE_DRIVE  # Target folder ID in Google Drive
     file_path = PATH_DATAFRAME_DATA_MERGED_FEATHER  # Local path to the merged Feather file

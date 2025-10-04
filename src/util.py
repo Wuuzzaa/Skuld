@@ -1,8 +1,123 @@
 import calendar
 import re
+import sys
+import os
 from pathlib import Path
-from config import FOLDERPATHS
+
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from config import *
+from config_utils import generate_expiry_dates_from_rules
 from datetime import date, timedelta
+
+
+def clean_temporary_files():
+    """
+    Clean all temporary data files before starting a new pipeline run.
+    This ensures fresh, consistent data and prevents mixing old/new data.
+    """
+    print("🧹 Cleaning temporary files before new run...")
+    
+    # List of all temporary data files to clean
+    temp_files = [
+        PATH_DATAFRAME_OPTION_DATA_FEATHER,
+        PATH_DATAFRAME_PRICE_AND_INDICATOR_DATA_FEATHER,
+        PATH_DATAFRAME_DATA_ANALYST_PRICE_TARGET_FEATHER,
+        PATH_DATAFRAME_EARNING_DATES_FEATHER,
+        PATH_DATAFRAME_YAHOOQUERY_OPTION_CHAIN_FEATHER,
+        PATH_DATAFRAME_YAHOOQUERY_FINANCIAL_FEATHER,
+        PATH_DATAFRAME_YAHOOQUERY_FINANCIAL_PROCESSED_FEATHER,
+        PATH_DATAFRAME_DATA_MERGED_FEATHER,
+        PATH_DATAFRAME_LIVE_STOCK_PRICES_FEATHER,  # Added missing live stock prices
+        PATH_DIVIDEND_RADAR,
+    ]
+    
+    # Additional CSV files (if they exist)
+    csv_files = [
+        PATH_DATA / 'yahooquery_financial.csv',
+        PATH_DATA / 'yahooquery_financial_processed.csv',
+    ]
+    
+    cleaned_count = 0
+    for file_path in temp_files + csv_files:
+        try:
+            if Path(file_path).exists():
+                Path(file_path).unlink()
+                print(f"   ✅ Deleted: {Path(file_path).name}")
+                cleaned_count += 1
+        except Exception as e:
+            print(f"   ⚠️  Could not delete {Path(file_path).name}: {e}")
+    
+    # Clean JSON option data directory
+    if PATH_OPTION_DATA_TRADINGVIEW.exists():
+        # Delete both JSON and feather files
+        json_files = list(PATH_OPTION_DATA_TRADINGVIEW.glob("*.json"))
+        feather_files = list(PATH_OPTION_DATA_TRADINGVIEW.glob("*.feather"))
+        all_option_files = json_files + feather_files
+        
+        for file in all_option_files:
+            try:
+                file.unlink()
+                cleaned_count += 1
+            except Exception as e:
+                print(f"   ⚠️  Could not delete {file.name}: {e}")
+        
+        if all_option_files:
+            print(f"   ✅ Deleted {len(json_files)} JSON and {len(feather_files)} feather option files")
+    
+    print(f"🧹 Cleanup complete: {cleaned_count} files removed")
+    print()
+
+
+def clean_all_data_files():
+    """
+    Clean ALL data files in the data/ directory.
+    Use this for a complete fresh start.
+    """
+    print("🧹 COMPLETE DATA CLEANUP - Removing ALL data files...")
+    
+    cleaned_count = 0
+    
+    # Remove all .feather files
+    feather_files = list(PATH_DATA.glob("*.feather"))
+    for file_path in feather_files:
+        try:
+            file_path.unlink()
+            print(f"   ✅ Deleted: {file_path.name}")
+            cleaned_count += 1
+        except Exception as e:
+            print(f"   ⚠️  Could not delete {file_path.name}: {e}")
+    
+    # Remove all .csv files
+    csv_files = list(PATH_DATA.glob("*.csv"))
+    for file_path in csv_files:
+        try:
+            file_path.unlink()
+            print(f"   ✅ Deleted: {file_path.name}")
+            cleaned_count += 1
+        except Exception as e:
+            print(f"   ⚠️  Could not delete {file_path.name}: {e}")
+    
+    # Clean option data directory (both JSON and feather files)
+    if PATH_OPTION_DATA_TRADINGVIEW.exists():
+        # Delete both JSON and feather files  
+        json_files = list(PATH_OPTION_DATA_TRADINGVIEW.glob("*.json"))
+        feather_files = list(PATH_OPTION_DATA_TRADINGVIEW.glob("*.feather"))
+        all_option_files = json_files + feather_files
+        
+        for file in all_option_files:
+            try:
+                file.unlink()
+                cleaned_count += 1
+            except Exception as e:
+                print(f"   ⚠️  Could not delete {file.name}: {e}")
+        
+        if all_option_files:
+            print(f"   ✅ Deleted {len(json_files)} JSON and {len(feather_files)} feather option files")
+    
+    print(f"🧹 COMPLETE CLEANUP: {cleaned_count} files removed")
+    print()
 
 
 def create_all_project_folders():
@@ -15,35 +130,6 @@ def create_all_project_folders():
             print(f"Created folder: {folder_path}")
         else:
             print(f"Folder already exists: {folder_path}")
-
-
-# def get_option_expiry_dates():
-#     today = date.today()
-#     expiry_dates = set()
-#
-#     # Monthly expiration dates: Third Friday of the next 4 months
-#     for i in range(4):
-#         year = today.year + (today.month + i - 1) // 12  # Adjust the year if the month exceeds 12
-#         month = (today.month + i - 1) % 12 + 1  # Keep the month between 1 and 12
-#
-#         # Get the month's calendar weeks
-#         month_cal = calendar.monthcalendar(year, month)
-#         # The third Friday is in the third week (if not available, take the fourth week)
-#         third_friday = month_cal[2][4] if month_cal[2][4] != 0 else month_cal[3][4]
-#         expiry_date = date(year, month, third_friday)
-#
-#         if expiry_date >= today:  # Only future dates
-#             expiry_dates.add(expiry_date)
-#
-#     # Weekly expiration dates: Every Friday for the next 60 days
-#     for i in range(60):
-#         future_date = today + timedelta(days=i)
-#         if future_date.weekday() == 4:  # Friday
-#             expiry_dates.add(future_date)
-#
-#     expiry_dates_list = sorted(int(d.strftime('%Y%m%d')) for d in expiry_dates)
-#
-#     return expiry_dates_list
 
 
 def get_third_friday(year, month):
@@ -59,52 +145,27 @@ def get_third_friday(year, month):
 
 
 def get_option_expiry_dates():
-    today = date.today()
-    expiry_dates = set()
-
-    # Monthly expiration dates: Third Friday of the next 4 months
-    for i in range(4):
-        year = today.year + (today.month + i - 1) // 12  # Adjust the year if the month exceeds 12
-        month = (today.month + i - 1) % 12 + 1  # Keep the month between 1 and 12
-
-        expiry_date = get_third_friday(year, month)
-
-        if expiry_date >= today:  # Only future dates
-            expiry_dates.add(expiry_date)
-
-    # Weekly expiration dates: Every Friday for the next 60 days
-    for i in range(60):
-        future_date = today + timedelta(days=i)
-        if future_date.weekday() == 4:  # Friday
-            expiry_dates.add(future_date)
-
-    # Additional third Fridays: first third Friday after 180 and 360 days
-    for target_days in [180, 360]:
-        target_date = today + timedelta(days=target_days)
-
-        # Start from the target month and look for the first third Friday after target_date
-        current_month = target_date.month
-        current_year = target_date.year
-
-        found = False
-        while not found:
-            # Get the third Friday of the current month
-            expiry_date = get_third_friday(current_year, current_month)
-
-            # If this third Friday is after the target date, we found our expiry
-            if expiry_date > target_date:
-                expiry_dates.add(expiry_date)
-                found = True
-            else:
-                # Move to next month
-                current_month += 1
-                if current_month > 12:
-                    current_month = 1
-                    current_year += 1
-
-    expiry_dates_list = sorted(int(d.strftime('%Y%m%d')) for d in expiry_dates)
-
-    return expiry_dates_list
+    """
+    Get option expiry dates based on enabled collection rules.
+    
+    Returns:
+        list: List of expiry dates in YYYYMMDD integer format
+    """
+    print("Generating expiry dates from collection rules...")
+    
+    # Get dates from the new rule-based system
+    expiry_date_strings = generate_expiry_dates_from_rules()
+    
+    # Convert from "YYYY-MM-DD" strings to YYYYMMDD integers
+    expiry_dates_int = []
+    for date_str in expiry_date_strings:
+        # Convert "2024-06-21" to 20240621
+        date_int = int(date_str.replace("-", ""))
+        expiry_dates_int.append(date_int)
+    
+    print(f"Generated {len(expiry_dates_int)} expiry dates from {len([r for r in OPTIONS_COLLECTION_RULES if r.get('enabled')])} enabled rules")
+    
+    return sorted(expiry_dates_int)
 
 def opra_to_osi(opra_code):
     """
@@ -151,6 +212,79 @@ def opra_to_osi(opra_code):
     osi_code = f"{symbol}{year}{month}{day}{opt_type}{strike_osi}"
     return osi_code
 
+def opra_to_symbol(opra_code):
+    """
+    Extracts symbol from OPRA option code.
+
+    OPRA format (used by many APIs and market data providers) looks like:
+        OPRA:<SYMBOL><YY><MM><DD><C/P><STRIKE>
+        Example: 'OPRA:AAPL250606C110.0'
+
+    Parameters:
+        opra_code (str): The OPRA-style option symbol (e.g. 'OPRA:AAPL250606C110.0')
+
+    Returns:
+        str: The corresponding OSI code (e.g. 'AAPL250606C00110000')
+
+    Raises:
+        ValueError: If the input does not match the expected OPRA format.
+
+    Example:
+        >>> opra_to_osi("OPRA:AAPL250606C110.0")
+        'AAPL'
+    """
+
+    # Remove optional "OPRA:" prefix if present
+    if opra_code.startswith("OPRA:"):
+        opra_code = opra_code[5:]
+
+    # Extract components: Symbol, Date (YYMMDD), Option Type, and Strike
+    match = re.match(r'^([A-Z]+)(\d{2})(\d{2})(\d{2})([CP])([\d.]+)$', opra_code)
+    if not match:
+        raise ValueError("Invalid OPRA format: " + opra_code)
+
+    symbol, year, month, day, opt_type, strike_str = match.groups()
+
+    return symbol
+
 if __name__ == "__main__":
     expiry_dates = get_option_expiry_dates()
     pass
+
+class Singleton:
+    """
+    A non-thread-safe helper class to ease implementing singletons.
+    This should be used as a decorator -- not a metaclass -- to the
+    class that should be a singleton.
+
+    The decorated class can define one `__init__` function that
+    takes only the `self` argument. Also, the decorated class cannot be
+    inherited from. Other than that, there are no restrictions that apply
+    to the decorated class.
+
+    To get the singleton instance, use the `instance` method. Trying
+    to use `__call__` will result in a `TypeError` being raised.
+
+    """
+
+    def __init__(self, decorated):
+        self._decorated = decorated
+
+    def instance(self):
+        """
+        Returns the singleton instance. Upon its first call, it creates a
+        new instance of the decorated class and calls its `__init__` method.
+        On all subsequent calls, the already created instance is returned.
+
+        """
+        try:
+            return self._instance
+        except AttributeError:
+            self._instance = self._decorated()
+            return self._instance
+
+    def __call__(self):
+        raise TypeError('Singletons must be accessed through `instance()`.')
+
+    def __instancecheck__(self, inst):
+        return isinstance(inst, self._decorated)

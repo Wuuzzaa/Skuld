@@ -11,7 +11,7 @@ from config import PATH_DIVIDEND_RADAR  # Path to the dividend file (e.g., divid
 custom_thresh_group1 = st.sidebar.number_input("Custom Threshold for Group 1 (Div-Yield ≥ 3)", value=14, step=1)
 custom_thresh_group2 = st.sidebar.number_input("Custom Threshold for Group 2 (Div-Yield < 3)", value=15, step=1)
 
-# Sidebar: Statt zwei einzelner Toggle-Buttons wird hier ein multiselect genutzt
+# Sidebar: Instead of two individual toggle buttons, a multiselect is used here
 selected_groups = st.sidebar.multiselect(
     "show chowder Numbers:",
     options=["Group 1", "Group 2"],
@@ -144,7 +144,7 @@ else:
     group1_df = df[(df["Div-Yield"] >= 3) & (df["Chowder-Number"] > custom_thresh_group1)]
     group2_df = df[(df["Div-Yield"] < 3) & (df["Chowder-Number"] > custom_thresh_group2)]
 
-    # Kombinieren der Ergebnisse basierend auf der Auswahl
+    # Combine results based on selection
     dfs = []
     if "Group 1" in selected_groups:
         dfs.append(group1_df)

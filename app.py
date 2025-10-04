@@ -37,6 +37,7 @@ if 'df' not in st.session_state:
 # Define pages
 total_dataframe = st.Page("pages/total_dataframe.py", title="Total Data")
 filtered_dataframe = st.Page("pages/filtered_dataframe.py", title="Filtered Data")
+iv_filter = st.Page("pages/iv_filter.py", title="IV Filter")
 analyst_prices = st.Page("pages/analyst_prices.py", title="Analyst Prices")
 spreads = st.Page("pages/spreads.py", title="Spreads")
 iron_condors = st.Page("pages/iron_condors.py", title="Iron Condors")
@@ -44,19 +45,24 @@ multi_indicator_direction = st.Page("pages/strategy_multi_indicator_score_direct
 log_messages = st.Page("pages/log_messages.py", title="Log messages")
 dividend_page = st.Page("pages/dividend_page.py", title="Dividend Page")
 documentation = st.Page("pages/documentation.py", title="Documentation")
+marrieds = st.Page("pages/married_put_analysis.py", title="Married Puts")
+
 
 # Set up navigation
 page = st.navigation(
     [
         total_dataframe,
         filtered_dataframe,
+        iv_filter,
         analyst_prices,
         spreads,
         iron_condors,
         multi_indicator_direction,
         log_messages,
         dividend_page,
-        documentation
+        documentation, 
+     
+        marrieds
     ]
 )
 
