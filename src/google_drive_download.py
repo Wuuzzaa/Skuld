@@ -133,10 +133,10 @@ def should_update_file(local_file, update_times, tz_name=LOCAL_TZ) -> bool:
     return False
 
 
-@st.cache_data(ttl=1800, show_spinner="Loading updated data...")
 def load_updated_data():
     """Loads data in Feather format. If the local file is outdated, downloads the Feather file from Google Drive,
     reads it into a DataFrame, and saves it locally. Otherwise, loads the local file.
+    Note: Caching is handled by the caller (e.g., app.py) to avoid warnings in non-Streamlit contexts.
     """
     if should_update_file(PATH_DATAFRAME_DATA_MERGED_FEATHER, UPDATE_TIMES):
         log_info("New file available – starting download from Google Drive ...")
@@ -209,10 +209,10 @@ def download_database_from_drive(file_id):
         return None
 
 
-@st.cache_data(ttl=1800, show_spinner="Loading updated database...")
 def load_updated_database():
     """Downloads the database file from Google Drive if it's outdated, otherwise uses the local file.
     Returns True if successful, False otherwise.
+    Note: Caching is handled by the caller (e.g., app.py) to avoid warnings in non-Streamlit contexts.
     """
     database_filename = "financial_data.db"
     

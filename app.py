@@ -18,12 +18,18 @@ st.title("SKULD - Option Viewer")
 
 
 # Ensure database is available (download if needed)
-if not use_local_data:
-    load_updated_database()
+@st.cache_data(ttl=1800, show_spinner="Checking for database updates...")
+def ensure_database_available():
+    """Downloads database from Google Drive if needed."""
+    if not use_local_data:
+        return load_updated_database()
+    return True
+
+ensure_database_available()
 
 
 # load dataframe
-@st.cache_data
+@st.cache_data(ttl=1800, show_spinner="Loading updated data...")
 def load_dataframe():
     # Local Mode
     if use_local_data:
