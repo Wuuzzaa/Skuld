@@ -22,6 +22,7 @@ PATH_DATAFRAME_LIVE_STOCK_PRICES_FEATHER = PATH_DATA / 'live_stock_prices.feathe
  
 # Database
 PATH_DATABASE = BASE_DIR / 'db/financial_data.db'
+
 # Tables
 TABLE_OPTION_DATA_TRADINGVIEW = 'OptionDataTradingView'
 TABLE_OPTION_DATA_YAHOO = 'OptionDataYahoo'
@@ -32,6 +33,7 @@ TABLE_FUNDAMENTAL_DATA_YAHOO = 'FundamentalDataYahoo'
 TABLE_FUNDAMENTAL_DATA_YAHOO_PROCESSED = 'FundamentalDataYahooProcessed'
 TABLE_TECHNICAL_INDICATORS = 'TechnicalIndicators'
 TABLE_STOCK_PRICE = 'StockPrice'
+
 #Views
 VIEW_OPTION_DATA = 'OptionData'
 VIEW_FUNDAMENTAL_DATA = 'FundamentalData'
@@ -49,9 +51,7 @@ PATH_SYMBOLS_EXCHANGE_FILE = BASE_DIR / 'symbols_exchange.xlsx'
 #Google Upload Config
 PATH_ON_GOOGLE_DRIVE = "1ahLHST1IEUDf03TT3hEdbVm1r7rcxJcu"
 FILENAME_GOOGLE_DRIVE = FILENAME_MERGED_DATAFRAME
-#PATH_FOR_SERVICE_ACCOUNT_FILE = "service_account.json"
-
-PATH_FOR_SERVICE_ACCOUNT_FILE = r'C:\Python\SKULD\service_account.json' 
+PATH_FOR_SERVICE_ACCOUNT_FILE = "service_account.json"
 
 # FOLDERPATHS relative to main.py
 FOLDERPATHS = \
@@ -571,7 +571,7 @@ TRANSACTION_COST_PER_CONTRACT = 3.5 # in USD
 
 # Symbol selection
 SYMBOL_SELECTION = {
-    "mode": "list",                   # "all", "list", "file", "max"
+    "mode": "all",                   # "all", "list", "file", "max"
     "symbols": ["MO"],             # Used when mode="list"
     "file_path": None,               # Used when mode="file"
     "max_symbols": 1000,               # Used when mode="max" or as limit for "all"
@@ -584,14 +584,14 @@ SYMBOL_SELECTION = {
 OPTIONS_COLLECTION_RULES = [
     {
         "name": "weekly_short_term",
-        "enabled": False,
+        "enabled": True,
         "days_range": [1, 40],            # Today + 1 to 60 days
         "frequency": "every_friday",      # "every_friday", "monthly_3rd_friday", "quarterly_3rd_friday"
         "description": "Weekly options for next 2 months"
     },
     {
         "name": "monthly_medium_term", 
-        "enabled": False,
+        "enabled": True,
         "days_range": [61, 120],
         "frequency": "monthly_3rd_friday",
         "description": "Monthly options 2-6 months out"
