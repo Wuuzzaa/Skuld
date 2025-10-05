@@ -10,7 +10,7 @@ from src.yahooquery_option_chain import get_yahooquery_option_chain, get_yahooqu
 from src.yahooquery_financials import generate_fundamental_data, generate_fundamental_data2
 from src.yfinance_analyst_price_targets import scrape_yahoo_finance_analyst_price_targets, scrape_yahoo_finance_analyst_price_targets2, scrape_yahoo_finance_analyst_price_targets3
 from config import *
-from src.google_drive_upload import upload_merged_data
+from src.google_drive_upload import upload_merged_data, upload_database
 from src.dividend_radar import process_dividend_data
 from config_utils import get_filtered_symbols_and_dates_with_logging
 import pandas as pd
@@ -135,11 +135,18 @@ def main(upload_df_google_drive=True):
 
     if upload_df_google_drive:
         print("#" * 80)
-        print("Upload file to Google Drive")
+        print("Upload database to Google Drive")
+        start = time.time()
+        print("#" * 80)
+        upload_database()
+        print(f"Upload database to Google Drive - Done - Runtime: {int(time.time() - start)}s")
+        
+        print("#" * 80)
+        print("Upload merged dataframe file to Google Drive")
         start = time.time()
         print("#" * 80)
         upload_merged_data()
-        print(f"Upload file to Google Drive - Done - Runtime: {int(time.time() - start)}s")
+        print(f"Upload merged dataframe file to Google Drive - Done - Runtime: {int(time.time() - start)}s")
 
     print("#" * 80)
     print("Data collection pipeline completed successfully!")
