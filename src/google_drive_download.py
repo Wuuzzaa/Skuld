@@ -11,7 +11,7 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 from googleapiclient.errors import HttpError
-from config import PATH_DATAFRAME_DATA_MERGED_FEATHER , FILENAME_GOOGLE_DRIVE, PATH_ON_GOOGLE_DRIVE, PATH_FOR_SERVICE_ACCOUNT_FILE  
+from config import PATH_DATAFRAME_DATA_MERGED_FEATHER , FILENAME_GOOGLE_DRIVE, PATH_ON_GOOGLE_DRIVE, PATH_FOR_SERVICE_ACCOUNT_FILE, PATH_DATABASE  
 
 """
 Configuration:
@@ -133,10 +133,10 @@ def should_update_file(local_file, update_times, tz_name=LOCAL_TZ) -> bool:
     return False
 
 
-@st.cache_data(ttl=1800, show_spinner="Loading updated data...")
 def load_updated_data():
     """Loads data in Feather format. If the local file is outdated, downloads the Feather file from Google Drive,
     reads it into a DataFrame, and saves it locally. Otherwise, loads the local file.
+    Note: Caching is handled by the caller (e.g., app.py) to avoid warnings in non-Streamlit contexts.
     """
     if should_update_file(PATH_DATAFRAME_DATA_MERGED_FEATHER, UPDATE_TIMES):
         log_info("New file available – starting download from Google Drive ...")
@@ -174,3 +174,79 @@ def load_updated_data():
         except Exception as e:
             log_error(f"Error reading the local Feather file: {e}")
             return None
+
+
+def download_database_from_drive(file_id):
+    """Downloads the database file from Google Drive.
+    Returns a BytesIO stream containing the file.
+    """
+    try:
+        creds = get_credentials()
+        service = build("drive", "v3", credentials=creds)
+        file_info = service.files().get(
+            fileId=file_id,
+            fields="id, name, mimeType, modifiedTime"
+        ).execute()
+        mime_type = file_info.get("mimeType", "")
+        modified_time_str = file_info.get("modifiedTime")
+        if modified_time_str:
+            modified_time_utc = datetime.fromisoformat(modified_time_str.replace("Z", "+00:00"))
+            modified_time_local = modified_time_utc.astimezone(ZoneInfo(LOCAL_TZ))
+            log_info(f"Database file last modified (Google Drive): {modified_time_local.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+        # Directly download the database file
+        request = service.files().get_media(fileId=file_id)
+        file_stream = io.BytesIO()
+        downloader = MediaIoBaseDownload(file_stream, request)
+        done = False
+        while not done:
+            status, done = downloader.next_chunk()
+            if status:
+                log_write(f"Download progress: {int(status.progress() * 100)}%")
+        file_stream.seek(0)
+        return file_stream
+    except HttpError as error:
+        log_error(f"An error occurred: {error}")
+        return None
+
+
+def load_updated_database():
+    """Downloads the database file from Google Drive if it's outdated, otherwise uses the local file.
+    Returns True if successful, False otherwise.
+    Note: Caching is handled by the caller (e.g., app.py) to avoid warnings in non-Streamlit contexts.
+    """
+    database_filename = "financial_data.db"
+    
+    if should_update_file(PATH_DATABASE, UPDATE_TIMES):
+        log_info("New database file available – starting download from Google Drive ...")
+        file_id = find_file_id_by_name(database_filename, PARENT_FOLDER_ID)
+        if file_id is None:
+            log_error("Database file with the specified name was not found on Google Drive.")
+            return False
+        file_stream = download_database_from_drive(file_id)
+        if file_stream is None:
+            return False
+        os.makedirs(os.path.dirname(PATH_DATABASE), exist_ok=True)
+        # Save the downloaded database file locally
+        try:
+            with open(PATH_DATABASE, 'wb') as f:
+                f.write(file_stream.getvalue())
+            log_info("Downloaded database file saved locally.")
+            return True
+        except Exception as e:
+            log_error(f"Error saving the database file: {e}")
+            return False
+    else:
+        log_info("Using local database file ...")
+        try:
+            if os.path.exists(PATH_DATABASE):
+                last_mod = file_last_modified(PATH_DATABASE)
+                last_mod_local = last_mod.astimezone(ZoneInfo(LOCAL_TZ))
+                log_info(f"Local database file last modified on: {last_mod_local.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+                return True
+            else:
+                log_error("Local database file does not exist.")
+                return False
+        except Exception as e:
+            log_error(f"Error checking the local database file: {e}")
+            return False
+
