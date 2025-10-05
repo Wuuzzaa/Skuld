@@ -14,13 +14,13 @@ from
             (
                 SELECT
                     *,
-                    minimum_potential_profit_total_annualized / total_investment * 100 as roi_annualized_pct
+                    round(minimum_potential_profit_total_annualized / total_investment * 100,2) as roi_annualized_pct
                 FROM
                     (
                         SELECT
                             *,
                             (total_investment + minimum_potential_profit) as total_return,
-                            minimum_potential_profit / total_investment * 100 as roi_pct,
+                            round(minimum_potential_profit / total_investment * 100,2) as roi_pct,
                             round(
                                 (minimum_potential_profit / days_to_expiration) * 365,
                                 2
@@ -37,10 +37,10 @@ from
                                     (
                                         (
                                             number_of_stocks * (live_stock_price + premium_option_price)
-                                        ) + 3.5
+                                        ) + transaction_cost
                                     ) as total_investment,
                                     round(
-                                        dividend_sum_to_expiration - (extrinsic_value * number_of_stocks) -3.5,
+                                        dividend_sum_to_expiration - (extrinsic_value * number_of_stocks) -transaction_cost,
                                         2
                                     ) as minimum_potential_profit
                                 FROM
@@ -48,10 +48,10 @@ from
                                         SELECT
                                             *,
                                             -- extrinsic_value + (3.5 / number_of_stocks) as max_loss_per_option,
-                                            ROUND(extrinsic_value * number_of_stocks + 3.5, 2) as max_loss_total,
                                             CAST(ceil(extrinsic_value / "Current-Div") as Integer) as dividends_to_break_even,
                                             -- (dividend_sum_per_option - extrinsic_value) as minimum_potential_profit_per_option,
-                                            ROUND(dividends_to_expiration * "Current-Div", 2) * number_of_stocks AS dividend_sum_to_expiration
+                                            ROUND(dividends_to_expiration * "Current-Div", 2) * number_of_stocks AS dividend_sum_to_expiration,
+                                            ROUND(extrinsic_value * number_of_stocks + transaction_cost, 2) as max_loss_total
                                         FROM
                                             (
                                                 SELECT
@@ -63,6 +63,7 @@ from
                                                     expiration_date,
                                                     days_to_expiration,
                                                     option_open_interest,
+                                                    7 as transaction_cost,
                                                     bid,
                                                     ask,
                                                     spread_ptc,
@@ -70,15 +71,15 @@ from
                                                     intrinsic_value,
                                                     extrinsic_value,
                                                     strike,
-                                                    iv,
+                                                    ROUND(iv,2) as iv,
                                                     round(impliedVolatility, 2) as impliedVolatility,
-                                                    delta,
-                                                    SMA200,
+                                                    ROUND(delta,2) as delta,
+                                                    ROUND(SMA200,2) as SMA200,
                                                     -- moneyness,
                                                     live_stock_price,
                                                     strike_stock_price_difference,
                                                     strike_stock_price_difference_ptc,
-                                                    analyst_mean_target as analyst_mean_target_price_year,
+                                                    round(analyst_mean_target,2) as analyst_mean_target_price_year,
                                                     "Fair-Value",
                                                     earnings_date,
                                                     days_to_ernings,
