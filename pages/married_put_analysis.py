@@ -189,9 +189,9 @@ if 'married_put_df' in st.session_state and not st.session_state['married_put_df
     # Apply symbol filter
     display_df = df if selected_symbol == 'All' else df[df['symbol'] == selected_symbol]
     
-    # Key columns for display
+    # Key columns for display (removed symbol_option_rank)
     key_columns = [
-        'symbol_option_rank', 'symbol', 'Company', 'expiration_date', 'days_to_expiration',
+        'symbol', 'Company', 'expiration_date', 'days_to_expiration',
         'strike', 'live_stock_price', 'premium_option_price', 'extrinsic_value',
         'total_investment', 'minimum_potential_profit', 'roi_pct', 'roi_annualized_pct',
         'delta', 'iv', 'option_open_interest', 'classification', 'Current-Div',

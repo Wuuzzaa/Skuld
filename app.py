@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from config import *
-from src.google_drive_download import load_updated_data
+from src.google_drive_download import load_updated_data, load_updated_database
 from src.custom_logging import *
 import sys
 
@@ -15,6 +15,11 @@ st.set_page_config(layout="wide")
 
 # Titel
 st.title("SKULD - Option Viewer")
+
+
+# Ensure database is available (download if needed)
+if not use_local_data:
+    load_updated_database()
 
 
 # load dataframe
