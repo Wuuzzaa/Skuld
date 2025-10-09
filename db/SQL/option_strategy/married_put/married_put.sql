@@ -117,7 +117,7 @@ where
 Order by
     roi_annualized_pct DESC;
 
--- detlta > abs(-0.85) Delta ≈ probability of finishing in the money (rough approximation, especially for near-term options).
+-- delta > abs(-0.85) Delta ≈ probability of finishing in the money (rough approximation, especially for near-term options).
 -- A put with Delta -0.30 means about a 30% chance it will expire in the money.
 -- payout ratio < 100% (earnings should cover dividend)
 -- buy at small implied volatility < 30%
