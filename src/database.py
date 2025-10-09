@@ -53,7 +53,8 @@ def insert_into_table(
 
     return affected_rows
 
-def select_into_dataframe(query: str = None, sql_file_path: str = None):
+
+def select_into_dataframe(query: str = None, sql_file_path: str = None, params: dict = None):
     """
     Executes a SQL query and returns the result as a DataFrame.
     You can provide either a SQL query string or a path to a .sql file.
@@ -61,15 +62,17 @@ def select_into_dataframe(query: str = None, sql_file_path: str = None):
     Parameters:
     - query (str, optional): SQL query string to execute.
     - sql_file_path (str, optional): Path to a .sql file containing the query.
+    - params (dict, optional): Dictionary of parameters to bind to the query (e.g., {'expiration_date': '2026-08-21'})
 
     Returns:
     - pd.DataFrame: Result of the query.
     """
     df = None
     try:
-        print(f" executing query: {query}")
-        start = time.time() 
+        print(f"Executing query: {query}")
+        start = time.time()
         engine = get_database_engine()
+
         if sql_file_path is not None and os.path.isfile(sql_file_path):
             with open(sql_file_path, 'r') as f:
                 sql = f.read()
@@ -77,13 +80,20 @@ def select_into_dataframe(query: str = None, sql_file_path: str = None):
             sql = query
         else:
             raise ValueError("Either 'query' or 'sql_file_path' must be provided.")
-        
-        df = pd.read_sql(sql, engine)
-        print(f"Query executed successfully in {round(time.time() - start,2)}s. Top 5 rows:")
+
+        # If parameters are provided, use text() with bound parameters
+        if params:
+            sql = text(sql)
+            df = pd.read_sql(sql, engine, params=params)
+        else:
+            df = pd.read_sql(sql, engine)
+
+        print(f"Query executed successfully in {round(time.time() - start, 2)}s. Top 5 rows:")
+        print(f"Dataframe shape: {df.shape}")
         print(df.head())
     except Exception as e:
         print(f"Error executing query {query}: {e}")
-    
+
     return df
 
 def run_migrations():
