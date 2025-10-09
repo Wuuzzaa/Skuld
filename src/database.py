@@ -69,7 +69,7 @@ def select_into_dataframe(query: str = None, sql_file_path: str = None, params: 
     """
     df = None
     try:
-        print(f"Executing query: {query}")
+        print(f"Executing query: {query} parameters: {params}")
         start = time.time()
         engine = get_database_engine()
 
