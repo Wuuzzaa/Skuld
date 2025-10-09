@@ -1,24 +1,22 @@
-import time
-from datetime import datetime
-import streamlit as st
-import pandas as pd
+from src.database import select_into_dataframe
 from src.spreads_calculation import get_spreads
-from src.util import get_option_expiry_dates
 from src.custom_logging import *
 
 # Titel
 st.subheader("Spreads")
 
-# Create layout with multiple columns
+# Create a layout with multiple columns
 col_epiration_date, col_delta_target, col_spread_width = st.columns(3)
 
 # expiration date
 with col_epiration_date:
-    # Expiration dates with selectbox
-    expiration_dates = [
-        datetime.strptime(str(date), "%Y%m%d").strftime("%Y-%m-%d")
-        for date in get_option_expiry_dates()
-    ]
+    expiration_dates_sql = """
+        SELECT DISTINCT expiration_date
+        FROM OptionDataMerged
+        ORDER BY expiration_date; \
+    """
+
+    expiration_dates = select_into_dataframe(expiration_dates_sql)
     expiration_date = st.selectbox("Expiration Date", expiration_dates)
 
 # delta target
@@ -29,9 +27,32 @@ with col_delta_target:
 with col_spread_width:
     spread_width = st.number_input("Spread Width", min_value=1, max_value=20, value=5, step=1)
 
-# Filter the dataframe and calculate the spread values with loading indicator
+# calculate the spread values with a loading indicator
 with st.status("Calculating... Please wait.", expanded=True) as status:
-    spreads_df = get_spreads(st.session_state['df'], expiration_date, delta_target, spread_width)
+    sql_query = """
+    SELECT
+            symbol,
+            expiration_date,
+            "option-type",
+            strike,
+            ask,
+            bid,
+            delta,
+            iv,
+            theta,
+            close,
+            earnings_date,
+            days_to_expiration
+    FROM
+            OptionDataMerged
+    WHERE
+        expiration_date = :expiration_date;
+    """
+
+    df = select_into_dataframe(query=sql_query, params={"expiration_date": expiration_date})
+
+    spreads_df = get_spreads(df, delta_target, spread_width)
+
     status.update(label="Calculation complete!", state="complete", expanded=True)
 
 # Dynamically extract unique values for symbol and option_type from calculated spreads_df
