@@ -1,25 +1,27 @@
 import streamlit as st
 
+from src.database import select_into_dataframe
+
 # Titel
 st.subheader("Analyst Prices")
 
-
-df = st.session_state['df']
-
-df_tab3 = df[
-    [
-        "symbol",
-        "close",
-        "analyst_mean_target",
-        "recommendation",
+sql_query = """
+    SELECT DISTINCT
+        symbol,
+        close,
+        analyst_mean_target,
+        recommendation,
         "Recommend.All",
         "target-close$",
         "target-close%"
-    ]
-].drop_duplicates().reset_index(drop=True)
+    FROM
+            OptionDataMerged;
+"""
+
+df = select_into_dataframe(query=sql_query)
 
 # rename columns for the app-view
-df_tab3 = df_tab3.rename(
+df = df.rename(
     columns={
         "symbol": "Symbol",
         "close": "Price",
@@ -31,4 +33,4 @@ df_tab3 = df_tab3.rename(
     }
 )
 
-st.dataframe(df_tab3, use_container_width=True)
+st.dataframe(df, use_container_width=True)
