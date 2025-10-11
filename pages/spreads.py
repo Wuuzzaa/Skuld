@@ -1,4 +1,5 @@
 from src.database import select_into_dataframe
+from src.page_display_dataframe import page_display_dataframe_with_trading_view_link
 from src.spreads_calculation import get_spreads
 from src.custom_logging import *
 
@@ -77,4 +78,6 @@ if option_type != "Put and Call":
 
 # Show the filtered spreads
 log_info(f"Spreads calculated for: {expiration_date}, delta {delta_target}, spread width {spread_width}, symbol {symbol}, option type {option_type}")
-st.dataframe(spreads_df, use_container_width=True)
+
+# show final dataframe
+page_display_dataframe_with_trading_view_link(spreads_df, symbol_column='symbol')
