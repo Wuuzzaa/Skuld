@@ -1,4 +1,5 @@
 from config import *
+from src.decorator_log_function import log_function
 from src.monte_carlo_simulation import UniversalOptionsMonteCarloSimulator
 
 
@@ -88,8 +89,8 @@ def _add_buy_options(df, sell_puts, sell_calls, spread_width):
 
     return put_spreads, call_spreads
 
-
-def get_spreads(df, delta_target, spread_width):
+@log_function
+def calc_spreads(df:pd.DataFrame, delta_target:float, spread_width:float):
     """
     Workflow:
     - select the sell options via delta
@@ -183,7 +184,7 @@ if __name__ == "__main__":
 
     start = time.time()
     df = select_into_dataframe(query=sql_query, params={"expiration_date": expiration_date})
-    spreads_df = get_spreads(df, delta_target, spread_width)
+    spreads_df = calc_spreads(df, delta_target, spread_width)
     ende = time.time()
 
     print(spreads_df.head())
