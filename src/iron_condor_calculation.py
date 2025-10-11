@@ -1,10 +1,10 @@
 import pandas as pd
 from config import *
-from src.spreads_calculation import get_spreads
+from src.spreads_calculation import calc_spreads
 
 
 def get_iron_condors(df, expiration_date, delta_target, spread_width):
-    spreads_df = get_spreads(df, expiration_date, delta_target, spread_width)
+    spreads_df = calc_spreads(df, expiration_date, delta_target, spread_width)
 
     # separate call and put spreads in own dataframes
     puts = spreads_df[spreads_df['option_type'] == 'put'].copy()
