@@ -1,3 +1,5 @@
+#todo shit redo whole logging for skuld.
+
 import streamlit as st
 import logging
 import sys
