@@ -12,13 +12,25 @@ col_epiration_date, col_delta_target, col_spread_width = st.columns(3)
 # expiration date
 with col_epiration_date:
     expiration_dates_sql = """
-        SELECT DISTINCT expiration_date
+        SELECT DISTINCT expiration_date, days_to_expiration
         FROM OptionDataMerged
-        ORDER BY expiration_date; \
+        ORDER BY days_to_expiration; \
     """
 
-    expiration_dates = select_into_dataframe(expiration_dates_sql)
-    expiration_date = st.selectbox("Expiration Date", expiration_dates)
+    dates_df = select_into_dataframe(expiration_dates_sql)
+
+    # dte labels  ("5 DTE - 2025-01-15")
+    dte_labels = dates_df.apply(
+        lambda row: f"{int(row['days_to_expiration'])} DTE  {row['expiration_date']}",
+        axis=1
+    ).tolist()
+
+    # selectbox with dte labels
+    selected_label = st.selectbox("Expiration Date", dte_labels)
+
+    # extract selected expiration date from dte label
+    selected_index = dte_labels.index(selected_label)
+    expiration_date = dates_df.iloc[selected_index]['expiration_date']
 
 # delta target
 with col_delta_target:
