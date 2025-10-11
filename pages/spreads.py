@@ -50,9 +50,7 @@ with st.status("Calculating... Please wait.", expanded=True) as status:
     """
 
     df = select_into_dataframe(query=sql_query, params={"expiration_date": expiration_date})
-
     spreads_df = get_spreads(df, delta_target, spread_width)
-
     status.update(label="Calculation complete!", state="complete", expanded=True)
 
 # Dynamically extract unique values for symbol and option_type from calculated spreads_df
