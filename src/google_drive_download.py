@@ -11,7 +11,8 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 from googleapiclient.errors import HttpError
-from config import PATH_DATAFRAME_DATA_MERGED_FEATHER , FILENAME_GOOGLE_DRIVE, PATH_ON_GOOGLE_DRIVE, PATH_FOR_SERVICE_ACCOUNT_FILE, PATH_DATABASE  
+from config import PATH_DATAFRAME_DATA_MERGED_FEATHER, FILENAME_GOOGLE_DRIVE, PATH_ON_GOOGLE_DRIVE, \
+    PATH_FOR_SERVICE_ACCOUNT_FILE, PATH_DATABASE, DATABASE_FILENAME
 
 """
 Configuration:
@@ -214,11 +215,9 @@ def load_updated_database():
     Returns True if successful, False otherwise.
     Note: Caching is handled by the caller (e.g., app.py) to avoid warnings in non-Streamlit contexts.
     """
-    database_filename = "financial_data.db"
-    
     if should_update_file(PATH_DATABASE, UPDATE_TIMES):
         log_info("New database file available – starting download from Google Drive ...")
-        file_id = find_file_id_by_name(database_filename, PARENT_FOLDER_ID)
+        file_id = find_file_id_by_name(DATABASE_FILENAME, PARENT_FOLDER_ID)
         if file_id is None:
             log_error("Database file with the specified name was not found on Google Drive.")
             return False

@@ -9,6 +9,7 @@ FILENAME_MERGED_DATAFRAME = 'merged_df.feather'
 
 # Data folder
 PATH_DATA = BASE_DIR / 'data'
+
 PATH_OPTION_DATA_TRADINGVIEW = PATH_DATA / 'json' / 'option_data_tradingview'
 PATH_DATAFRAME_OPTION_DATA_FEATHER = PATH_DATA / 'option_data.feather'
 PATH_DATAFRAME_PRICE_AND_INDICATOR_DATA_FEATHER = PATH_DATA / 'price_and_indicators.feather'
@@ -21,7 +22,8 @@ PATH_DATAFRAME_YAHOOQUERY_FINANCIAL_PROCESSED_FEATHER = PATH_DATA / 'yahooquery_
 PATH_DATAFRAME_LIVE_STOCK_PRICES_FEATHER = PATH_DATA / 'live_stock_prices.feather'
  
 # Database
-PATH_DATABASE = BASE_DIR / 'db/financial_data.db'
+DATABASE_FILENAME = 'financial_data.db'
+PATH_DATABASE =  BASE_DIR / 'db' / DATABASE_FILENAME
 
 # Tables
 TABLE_OPTION_DATA_TRADINGVIEW = 'OptionDataTradingView'
@@ -567,7 +569,6 @@ TRANSACTION_COST_PER_CONTRACT = 3.5 # in USD
 # =============================================================================
 # SIMPLIFIED DATA COLLECTION CONFIGURATION
 # =============================================================================
-
 
 # Symbol selection
 SYMBOL_SELECTION = {
