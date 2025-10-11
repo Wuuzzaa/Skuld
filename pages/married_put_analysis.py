@@ -3,6 +3,8 @@ import pandas as pd
 import sys
 import os
 
+from src.page_display_dataframe import page_display_dataframe_with_trading_view_link
+
 # Add src directory to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
@@ -200,11 +202,11 @@ if 'married_put_df' in st.session_state and not st.session_state['married_put_df
     
     # Filter columns that actually exist in the dataframe
     available_columns = [col for col in key_columns if col in display_df.columns]
-    
-    # Display the dataframe
-    st.dataframe(
-        display_df[available_columns],
-        use_container_width=True,
+
+    # show final dataframe
+    page_display_dataframe_with_trading_view_link(
+        df=display_df[available_columns],
+        symbol_column='symbol',
         column_config={
             "roi_annualized_pct": st.column_config.NumberColumn(
                 "ROI % (Annual)",
