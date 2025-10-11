@@ -1,3 +1,5 @@
+#todo still needed. if so port to db from dataframe
+
 import streamlit as st
 import pandas as pd
 import os

@@ -1,3 +1,5 @@
+#todo still needed. if so port to db from dataframe
+
 import time
 from datetime import datetime
 import streamlit as st
