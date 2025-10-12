@@ -11,13 +11,8 @@ col_epiration_date, col_delta_target, col_spread_width = st.columns(3)
 
 # expiration date
 with col_epiration_date:
-    expiration_dates_sql = """
-        SELECT DISTINCT expiration_date, days_to_expiration
-        FROM OptionDataMerged
-        ORDER BY days_to_expiration; \
-    """
-
-    dates_df = select_into_dataframe(expiration_dates_sql)
+    sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'expiration_dte_asc.sql'
+    dates_df = select_into_dataframe(sql_file_path=sql_file_path)
 
     # dte labels  ("5 DTE - 2025-01-15")
     dte_labels = dates_df.apply(
@@ -42,27 +37,8 @@ with col_spread_width:
 
 # calculate the spread values with a loading indicator
 with st.status("Calculating... Please wait.", expanded=True) as status:
-    sql_query = """
-    SELECT
-            symbol,
-            expiration_date,
-            "option-type",
-            strike,
-            ask,
-            bid,
-            delta,
-            iv,
-            theta,
-            close,
-            earnings_date,
-            days_to_expiration
-    FROM
-            OptionDataMerged
-    WHERE
-        expiration_date = :expiration_date;
-    """
-
-    df = select_into_dataframe(query=sql_query, params={"expiration_date": expiration_date})
+    sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'spreads_input.sql'
+    df = select_into_dataframe(sql_file_path=sql_file_path, params={"expiration_date": expiration_date})
     spreads_df = calc_spreads(df, delta_target, spread_width)
     status.update(label="Calculation complete!", state="complete", expanded=True)
 

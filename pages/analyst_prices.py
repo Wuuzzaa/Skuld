@@ -1,25 +1,14 @@
 import streamlit as st
 
+from config import PATH_DATABASE_QUERY_FOLDER
 from src.database import select_into_dataframe
 from src.page_display_dataframe import page_display_dataframe_with_trading_view_link
 
 # Titel
 st.subheader("Analyst Prices")
 
-sql_query = """
-    SELECT DISTINCT
-        symbol,
-        close,
-        analyst_mean_target,
-        recommendation,
-        "Recommend.All",
-        "target-close$",
-        "target-close%"
-    FROM
-            OptionDataMerged;
-"""
-
-df = select_into_dataframe(query=sql_query)
+sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'analyst_prices.sql'
+df = select_into_dataframe(sql_file_path=sql_file_path)
 
 # rename columns for the app-view
 df = df.rename(
