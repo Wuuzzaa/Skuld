@@ -15,7 +15,7 @@ from src.database import select_into_dataframe
 st.subheader("Married Put Analysis")
 
 # Filter Controls
-col1, col2, col3 = st.columns(3)
+col1, col2, col3, col4 = st.columns(4)
 
 with col1:
     max_results = st.number_input("Max Results", min_value=10, max_value=1000, value=50, step=10)
@@ -24,10 +24,17 @@ with col2:
     min_roi = st.number_input("Min ROI % (annualized)", min_value=0.0, max_value=100.0, value=0.0, step=1.0)
 
 with col3:
+    max_roi = st.number_input("Max ROI % (annualized)", min_value=0.0, max_value=100.0, value=7.0, step=1.0)
+
+with col4:
     min_days = st.number_input("Min Days to Expiration", min_value=30, max_value=500, value=90, step=10)
 
-# Button to refresh data
-if st.button("Load/Refresh Data"):
+# Auto-load data on page load or when filters change
+# Using session state to track if data needs to be reloaded
+filter_key = f"{max_results}_{min_roi}_{max_roi}_{min_days}"
+if 'last_filter_key' not in st.session_state or st.session_state['last_filter_key'] != filter_key:
+    st.session_state['last_filter_key'] = filter_key
+    
     with st.spinner("Loading married put analysis..."):
         try:
             # Execute SQL query
@@ -35,10 +42,13 @@ if st.button("Load/Refresh Data"):
             df = select_into_dataframe(sql_file_path=sql_file_path)
             
             if df is not None and not df.empty:
-                # Apply additional filters
-                if min_roi > 0:
-                    df = df[df['roi_annualized_pct'] >= min_roi]
+                # Apply ROI filters
+                df = df[
+                    (df['roi_annualized_pct'] >= min_roi) & 
+                    (df['roi_annualized_pct'] <= max_roi)
+                ]
                 
+                # Apply days filter
                 if min_days != 90:
                     df = df[df['days_to_expiration'] >= min_days]
                 
@@ -47,7 +57,6 @@ if st.button("Load/Refresh Data"):
                 
                 # Store in session state
                 st.session_state['married_put_df'] = df
-                st.success(f"Loaded {len(df)} married put opportunities")
                 
             else:
                 st.warning("No data found")
@@ -60,24 +69,6 @@ if st.button("Load/Refresh Data"):
 # Display data if it exists
 if 'married_put_df' in st.session_state and not st.session_state['married_put_df'].empty:
     df = st.session_state['married_put_df']
-    
-    # Summary metrics
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric("Total Opportunities", len(df))
-    
-    with col2:
-        avg_roi = df['roi_annualized_pct'].mean()
-        st.metric("Avg ROI %", f"{avg_roi:.2f}%")
-    
-    with col3:
-        unique_symbols = df['symbol'].nunique()
-        st.metric("Unique Symbols", unique_symbols)
-    
-    with col4:
-        avg_days = df['days_to_expiration'].mean()
-        st.metric("Avg Days to Exp", f"{avg_days:.0f}")
     
     # Symbol filter
     symbols = ['All'] + sorted(df['symbol'].unique().tolist())
@@ -135,7 +126,7 @@ if 'married_put_df' in st.session_state and not st.session_state['married_put_df
     )
 
 else:
-    st.info("Click 'Load/Refresh Data' to see the married put analysis")
+    st.info("No data available")
     
 # Info box with strategy explanation
 with st.expander("Strategy Information"):
