@@ -1,7 +1,8 @@
+import streamlit as st
 from src.database import select_into_dataframe
 from src.page_display_dataframe import page_display_dataframe_with_trading_view_link
 from src.spreads_calculation import calc_spreads
-from src.custom_logging import *
+from config import *
 
 # Titel
 st.subheader("Spreads")
@@ -63,9 +64,6 @@ if symbol != "All Symbols":
 
 if option_type != "Put and Call":
     spreads_df = spreads_df[spreads_df['option_type'] == option_type]
-
-# Show the filtered spreads
-log_info(f"Spreads calculated for: {expiration_date}, delta {delta_target}, spread width {spread_width}, symbol {symbol}, option type {option_type}")
 
 # show final dataframe
 page_display_dataframe_with_trading_view_link(spreads_df, symbol_column='symbol')

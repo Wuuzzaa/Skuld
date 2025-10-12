@@ -1,18 +1,20 @@
 import os
 import io
-import json
 import streamlit as st
 import pandas as pd
+import logging
 from datetime import datetime, time
 from zoneinfo import ZoneInfo
-from src.custom_logging import log_info, log_error, log_write
-
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 from googleapiclient.errors import HttpError
 from config import PATH_DATAFRAME_DATA_MERGED_FEATHER, FILENAME_GOOGLE_DRIVE, PATH_ON_GOOGLE_DRIVE, \
-    PATH_FOR_SERVICE_ACCOUNT_FILE, PATH_DATABASE_FILE, DATABASE_FILENAME
+     PATH_DATABASE_FILE, DATABASE_FILENAME
+
+# logging
+logger = logging.getLogger(__name__)
+logger.info("Start google drive download")
 
 """
 Configuration:
@@ -56,14 +58,14 @@ def find_file_id_by_name(file_name, parent_folder_id=None):
         ).execute()
         files = results.get("files", [])
         if not files:
-            log_error("No file found with the specified name.")
+            logger.error("No file found with the specified name.")
             return None
         else:
             file = files[0]
-            log_info(f"Found file: {file.get('name')} (ID: {file.get('id')})")
+            logger.info(f"Found file: {file.get('name')} (ID: {file.get('id')})")
             return file.get("id")
     except HttpError as error:
-        log_error(f"An error occurred: {error}")
+        logger.error(f"An error occurred: {error}")
         return None
 
 
@@ -83,7 +85,7 @@ def download_feather_from_drive(file_id):
         if modified_time_str:
             modified_time_utc = datetime.fromisoformat(modified_time_str.replace("Z", "+00:00"))
             modified_time_local = modified_time_utc.astimezone(ZoneInfo(LOCAL_TZ))
-            log_info(f"File last modified (Google Drive): {modified_time_local.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+            logger.info(f"File last modified (Google Drive): {modified_time_local.strftime('%Y-%m-%d %H:%M:%S %Z')}")
         # Directly download the file without export since it's a Feather file
         request = service.files().get_media(fileId=file_id)
         file_stream = io.BytesIO()
@@ -92,11 +94,11 @@ def download_feather_from_drive(file_id):
         while not done:
             status, done = downloader.next_chunk()
             if status:
-                log_write(f"Download progress: {int(status.progress() * 100)}%")
+                logger.info(f"Download progress: {int(status.progress() * 100)}%")
         file_stream.seek(0)
         return file_stream
     except HttpError as error:
-        log_error(f"An error occurred: {error}")
+        logger.error(f"An error occurred: {error}")
         return None
 
 
@@ -140,10 +142,10 @@ def load_updated_data():
     Note: Caching is handled by the caller (e.g., app.py) to avoid warnings in non-Streamlit contexts.
     """
     if should_update_file(PATH_DATAFRAME_DATA_MERGED_FEATHER, UPDATE_TIMES):
-        log_info("New file available – starting download from Google Drive ...")
+        logger.info("New file available – starting download from Google Drive ...")
         file_id = find_file_id_by_name(FILE_NAME, PARENT_FOLDER_ID)
         if file_id is None:
-            log_error("File with the specified name was not found on Google Drive.")
+            logger.error("File with the specified name was not found on Google Drive.")
             return None
         file_stream = download_feather_from_drive(file_id)
         if file_stream is None:
@@ -152,28 +154,28 @@ def load_updated_data():
         # Read Feather from the downloaded stream
         try:
             df = pd.read_feather(file_stream)
-            log_info("Feather file successfully read from the downloaded stream.")
+            logger.info("Feather file successfully read from the downloaded stream.")
         except Exception as e:
-            log_error(f"Error reading the Feather file: {e}")
+            logger.error(f"Error reading the Feather file: {e}")
             return None
         # Save the DataFrame as a local Feather file
         try:
             df.to_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
-            log_info("Downloaded Feather file saved locally.")
+            logger.info("Downloaded Feather file saved locally.")
         except Exception as e:
-            log_error(f"Error saving the Feather file: {e}")
+            logger.error(f"Error saving the Feather file: {e}")
             return None
         return df
     else:
-        log_info("Loading local Feather file ...")
+        logger.info("Loading local Feather file ...")
         try:
             df = pd.read_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
             last_mod = file_last_modified(PATH_DATAFRAME_DATA_MERGED_FEATHER)
             last_mod_local = last_mod.astimezone(ZoneInfo(LOCAL_TZ))
-            log_info(f"Local file last modified on: {last_mod_local.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+            logger.info(f"Local file last modified on: {last_mod_local.strftime('%Y-%m-%d %H:%M:%S %Z')}")
             return df
         except Exception as e:
-            log_error(f"Error reading the local Feather file: {e}")
+            logger.error(f"Error reading the local Feather file: {e}")
             return None
 
 
@@ -193,7 +195,7 @@ def download_database_from_drive(file_id):
         if modified_time_str:
             modified_time_utc = datetime.fromisoformat(modified_time_str.replace("Z", "+00:00"))
             modified_time_local = modified_time_utc.astimezone(ZoneInfo(LOCAL_TZ))
-            log_info(f"Database file last modified (Google Drive): {modified_time_local.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+            logger.info(f"Database file last modified (Google Drive): {modified_time_local.strftime('%Y-%m-%d %H:%M:%S %Z')}")
         # Directly download the database file
         request = service.files().get_media(fileId=file_id)
         file_stream = io.BytesIO()
@@ -202,11 +204,11 @@ def download_database_from_drive(file_id):
         while not done:
             status, done = downloader.next_chunk()
             if status:
-                log_write(f"Download progress: {int(status.progress() * 100)}%")
+                logger.info(f"Download progress: {int(status.progress() * 100)}%")
         file_stream.seek(0)
         return file_stream
     except HttpError as error:
-        log_error(f"An error occurred: {error}")
+        logger.error(f"An error occurred: {error}")
         return None
 
 
@@ -216,10 +218,10 @@ def load_updated_database():
     Note: Caching is handled by the caller (e.g., app.py) to avoid warnings in non-Streamlit contexts.
     """
     if should_update_file(PATH_DATABASE_FILE, UPDATE_TIMES):
-        log_info("New database file available – starting download from Google Drive ...")
+        logger.info("New database file available – starting download from Google Drive ...")
         file_id = find_file_id_by_name(DATABASE_FILENAME, PARENT_FOLDER_ID)
         if file_id is None:
-            log_error("Database file with the specified name was not found on Google Drive.")
+            logger.error("Database file with the specified name was not found on Google Drive.")
             return False
         file_stream = download_database_from_drive(file_id)
         if file_stream is None:
@@ -229,23 +231,23 @@ def load_updated_database():
         try:
             with open(PATH_DATABASE_FILE, 'wb') as f:
                 f.write(file_stream.getvalue())
-            log_info("Downloaded database file saved locally.")
+            logger.info("Downloaded database file saved locally.")
             return True
         except Exception as e:
-            log_error(f"Error saving the database file: {e}")
+            logger.error(f"Error saving the database file: {e}")
             return False
     else:
-        log_info("Using local database file ...")
+        logger.info("Using local database file ...")
         try:
             if os.path.exists(PATH_DATABASE_FILE):
                 last_mod = file_last_modified(PATH_DATABASE_FILE)
                 last_mod_local = last_mod.astimezone(ZoneInfo(LOCAL_TZ))
-                log_info(f"Local database file last modified on: {last_mod_local.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+                logger.info(f"Local database file last modified on: {last_mod_local.strftime('%Y-%m-%d %H:%M:%S %Z')}")
                 return True
             else:
-                log_error("Local database file does not exist.")
+                logger.error("Local database file does not exist.")
                 return False
         except Exception as e:
-            log_error(f"Error checking the local database file: {e}")
+            logger.error(f"Error checking the local database file: {e}")
             return False
 

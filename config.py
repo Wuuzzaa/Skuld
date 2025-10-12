@@ -4,6 +4,9 @@ from pathlib import Path
 # Base path relative to base folder
 BASE_DIR = Path(__file__).resolve().parent
 
+# Logfile
+PATH_LOG_FILE = BASE_DIR / "logs" /"log.log"
+
 # Filename merged dataframe the final file for the streamlit app
 FILENAME_MERGED_DATAFRAME = 'merged_df.feather'
 

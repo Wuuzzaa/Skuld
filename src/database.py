@@ -1,11 +1,15 @@
 import time
-from typing import Literal
-import pandas as pd
-from sqlalchemy import create_engine, text, inspect
-
-from config import PATH_DATABASE_FILE
 import os
 import re
+import pandas as pd
+import logging
+from typing import Literal
+from sqlalchemy import create_engine, text, inspect
+from config import PATH_DATABASE_FILE
+from src.decorator_log_function import log_function
+
+# logging
+logger = logging.getLogger(__name__)
 
 
 def get_database_engine():
@@ -53,7 +57,7 @@ def insert_into_table(
 
     return affected_rows
 
-
+@log_function
 def select_into_dataframe(query: str = None, sql_file_path: str = None, params: dict = None):
     """
     Executes a SQL query and returns the result as a DataFrame.
@@ -69,7 +73,7 @@ def select_into_dataframe(query: str = None, sql_file_path: str = None, params: 
     """
     df = None
     try:
-        print(f"Executing query: {query} parameters: {params}")
+        #print(f"Executing query: {query} parameters: {params}")
         start = time.time()
         engine = get_database_engine()
 
@@ -79,7 +83,9 @@ def select_into_dataframe(query: str = None, sql_file_path: str = None, params: 
         elif query is not None:
             sql = query
         else:
-            raise ValueError("Either 'query' or 'sql_file_path' must be provided.")
+            msg = "Either 'query' or 'sql_file_path' must be provided."
+            logger.error(msg)
+            raise ValueError(msg)
 
         # If parameters are provided, use text() with bound parameters
         if params:
@@ -88,11 +94,9 @@ def select_into_dataframe(query: str = None, sql_file_path: str = None, params: 
         else:
             df = pd.read_sql(sql, engine)
 
-        print(f"Query executed successfully in {round(time.time() - start, 2)}s. Top 5 rows:")
-        print(f"Dataframe shape: {df.shape}")
-        print(df.head())
+        logger.debug(f"Query executed successfully in {round(time.time() - start, 2)}s. Top 5 rows:")
     except Exception as e:
-        print(f"Error executing query {query}: {e}")
+        logger.error(f"Error executing query {query}: {e}")
 
     return df
 

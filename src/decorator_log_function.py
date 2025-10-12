@@ -38,23 +38,8 @@ Version:
 import logging
 import time
 import functools
-from typing import Any
 import pandas as pd
-
-
-# Configure logger
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
-
-# Console handler
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-console_handler.setFormatter(formatter)
-
-# Add handler if not already present
-if not logger.handlers:
-    logger.addHandler(console_handler)
+from typing import Any
 
 
 def log_function(func):
@@ -91,13 +76,6 @@ def log_function(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs) -> Any:
         logger = logging.getLogger(__name__)
-        if not logger.handlers:
-            handler = logging.StreamHandler()
-            handler.setFormatter(
-                logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-            )
-            logger.addHandler(handler)
-            logger.setLevel(logging.INFO)
 
         func_name = func.__name__
 
@@ -211,84 +189,3 @@ def _format_result(result: Any) -> str:
         return f"dict(keys={len(result)})\n{dict(items)}"
     else:
         return repr(result)
-
-
-# ============================================================================
-# USAGE EXAMPLES
-# ============================================================================
-
-if __name__ == "__main__":
-    """
-    Examples demonstrating the log_function decorator.
-
-    Run this module directly to see example outputs:
-    $ python decorator_log_function.py
-    """
-
-    @log_function
-    def fetch_user_data(user_id: int, limit: int = 10) -> pd.DataFrame:
-        """Fetch user data and return as DataFrame."""
-        time.sleep(0.2)
-        df = pd.DataFrame({
-            'user_id': [user_id] * limit,
-            'value': range(limit),
-            'timestamp': pd.date_range('2025-01-01', periods=limit)
-        })
-        return df
-
-    @log_function
-    def process_dataframe(df: pd.DataFrame, multiplier: float = 2.0) -> pd.DataFrame:
-        """Process DataFrame by multiplying values."""
-        time.sleep(0.15)
-        df_copy = df.copy()
-        df_copy['value'] = df_copy['value'] * multiplier
-        return df_copy
-
-    @log_function
-    def calculate_statistics(values: list) -> dict:
-        """Calculate statistics from a list of values."""
-        time.sleep(0.1)
-        return {
-            'sum': sum(values),
-            'mean': sum(values) / len(values),
-            'min': min(values),
-            'max': max(values),
-            'count': len(values)
-        }
-
-    @log_function
-    def transform_data(
-        df: pd.DataFrame,
-        column_name: str,
-        operation: str = 'multiply',
-        factor: float = 2.0
-    ) -> pd.DataFrame:
-        """Transform DataFrame column with specified operation."""
-        time.sleep(0.1)
-        df_copy = df.copy()
-        if operation == 'multiply':
-            df_copy[column_name] = df_copy[column_name] * factor
-        elif operation == 'add':
-            df_copy[column_name] = df_copy[column_name] + factor
-        return df_copy
-
-    # Example 1: Function returning DataFrame
-    print("\n=== Example 1: Fetch User Data ===")
-    user_df = fetch_user_data(user_id=456, limit=5)
-
-    # Example 2: Function processing DataFrame
-    print("\n=== Example 2: Process DataFrame ===")
-    processed_df = process_dataframe(user_df, multiplier=3.0)
-
-    # Example 3: Function with simple types
-    print("\n=== Example 3: Calculate Statistics ===")
-    stats = calculate_statistics([10, 20, 30, 40, 50])
-
-    # Example 4: Function with multiple parameters
-    print("\n=== Example 4: Transform Data ===")
-    transformed_df = transform_data(
-        user_df,
-        column_name='value',
-        operation='add',
-        factor=100
-    )
