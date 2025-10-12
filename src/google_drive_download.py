@@ -12,7 +12,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 from googleapiclient.errors import HttpError
 from config import PATH_DATAFRAME_DATA_MERGED_FEATHER, FILENAME_GOOGLE_DRIVE, PATH_ON_GOOGLE_DRIVE, \
-    PATH_FOR_SERVICE_ACCOUNT_FILE, PATH_DATABASE, DATABASE_FILENAME
+    PATH_FOR_SERVICE_ACCOUNT_FILE, PATH_DATABASE_FILE, DATABASE_FILENAME
 
 """
 Configuration:
@@ -215,7 +215,7 @@ def load_updated_database():
     Returns True if successful, False otherwise.
     Note: Caching is handled by the caller (e.g., app.py) to avoid warnings in non-Streamlit contexts.
     """
-    if should_update_file(PATH_DATABASE, UPDATE_TIMES):
+    if should_update_file(PATH_DATABASE_FILE, UPDATE_TIMES):
         log_info("New database file available – starting download from Google Drive ...")
         file_id = find_file_id_by_name(DATABASE_FILENAME, PARENT_FOLDER_ID)
         if file_id is None:
@@ -224,10 +224,10 @@ def load_updated_database():
         file_stream = download_database_from_drive(file_id)
         if file_stream is None:
             return False
-        os.makedirs(os.path.dirname(PATH_DATABASE), exist_ok=True)
+        os.makedirs(os.path.dirname(PATH_DATABASE_FILE), exist_ok=True)
         # Save the downloaded database file locally
         try:
-            with open(PATH_DATABASE, 'wb') as f:
+            with open(PATH_DATABASE_FILE, 'wb') as f:
                 f.write(file_stream.getvalue())
             log_info("Downloaded database file saved locally.")
             return True
@@ -237,8 +237,8 @@ def load_updated_database():
     else:
         log_info("Using local database file ...")
         try:
-            if os.path.exists(PATH_DATABASE):
-                last_mod = file_last_modified(PATH_DATABASE)
+            if os.path.exists(PATH_DATABASE_FILE):
+                last_mod = file_last_modified(PATH_DATABASE_FILE)
                 last_mod_local = last_mod.astimezone(ZoneInfo(LOCAL_TZ))
                 log_info(f"Local database file last modified on: {last_mod_local.strftime('%Y-%m-%d %H:%M:%S %Z')}")
                 return True

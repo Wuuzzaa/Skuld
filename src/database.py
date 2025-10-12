@@ -3,7 +3,7 @@ from typing import Literal
 import pandas as pd
 from sqlalchemy import create_engine, text, inspect
 
-from config import PATH_DATABASE
+from config import PATH_DATABASE_FILE
 import os
 import re
 
@@ -12,7 +12,7 @@ def get_database_engine():
     """
     Creates and returns a SQLAlchemy engine for the SQLite database.
     """
-    return create_engine(f'sqlite:///{PATH_DATABASE}')
+    return create_engine(f'sqlite:///{PATH_DATABASE_FILE}')
 
 
 def truncate_table(table_name):

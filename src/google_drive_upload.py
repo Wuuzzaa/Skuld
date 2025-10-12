@@ -9,7 +9,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 from google.oauth2 import service_account
-from config import PATH_DATAFRAME_DATA_MERGED_FEATHER , FILENAME_GOOGLE_DRIVE, PATH_ON_GOOGLE_DRIVE, PATH_FOR_SERVICE_ACCOUNT_FILE, PATH_DATABASE
+from config import PATH_DATAFRAME_DATA_MERGED_FEATHER , FILENAME_GOOGLE_DRIVE, PATH_ON_GOOGLE_DRIVE, PATH_FOR_SERVICE_ACCOUNT_FILE, PATH_DATABASE_FILE
 from src.custom_logging import log_info, log_error, log_write, show_log_messages
 
 
@@ -171,7 +171,7 @@ def upload_database():
     """
     service_account_file = PATH_FOR_SERVICE_ACCOUNT_FILE  # Path to the Service Account JSON file
     parent_folder_id = PATH_ON_GOOGLE_DRIVE  # Target folder ID in Google Drive
-    file_path = PATH_DATABASE  # Local path to the database file
+    file_path = PATH_DATABASE_FILE  # Local path to the database file
     file_name = "financial_data.db"  # Name under which the file will be saved on Google Drive
 
     log_info("Starting database upload to Google Drive ...")
