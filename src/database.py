@@ -12,7 +12,8 @@ def get_database_engine():
     """
     Creates and returns a SQLAlchemy engine for the SQLite database.
     """
-    return create_engine(f'sqlite:///{PATH_DATABASE_FILE}')
+    # return create_engine(f'sqlite:///{PATH_DATABASE_FILE}')
+    return create_engine(f'sqlite:///{str(PATH_DATABASE_FILE.absolute())}')
 
 
 def truncate_table(table_name):
