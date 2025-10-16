@@ -1,20 +1,73 @@
 import time
-from typing import Literal
-import pandas as pd
-from sqlalchemy import create_engine, text, inspect
-
-from config import PATH_DATABASE_FILE
 import os
 import re
+import pandas as pd
+import sqlite3
+from typing import Literal
+from sqlalchemy import create_engine, text, inspect
+from config import PATH_DATABASE_FILE, PATH_DATABASE_QUERY_FOLDER
+
+# Global variable for the in-memory engine
+_in_memory_engine = None
+_in_memory_initialized = False
 
 
 def get_database_engine():
     """
-    Creates and returns a SQLAlchemy engine for the SQLite database.
+    Creates and returns an SQLAlchemy engine for the SQLite database.
     """
-    # return create_engine(f'sqlite:///{PATH_DATABASE_FILE}')
     return create_engine(f'sqlite:///{str(PATH_DATABASE_FILE.absolute())}')
 
+
+def get_in_memory_engine():
+    """
+    Returns a singleton in-memory SQLAlchemy engine.
+    The database is loaded once and reused for all subsequent calls.
+    """
+    global _in_memory_engine, _in_memory_initialized
+
+    if _in_memory_engine is None:
+        print("Creating in-memory database engine...")
+        _in_memory_engine = create_engine('sqlite:///:memory:')
+        _in_memory_initialized = False
+
+    if not _in_memory_initialized:
+        _load_database_into_memory()
+        _in_memory_initialized = True
+
+    return _in_memory_engine
+
+
+def _load_database_into_memory():
+    """
+    Loads the entire database from disk into memory using SQLite's backup API.
+    This is much faster and more reliable than copying tables individually.
+    """
+    print(f"Loading database from {PATH_DATABASE_FILE} into memory...")
+    start = time.time()
+
+    # Get raw connections from engines
+    source_conn = sqlite3.connect(str(PATH_DATABASE_FILE.absolute()))
+
+    # Get the actual sqlite3.Connection from SQLAlchemy's connection pool
+    target_conn_wrapper = _in_memory_engine.raw_connection()
+    target_conn = target_conn_wrapper.driver_connection
+
+    # Use SQLite's backup API to copy the entire database
+    source_conn.backup(target_conn)
+    source_conn.close()
+    target_conn_wrapper.close()
+
+    print(f"Database loaded into memory in {round(time.time() - start, 2)}s")
+
+def reload_in_memory_database():
+    """
+    Forces a reload of the in-memory database from disk.
+    Call this after making changes to the database file.
+    """
+    global _in_memory_initialized
+    _in_memory_initialized = False
+    get_in_memory_engine()
 
 def truncate_table(table_name):
     """
@@ -55,15 +108,20 @@ def insert_into_table(
     return affected_rows
 
 
-def select_into_dataframe(query: str = None, sql_file_path: str = None, params: dict = None):
+def select_into_dataframe(
+        query: str = None,
+        sql_file_path: str = None,
+        params: dict = None,
+        use_in_memory: bool = True
+):
     """
     Executes a SQL query and returns the result as a DataFrame.
-    You can provide either a SQL query string or a path to a .sql file.
 
     Parameters:
     - query (str, optional): SQL query string to execute.
     - sql_file_path (str, optional): Path to a .sql file containing the query.
-    - params (dict, optional): Dictionary of parameters to bind to the query (e.g., {'expiration_date': '2026-08-21'})
+    - params (dict, optional): Dictionary of parameters to bind to the query.
+    - use_in_memory (bool): If True, uses the in-memory database for faster reads. Default: True.
 
     Returns:
     - pd.DataFrame: Result of the query.
@@ -72,7 +130,9 @@ def select_into_dataframe(query: str = None, sql_file_path: str = None, params: 
     try:
         print(f"Executing query: {query} parameters: {params}")
         start = time.time()
-        engine = get_database_engine()
+
+        # Use in-memory engine for reads by default
+        engine = get_in_memory_engine() if use_in_memory else get_database_engine()
 
         if sql_file_path is not None and os.path.isfile(sql_file_path):
             with open(sql_file_path, 'r') as f:
@@ -157,3 +217,94 @@ def run_migrations():
             connection.execute(text(f"UPDATE DbVersion SET version = {last_migration_version}"))
             print(f"Database version updated to {last_migration_version}.")
     print(f"Database migration completed in {round(time.time() - start,2)}s")
+
+
+if __name__ == "__main__":
+    """
+    Benchmark comparing file-based vs in-memory database queries.
+    """
+    print("=" * 80)
+    print("DATABASE QUERY BENCHMARK: File-based vs In-Memory")
+    print("=" * 80)
+
+    # Get all SQL query files using relative path from current file
+    query_files = list(PATH_DATABASE_QUERY_FOLDER.glob("*.sql"))
+
+    if not query_files:
+        print(f"No query files found in {PATH_DATABASE_QUERY_FOLDER}")
+        print(f"Looking for: {PATH_DATABASE_QUERY_FOLDER.absolute()}")
+        exit(1)
+
+    print(f"\nFound {len(query_files)} query files to benchmark")
+    print(f"Query directory: {PATH_DATABASE_QUERY_FOLDER.absolute()}\n")
+
+    # Pre-load in-memory database before benchmark starts (for fair comparison)
+    print("Pre-loading in-memory database...")
+    get_in_memory_engine()
+    print("In-memory database ready!\n")
+
+    results = []
+
+    for sql_file in sorted(query_files):
+        query_name = sql_file.name
+
+        # ignore query with parameter
+        if query_name == "spreads_input.sql":
+            continue
+
+        print(f"\n{'─' * 80}")
+        print(f"Testing: {query_name}")
+        print(f"{'─' * 80}")
+
+        # Benchmark file-based query
+        print("\n[File-based]")
+        start_file = time.time()
+        df_file = select_into_dataframe(sql_file_path=str(sql_file), use_in_memory=False)
+        time_file = time.time() - start_file
+
+        # Benchmark in-memory query
+        print("\n[In-Memory]")
+        start_memory = time.time()
+        df_memory = select_into_dataframe(sql_file_path=str(sql_file), use_in_memory=True)
+        time_memory = time.time() - start_memory
+
+        # Calculate speedup
+        speedup = time_file / time_memory if time_memory > 0 else 0
+
+        results.append({
+            'query': query_name,
+            'file_time': time_file,
+            'memory_time': time_memory,
+            'speedup': speedup,
+            'rows': len(df_memory) if df_memory is not None else 0
+        })
+
+        print(f"\n📊 Results for {query_name}:")
+        print(f"   File-based:  {time_file:.4f}s")
+        print(f"   In-Memory:   {time_memory:.4f}s")
+        print(f"   Speedup:     {speedup:.2f}x faster")
+        print(f"   Rows:        {len(df_memory) if df_memory is not None else 0}")
+
+    # Summary
+    print("\n" + "=" * 80)
+    print("BENCHMARK SUMMARY")
+    print("=" * 80)
+    print(f"\n{'Query':<40} {'File (s)':<12} {'Memory (s)':<12} {'Speedup':<10} {'Rows':<10}")
+    print("─" * 80)
+
+    for r in results:
+        print(
+            f"{r['query']:<40} {r['file_time']:<12.4f} {r['memory_time']:<12.4f} {r['speedup']:<10.2f}x {r['rows']:<10}")
+
+    # Overall statistics
+    avg_speedup = sum(r['speedup'] for r in results) / len(results) if results else 0
+    total_file_time = sum(r['file_time'] for r in results)
+    total_memory_time = sum(r['memory_time'] for r in results)
+
+    print("─" * 80)
+    print(
+        f"{'TOTAL':<40} {total_file_time:<12.4f} {total_memory_time:<12.4f} {total_file_time / total_memory_time if total_memory_time > 0 else 0:<10.2f}x")
+    print(f"\nAverage Speedup: {avg_speedup:.2f}x")
+    print(
+        f"Time Saved: {total_file_time - total_memory_time:.4f}s ({((total_file_time - total_memory_time) / total_file_time * 100):.1f}%)")
+    print("=" * 80)
