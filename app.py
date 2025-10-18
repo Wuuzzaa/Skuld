@@ -1,6 +1,14 @@
-from src.google_drive_download import load_updated_data, load_updated_database
-from src.custom_logging import *
+import logging
 import sys
+import streamlit as st
+from src.google_drive_download import load_updated_data, load_updated_database
+from src.logger_config import setup_logging
+from config import *
+
+# enable logging
+setup_logging(log_file=PATH_LOG_FILE, log_level=logging.DEBUG, console_output=True)
+logger = logging.getLogger(__name__)
+logger.info("Start SKULD")
 
 # Check if "--local" is passed as a command-line argument
 # start in terminal with: streamlit run app.py -- --local
