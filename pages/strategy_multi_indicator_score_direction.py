@@ -4,7 +4,6 @@ import time
 from datetime import datetime
 import streamlit as st
 import pandas as pd
-from src.custom_logging import log_info
 from src.strategy_multi_indicator_score_direction_calculation import calc_multi_indicator_score_direction
 
 # Title

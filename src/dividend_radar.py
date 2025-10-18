@@ -1,20 +1,19 @@
-import streamlit as st
-import pandas as pd
+import logging
 import requests
-from lxml import html
-from urllib.parse import urljoin
 import io
 import sys
 import os
-
+from lxml import html
+from urllib.parse import urljoin
 from src.database import insert_into_table, truncate_table
+from config import *
+
+# logging
+logger = logging.getLogger(__name__)
+logger.info("Start SKULD")
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from config import *
-from src.custom_logging import log_info, log_error, log_write, show_log_messages
-
 
 
 def download_xlsx_file():
@@ -36,7 +35,7 @@ def download_xlsx_file():
     file_url = tree.xpath('(//a[contains(@href, ".xlsx")])[1]/@href')
     
     if not file_url:
-        log_error("No XLSX download link found.")
+        logger.error("No XLSX download link found.")
         return None
     
     file_url = file_url[0]
@@ -94,7 +93,7 @@ def _add_classification(df_all, content):
         df_contenders  = _read_excel_sheet(content, "Contenders", header_row=2)
         df_challengers = _read_excel_sheet(content, "Challengers", header_row=2)
     except Exception as e:
-        log_error(f"Error reading category sheets: {e}")
+        logger.error(f"Error reading category sheets: {e}")
         df_all["Classification"] = "Unclassified"
         return df_all
 
@@ -145,18 +144,12 @@ def process_dividend_data(path_outputfile):
         # log_error(f"Error during classification: {e}")
         # show_log_messages()
         return
-    
-    # log_info(f"Columns after processing: {df.columns.tolist()}")
-    # log_info(f"Number of rows read: {len(df)}")
-    
-    # st.write("DataFrame-Inhalt:")
-    # st.write(df)
-    
+
     try:
         df.to_feather(str(path_outputfile))
         # log_info(f"DataFrame saved as {path_outputfile}.")
     except Exception as e:
-        log_error(f"Error saving as Feather: {e}") 
+        logger.error(f"Error saving as Feather: {e}")
 
     # --- Database Persistence ---
     truncate_table(TABLE_FUNDAMENTAL_DATA_DIVIDEND_RADAR)
@@ -182,13 +175,13 @@ def force_data_download(path_outputfile):
         df = _read_excel_sheet(content, "All", header_row=2)
         # log_info("Excel 'All' sheet read successfully during forced download.")
         df = _add_classification(df, content)
-        log_info("Classification column added (forced).")
+        logger.info("Classification column added (forced).")
     except Exception as e:
-        log_error(f"Error reading/classifying during forced download: {e}")
+        logger.error(f"Error reading/classifying during forced download: {e}")
         return
 
     try:
         df.to_feather(str(path_outputfile))
-        log_info(f"DataFrame saved successfully as {path_outputfile} (overwritten).")
+        logger.info(f"DataFrame saved successfully as {path_outputfile} (overwritten).")
     except Exception as e:
-        log_error(f"Error saving DataFrame as Feather during forced download: {e}")
+        logger.error(f"Error saving DataFrame as Feather during forced download: {e}")
