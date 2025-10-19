@@ -309,8 +309,6 @@ def generate_fundamental_data2(enable_diagnostics=False):
 
     for symbol, symbol_data in data.items():
         try:
-            print(f"Enhancing data for {symbol} with additional data...")
-
             # Start with financial data if available
             if symbol in df_financial_latest['symbol'].values:
                 symbol_dict = df_financial_latest[df_financial_latest['symbol'] == symbol].iloc[0].to_dict()
@@ -364,7 +362,8 @@ def generate_fundamental_data2(enable_diagnostics=False):
             
             all_fundamental_data.append(symbol_dict)
             
-        except Exception:
+        except Exception as e:
+            print(f"Error processing data for {symbol}: {e}")
             all_fundamental_data.append({'symbol': symbol})
     
     if all_fundamental_data is None or len(all_fundamental_data) == 0:
@@ -395,21 +394,12 @@ def generate_fundamental_data2(enable_diagnostics=False):
         df_all_fundamentals.to_csv(csv_path, index=False)
         return
 
-    df_processed = prepare_fundamentals_for_merge(df_all_fundamentals)
-    df_processed.to_feather(PATH_DATAFRAME_YAHOOQUERY_FINANCIAL_PROCESSED_FEATHER)
-
     truncate_table(TABLE_FUNDAMENTAL_DATA_YAHOO)
     insert_into_table(
         table_name=TABLE_FUNDAMENTAL_DATA_YAHOO,
         dataframe=df_all_fundamentals,
         if_exists="append"
     )
-    truncate_table(TABLE_FUNDAMENTAL_DATA_YAHOO_PROCESSED)
-    insert_into_table(
-        table_name=TABLE_FUNDAMENTAL_DATA_YAHOO_PROCESSED,
-        dataframe=df_processed,
-        if_exists="append"
-    )    
 
 if __name__ == "__main__":
 

@@ -52,7 +52,7 @@ def insert_into_table(
     try:
         engine = get_database_engine()
         affected_rows = dataframe.to_sql(table_name, engine, if_exists=if_exists, index=False)
-        print(f"Successfully saved {affected_rows} to the database table {table_name} in {round(time.time() - start,2)}s.")
+        print(f"Successfully saved {affected_rows} rows to the database table {table_name} in {round(time.time() - start,2)}s.")
     except Exception as e:
         print(f"Error saving to the database table {table_name}: {e}")
 
