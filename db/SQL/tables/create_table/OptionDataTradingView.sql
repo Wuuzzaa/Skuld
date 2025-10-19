@@ -16,4 +16,4 @@ CREATE TABLE "OptionDataTradingView" (
 	exchange TEXT, 
 	expiration_date BIGINT, 
 	option_osi TEXT
-)
+);

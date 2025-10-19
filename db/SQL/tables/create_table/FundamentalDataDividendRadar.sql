@@ -39,4 +39,4 @@ CREATE TABLE "FundamentalDataDividendRadar" (
 	"New-Member" FLOAT, 
 	"Industry" TEXT, 
 	"Classification" TEXT
-)
+);

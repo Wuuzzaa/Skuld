@@ -16,4 +16,4 @@ CREATE TABLE "OptionDataYahoo" (
 	"impliedVolatility" FLOAT, 
 	"inTheMoney" BOOLEAN, 
 	option_volume FLOAT
-)
+);
