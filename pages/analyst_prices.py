@@ -2,7 +2,7 @@ import streamlit as st
 
 from config import PATH_DATABASE_QUERY_FOLDER
 from src.database import select_into_dataframe
-from src.page_display_dataframe import page_display_dataframe_with_trading_view_link
+from src.page_display_dataframe import page_display_dataframe
 
 # Titel
 st.subheader("Analyst Prices")
@@ -24,4 +24,4 @@ df = df.rename(
 )
 
 # show final dataframe
-page_display_dataframe_with_trading_view_link(df, symbol_column='Symbol')
+page_display_dataframe(df, symbol_column='Symbol')

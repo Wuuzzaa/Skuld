@@ -1,6 +1,6 @@
 import streamlit as st
 from src.database import select_into_dataframe
-from src.page_display_dataframe import page_display_dataframe_with_trading_view_link
+from src.page_display_dataframe import page_display_dataframe
 from src.spreads_calculation import calc_spreads
 from config import *
 
@@ -66,4 +66,4 @@ if option_type != "Put and Call":
     spreads_df = spreads_df[spreads_df['option_type'] == option_type]
 
 # show final dataframe
-page_display_dataframe_with_trading_view_link(spreads_df, symbol_column='symbol')
+page_display_dataframe(spreads_df, symbol_column='symbol')
