@@ -95,4 +95,4 @@ CREATE TABLE "TechnicalIndicators" (
 	recommendation_buy_amount BIGINT, 
 	recommendation_neutral_amount BIGINT, 
 	recommendation_sell_amount BIGINT
-)
+);
