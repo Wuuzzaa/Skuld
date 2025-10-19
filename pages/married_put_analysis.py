@@ -4,7 +4,7 @@ import sys
 import os
 
 from config import PATH_DATABASE_QUERY_FOLDER
-from src.page_display_dataframe import page_display_dataframe_with_trading_view_link
+from src.page_display_dataframe import page_display_dataframe
 
 # Add src directory to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
@@ -90,7 +90,7 @@ if 'married_put_df' in st.session_state and not st.session_state['married_put_df
     available_columns = [col for col in key_columns if col in display_df.columns]
 
     # show final dataframe
-    page_display_dataframe_with_trading_view_link(
+    page_display_dataframe(
         df=display_df[available_columns],
         symbol_column='symbol',
         column_config={

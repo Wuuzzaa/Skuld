@@ -19,7 +19,7 @@ def _add_tradingview_link(df:pd.DataFrame, symbol_column='symbol'):
     return df
 
 
-def page_display_dataframe_with_trading_view_link(
+def page_display_dataframe(
     df: pd.DataFrame,
     symbol_column='symbol',
     column_config: dict = None
