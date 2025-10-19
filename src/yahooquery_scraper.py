@@ -77,6 +77,7 @@ class YahooQueryScraper:
                         if len(self.symbols) > self.batch_size:
                             print(f"Fetching Yahoo all financial data for batch of up to {self.batch_size} symbols...")
                         df = ticker_batch.all_financial_data()
+                        df.reset_index(inplace=True)
                         if df is not None and not df.empty:
                             all_data.append(df)
                             print(f"SUCCESS: {len(df)} financial data found")
