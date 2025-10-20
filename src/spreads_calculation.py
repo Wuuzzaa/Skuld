@@ -126,10 +126,16 @@ def calc_spreads(df:pd.DataFrame, delta_target:float, spread_width:float):
     spreads["spread_theta"] = spreads["theta_sell"] - spreads["theta_buy"]
     spreads["expected_value"] = spreads.apply(_calculate_expected_value_for_symbol, axis=1)
 
+    # Add earnings warning column. Warning for 7 days or less left.
+    spreads['earnings_warning'] = spreads['delta_expiration_date_to_earnings_date_sell'].apply(
+        lambda x: '⚠️' if pd.notna(x) and x >= -7 else ''
+    )
+
     # remove unnecessary columns for streamlit data view
     spreads_columns = [
         'symbol',
         'earnings_date',
+        'earnings_warning',
         'close',
         'option_type',
         'strike_sell',
@@ -151,35 +157,43 @@ def calc_spreads(df:pd.DataFrame, delta_target:float, spread_width:float):
 
 if __name__ == "__main__":
     """
-    Keep the main for testing purposes
-    """
+     Keep the main for testing purposes
+     """
 
     import time
+    import logging
+    from src.logger_config import setup_logging
     from src.database import select_into_dataframe
 
-    df = pd.read_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
-    expiration_date = '2026-08-21'
+    # enable logging
+    setup_logging(log_file=PATH_LOG_FILE, log_level=logging.DEBUG, console_output=True)
+    logger = logging.getLogger(__name__)
+    logger.info(f"Start {__name__} ({__file__})")
+
+    expiration_date = '2025-10-24'
     delta_target = 0.2
     spread_width = 5
 
     sql_query = """
     SELECT
-            symbol,
-            expiration_date,
-            "option-type",
-            strike,
-            ask,
-            bid,
-            delta,
-            iv,
-            theta,
-            close,
-            earnings_date,
-            days_to_expiration
+        symbol,
+        expiration_date,
+        "option-type",
+        strike,
+        ask,
+        bid,
+        delta,
+        iv,
+        theta,
+        close,
+        earnings_date,
+        days_to_expiration,
+        days_to_ernings,
+        days_to_expiration - days_to_ernings AS delta_expiration_date_to_earnings_date
     FROM
-            OptionDataMerged
+        OptionDataMerged
     WHERE
-        expiration_date = :expiration_date;
+        expiration_date =:expiration_date;
     """
 
     start = time.time()
