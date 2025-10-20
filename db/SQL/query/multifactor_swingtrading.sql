@@ -5,7 +5,8 @@ SELECT Distinct
     Summary_priceToSalesTrailing12Months AS 'price_to_sales',
     EBITDA / EnterpriseValue AS 'ebitda_to_enterprise_value',
     FinData_currentPrice / FinData_freeCashflow AS 'price_to_cashflow',
-    KeyStats_52WeekChange + Summary_trailingAnnualDividendYield AS '1_year_shareholder_yield'
+    Summary_trailingAnnualDividendYield AS 'shareholder_yield',
+    KeyStats_52WeekChange AS '1_year_price_appreciation'
 FROM
     FundamentalDataYahoo
 WHERE

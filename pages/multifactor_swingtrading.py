@@ -12,7 +12,7 @@ sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'multifactor_swingtrading.sql'
 df = select_into_dataframe(sql_file_path=sql_file_path)
 
 # calculate strategy
-df = calculate_multifactor_swingtrading_strategy(df)
+df = calculate_multifactor_swingtrading_strategy(df, top_percentile_value_score=10, top_n=25)
 
 # show final dataframe
 page_display_dataframe(df, symbol_column='symbol')

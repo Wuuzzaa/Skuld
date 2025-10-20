@@ -35,13 +35,15 @@ ensure_database_available()
 analyst_prices = st.Page("pages/analyst_prices.py", title="Analyst Prices")
 spreads = st.Page("pages/spreads.py", title="Spreads")
 marrieds = st.Page("pages/married_put_analysis.py", title="Married Puts")
+multifactor_swingtrading = st.Page('pages/multifactor_swingtrading.py', title="Multifactor Swingtrading")
 
 # Set up navigation
 page = st.navigation(
     [
         analyst_prices,
         spreads,
-        marrieds
+        marrieds,
+        multifactor_swingtrading
     ]
 )
 
