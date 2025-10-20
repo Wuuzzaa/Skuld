@@ -12,10 +12,10 @@ logger.info(f"Start {__name__} ({__file__})")
 @log_function
 def calculate_multifactor_swingtrading_strategy(
         df: pd.DataFrame,
-        top_percentile_value_score: float = 100,
-        top_n: int = 250,
-        drop_missing_values: bool = True,
-        drop_weak_value_factors: bool = True,
+        top_percentile_value_score: float = 20,
+        top_n: int = 50,
+        drop_missing_values: bool = False,
+        drop_weak_value_factors: bool = False,
 ) -> pd.DataFrame:
 
     # handel missing values
