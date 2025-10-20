@@ -2,7 +2,7 @@ DROP VIEW IF EXISTS FundamentalData;
 
 CREATE VIEW FundamentalData AS
 SELECT 
-	-- FundamentalDataYahooProcessed
+	-- FundamentalDataYahoo
 	a.symbol, 
 	a."asOfDate", 
 	a."periodType", 
