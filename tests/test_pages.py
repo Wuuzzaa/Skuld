@@ -5,11 +5,9 @@ from pathlib import Path
 # Alle Page-Dateien die getestet werden sollen
 PAGES = [
     "pages/analyst_prices.py",
-    #"pages/dividend_page.py",
-    #"pages/iron_condors.py",
     "pages/married_put_analysis.py",
     "pages/spreads.py",
-    #"pages/strategy_multi_indicator_score_d.py",
+    'pages/multifactor_swingtrading.py'
 ]
 
 
