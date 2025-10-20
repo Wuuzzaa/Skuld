@@ -1,20 +1,41 @@
-import pandas as pd
+import logging
+from src.logger_config import setup_logging
 from config import *
 from src.decorator_log_function import log_function
+
+# enable logging
+setup_logging(log_file=PATH_LOG_FILE, log_level=logging.DEBUG, console_output=True)
+logger = logging.getLogger(__name__)
+logger.info(f"Start {__name__} ({__file__})")
 
 
 @log_function
 def calculate_multifactor_swingtrading_strategy(
         df: pd.DataFrame,
-        top_percentile_value_score: float = 10,
-        top_n: int = 25,
+        top_percentile_value_score: float = 100,
+        top_n: int = 250,
         drop_missing_values: bool = True,
+        drop_weak_value_factors: bool = True,
 ) -> pd.DataFrame:
 
+    # handel missing values
     if drop_missing_values:
         df = df.copy().dropna()
+        logger.debug(f"df after missing values filter... shape {df.shape}")
     else:
         df = df.copy()
+
+    # handel weak value factors
+    if drop_weak_value_factors:
+        df = df[
+            (df['price_to_book'] >= 0.3) & (df['price_to_book'] <= 2.0) &
+            (df['price_to_earnings'] >= 5) & (df['price_to_earnings'] <= 30) &
+            (df['price_to_sales'] <= 2.0) &
+            (df['ebitda_to_enterprise_value'] >= 0.05) &
+            (df['price_to_cashflow'] > 0) &
+            (df['1_year_price_appreciation'] > - 0.3)
+            ]
+        logger.debug(f"df after drop weak value factor filter... shape {df.shape}")
 
     # Value factors where low is better
     value_factors_low = [
