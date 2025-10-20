@@ -7,14 +7,63 @@ from src.database import select_into_dataframe
 # Titel
 st.subheader("Multifactor Swingtrading")
 
-# sql query
+# Parameter inputs
+col1, col2, col3, col4 = st.columns(4)
+
+with col1:
+    top_percentile_value_score = st.slider(
+        "Top Percentile Value Score",
+        min_value=5.0,
+        max_value=100.0,
+        value=20.0,
+        step=5.0,
+        help="Percentile for value score (e.g. 20 = top 20%)"
+    )
+
+with col2:
+    top_n = st.number_input(
+        "Top N Stocks",
+        min_value=1,
+        max_value=200,
+        value=50,
+        step=5,
+        help="Number of top stocks to select"
+    )
+
+with col3:
+    drop_missing_values = st.checkbox(
+        "Drop Missing Values",
+        value=False,
+        help="Exclude stocks with missing values from analysis"
+    )
+
+with col4:
+    drop_weak_value_factors = st.checkbox(
+        "Drop Weak Value Factors",
+        value=False,
+        help="Exclude stocks with weak value factors"
+    )
+
+st.divider()
+
+# SQL query
 sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'multifactor_swingtrading.sql'
-df = select_into_dataframe(sql_file_path=sql_file_path)
 
-# calculate strategy
-df = calculate_multifactor_swingtrading_strategy(df, top_percentile_value_score=10, top_n=25)
+# Load data and calculate strategy (runs on every parameter change)
+with st.spinner('Loading data and calculating strategy...'):
+    # Load data
+    df = select_into_dataframe(sql_file_path=sql_file_path)
 
-# show final dataframe
+    # Calculate strategy
+    df = calculate_multifactor_swingtrading_strategy(
+        df,
+        top_percentile_value_score=top_percentile_value_score,
+        top_n=top_n,
+        drop_missing_values=drop_missing_values,
+        drop_weak_value_factors=drop_weak_value_factors
+    )
+
+# Display dataframe
 page_display_dataframe(df, symbol_column='symbol')
 
 st.markdown("""
