@@ -4,10 +4,17 @@ from src.decorator_log_function import log_function
 
 
 @log_function
-def calculate_multifactor_swingtrading_strategy(df: pd.DataFrame, top_percentile_value_score: float = 10,
-                                                top_n: int = 25) -> pd.DataFrame:
+def calculate_multifactor_swingtrading_strategy(
+        df: pd.DataFrame,
+        top_percentile_value_score: float = 10,
+        top_n: int = 25,
+        drop_missing_values: bool = True,
+) -> pd.DataFrame:
 
-    df = df.copy()
+    if drop_missing_values:
+        df = df.copy().dropna()
+    else:
+        df = df.copy()
 
     # Value factors where low is better
     value_factors_low = [
