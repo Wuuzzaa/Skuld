@@ -2,6 +2,8 @@ import pytest
 from streamlit.testing.v1 import AppTest
 from pathlib import Path
 
+#todo main testen. mit subset der symbole und ohne db upload
+
 # Alle Page-Dateien die getestet werden sollen
 PAGES = [
     "pages/analyst_prices.py",
