@@ -293,11 +293,10 @@ def detect_breakout_patterns(close, high, bb_upper, bb_lower, volume, vwma_vol, 
 @log_function
 def calculate_atlas_multi_signal_alpha_strategy(
         df: pd.DataFrame,
-        equity: float = 100000.0,
+        equity: float = 10000.0,
         risk_per_trade_pct: float = 0.005,
         config: SignalConfig = None):
     """
-    ELITE Multi-Factor Strategy mit ALLEN verfügbaren Indikatoren.
 
     Key Improvements:
     - Multiple Indicators Consensus (10+ Oszillatoren)
@@ -312,6 +311,7 @@ def calculate_atlas_multi_signal_alpha_strategy(
     if config is None:
         config = SignalConfig()
 
+    # debug
     df.to_csv("debug_input.csv", index=False)
 
     rows_out = []
@@ -831,6 +831,9 @@ def calculate_atlas_multi_signal_alpha_strategy(
 
     logger.info(f"Generated {len(signals_df)} signals. Tradeable: {trade_count}. Avg R:R: {avg_rr:.2f}")
     logger.info(f"Signal Distribution: {signals_df['trade_type'].value_counts().to_dict()}")
+
+    # remove NO_TRADE
+    signals_df = signals_df[signals_df['trade_type'] != 'NO_TRADE']
 
     return signals_df
 

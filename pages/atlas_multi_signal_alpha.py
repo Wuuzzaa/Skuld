@@ -17,7 +17,7 @@ df = calculate_atlas_multi_signal_alpha_strategy(df=df)
 page_display_dataframe(df, symbol_column='symbol')
 
 st.markdown("""
-# Elite Multi-Factor Trading Strategy - Dokumentation
+# AAtlas Multi Signal Alpha - Dokumentation
 
 ## 📋 Inhaltsverzeichnis
 1. [Überblick](#überblick)
@@ -639,8 +639,6 @@ rsi_meanrev_threshold = 25.0  # Nur extreme Oversold
 
 ---
 
-## Zusammenfassung für deine Kollegen
-
 ### 📈 Was macht diese Strategie besser?
 
 1. **Multi-Faktor Ansatz** 
@@ -673,26 +671,4 @@ Annualisiert: 18% - 30% (CAGR)
 Sharpe Ratio: 1.5 - 2.1
 Drawdown:     8% - 12% (Max)
 ```
-
-### ⏱️ Zeitaufwand
-- Monitoring: 30 min/Tag
-- Execution: 15 min/Trade
-- Review: 2 Stunden/Woche
-
----
-
-## Checkliste vor dem Live-Trading
-
-- [ ] Backtests auf 2-3 Jahren Historisch durchgeführt
-- [ ] Papier-Trading für 4-8 Wochen getestet
-- [ ] Risk Management Limits definiert
-- [ ] Stop Losses konfiguriert
-- [ ] Broker Integration ready
-- [ ] Trading Journal erstellt
-- [ ] Kollegen trainiert
-- [ ] Regelmäßiges Monitoring geplant
-
----
-
-**Viel Erfolg mit der Strategie! 🚀**
 """)
