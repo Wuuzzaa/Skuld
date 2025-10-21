@@ -4,37 +4,53 @@ import pandas as pd
 import numpy as np
 from config import *
 from src.decorator_log_function import log_function
+from enum import Enum
+from dataclasses import dataclass
 
-# enable logging
 setup_logging(log_file=PATH_LOG_FILE, log_level=logging.DEBUG, console_output=True)
 logger = logging.getLogger(__name__)
 logger.info(f"Start {__name__} ({__file__})")
-# Python backend for the Multi-Factor Technical Screening Strategy
-# - Defines a single entry function `compute_signals(df, ...)` which returns `signals_df`.
-# - The function expects a pandas DataFrame `df` containing at least `symbol` and `close` and the indicator columns you provided.
-# - It is defensive to missing columns and fills missing numeric indicators with np.nan.
-# - It **does not** execute on any `df` here; it only defines functions. Call compute_signals(your_df) in your backend.
-#
-# Usage example (in your backend):
-# signals = compute_signals(df)
-#
-# NOTE: This cell only defines the backend; it prints a readiness message.
 
 
+class TradeType(Enum):
+    NO_TRADE = "NO_TRADE"
+    TREND_BREAKOUT = "TREND_BREAKOUT"
+    MEAN_REVERT_IN_TREND = "MEAN_REVERT_IN_TREND"
+    VOLATILITY_BREAKOUT = "VOLATILITY_BREAKOUT"
+    PIVOT_REVERSION = "PIVOT_REVERSION"
+    MULTI_FACTOR = "MULTI_FACTOR"
+    DIRECTIONAL_ALIGNMENT = "DIRECTIONAL_ALIGNMENT"
 
 
-# --- Helper functions ---
+@dataclass
+class SignalConfig:
+    """Optimierte Parameter für maximale Profitabilität"""
+    score_threshold: float = 68.0
+    adx_trend_threshold: float = 20.0
+    di_difference_threshold: float = 10.0  # ADX+DI vs ADX-DI
+    rsi_meanrev_threshold: float = 28.0
+    rsi_overbought_threshold: float = 72.0
+    stoch_oversold: float = 20.0
+    stoch_overbought: float = 80.0
+    wr_oversold: float = -80.0  # Williams %R
+    uo_threshold: float = 30.0  # Ultimate Oscillator
+    bb_stop_k: float = 1.3
+    bb_target_cons_k: float = 2.0
+    bb_target_agg_k: float = 3.0
+    min_trend_strength: float = 0.7
+    max_position_size_pct: float = 0.015
+    psar_confirmation_weight: float = 0.15  # Parabolic SAR Weight
+
+
 def safe(colname, row, default=np.nan):
-    """Return row[colname] if present in row, else default."""
     return row.get(colname, default)
 
 
 def norm01(x, minv, maxv):
-    """Normalize x to 0..1 between minv and maxv (clip outside)."""
     if np.isnan(x):
-        return 0.0
+        return 0.5
     if maxv == minv:
-        return 0.0
+        return 0.5
     return float(np.clip((x - minv) / (maxv - minv), 0.0, 1.0))
 
 
@@ -42,409 +58,779 @@ def weighted_cap(score, cap=100):
     return float(np.clip(score, 0, cap))
 
 
-# interpret recommendations: we'll treat strings/numerics: if numeric, 1=buy maybe; if string 'buy' etc.
-def interpret_rec(x):
-    if x is None or (isinstance(x, float) and np.isnan(x)):
-        return 0.0
-    if isinstance(x, (int, float, np.number)):
-        # Many providers use positive numbers (1..5) or scores. We'll normalize to 0..1 assuming range -1..2
-        return float(x) / 5.0 if abs(x) > 1e-9 else 0.0
-    xs = str(x).lower()
-    if 'buy' in xs and 'strong' in xs:
-        return 1.0
-    if 'buy' in xs:
-        return 0.9
-    if 'neutral' in xs or 'hold' in xs:
-        return 0.5
-    if 'sell' in xs:
-        return 0.0
-    try:
-        # try to parse numeric-like strings
-        return float(xs) / 5.0
-    except Exception:
-        return 0.0
-
-# We'll compute some global normalization baselines from existing numeric columns when needed
-# Use percentiles for robust normalization
-def col_percentile(col):
+def col_percentile(col, df, percentile_low=5, percentile_high=95):
     if col in df.columns:
         vals = pd.to_numeric(df[col], errors='coerce').dropna()
         if len(vals) == 0:
             return (0.0, 1.0)
-        return (np.nanpercentile(vals, 5), np.nanpercentile(vals, 95))
+        return (np.percentile(vals, percentile_low), np.percentile(vals, percentile_high))
     return (0.0, 1.0)
+
+
+def interpret_rec_enhanced(x, recommendation_type="all"):
+    """Intelligente Recommendation-Interpretation"""
+    if x is None or (isinstance(x, float) and np.isnan(x)):
+        return 0.0
+    if isinstance(x, (int, float, np.number)):
+        return float(np.clip(x / 5.0, 0.0, 1.0))
+    xs = str(x).lower().strip()
+    if 'strong buy' in xs:
+        return 1.0
+    if 'buy' in xs:
+        return 0.8
+    if 'strong sell' in xs:
+        return 0.0
+    if 'sell' in xs:
+        return 0.15
+    if 'neutral' in xs or 'hold' in xs:
+        return 0.5
+    try:
+        return float(np.clip(float(xs) / 5.0, 0.0, 1.0))
+    except:
+        return 0.0
+
+
+def check_directional_alignment(ema5, ema10, ema20, ema50, ema100, ema200, close, vwma):
+    """Prüfe Alignment aller Moving Averages (0..1)"""
+    alignment_score = 0.0
+    count = 0
+
+    # Aufsteigend ordnen
+    mas = [ema5, ema10, ema20, ema50, ema100, ema200, vwma]
+    mas_clean = [m for m in mas if not np.isnan(m)]
+
+    if len(mas_clean) >= 3:
+        # Prüfe ob sortiert (für Uptrend)
+        is_ascending = all(mas_clean[i] < mas_clean[i + 1] for i in range(len(mas_clean) - 1))
+        if is_ascending:
+            alignment_score = min(1.0, len(mas_clean) / 7.0)
+
+    # Close oberhalb aller MAs?
+    above_mas = sum(1 for m in mas_clean if not np.isnan(m) and close > m)
+    ma_proximity = above_mas / len(mas_clean) if mas_clean else 0.0
+
+    return min(1.0, 0.6 * alignment_score + 0.4 * ma_proximity)
+
+
+def calculate_multiple_indicators_consensus(
+        rsi, stoch_k, cci, wr, uo, bbpower, macd_val, macd_sig, ao, mom
+):
+    """Berechne Konsens aus ALLEN Oszillatoren"""
+    bullish_count = 0
+    total_count = 0
+    scores = []
+
+    # RSI (> 50 = bullish, < 30 = oversold buy)
+    if not np.isnan(rsi):
+        total_count += 1
+        if rsi > 55:
+            bullish_count += 1
+            scores.append(0.8)
+        elif rsi > 50:
+            scores.append(0.6)
+        elif rsi < 30:
+            scores.append(0.4)  # Oversold
+        elif rsi < 35:
+            scores.append(0.45)
+        else:
+            scores.append(0.5)
+
+    # Stochastic K (> 50 = bullish)
+    if not np.isnan(stoch_k):
+        total_count += 1
+        if stoch_k > 60:
+            bullish_count += 1
+            scores.append(0.8)
+        elif stoch_k > 50:
+            scores.append(0.65)
+        elif stoch_k < 20:
+            scores.append(0.3)  # Oversold
+        else:
+            scores.append(0.5)
+
+    # CCI (> 0 = bullish, > 100 = overbought)
+    if not np.isnan(cci):
+        total_count += 1
+        if cci > 100:
+            scores.append(0.7)
+            bullish_count += 1
+        elif cci > 0:
+            scores.append(0.65)
+            bullish_count += 1
+        elif cci < -100:
+            scores.append(0.2)  # Oversold
+        else:
+            scores.append(0.5)
+
+    # Williams %R (höher/näher 0 = bullish, < -80 = oversold)
+    if not np.isnan(wr):
+        total_count += 1
+        if wr > -50:
+            bullish_count += 1
+            scores.append(0.75)
+        elif wr > -80:
+            scores.append(0.6)
+        elif wr < -80:
+            scores.append(0.25)  # Oversold
+        else:
+            scores.append(0.5)
+
+    # Ultimate Oscillator (> 50 = bullish)
+    if not np.isnan(uo):
+        total_count += 1
+        if uo > 70:
+            bullish_count += 1
+            scores.append(0.85)
+        elif uo > 50:
+            bullish_count += 1
+            scores.append(0.7)
+        elif uo < 30:
+            scores.append(0.3)
+        else:
+            scores.append(0.5)
+
+    # BBPower (normalisiert 0..1)
+    if not np.isnan(bbpower):
+        total_count += 1
+        bbpower_norm = np.clip(bbpower, -1, 1)
+        if bbpower_norm > 0.2:
+            bullish_count += 1
+        scores.append((bbpower_norm + 1) / 2)  # Normalisiere auf 0..1
+
+    # MACD (bullish wenn macd > signal)
+    if not np.isnan(macd_val) and not np.isnan(macd_sig):
+        total_count += 1
+        if macd_val > macd_sig:
+            bullish_count += 1
+            scores.append(0.8)
+        else:
+            scores.append(0.3)
+
+    # AO (Awesome Oscillator, > 0 = bullish)
+    if not np.isnan(ao):
+        total_count += 1
+        if ao > 0:
+            bullish_count += 1
+            scores.append(0.7)
+        elif ao > -0.001:
+            scores.append(0.5)
+        else:
+            scores.append(0.2)
+
+    # Momentum (> 0 = bullish)
+    if not np.isnan(mom):
+        total_count += 1
+        if mom > 0:
+            bullish_count += 1
+            scores.append(0.7)
+        else:
+            scores.append(0.3)
+
+    consensus_score = np.mean(scores) if scores else 0.5
+    bullish_ratio = bullish_count / total_count if total_count > 0 else 0.5
+
+    return consensus_score, bullish_ratio, total_count
+
+
+def detect_reversal_patterns(rsi, rsi1, stoch_k, stoch_k1, cci, cci1, close, low, bb_lower):
+    """Erkenne Reversal-Patterns für Mean Reversion"""
+    reversal_strength = 0.0
+
+    # RSI divergence & bottoming
+    if not np.isnan(rsi) and not np.isnan(rsi1):
+        if rsi < 25 and rsi > rsi1:  # Extremer Oversold + Rising
+            reversal_strength += 0.30
+        elif rsi < 35 and rsi > rsi1:
+            reversal_strength += 0.15
+
+    # Stoch crossing
+    if not np.isnan(stoch_k) and not np.isnan(stoch_k1):
+        if stoch_k < 20 and stoch_k > stoch_k1:
+            reversal_strength += 0.25
+
+    # CCI extremum
+    if not np.isnan(cci) and not np.isnan(cci1):
+        if cci < -150:  # Extreme oversold
+            reversal_strength += 0.20
+        elif cci < -100 and cci > cci1:
+            reversal_strength += 0.10
+
+    # Price touching lower BB
+    if not np.isnan(close) and not np.isnan(low) and not np.isnan(bb_lower):
+        if low <= bb_lower and close > bb_lower * 1.005:  # Touched aber recovered
+            reversal_strength += 0.15
+
+    return min(1.0, reversal_strength)
+
+
+def detect_breakout_patterns(close, high, bb_upper, bb_lower, volume, vwma_vol, psar, macd_val, macd_sig):
+    """Erkenne Breakout-Patterns"""
+    breakout_strength = 0.0
+
+    # Price above upper BB
+    if not np.isnan(close) and not np.isnan(bb_upper) and close > bb_upper:
+        breakout_strength += 0.30
+
+    # Price making new high
+    if not np.isnan(high) and not np.isnan(close) and high >= close * 0.995:
+        breakout_strength += 0.15
+
+    # Volume confirmation
+    if not np.isnan(volume) and not np.isnan(vwma_vol) and volume > vwma_vol * 1.3:
+        breakout_strength += 0.25
+
+    # MACD bullish
+    if not np.isnan(macd_val) and not np.isnan(macd_sig) and macd_val > macd_sig:
+        breakout_strength += 0.15
+
+    # Parabolic SAR bullish
+    if isinstance(psar, str) and 'bullish' in str(psar).lower():
+        breakout_strength += 0.15
+
+    return min(1.0, breakout_strength)
 
 
 @log_function
 def calculate_atlas_multi_signal_alpha_strategy(
-        df:pd.DataFrame,
-        equity=100000.0,
-        risk_per_trade_pct=0.005,
-        score_threshold=70.0,
-        adx_trend_threshold=25.0,
-        rsi_meanrev_threshold=35.0,
-        bb_stop_k=1.0,
-        bb_target_cons_k=1.5,
-        bb_target_agg_k=2.5):
+        df: pd.DataFrame,
+        equity: float = 100000.0,
+        risk_per_trade_pct: float = 0.005,
+        config: SignalConfig = None):
     """
-    Compute signals for each row (symbol) in df and return a signals DataFrame.
+    ELITE Multi-Factor Strategy mit ALLEN verfügbaren Indikatoren.
 
-    Parameters:
-      df: pandas.DataFrame with one row per symbol and columns with technical indicators.
-      equity: portfolio equity used to compute suggested position sizing.
-      risk_per_trade_pct: fractional risk per trade (e.g., 0.005 = 0.5%)
-      score_threshold: minimal score to include symbol in suggestions (0-100)
-      other multipliers for stops/targets
-
-    Returns:
-      signals_df: pandas.DataFrame with columns:
-        ['symbol','signal_score','conviction','entry_price','stop_loss','target_conservative',
-         'target_aggressive','trade_type','rationale_flags','confidence_reason','expected_holding_days_estimate',
-         'position_size_shares','position_size_value']
+    Key Improvements:
+    - Multiple Indicators Consensus (10+ Oszillatoren)
+    - Directional Alignment aller Moving Averages
+    - Parabolic SAR Confirmation
+    - ADX Directional Components (DI+ vs DI-)
+    - Williams %R, Ultimate Oscillator Integration
+    - Multiple Pivot Systems
+    - Stochastic RSI & W%R Recommendations
+    - Advanced Pattern Detection (Reversal + Breakout)
     """
+    if config is None:
+        config = SignalConfig()
+
+    df.to_csv("debug_input.csv", index=False)
+
     rows_out = []
 
-    # Baselines (example: AO, BBPower, volume)
-    ao_min, ao_max = col_percentile('AO')
-    bbpower_min, bbpower_max = col_percentile('BBPower')
-    volume_min, volume_max = col_percentile('volume')
-    adx_min, adx_max = col_percentile('ADX')
-    rsi_min, rsi_max = 0.0, 100.0  # fixed bounds for RSI
+    # Globale Baselines
+    ao_min, ao_max = col_percentile('AO', df)
+    bbpower_min, bbpower_max = col_percentile('BBPower', df)
+    volume_min, volume_max = col_percentile('volume', df)
+    adx_min, adx_max = col_percentile('ADX', df)
+    uo_min, uo_max = col_percentile('UO', df)
+    di_diff_min, di_diff_max = col_percentile('ADX+DI', df)
 
-    # iterate rows
     for _, row_series in df.iterrows():
         row = row_series.to_dict()
-        symbol = safe('symbol', row, default=None) or safe('ticker', row, default=None) or 'UNKNOWN'
+        symbol = safe('symbol', row, 'UNKNOWN')
         close = safe('close', row, np.nan)
+        open_p = safe('open', row, np.nan)
+        high = safe('high', row, np.nan)
+        low = safe('low', row, np.nan)
+        change = safe('change', row, np.nan)
+        psar = safe('P.SAR', row, None)
 
-        # Basic derived fields
+        # === MOVING AVERAGES (alle laden) ===
+        ema5 = safe('EMA5', row, np.nan)
+        ema10 = safe('EMA10', row, np.nan)
+        ema20 = safe('EMA20', row, np.nan)
         ema50 = safe('EMA50', row, np.nan)
         ema100 = safe('EMA100', row, np.nan)
+        ema200 = safe('EMA200', row, np.nan)
+        sma5 = safe('SMA5', row, np.nan)
+        sma20 = safe('SMA20', row, np.nan)
+        sma50 = safe('SMA50', row, np.nan)
+        sma200 = safe('SMA200', row, np.nan)
         vwma = safe('VWMA', row, np.nan)
         hull9 = safe('HullMA9', row, np.nan)
-        ichimoku_rec = safe('Rec.Ichimoku', row, np.nan)
-        macd_val = safe('MACD.macd', row, np.nan)
-        macd_sig = safe('MACD.signal', row, np.nan)
-        ao = safe('AO', row, np.nan)
-        ao1 = safe('AO[1]', row, np.nan)
-        mom = safe('Mom', row, np.nan)
-        mom1 = safe('Mom[1]', row, np.nan)
+        ichimoku_bline = safe('Ichimoku.BLine', row, np.nan)
+
+        # === MOMENTUM OSCILLATORS ===
         rsi = safe('RSI', row, np.nan)
         rsi1 = safe('RSI[1]', row, np.nan)
+
+        stoch_k = safe('Stoch.K', row, np.nan)
+        stoch_d = safe('Stoch.D', row, np.nan)
+        stoch_k1 = safe('Stoch.K[1]', row, np.nan)
+        stoch_d1 = safe('Stoch.D[1]', row, np.nan)
+        stoch_rsi_k = safe('Stoch.RSI.K', row, np.nan)
+
         cci = safe('CCI20', row, np.nan)
-        stochK = safe('Stoch.K', row, np.nan)
-        stochK1 = safe('Stoch.K[1]', row, np.nan)
-        macd_bull = False if (np.isnan(macd_val) or np.isnan(macd_sig)) else (macd_val > macd_sig)
+        cci1 = safe('CCI20[1]', row, np.nan)
+
+        wr = safe('W.R', row, np.nan)
+
+        uo = safe('UO', row, np.nan)
+
+        bbpower = safe('BBPower', row, np.nan)
+
+        # === MACD & MOMENTUM ===
+        macd_val = safe('MACD.macd', row, np.nan)
+        macd_sig = safe('MACD.signal', row, np.nan)
+        macd_hist = safe('MACD.histogram', row, np.nan) if 'MACD.histogram' in row else np.nan
+
+        ao = safe('AO', row, np.nan)
+        ao1 = safe('AO[1]', row, np.nan)
+        ao2 = safe('AO[2]', row, np.nan)
+
+        mom = safe('Mom', row, np.nan)
+        mom1 = safe('Mom[1]', row, np.nan)
+
+        # === ADX & DIREKTIONALE KOMPONENTEN ===
         adx = safe('ADX', row, np.nan)
+        di_plus = safe('ADX+DI', row, np.nan)
+        di_minus = safe('ADX-DI', row, np.nan)
+        di_plus1 = safe('ADX+DI[1]', row, np.nan)
+        di_minus1 = safe('ADX-DI[1]', row, np.nan)
+
+        di_difference = (di_plus - di_minus) if (not np.isnan(di_plus) and not np.isnan(di_minus)) else np.nan
+        di_crossing_bullish = False
+        if not np.isnan(di_plus) and not np.isnan(di_minus) and not np.isnan(di_plus1) and not np.isnan(di_minus1):
+            di_crossing_bullish = (di_plus1 <= di_minus1) and (di_plus > di_minus)
+
+        # === BOLLINGER BANDS ===
         bb_upper = safe('BB.upper', row, np.nan)
         bb_lower = safe('BB.lower', row, np.nan)
-        bb_width = np.nan
-        if (not np.isnan(bb_upper)) and (not np.isnan(bb_lower)):
-            bb_width = bb_upper - bb_lower
-            if bb_width <= 0:
-                bb_width = np.nan
-        bbpower = safe('BBPower', row, np.nan)
+        bb_middle = (bb_upper + bb_lower) / 2 if (not np.isnan(bb_upper) and not np.isnan(bb_lower)) else np.nan
+        bb_width = (bb_upper - bb_lower) if (not np.isnan(bb_upper) and not np.isnan(bb_lower)) else np.nan
+
+        # === PIVOT SYSTEMS ===
+        pivot_systems = {
+            'Classic': {
+                'M': safe('Pivot.M.Classic.Middle', row, np.nan),
+                'R1': safe('Pivot.M.Classic.R1', row, np.nan),
+                'R2': safe('Pivot.M.Classic.R2', row, np.nan),
+                'R3': safe('Pivot.M.Classic.R3', row, np.nan),
+                'S1': safe('Pivot.M.Classic.S1', row, np.nan),
+                'S2': safe('Pivot.M.Classic.S2', row, np.nan),
+                'S3': safe('Pivot.M.Classic.S3', row, np.nan),
+            },
+            'Fibonacci': {
+                'M': safe('Pivot.M.Fibonacci.Middle', row, np.nan),
+                'R1': safe('Pivot.M.Fibonacci.R1', row, np.nan),
+                'R2': safe('Pivot.M.Fibonacci.R2', row, np.nan),
+                'R3': safe('Pivot.M.Fibonacci.R3', row, np.nan),
+                'S1': safe('Pivot.M.Fibonacci.S1', row, np.nan),
+                'S2': safe('Pivot.M.Fibonacci.S2', row, np.nan),
+                'S3': safe('Pivot.M.Fibonacci.S3', row, np.nan),
+            },
+            'Camarilla': {
+                'M': safe('Pivot.M.Camarilla.Middle', row, np.nan),
+                'R1': safe('Pivot.M.Camarilla.R1', row, np.nan),
+                'R2': safe('Pivot.M.Camarilla.R2', row, np.nan),
+                'S1': safe('Pivot.M.Camarilla.S1', row, np.nan),
+                'S2': safe('Pivot.M.Camarilla.S2', row, np.nan),
+            },
+            'Demark': {
+                'M': safe('Pivot.M.Demark.Middle', row, np.nan),
+                'R1': safe('Pivot.M.Demark.R1', row, np.nan),
+                'S1': safe('Pivot.M.Demark.S1', row, np.nan),
+            }
+        }
+
+        # Nutze Classic, fallback zu anderen
+        pivot_middle = pivot_systems['Classic']['M']
+        if np.isnan(pivot_middle):
+            pivot_middle = pivot_systems['Fibonacci']['M']
+
+        pivot_r1 = pivot_systems['Classic']['R1'] or pivot_systems['Fibonacci']['R1']
+        pivot_r2 = pivot_systems['Classic']['R2'] or pivot_systems['Fibonacci']['R2']
+        pivot_s1 = pivot_systems['Classic']['S1'] or pivot_systems['Fibonacci']['S1']
+        pivot_s2 = pivot_systems['Classic']['S2'] or pivot_systems['Fibonacci']['S2']
+
+        # === VOLUME ===
         volume = safe('volume', row, np.nan)
-        vwma_col = safe('VWMA', row, np.nan)
+        volume1 = safe('volume', row, np.nan)  # Wenn nicht vorhanden, wird np.nan
+        vol_avg = np.nanmean([volume, volume1]) if not (np.isnan(volume) and np.isnan(volume1)) else np.nan
 
-        # Pivot fields - prefer Classic if available, fall back to other sets
-        pivot_middle = None
-        pivot_r1 = None
-        pivot_r2 = None
-        pivot_s1 = None
-        pivot_s2 = None
-        # Try Classic
-        if 'Pivot.M.Classic.Middle' in df.columns:
-            pivot_middle = safe('Pivot.M.Classic.Middle', row, np.nan)
-            pivot_r1 = safe('Pivot.M.Classic.R1', row, np.nan)
-            pivot_r2 = safe('Pivot.M.Classic.R2', row, np.nan)
-            pivot_s1 = safe('Pivot.M.Classic.S1', row, np.nan)
-            pivot_s2 = safe('Pivot.M.Classic.S2', row, np.nan)
-        else:
-            # fallback to Fibonacci or Camarilla etc.
-            pivot_middle = safe('Pivot.M.Fibonacci.Middle', row, np.nan)
-            pivot_r1 = safe('Pivot.M.Fibonacci.R1', row, np.nan)
-            pivot_r2 = safe('Pivot.M.Fibonacci.R2', row, np.nan)
-            pivot_s1 = safe('Pivot.M.Fibonacci.S1', row, np.nan)
-            pivot_s2 = safe('Pivot.M.Fibonacci.S2', row, np.nan)
+        # === RECOMMENDATIONS ===
+        rec_all = safe('Recommend.All', row, np.nan)
+        rec_ma = safe('Recommend.MA', row, np.nan)
+        rec_other = safe('Recommend.Other', row, np.nan)
+        rec_ichimoku = safe('Rec.Ichimoku', row, np.nan)
+        rec_stoch_rsi = safe('Rec.Stoch.RSI', row, np.nan)
+        rec_wr = safe('Rec.WR', row, np.nan)
+        rec_bbpower = safe('Rec.BBPower', row, np.nan)
+        rec_uo = safe('Rec.UO', row, np.nan)
+        rec_vwma = safe('Rec.VWMA', row, np.nan)
+        rec_hull = safe('Rec.HullMA9', row, np.nan)
 
-        # --- Scoring components ---
+        # === SCORING ===
         trend_score = 0.0
         momentum_score = 0.0
         meanrev_score = 0.0
         vol_break_score = 0.0
         volume_score = 0.0
         pivot_score = 0.0
+        pattern_score = 0.0
+        di_score = 0.0
+        consensus_score = 0.0
         rationale_flags = []
 
-        # Trend filter (max 25 points)
-        # Criteria: close > EMA50 and EMA50 > EMA100 and VWMA > EMA50 give strong trend
+        # --- 1. DIRECTIONAL ALIGNMENT (Max 25 Punkte) ---
         try:
-            if not np.isnan(close) and not np.isnan(ema50) and not np.isnan(ema100) and not np.isnan(vwma):
-                if (close > ema50) and (ema50 > ema100) and (vwma > ema50):
-                    trend_score += 25.0
-                    rationale_flags.append('TREND_STRONG_EMA_VWMA')
-                elif (close > ema50) and (ema50 > ema100):
-                    trend_score += 15.0
-                    rationale_flags.append('TREND_EMA')
-                elif ichimoku_rec == 'bullish' or (
-                        not np.isnan(ichimoku_rec) and str(ichimoku_rec).lower().startswith('b')):
-                    trend_score += 18.0
-                    rationale_flags.append('TREND_ICHIMOKU')
-                else:
-                    # small partial if hull9 is aligned
-                    if not np.isnan(hull9) and close > hull9:
-                        trend_score += 8.0
-                        rationale_flags.append('TREND_HULL9')
-            else:
-                # fallback: rely on Ichimoku if present
-                if ichimoku_rec == 'bullish' or (
-                        not np.isnan(ichimoku_rec) and str(ichimoku_rec).lower().startswith('b')):
-                    trend_score += 18.0
-                    rationale_flags.append('TREND_ICHIMOKU_ONLY')
-        except Exception:
-            pass
+            alignment = check_directional_alignment(ema5, ema10, ema20, ema50, ema100, ema200, close, vwma)
+            trend_score += 25.0 * alignment
 
-        # Momentum (max 25 points)
-        try:
-            if macd_bull:
-                momentum_score += 15.0
-                rationale_flags.append('MACD_BULL')
-            if not np.isnan(ao) and not np.isnan(ao1) and ao > 0 and ao > ao1:
-                momentum_score += 5.0
-                rationale_flags.append('AO_POS_UP')
-            if not np.isnan(mom) and mom > 0:
-                momentum_score += 5.0
-                rationale_flags.append('MOM_POS')
-            # ADX as amplifier
-            if not np.isnan(adx) and adx >= adx_trend_threshold:
-                momentum_score *= 1.20
-                rationale_flags.append('ADX_STRONG')
-        except Exception:
-            pass
-        momentum_score = min(momentum_score, 25.0)
+            if alignment > 0.85:
+                trend_score += 5.0
+                rationale_flags.append('PERFECT_MA_ALIGNMENT')
+            elif alignment > 0.7:
+                rationale_flags.append('STRONG_MA_ALIGNMENT')
 
-        # Mean Reversion (max 15)
-        try:
-            if not np.isnan(rsi) and rsi < rsi_meanrev_threshold:
-                # only good mean-revert if trend is intact (close > ema50)
-                if not np.isnan(ema50) and close > ema50:
-                    meanrev_score += 10.0
-                    rationale_flags.append('RSI_MEANREV_IN_TREND')
-                else:
-                    meanrev_score += 6.0
-                    rationale_flags.append('RSI_MEANREV')
-            if not np.isnan(cci) and cci < -100:
-                meanrev_score += 4.0
-                rationale_flags.append('CCI20_OVERSOLD')
-            if not np.isnan(stochK) and not np.isnan(stochK1) and stochK < 20 and stochK > stochK1:
-                meanrev_score += 3.0
-                rationale_flags.append('STOCH_K_RISING')
-        except Exception:
-            pass
-        meanrev_score = min(meanrev_score, 15.0)
+            # Hull MA als zusätzliches Filter
+            if not np.isnan(hull9) and close > hull9:
+                if not np.isnan(ema50) and hull9 > ema50:
+                    trend_score += 8.0
+                    rationale_flags.append('HULL_ABOVE_EMA50')
+        except Exception as e:
+            logger.warning(f"Alignment Error: {e}")
 
-        # Volatility / Breakout (max 15)
+        # --- 2. ADX & DIRECTIONAL COMPONENTS (Max 20 Punkte) ---
         try:
-            # BB squeeze detection: BBPower low (normalize) AND BB width small
-            bbpower_norm = norm01(bbpower, bbpower_min, bbpower_max) if not np.isnan(bbpower) else 0.0
-            if not np.isnan(bb_width) and bb_width > 0:
-                # small width = squeeze -> we reward potential breakout only if price near bands
-                median_bb = (bb_upper + bb_lower) / 2.0 if (
-                            not np.isnan(bb_upper) and not np.isnan(bb_lower)) else np.nan
-                # if BBPower indicates compression (small normalized) -> reward
-                if bbpower_norm < 0.4:
-                    vol_break_score += 8.0
-                    rationale_flags.append('BB_SQUEEZE')
-                # price near lower band but other momentum bullish => potential squeeze->reversal long
-                if (not np.isnan(close) and not np.isnan(bb_lower)) and (close < (bb_lower + 0.25 * bb_width)):
-                    vol_break_score += 4.0
-                    rationale_flags.append('PRICE_NEAR_BBLOWER')
-                # price breaking above middle towards upper and MACD bullish -> breakout
-                if (not np.isnan(pivot_middle) and not np.isnan(close) and close > pivot_middle and macd_bull):
-                    vol_break_score += 3.0
-                    rationale_flags.append('BREAK_ABOVE_PIVOT_MID_MACD')
-            else:
-                # if no BB available but MACD bull + AO positive, reward small
-                if macd_bull and not np.isnan(ao) and ao > 0:
-                    vol_break_score += 4.0
-                    rationale_flags.append('MACD_AO_BREAK')
-        except Exception:
-            pass
-        vol_break_score = min(vol_break_score, 15.0)
+            if not np.isnan(adx):
+                if adx >= config.adx_trend_threshold:
+                    adx_norm = norm01(adx, 20.0, 60.0)
+                    trend_score += 15.0 * adx_norm
+                    rationale_flags.append('ADX_STRONG')
 
-        # Volume confirmation (max 10)
+            # DI+ über DI- ist bullish
+            if not np.isnan(di_plus) and not np.isnan(di_minus):
+                if di_plus > di_minus + config.di_difference_threshold:
+                    di_score += 12.0
+                    rationale_flags.append('DI_PLUS_DOMINANT')
+                elif di_plus > di_minus:
+                    di_score += 6.0
+                    rationale_flags.append('DI_PLUS_HIGHER')
+
+            # DI Crossing
+            if di_crossing_bullish:
+                di_score += 8.0
+                rationale_flags.append('DI_BULLISH_CROSS')
+
+            trend_score += di_score
+        except Exception as e:
+            logger.warning(f"ADX Error: {e}")
+
+        trend_score = min(trend_score, 35.0)
+
+        # --- 3. MULTIPLE INDICATORS CONSENSUS (Max 30 Punkte) ---
         try:
-            if not np.isnan(volume) and not np.isnan(vwma_col):
-                if volume > vwma_col:
+            consensus, bullish_ratio, indicator_count = calculate_multiple_indicators_consensus(
+                rsi, stoch_k, cci, wr, uo, bbpower, macd_val, macd_sig, ao, mom
+            )
+
+            consensus_score = 30.0 * consensus
+
+            # Bonus für viele bullish Indikatoren
+            if bullish_ratio >= 0.75 and indicator_count >= 8:
+                consensus_score += 8.0
+                rationale_flags.append('STRONG_INDICATOR_CONSENSUS')
+            elif bullish_ratio >= 0.6 and indicator_count >= 6:
+                rationale_flags.append('GOOD_INDICATOR_ALIGNMENT')
+
+            momentum_score += consensus_score
+        except Exception as e:
+            logger.warning(f"Consensus Error: {e}")
+
+        # --- 4. PARABOLIC SAR CONFIRMATION (Max 10 Punkte) ---
+        try:
+            if isinstance(psar, str) and 'bullish' in str(psar).lower():
+                momentum_score += 10.0
+                rationale_flags.append('PSAR_BULLISH')
+            elif not np.isnan(psar):
+                psar_float = float(psar) if psar else np.nan
+                if not np.isnan(psar_float) and close > psar_float:
+                    momentum_score += 5.0
+                    rationale_flags.append('PRICE_ABOVE_SAR')
+        except Exception as e:
+            logger.warning(f"SAR Error: {e}")
+
+        momentum_score = min(momentum_score, 40.0)
+
+        # --- 5. REVERSAL PATTERN DETECTION (Max 15 Punkte) ---
+        try:
+            reversal_strength = detect_reversal_patterns(rsi, rsi1, stoch_k, stoch_k1, cci, cci1, close, low, bb_lower)
+            meanrev_score += 15.0 * reversal_strength
+
+            if reversal_strength > 0.7:
+                rationale_flags.append('STRONG_REVERSAL_SETUP')
+            elif reversal_strength > 0.4:
+                rationale_flags.append('REVERSAL_FORMING')
+        except Exception as e:
+            logger.warning(f"Reversal Error: {e}")
+
+        meanrev_score = min(meanrev_score, 18.0)
+
+        # --- 6. BREAKOUT PATTERN DETECTION (Max 18 Punkte) ---
+        try:
+            breakout_strength = detect_breakout_patterns(close, high, bb_upper, bb_lower, volume, vwma, psar, macd_val,
+                                                         macd_sig)
+            vol_break_score += 18.0 * breakout_strength
+
+            if breakout_strength > 0.8:
+                rationale_flags.append('STRONG_BREAKOUT_SETUP')
+            elif breakout_strength > 0.5:
+                rationale_flags.append('BREAKOUT_FORMING')
+        except Exception as e:
+            logger.warning(f"Breakout Error: {e}")
+
+        vol_break_score = min(vol_break_score, 20.0)
+
+        # --- 7. VOLUME CONFIRMATION (Max 10 Punkte) ---
+        try:
+            if not np.isnan(volume) and not np.isnan(vwma):
+                if volume > vwma * 1.25:
                     volume_score += 10.0
                     rationale_flags.append('VOLUME_SPIKE')
-                else:
-                    # relative strength of volume
-                    vol_norm = norm01(volume, volume_min, volume_max)
-                    volume_score += vol_norm * 6.0
-            elif not np.isnan(vwma_col):
-                volume_score += 4.0
-        except Exception:
-            pass
+                elif volume > vwma:
+                    volume_score += 6.0
+                    rationale_flags.append('VOLUME_ABOVE_AVG')
+        except Exception as e:
+            logger.warning(f"Volume Error: {e}")
+
         volume_score = min(volume_score, 10.0)
 
-        # Pivot / Support (max 10)
+        # --- 8. PIVOT LEVELS & SUPPORT/RESISTANCE (Max 12 Punkte) ---
         try:
-            if (not np.isnan(pivot_s1) and not np.isnan(close)) and (
-            close > pivot_s1 and close < pivot_middle if not np.isnan(pivot_middle) else close > pivot_s1):
-                pivot_score += 7.0
-                rationale_flags.append('PRICE_BETWEEN_S1_MID')
-            if (not np.isnan(pivot_s2) and not np.isnan(close)) and (close > pivot_s2 and close < pivot_s1):
-                pivot_score += 9.0
-                rationale_flags.append('PRICE_BETWEEN_S2_S1')
-            # If price already above R1 that's a breakout
-            if (not np.isnan(pivot_r1) and not np.isnan(close)) and close > pivot_r1:
-                pivot_score += 6.0
-                rationale_flags.append('PRICE_ABOVE_R1')
-        except Exception:
-            pass
-        pivot_score = min(pivot_score, 10.0)
+            pivot_r1_vals = [pivot_systems[sys]['R1'] for sys in pivot_systems if
+                             not np.isnan(pivot_systems[sys]['R1'])]
+            pivot_s1_vals = [pivot_systems[sys]['S1'] for sys in pivot_systems if
+                             not np.isnan(pivot_systems[sys]['S1'])]
 
-        # Aggregate weighted score
-        # weights: Trend 25, Momentum 25, MeanRev 15, VolBreak 15, Volume 10, Pivot 10
-        total_score_raw = (trend_score) + (momentum_score) + (meanrev_score) + (vol_break_score) + (volume_score) + (
-            pivot_score)
-        # Normalize to 0-100 (sum of maxima is 100)
+            if pivot_r1_vals and close > np.mean(pivot_r1_vals):
+                pivot_score += 8.0
+                rationale_flags.append('ABOVE_RESISTANCE')
+
+            if pivot_s1_vals and close > np.mean(pivot_s1_vals):
+                pivot_score += 6.0
+                rationale_flags.append('ABOVE_SUPPORT')
+        except Exception as e:
+            logger.warning(f"Pivot Error: {e}")
+
+        pivot_score = min(pivot_score, 12.0)
+
+        # --- 9. RECOMMENDATION AGGREGATION (Max 8 Punkte) ---
+        try:
+            rec_scores = [
+                interpret_rec_enhanced(rec_all),
+                interpret_rec_enhanced(rec_ma),
+                interpret_rec_enhanced(rec_other),
+                interpret_rec_enhanced(rec_ichimoku),
+                interpret_rec_enhanced(rec_stoch_rsi),
+                interpret_rec_enhanced(rec_wr),
+                interpret_rec_enhanced(rec_bbpower),
+                interpret_rec_enhanced(rec_uo),
+            ]
+
+            rec_scores_clean = [s for s in rec_scores if not np.isnan(s) and s > 0]
+            if rec_scores_clean:
+                rec_mean = np.mean(rec_scores_clean)
+                momentum_score += 8.0 * rec_mean
+
+                if rec_mean > 0.75:
+                    rationale_flags.append('REC_STRONG_BUY')
+                elif rec_mean > 0.6:
+                    rationale_flags.append('REC_BUY')
+        except Exception as e:
+            logger.warning(f"Recommendation Error: {e}")
+
+        # === AGGREGATE SCORE ===
+        total_score_raw = (trend_score + momentum_score + meanrev_score + vol_break_score +
+                           volume_score + pivot_score)
         signal_score = weighted_cap(total_score_raw, 100.0)
 
-        # Conviction calculation (0-100)
-        # 60% from normalized signal_score, 20% from Recommend.* consensus, 20% from ADX strength
-        # Recommend aggregation
-        recommend_all = safe('Recommend.All', row, np.nan)
-        recommend_ma = safe('Recommend.MA', row, np.nan)
-        recommend_other = safe('Recommend.Other', row, np.nan)
+        # Trend muss stabil sein
+        trend_requirement_met = trend_score >= 20.0
 
-        rec_vals = [interpret_rec(recommend_all), interpret_rec(recommend_ma), interpret_rec(recommend_other)]
-        rec_mean = np.nanmean(rec_vals) if len(rec_vals) > 0 else 0.0
-        rec_score_component = float(np.clip(rec_mean, 0.0, 1.0))
+        # === CONVICTION (0-100) ===
+        # 50% Signal Score, 30% Recommendations, 20% ADX Stärke
+        adx_norm = norm01(adx, 15.0, 50.0) if not np.isnan(adx) else 0.5
 
-        # ADX contribution: map ADX to 0..1 (20->0.4, 25->0.6, 40->1.0)
-        adx_contrib = 0.0
-        if not np.isnan(adx):
-            if adx < 20:
-                adx_contrib = 0.2 * (adx / 20.0)
-            elif adx < 25:
-                adx_contrib = 0.2 + 0.4 * ((adx - 20.0) / 5.0)
-            else:
-                # scale 25..60 -> 0.6..1.0
-                adx_contrib = 0.6 + 0.4 * np.clip((adx - 25.0) / 35.0, 0.0, 1.0)
-        # combine
-        conviction = 0.60 * (signal_score) + 0.20 * (rec_score_component * 100.0) + 0.20 * (adx_contrib * 100.0)
+        conviction = (0.50 * signal_score +
+                      0.30 * (np.mean([s for s in rec_scores if not np.isnan(s)]) * 100 if rec_scores else 50) +
+                      0.20 * (adx_norm * 100))
         conviction = float(np.clip(conviction, 0.0, 100.0))
 
-        # Determine trade type heuristically
-        trade_type = 'NO_TRADE'
-        if signal_score >= score_threshold:
-            # pick best fitting trade type
-            if macd_bull and (not np.isnan(close) and not np.isnan(pivot_r1)) and close > pivot_r1:
-                trade_type = 'TREND_BREAKOUT'
-            elif (not np.isnan(rsi) and rsi < rsi_meanrev_threshold) and (not np.isnan(ema50) and close > ema50):
-                trade_type = 'MEAN_REVERT_IN_TREND'
-            elif bbpower_norm < 0.4 and (not np.isnan(bb_width)) and volume > vwma_col:
-                trade_type = 'VOLATILITY_BREAKOUT'
-            elif (not np.isnan(pivot_s1) and close > pivot_s1 and safe('P.SAR', row, np.nan) == 'bullish'):
-                trade_type = 'PIVOT_REVERSION'
-            else:
-                trade_type = 'MULTI_FACTOR'
-        else:
-            trade_type = 'NO_TRADE'
+        # === TRADE TYPE DETERMINATION ===
+        trade_type = TradeType.NO_TRADE.value
 
-        # Entry price: default to close, could be adjusted for limit entries
+        if signal_score >= config.score_threshold and trend_requirement_met:
+            # Priorisiere nach Pattern
+            breakout_strength = detect_breakout_patterns(close, high, bb_upper, bb_lower, volume, vwma, psar, macd_val,
+                                                         macd_sig)
+            reversal_strength = detect_reversal_patterns(rsi, rsi1, stoch_k, stoch_k1, cci, cci1, close, low, bb_lower)
+
+            if breakout_strength > 0.65 and not np.isnan(macd_val) and macd_val > macd_sig:
+                trade_type = TradeType.TREND_BREAKOUT.value
+            elif reversal_strength > 0.6 and not np.isnan(rsi) and rsi < config.rsi_meanrev_threshold:
+                trade_type = TradeType.MEAN_REVERT_IN_TREND.value
+            elif vol_break_score >= 12.0:
+                trade_type = TradeType.VOLATILITY_BREAKOUT.value
+            elif consensus > 0.70:
+                trade_type = TradeType.DIRECTIONAL_ALIGNMENT.value
+            else:
+                trade_type = TradeType.MULTI_FACTOR.value
+
+        # === ENTRY / STOP / TARGET ===
         entry_price = float(close) if not np.isnan(close) else np.nan
 
-        # Stop loss: use pivot_s1 if present, else entry - k*bb_width, else entry * 0.97 (3% fallback)
+        # Stop Loss: Mehrschichtiges System
         stop_loss = np.nan
-        if not np.isnan(pivot_s1):
-            stop_loss = float(pivot_s1)
-        elif not np.isnan(bb_width) and not np.isnan(entry_price):
-            stop_loss = float(max(0.0, entry_price - bb_stop_k * bb_width))
-        elif not np.isnan(entry_price):
-            stop_loss = float(entry_price * 0.97)
+        stops_to_consider = []
 
-        # Targets using BB width and pivot levels
+        # Pivot S1/S2
+        if not np.isnan(pivot_s1) and pivot_s1 < entry_price:
+            stops_to_consider.append(float(pivot_s1) * 0.98)  # Leicht unter Pivot
+
+        # Ichimoku Kijun
+        if not np.isnan(ichimoku_bline) and ichimoku_bline < entry_price:
+            stops_to_consider.append(float(ichimoku_bline) * 0.98)
+
+        # Lower Bollinger Band
+        if not np.isnan(bb_lower) and bb_lower < entry_price:
+            stops_to_consider.append(float(bb_lower) * 0.97)
+
+        # EMA200 (Long-term)
+        if not np.isnan(ema200) and ema200 < entry_price:
+            stops_to_consider.append(float(ema200) * 0.99)
+
+        # Wähle höchsten Stop (beste Balance zwischen Schutz & Reversal-Raum)
+        if stops_to_consider:
+            stop_loss = max(stops_to_consider)
+        elif not np.isnan(bb_width) and not np.isnan(entry_price):
+            stop_loss = float(max(0.01, entry_price - config.bb_stop_k * bb_width))
+        elif not np.isnan(entry_price):
+            stop_loss = float(entry_price * 0.94)
+
+        # === TARGETS (mehrere Szenarien) ===
         target_conservative = np.nan
         target_aggressive = np.nan
-        if not np.isnan(pivot_r1):
-            target_conservative = float(min(pivot_r1, entry_price + bb_target_cons_k * (
-                bb_width if not np.isnan(bb_width) else entry_price * 0.02)))
-        else:
-            target_conservative = float(
-                entry_price + bb_target_cons_k * (bb_width if not np.isnan(bb_width) else entry_price * 0.02))
-        if not np.isnan(pivot_r2):
-            target_aggressive = float(min(pivot_r2, entry_price + bb_target_agg_k * (
-                bb_width if not np.isnan(bb_width) else entry_price * 0.03)))
-        else:
-            target_aggressive = float(
-                entry_price + bb_target_agg_k * (bb_width if not np.isnan(bb_width) else entry_price * 0.03))
 
-        # Position sizing (shares) based on risk per trade
-        position_size_shares = np.nan
-        position_size_value = np.nan
-        if not np.isnan(entry_price) and not np.isnan(stop_loss) and (entry_price > stop_loss):
+        if not np.isnan(entry_price) and not np.isnan(stop_loss) and entry_price > stop_loss:
+            risk = entry_price - stop_loss
+
+            # Target 1: Pivot R1 oder 1.5x Risk
+            if not np.isnan(pivot_r1) and pivot_r1 > entry_price:
+                target_conservative = float(pivot_r1)
+            else:
+                target_conservative = float(entry_price + 1.5 * risk)
+
+            # Target 2: Pivot R2 oder 3x Risk
+            if not np.isnan(pivot_r2) and pivot_r2 > entry_price:
+                target_aggressive = float(pivot_r2)
+            else:
+                target_aggressive = float(entry_price + 3.0 * risk)
+
+        # === POSITION SIZING (risikoadjustiert) ===
+        position_size_shares = 0
+        position_size_value = 0.0
+
+        if (not np.isnan(entry_price) and not np.isnan(stop_loss) and
+                entry_price > stop_loss and trade_type != TradeType.NO_TRADE.value):
+
             risk_per_share = entry_price - stop_loss
-            risk_amount = equity * risk_per_trade_pct
-            position_size_shares = int(np.floor(risk_amount / risk_per_share)) if risk_per_share > 0 else 0
-            position_size_value = position_size_shares * entry_price
-        else:
-            # if stop is greater or nan, default to small suggested value
-            position_size_shares = 0
-            position_size_value = 0.0
+            max_risk_amount = equity * min(risk_per_trade_pct, config.max_position_size_pct)
 
-        # Confidence reason: short text explaining top contributors
+            # Conviction-Multiplikator (höhere Conviction = mehr Risiko)
+            conviction_multiplier = 0.5 + (conviction / 200.0)  # 0.5..1.0
+            adjusted_risk = max_risk_amount * conviction_multiplier
+
+            if risk_per_share > 0:
+                position_size_shares = int(np.floor(adjusted_risk / risk_per_share))
+                position_size_value = position_size_shares * entry_price
+
+        # === CONFIDENCE REASON ===
         top_reasons = []
-        if trend_score >= 20:
+        if trend_score >= 25:
             top_reasons.append('TREND')
-        if momentum_score >= 15:
-            top_reasons.append('MOMENTUM')
-        if meanrev_score >= 8:
-            top_reasons.append('MEANREV')
-        if vol_break_score >= 8:
-            top_reasons.append('VOL_BREAK')
-        if volume_score >= 6:
+        if consensus_score >= 20:
+            top_reasons.append('CONSENSUS')
+        if meanrev_score >= 10:
+            top_reasons.append('REVERSAL')
+        if vol_break_score >= 12:
+            top_reasons.append('BREAKOUT')
+        if di_score >= 8:
+            top_reasons.append('DI_STRONG')
+        if volume_score >= 8:
             top_reasons.append('VOLUME')
 
-        confidence_reason = ','.join(top_reasons) if len(top_reasons) > 0 else 'LOW_SCORE'
+        confidence_reason = ','.join(top_reasons) if top_reasons else 'WEAK'
 
-        # expected holding days estimate: heuristic based on trade type & conviction
-        if trade_type == 'TREND_BREAKOUT':
-            expected_holding = int(np.clip(3 + (conviction / 20.0), 3, 30))  # 3..30 days
-        elif trade_type == 'MEAN_REVERT_IN_TREND':
-            expected_holding = int(np.clip(2 + (conviction / 30.0), 2, 14))
-        elif trade_type == 'VOLATILITY_BREAKOUT':
-            expected_holding = int(np.clip(3 + (conviction / 25.0), 3, 21))
-        elif trade_type == 'PIVOT_REVERSION':
-            expected_holding = int(np.clip(1 + (conviction / 50.0), 1, 10))
+        # === EXPECTED HOLDING DAYS ===
+        expected_holding = 5
+        if trade_type == TradeType.TREND_BREAKOUT.value:
+            expected_holding = int(np.clip(7 + conviction / 12.0, 7, 50))
+        elif trade_type == TradeType.MEAN_REVERT_IN_TREND.value:
+            expected_holding = int(np.clip(2 + conviction / 25.0, 2, 14))
+        elif trade_type == TradeType.VOLATILITY_BREAKOUT.value:
+            expected_holding = int(np.clip(4 + conviction / 20.0, 4, 25))
+        elif trade_type == TradeType.DIRECTIONAL_ALIGNMENT.value:
+            expected_holding = int(np.clip(5 + conviction / 18.0, 5, 30))
         else:
-            expected_holding = int(np.clip(3 + (conviction / 33.0), 1, 30))
+            expected_holding = int(np.clip(4 + conviction / 22.0, 2, 30))
 
-        # Build output row
+        # === RISK/REWARD ===
+        rr_ratio = np.nan
+        if not np.isnan(entry_price) and not np.isnan(stop_loss) and not np.isnan(target_conservative):
+            if entry_price > stop_loss:
+                rr_ratio = (target_conservative - entry_price) / (entry_price - stop_loss)
+
+        # === OUTPUT ===
         out = {
             'symbol': symbol,
             'signal_score': round(float(signal_score), 2),
             'conviction': round(float(conviction), 2),
-            'entry_price': entry_price,
+            'entry_price': round(entry_price, 6) if not np.isnan(entry_price) else np.nan,
             'stop_loss': round(stop_loss, 6) if not np.isnan(stop_loss) else np.nan,
             'target_conservative': round(target_conservative, 6) if not np.isnan(target_conservative) else np.nan,
             'target_aggressive': round(target_aggressive, 6) if not np.isnan(target_aggressive) else np.nan,
             'trade_type': trade_type,
-            'rationale_flags': ';'.join(list(dict.fromkeys(rationale_flags))) if rationale_flags else '',
+            'rationale_flags': ';'.join(list(dict.fromkeys(rationale_flags))) if rationale_flags else 'NONE',
             'confidence_reason': confidence_reason,
             'expected_holding_days_estimate': int(expected_holding),
             'position_size_shares': int(position_size_shares),
-            'position_size_value': float(position_size_value)
+            'position_size_value': round(float(position_size_value), 2),
+            'risk_reward_ratio': round(rr_ratio, 2) if not np.isnan(rr_ratio) else np.nan,
+            'trend_score': round(trend_score, 2),
+            'momentum_score': round(momentum_score, 2),
+            'consensus_strength': round(bullish_ratio * 100, 2) if 'bullish_ratio' in locals() else np.nan,
+            'di_dominance': round(di_score, 2),
+            'pattern_quality': round(max(breakout_strength, reversal_strength) * 100,
+                                     2) if 'breakout_strength' in locals() else np.nan,
         }
+
         rows_out.append(out)
 
     signals_df = pd.DataFrame(rows_out)
-    # sort by signal_score desc then conviction
-    if 'signal_score' in signals_df.columns:
-        signals_df = signals_df.sort_values(by=['signal_score', 'conviction'], ascending=False).reset_index(drop=True)
+
+    # Sortierung: Erst Trade Type, dann Risk/Reward, dann Score
+    trade_type_order = {
+        'TREND_BREAKOUT': 0,
+        'VOLATILITY_BREAKOUT': 1,
+        'MEAN_REVERT_IN_TREND': 2,
+        'DIRECTIONAL_ALIGNMENT': 3,
+        'MULTI_FACTOR': 4,
+        'NO_TRADE': 999
+    }
+    signals_df['_trade_order'] = signals_df['trade_type'].map(trade_type_order)
+
+    signals_df = (signals_df.sort_values(
+        by=['_trade_order', 'risk_reward_ratio', 'signal_score', 'conviction'],
+        ascending=[True, False, False, False],
+        na_position='last'
+    ).drop('_trade_order', axis=1).reset_index(drop=True))
+
+    # Logging
+    trade_count = len(signals_df[signals_df['trade_type'] != 'NO_TRADE'])
+    avg_rr = signals_df[signals_df['trade_type'] != 'NO_TRADE']['risk_reward_ratio'].mean()
+
+    logger.info(f"Generated {len(signals_df)} signals. Tradeable: {trade_count}. Avg R:R: {avg_rr:.2f}")
+    logger.info(f"Signal Distribution: {signals_df['trade_type'].value_counts().to_dict()}")
 
     return signals_df
 
