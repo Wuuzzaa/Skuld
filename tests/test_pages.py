@@ -9,7 +9,8 @@ PAGES = [
     "pages/analyst_prices.py",
     "pages/married_put_analysis.py",
     "pages/spreads.py",
-    'pages/multifactor_swingtrading.py'
+    'pages/multifactor_swingtrading.py',
+    'pages/atlas_multi_signal_alpha.py'
 ]
 
 

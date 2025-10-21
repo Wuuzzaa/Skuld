@@ -36,6 +36,7 @@ analyst_prices = st.Page("pages/analyst_prices.py", title="Analyst Prices")
 spreads = st.Page("pages/spreads.py", title="Spreads")
 marrieds = st.Page("pages/married_put_analysis.py", title="Married Puts")
 multifactor_swingtrading = st.Page('pages/multifactor_swingtrading.py', title="Multifactor Swingtrading")
+atlas_multi_signal_alpha = st.Page('pages/atlas_multi_signal_alpha.py', title="Atlas Multi Signal Alpha")
 
 # Set up navigation
 page = st.navigation(
@@ -43,7 +44,8 @@ page = st.navigation(
         analyst_prices,
         spreads,
         marrieds,
-        multifactor_swingtrading
+        multifactor_swingtrading,
+        atlas_multi_signal_alpha
     ]
 )
 
