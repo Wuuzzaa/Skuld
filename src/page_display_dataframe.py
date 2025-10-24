@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import urllib.parse
 
 
 def _add_tradingview_link(df:pd.DataFrame, symbol_column='symbol'):
@@ -9,9 +10,34 @@ def _add_tradingview_link(df:pd.DataFrame, symbol_column='symbol'):
     return df
 
 def _add_tradingview_superchart_link(df:pd.DataFrame, symbol_column='symbol'):
-    df['chart'] = df[symbol_column].apply(
+    df['Chart'] = df[symbol_column].apply(
         lambda x: f'https://www.tradingview.com/chart/?symbol={x}'
     )
+    return df
+
+
+def _add_claude_analysis_link(df: pd.DataFrame, symbol_column='symbol'):
+    """Adds Claude AI analysis link with pre-filled prompt"""
+
+    def create_claude_prompt(symbol):
+        prompt = f"""
+            Erstelle eine kompakte Aktienanalyse für {symbol}:
+            Unternehmen: Geschäftsmodell und Branche in 1-2 Sätzen
+            Aktuelle News: Wichtigste Entwicklungen der letzten 4 Wochen
+            Anstehende Events: Earnings, Produktlaunches oder relevante Termine
+            Einschätzung:
+            
+            Kauf/Halten/Verkaufen mit Begründung
+            Aktuelles Kursziel (Analystenkonsens)
+            Wichtigste Chance und größtes Risiko
+            
+            Format: Prägnant, faktenbasiert, keine Füllwörter, max. eine Seite.
+        """
+        # URL-encode the prompt
+        encoded_prompt = urllib.parse.quote(prompt)
+        return f'https://claude.ai/new?q={encoded_prompt}'
+
+    df['Claude'] = df[symbol_column].apply(create_claude_prompt)
     return df
 
 
@@ -33,18 +59,24 @@ def page_display_dataframe(
     """
     df = _add_tradingview_link(df, symbol_column)
     df = _add_tradingview_superchart_link(df, symbol_column)
+    df = _add_claude_analysis_link(df, symbol_column)
 
-    # Default TradingView configuration
+    # default configuration
     default_config = {
         "TradingView": st.column_config.LinkColumn(
-            "TradingView",
-            display_text="🔗",
-            width="small"
+            label="",
+            help="TradingView Symbolinfo",
+            display_text="📊",
         ),
-        "chart": st.column_config.LinkColumn(
-            "Chart",
+        "Chart": st.column_config.LinkColumn(
+            label="",
+            help="TradingView Superchart",
             display_text="📈",
-            width="small"
+        ),
+        "Claude": st.column_config.LinkColumn(
+            label="",
+            help="Analyze with Claude AI",
+            display_text="🤖",
         )
     }
 
