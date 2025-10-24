@@ -38,11 +38,13 @@ def page_display_dataframe(
     default_config = {
         "TradingView": st.column_config.LinkColumn(
             "TradingView",
-            display_text="🔗"
+            display_text="🔗",
+            width="small"
         ),
         "chart": st.column_config.LinkColumn(
             "Chart",
-            display_text="📈"
+            display_text="📈",
+            width="small"
         )
     }
 
