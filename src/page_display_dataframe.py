@@ -3,20 +3,17 @@ import pandas as pd
 
 
 def _add_tradingview_link(df:pd.DataFrame, symbol_column='symbol'):
-    """
-    Adds a TradingView link column to the DataFrame.
-
-    Args:
-        df: DataFrame
-        symbol_column: Name of the column containing symbols (default: 'Symbol')
-
-    Returns:
-        DataFrame with TradingView column
-    """
     df['TradingView'] = df[symbol_column].apply(
         lambda x: f'https://www.tradingview.com/symbols/{x}/'
     )
     return df
+
+def _add_tradingview_superchart_link(df:pd.DataFrame, symbol_column='symbol'):
+    df['chart'] = df[symbol_column].apply(
+        lambda x: f'https://www.tradingview.com/chart/?symbol={x}'
+    )
+    return df
+
 
 
 def page_display_dataframe(
@@ -35,12 +32,17 @@ def page_display_dataframe(
                         These settings have higher priority than the default settings.
     """
     df = _add_tradingview_link(df, symbol_column)
+    df = _add_tradingview_superchart_link(df, symbol_column)
 
     # Default TradingView configuration
     default_config = {
         "TradingView": st.column_config.LinkColumn(
             "TradingView",
             display_text="🔗"
+        ),
+        "chart": st.column_config.LinkColumn(
+            "Chart",
+            display_text="📈"
         )
     }
 
