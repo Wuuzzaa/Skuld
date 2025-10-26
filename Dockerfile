@@ -23,17 +23,6 @@ RUN chmod 0644 /etc/cron.d/skuld-cron && \
     crontab /etc/cron.d/skuld-cron && \
     touch /var/log/cron.log
 
-# Streamlit Config erstellen
-RUN mkdir -p /root/.streamlit && \
-    cat > /root/.streamlit/config.toml << 'EOF'
-[server]
-headless = true
-enableCORS = false
-port = 8501
-address = "0.0.0.0"
-fileWatcherType = "none"
-EOF
-
 # Port für Streamlit
 EXPOSE 8501
 
@@ -60,7 +49,7 @@ fi\n\
 \n\
 # Start Streamlit\n\
 echo "Starting Streamlit on port 8501..."\n\
-exec python -m streamlit run /app/Skuld/app.py' > /app/start.sh && \
+exec streamlit run /app/Skuld/app.py --server.headless=true --server.enableCORS=false --server.port=8501 --server.address=0.0.0.0 --server.fileWatcherType=none' > /app/start.sh && \
     chmod +x /app/start.sh
 
 CMD ["/app/start.sh"]
