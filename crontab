@@ -1,0 +1,16 @@
+# Cronjob für SKULD Datensammlung
+# 2x täglich um 10:00 und 16:00 CET (09:00 und 15:00 UTC)
+# Nur an Werktagen (Montag-Freitag)
+
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+PYTHONPATH=/app/Skuld
+
+# Datensammlung um 10:00 CET (09:00 UTC)
+0 9 * * 1-5 cd /app/Skuld && /usr/local/bin/python main.py >> /var/log/cron.log 2>&1
+
+# Datensammlung um 16:00 CET (15:00 UTC)
+0 15 * * 1-5 cd /app/Skuld && /usr/local/bin/python main.py >> /var/log/cron.log 2>&1
+
+# Leere Zeile am Ende ist wichtig für Cron!
+

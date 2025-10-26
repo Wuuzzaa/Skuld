@@ -1,7 +1,6 @@
 import logging
 import sys
 import streamlit as st
-from src.google_drive_download import load_updated_database
 from src.logger_config import setup_logging
 from config import *
 
@@ -21,15 +20,18 @@ st.set_page_config(layout="wide")
 # Titel
 st.title("SKULD - Option Viewer")
 
-# Ensure database is available (download if needed)
-@st.cache_data(ttl=1800, show_spinner="Checking for database updates...")
-def ensure_database_available():
-    """Downloads the database from Google Drive if needed."""
-    if not use_local_data:
-        return load_updated_database()
-    return True
+# Check if database exists (created by cronjob)
+if not PATH_DATABASE_FILE.exists():
+    st.error("""
+    ⚠️ Database not found!
+    
+    The database is created automatically by the scheduled data collection process.
+    Please wait for the next scheduled run (10:00 or 16:00 CET) or contact the administrator.
+    """)
+    st.info(f"Expected database location: `{PATH_DATABASE_FILE}`")
+    st.stop()
 
-ensure_database_available()
+logger.info(f"✓ Database found at: {PATH_DATABASE_FILE}")
 
 # Define pages
 analyst_prices = st.Page("pages/analyst_prices.py", title="Analyst Prices")

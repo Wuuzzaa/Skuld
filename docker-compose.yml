@@ -7,14 +7,12 @@ services:
     ports:
       - "8501:8501"
     volumes:
-      # Datenbank persistent speichern
-      - ./Skuld/db:/app/Skuld/db
+      # Datenbank persistent speichern (WICHTIG für lokale Persistenz!)
+      - ./db:/app/Skuld/db
       # Logs persistent
-      - ./Skuld/logs:/app/Skuld/logs
-      # Secrets (Production: /etc/skuld/secrets/, Local: ./)
-      - ${SECRETS_PATH:-./service_account.json}:/app/service_account.json:ro
-      # Optional: Streamlit secrets
-      # - ${SECRETS_PATH:-./}/.streamlit/secrets.toml:/app/Skuld/.streamlit/secrets.toml:ro
+      - ./logs:/app/Skuld/logs
+      # Cron logs für Debugging
+      - ./cron.log:/var/log/cron.log
     environment:
       - PYTHONUNBUFFERED=1
       - TZ=Europe/Berlin

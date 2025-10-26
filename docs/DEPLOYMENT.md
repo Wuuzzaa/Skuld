@@ -1,154 +1,259 @@
-# Deployment auf Hetzner Server
+# 🚀 SKULD Docker Deployment Guide
 
-## 1. Server Vorbereitung (einmalig)
+## Overview
 
-### SSH zum Server verbinden
+SKULD runs completely in Docker with:
+- ✅ **Persistent local database** (no Google Drive)
+- ✅ **Automatic data collection** 2x daily via cronjob
+- ✅ **Streamlit web interface** on port 8501
+- ✅ **No external secrets** required
+
+---
+
+## 1. Local Testing (Windows/Linux/Mac)
+
+### Prerequisites
+- Docker & Docker Compose installed
+- Git installed
+
+### Quick Start
+
 ```bash
-ssh root@YOUR_SERVER_IP
+# Clone repository
+git clone https://github.com/Wuuzzaa/Skuld.git
+cd Skuld
+git checkout docker
+
+# Start container
+docker-compose up -d --build
+
+# Monitor logs
+docker-compose logs -f
 ```
 
-### Docker installieren
+### Access
+Open browser: **http://localhost:8501**
+
+### Useful Commands
+
 ```bash
-# System aktualisieren
+# Container status
+docker ps
+
+# View logs
+docker-compose logs -f
+
+# Cron logs (data collection)
+tail -f cron.log
+
+# Restart container
+docker-compose restart
+
+# Stop container
+docker-compose down
+
+# Manually trigger data collection
+docker-compose exec skuld-app python /app/Skuld/main.py
+```
+
+---
+
+## 2. Production Deployment on Hetzner
+
+### Server Preparation (one-time)
+
+```bash
+# 1. SSH to server
+ssh root@YOUR_SERVER_IP
+
+# 2. Update system
 apt update && apt upgrade -y
 
-# Docker installieren
-apt install -y docker.io docker-compose
+# 3. Install Docker
+apt install -y docker.io docker-compose git curl
 
-# Docker starten und autostart aktivieren
+# 4. Start Docker
 systemctl start docker
 systemctl enable docker
 
-# Git installieren (falls nicht vorhanden)
-apt install -y git
-
-# Optional: Nicht-root User erstellen
-adduser skuld
-usermod -aG docker skuld
-```
-
-### Projekt-Verzeichnis erstellen
-```bash
-mkdir -p /opt/skuld
-cd /opt/skuld
-```
-
-### Repository klonen
-```bash
-git clone https://github.com/Wuuzzaa/Skuld.git .
-git checkout clean-up-data-collection
-```
-
-### Secrets auf Server kopieren (von deinem lokalen PC aus)
-```powershell
-# service_account.json hochladen
-scp C:\Python\SKULD\service_account.json root@YOUR_SERVER_IP:/opt/skuld/
-
-# Wenn du später secrets.toml brauchst (optional):
-# scp C:\Python\SKULD\.streamlit\secrets.toml root@YOUR_SERVER_IP:/opt/skuld/.streamlit/
-```
-
-### Firewall konfigurieren
-```bash
-# Port 8501 für Streamlit öffnen
-ufw allow 8501/tcp
-ufw allow 22/tcp  # SSH nicht vergessen!
+# 5. Configure firewall
+ufw allow 22/tcp      # SSH
+ufw allow 8501/tcp    # Streamlit
 ufw enable
 ```
 
-## 2. App starten auf dem Server
+### Deploy Project
+
+```bash
+# 1. Create project directory
+mkdir -p /opt/skuld
+cd /opt/skuld
+
+# 2. Clone repository
+git clone https://github.com/Wuuzzaa/Skuld.git .
+git checkout docker
+
+# 3. Create persistent directories
+mkdir -p db logs
+
+# 4. Start container
+docker-compose up -d --build
+
+# 5. Check logs
+docker-compose logs -f
+```
+
+### Test Access
+Browser: **http://YOUR_SERVER_IP:8501**
+
+---
+
+## 3. Automatic Data Collection
+
+### Schedule (Cronjob)
+
+Container automatically collects data:
+- **10:00 CET** (09:00 UTC) - Morning
+- **16:00 CET** (15:00 UTC) - Afternoon
+- **Weekdays only** (Monday-Friday)
+
+### Check Cronjob
+
+```bash
+# Show cronjobs
+docker-compose exec skuld-app crontab -l
+
+# Cron service status
+docker-compose exec skuld-app service cron status
+
+# Live cron logs
+tail -f cron.log
+```
+
+### Manual Execution
+
+```bash
+# Start data collection immediately
+docker-compose exec skuld-app python /app/Skuld/main.py
+
+# With logs
+docker-compose exec skuld-app bash -c "cd /app/Skuld && python main.py"
+```
+
+---
+
+## 4. Persistent Data
+
+All data is stored on the host:
+
+```
+/opt/skuld/
+├── db/
+│   └── financial_data.db    # SQLite database (approx. 50-200 MB)
+├── logs/
+│   └── log.log               # Streamlit & app logs
+└── cron.log                  # Data collection logs
+```
+
+### Database Backup
+
+```bash
+# Manual backup
+cp /opt/skuld/db/financial_data.db \
+   /opt/skuld/backups/financial_data_$(date +%Y%m%d).db
+
+# Create automated backup script
+cat > /opt/skuld/backup.sh << 'EOF'
+#!/bin/bash
+BACKUP_DIR="/opt/skuld-backups"
+DATE=$(date +%Y%m%d_%H%M%S)
+mkdir -p $BACKUP_DIR
+cp /opt/skuld/db/financial_data.db $BACKUP_DIR/financial_data_${DATE}.db
+# Delete old backups (older than 30 days)
+find $BACKUP_DIR -name "*.db" -mtime +30 -delete
+echo "Backup completed: financial_data_${DATE}.db"
+EOF
+
+chmod +x /opt/skuld/backup.sh
+
+# Add cronjob for daily backup (11:00 PM)
+crontab -e
+# Add this line:
+0 23 * * * /opt/skuld/backup.sh >> /opt/skuld/backup.log 2>&1
+```
+
+---
+
+## 5. Deploy Updates
 
 ```bash
 cd /opt/skuld
 
-# Container bauen und starten
+# 1. Update code
+git pull origin docker
+
+# 2. Rebuild and restart container
+docker-compose down
 docker-compose up -d --build
 
-# Logs prüfen
+# 3. Check logs
 docker-compose logs -f
+
+# 4. Clean up old images
+docker system prune -a -f
 ```
 
-## 3. Zugriff testen
+---
 
-Öffne im Browser: `http://YOUR_SERVER_IP:8501`
+## 6. Monitoring & Maintenance
 
-## 4. Container verwalten
+### Monitor Container
 
 ```bash
-# Status prüfen
+# Container status
 docker ps
 
-# Logs anzeigen
-docker-compose logs -f
+# Resource usage
+docker stats skuld-streamlit
 
-# Container neu starten
-docker-compose restart
+# Check disk space
+df -h
+du -sh /opt/skuld/db/
 
-# Container stoppen
-docker-compose down
-
-# Updates deployen
-git pull
-docker-compose up -d --build
+# Check log size
+ls -lh /opt/skuld/logs/
+ls -lh /opt/skuld/cron.log
 ```
 
-## 5. Auto-Deployment mit GitHub Actions
+### Log Rotation
 
-Die Workflow-Datei `.github/workflows/deploy.yml` ist bereits erstellt.
-
-### GitHub Secrets einrichten:
-
-1. Gehe zu: https://github.com/Wuuzzaa/Skuld/settings/secrets/actions
-2. Füge folgende Secrets hinzu:
-
-   - `HETZNER_HOST`: Deine Server IP
-   - `HETZNER_USER`: `root` (oder dein erstellter User)
-   - `HETZNER_SSH_KEY`: Dein privater SSH Key (kompletten Inhalt)
-   - `HETZNER_PORT`: `22` (Standard SSH Port)
-
-### SSH Key für GitHub Actions erstellen:
+Docker rotates logs automatically, but for cron.log:
 
 ```bash
-# Auf deinem lokalen PC oder direkt auf dem Server:
-ssh-keygen -t ed25519 -C "github-actions-skuld" -f skuld_deploy_key
-
-# Public Key zum Server hinzufügen
-cat skuld_deploy_key.pub >> ~/.ssh/authorized_keys
-
-# Private Key in GitHub Secrets einfügen (HETZNER_SSH_KEY)
-cat skuld_deploy_key
+# Configure log rotation
+cat > /etc/logrotate.d/skuld << 'EOF'
+/opt/skuld/cron.log {
+    weekly
+    rotate 4
+    compress
+    missingok
+    notifempty
+}
+EOF
 ```
 
-### Auto-Deployment testen:
+---
+
+## 7. Production Setup with SSL (Optional)
+
+### Nginx Reverse Proxy
 
 ```bash
-# Lokale Änderung machen
-git add .
-git commit -m "Test deployment"
-git push origin clean-up-data-collection
-
-# Oder für Production:
-git push origin master
-```
-
-GitHub Actions wird automatisch:
-1. SSH zum Server verbinden
-2. Code pullen
-3. Container neu bauen
-4. Container starten
-5. Alte Images aufräumen
-
-## 6. Production-Setup (Optional)
-
-### Reverse Proxy mit Nginx + SSL
-
-```bash
+# Install Nginx
 apt install -y nginx certbot python3-certbot-nginx
 
-# Nginx konfigurieren
-nano /etc/nginx/sites-available/skuld
-
-# Inhalt:
+# Create Nginx config
+cat > /etc/nginx/sites-available/skuld << 'EOF'
 server {
     listen 80;
     server_name your-domain.com;
@@ -162,59 +267,592 @@ server {
         proxy_cache_bypass $http_upgrade;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
+EOF
+
+# Enable
+ln -s /etc/nginx/sites-available/skuld /etc/nginx/sites-enabled/
+nginx -t
+systemctl reload nginx
+
+# Update firewall
+ufw allow 80/tcp
+ufw allow 443/tcp
+
+# Get free SSL certificate
+certbot --nginx -d your-domain.com
+```
+
+### Adjust docker-compose.yml
+
+```yaml
+# Make port internal only
+ports:
+  - "127.0.0.1:8501:8501"  # localhost only, not public
+```
+
+Then: `docker-compose up -d`
+
+---
+
+## 8. Troubleshooting
+
+### Container won't start
+
+```bash
+# Detailed logs
+docker-compose logs skuld-app
+
+# Container status
+docker ps -a
+
+# Force restart
+docker-compose down -v
+docker-compose up -d --build
+```
+
+### Database not found
+
+```bash
+# Does database exist?
+ls -lh /opt/skuld/db/
+
+# Check permissions
+docker-compose exec skuld-app ls -la /app/Skuld/db/
+
+# Create manually
+docker-compose exec skuld-app python /app/Skuld/main.py
+```
+
+### Cronjob not running
+
+```bash
+# Check inside container
+docker-compose exec skuld-app bash
+
+# Cron status
+service cron status
+
+# Show cronjobs
+crontab -l
+
+# Check logs
+tail -f /var/log/cron.log
+exit
+
+# On host
+tail -f /opt/skuld/cron.log
+```
+
+### Streamlit not loading
+
+```bash
+# Is container running?
+docker ps | grep skuld
+
+# Is port accessible?
+curl http://localhost:8501
+
+# Firewall?
+ufw status
+
+# Check logs
+docker-compose logs -f
+```
+
+### Disk space full
+
+```bash
+# Delete old Docker images
+docker system prune -a -f
+
+# Delete old logs
+truncate -s 0 /opt/skuld/logs/log.log
+truncate -s 0 /opt/skuld/cron.log
+
+# Delete old backups
+find /opt/skuld-backups -name "*.db" -mtime +30 -delete
+```
+
+---
+
+## 9. Security
+
+### Best Practices
+
+```bash
+# SSH key-only authentication
+nano /etc/ssh/sshd_config
+# PasswordAuthentication no
+systemctl restart sshd
+
+# Minimize firewall rules
+ufw default deny incoming
+ufw default allow outgoing
+ufw allow 22/tcp
+ufw allow 80/tcp
+ufw allow 443/tcp
+ufw enable
+
+# Automatic updates
+apt install -y unattended-upgrades
+dpkg-reconfigure -plow unattended-upgrades
+
+# Fail2ban for SSH protection
+apt install -y fail2ban
+systemctl enable fail2ban
+```
+
+---
+
+## 10. Summary
+
+### What you need:
+✅ Hetzner server (or any Linux server)  
+✅ Docker & Docker Compose  
+✅ Git  
+✅ Port 8501 open (or Nginx for SSL)
+
+### What you DON'T need:
+❌ Google Drive API  
+❌ Service account secrets  
+❌ GitHub Actions  
+❌ External database  
+
+### Deploy in 3 commands:
+```bash
+git clone https://github.com/Wuuzzaa/Skuld.git && cd Skuld
+git checkout docker
+docker-compose up -d --build
+```
+
+**🎉 Done! The app runs and automatically collects data 2x daily!**
+- ✅ **Persistente lokale Datenbank** (keine Google Drive)
+- ✅ **Automatische Datensammlung** 2x täglich per Cronjob
+- ✅ **Streamlit Web-Interface** auf Port 8501
+- ✅ **Keine externen Secrets** benötigt
+
+---
+
+## 1. Lokaler Test (Windows/Linux/Mac)
+
+### Prerequisites
+- Docker & Docker Compose installiert
+- Git installiert
+
+### Schnellstart
+
+```bash
+# Repository klonen
+git clone https://github.com/Wuuzzaa/Skuld.git
+cd Skuld
+git checkout docker
+
+# Container starten
+docker-compose up -d --build
+
+# Logs überwachen
+docker-compose logs -f
+```
+
+### Zugriff
+Öffne Browser: **http://localhost:8501**
+
+### Wichtige Befehle
+
+```bash
+# Container Status
+docker ps
+
+# Logs anzeigen
+docker-compose logs -f
+
+# Cron Logs (Datensammlung)
+tail -f cron.log
+
+# Container neu starten
+docker-compose restart
+
+# Container stoppen
+docker-compose down
+
+# Manuell Datensammlung starten
+docker-compose exec skuld-app python /app/Skuld/main.py
+```
+
+---
+
+## 2. Production Deployment auf Hetzner
+
+### Server Vorbereitung (einmalig)
+
+```bash
+# 1. SSH zum Server
+ssh root@YOUR_SERVER_IP
+
+# 2. System aktualisieren
+apt update && apt upgrade -y
+
+# 3. Docker installieren
+apt install -y docker.io docker-compose git curl
+
+# 4. Docker starten
+systemctl start docker
+systemctl enable docker
+
+# 5. Firewall konfigurieren
+ufw allow 22/tcp      # SSH
+ufw allow 8501/tcp    # Streamlit
+ufw enable
+```
+
+### Projekt deployen
+
+```bash
+# 1. Projekt-Verzeichnis erstellen
+mkdir -p /opt/skuld
+cd /opt/skuld
+
+# 2. Repository klonen
+git clone https://github.com/Wuuzzaa/Skuld.git .
+git checkout docker
+
+# 3. Persistente Verzeichnisse erstellen
+mkdir -p db logs
+
+# 4. Container starten
+docker-compose up -d --build
+
+# 5. Logs prüfen
+docker-compose logs -f
+```
+
+### Zugriff testen
+Browser: **http://YOUR_SERVER_IP:8501**
+
+---
+
+## 3. Automatische Datensammlung
+
+### Zeitplan (Cronjob)
+
+Der Container sammelt automatisch Daten:
+- **10:00 CET** (09:00 UTC) - Vormittags
+- **16:00 CET** (15:00 UTC) - Nachmittags
+- **Nur Werktags** (Montag-Freitag)
+
+### Cronjob prüfen
+
+```bash
+# Cronjobs anzeigen
+docker-compose exec skuld-app crontab -l
+
+# Cron Service Status
+docker-compose exec skuld-app service cron status
+
+# Cron Logs live anzeigen
+tail -f cron.log
+```
+
+### Manuell ausführen
+
+```bash
+# Sofort Datensammlung starten
+docker-compose exec skuld-app python /app/Skuld/main.py
+
+# Mit Logs
+docker-compose exec skuld-app bash -c "cd /app/Skuld && python main.py"
+```
+
+---
+
+## 4. Persistente Daten
+
+Alle Daten werden auf dem Host gespeichert:
+
+```
+/opt/skuld/
+├── db/
+│   └── financial_data.db    # SQLite Datenbank (ca. 50-200 MB)
+├── logs/
+│   └── log.log               # Streamlit & App Logs
+└── cron.log                  # Datensammlung Logs
+```
+
+### Datenbank Backup
+
+```bash
+# Manuelles Backup
+cp /opt/skuld/db/financial_data.db \
+   /opt/skuld/backups/financial_data_$(date +%Y%m%d).db
+
+# Automatisches Backup Script erstellen
+cat > /opt/skuld/backup.sh << 'EOF'
+#!/bin/bash
+BACKUP_DIR="/opt/skuld-backups"
+DATE=$(date +%Y%m%d_%H%M%S)
+mkdir -p $BACKUP_DIR
+cp /opt/skuld/db/financial_data.db $BACKUP_DIR/financial_data_${DATE}.db
+# Alte Backups löschen (älter als 30 Tage)
+find $BACKUP_DIR -name "*.db" -mtime +30 -delete
+echo "Backup completed: financial_data_${DATE}.db"
+EOF
+
+chmod +x /opt/skuld/backup.sh
+
+# Cronjob für tägliches Backup (23:00 Uhr)
+crontab -e
+# Füge hinzu:
+0 23 * * * /opt/skuld/backup.sh >> /opt/skuld/backup.log 2>&1
+```
+
+---
+
+## 5. Updates deployen
+
+```bash
+cd /opt/skuld
+
+# 1. Code aktualisieren
+git pull origin docker
+
+# 2. Container neu bauen und starten
+docker-compose down
+docker-compose up -d --build
+
+# 3. Logs prüfen
+docker-compose logs -f
+
+# 4. Alte Images aufräumen
+docker system prune -a -f
+```
+
+---
+
+## 6. Monitoring & Wartung
+
+### Container überwachen
+
+```bash
+# Container Status
+docker ps
+
+# Ressourcen-Nutzung
+docker stats skuld-streamlit
+
+# Disk Space prüfen
+df -h
+du -sh /opt/skuld/db/
+
+# Logs Größe prüfen
+ls -lh /opt/skuld/logs/
+ls -lh /opt/skuld/cron.log
+```
+
+### Log Rotation
+
+Docker rotiert Logs automatisch, aber für cron.log:
+
+```bash
+# Log Rotation konfigurieren
+cat > /etc/logrotate.d/skuld << 'EOF'
+/opt/skuld/cron.log {
+    weekly
+    rotate 4
+    compress
+    missingok
+    notifempty
+}
+EOF
+```
+
+---
+
+## 7. Production Setup mit SSL (Optional)
+
+### Nginx Reverse Proxy
+
+```bash
+# Nginx installieren
+apt install -y nginx certbot python3-certbot-nginx
+
+# Nginx Config erstellen
+cat > /etc/nginx/sites-available/skuld << 'EOF'
+server {
+    listen 80;
+    server_name your-domain.com;
+
+    location / {
+        proxy_pass http://localhost:8501;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+EOF
 
 # Aktivieren
 ln -s /etc/nginx/sites-available/skuld /etc/nginx/sites-enabled/
 nginx -t
 systemctl reload nginx
 
+# Firewall anpassen
+ufw allow 80/tcp
+ufw allow 443/tcp
+
 # SSL Zertifikat (kostenlos)
 certbot --nginx -d your-domain.com
 ```
 
-### Container Monitoring
+### docker-compose.yml anpassen
 
-```bash
-# Docker Stats anzeigen
-docker stats skuld-streamlit
-
-# Disk Space prüfen
-df -h
-
-# Logs rotieren (docker-compose.yml bereits konfiguriert)
+```yaml
+# Port nur noch intern
+ports:
+  - "127.0.0.1:8501:8501"  # Nur localhost, nicht public
 ```
 
-## Troubleshooting
+Dann: `docker-compose up -d`
+
+---
+
+## 8. Troubleshooting
 
 ### Container startet nicht
+
 ```bash
-docker-compose logs -f
+# Detaillierte Logs
+docker-compose logs skuld-app
+
+# Container Status
+docker ps -a
+
+# Neustart erzwingen
 docker-compose down -v
 docker-compose up -d --build
 ```
 
-### Port bereits belegt
+### Datenbank nicht gefunden
+
 ```bash
-lsof -i :8501
-# Prozess beenden oder Port in docker-compose.yml ändern
+# Datenbank existiert?
+ls -lh /opt/skuld/db/
+
+# Permissions prüfen
+docker-compose exec skuld-app ls -la /app/Skuld/db/
+
+# Manuell erstellen
+docker-compose exec skuld-app python /app/Skuld/main.py
 ```
 
-### Kein Speicherplatz mehr
+### Cronjob läuft nicht
+
+```bash
+# In Container prüfen
+docker-compose exec skuld-app bash
+
+# Cron Status
+service cron status
+
+# Cronjobs anzeigen
+crontab -l
+
+# Logs prüfen
+tail -f /var/log/cron.log
+exit
+
+# Auf Host
+tail -f /opt/skuld/cron.log
+```
+
+### Streamlit lädt nicht
+
+```bash
+# Container läuft?
+docker ps | grep skuld
+
+# Port erreichbar?
+curl http://localhost:8501
+
+# Firewall?
+ufw status
+
+# Logs prüfen
+docker-compose logs -f
+```
+
+### Speicherplatz voll
+
 ```bash
 # Alte Docker Images löschen
-docker system prune -a
+docker system prune -a -f
 
-# Logs löschen
-docker-compose down
-rm -rf Skuld/logs/*
-docker-compose up -d
+# Alte Logs löschen
+truncate -s 0 /opt/skuld/logs/log.log
+truncate -s 0 /opt/skuld/cron.log
+
+# Alte Backups löschen
+find /opt/skuld-backups -name "*.db" -mtime +30 -delete
 ```
 
-### Datenbank-Fehler
+---
+
+## 9. Sicherheit
+
+### Best Practices
+
 ```bash
-# Datenbank neu downloaden
-docker-compose exec skuld-streamlit rm -f /app/Skuld/db/financial_data.db
-docker-compose restart
+# SSH Key-only Auth
+nano /etc/ssh/sshd_config
+# PasswordAuthentication no
+systemctl restart sshd
+
+# Firewall Regeln minimieren
+ufw default deny incoming
+ufw default allow outgoing
+ufw allow 22/tcp
+ufw allow 80/tcp
+ufw allow 443/tcp
+ufw enable
+
+# Automatische Updates
+apt install -y unattended-upgrades
+dpkg-reconfigure -plow unattended-upgrades
+
+# Fail2ban für SSH Protection
+apt install -y fail2ban
+systemctl enable fail2ban
 ```
+
+---
+
+## 10. Zusammenfassung
+
+### Was du brauchst:
+✅ Hetzner Server (oder beliebiger Linux Server)  
+✅ Docker & Docker Compose  
+✅ Git  
+✅ Port 8501 offen (oder Nginx für SSL)
+
+### Was du NICHT brauchst:
+❌ Google Drive API  
+❌ Service Account Secrets  
+❌ GitHub Actions  
+❌ Externe Datenbank  
+
+### Deployment in 3 Befehlen:
+```bash
+git clone https://github.com/Wuuzzaa/Skuld.git && cd Skuld
+git checkout docker
+docker-compose up -d --build
+```
+
+**🎉 Fertig! Die App läuft und sammelt automatisch 2x täglich Daten!**
+
