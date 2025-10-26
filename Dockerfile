@@ -29,7 +29,8 @@ RUN echo "[server]" > /root/.streamlit/config.toml && \
     echo "headless = true" >> /root/.streamlit/config.toml && \
     echo "enableCORS = false" >> /root/.streamlit/config.toml && \
     echo "port = 8501" >> /root/.streamlit/config.toml && \
-    echo "address = \"0.0.0.0\"" >> /root/.streamlit/config.toml
+    echo "address = \"0.0.0.0\"" >> /root/.streamlit/config.toml && \
+    echo "fileWatcherType = \"none\"" >> /root/.streamlit/config.toml
 
 # Port für Streamlit
 EXPOSE 8501
