@@ -23,9 +23,16 @@ RUN chmod 0644 /etc/cron.d/skuld-cron && \
     crontab /etc/cron.d/skuld-cron && \
     touch /var/log/cron.log
 
-# Streamlit Config kopieren
-RUN mkdir -p /root/.streamlit
-COPY .streamlit/config.toml /root/.streamlit/config.toml
+# Streamlit Config erstellen
+RUN mkdir -p /root/.streamlit && \
+    cat > /root/.streamlit/config.toml << 'EOF'
+[server]
+headless = true
+enableCORS = false
+port = 8501
+address = "0.0.0.0"
+fileWatcherType = "none"
+EOF
 
 # Port für Streamlit
 EXPOSE 8501
