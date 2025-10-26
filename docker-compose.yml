@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  skuld-app:
+    build: .
+    container_name: skuld-streamlit
+    ports:
+      - "8501:8501"
+    volumes:
+      # Datenbank persistent speichern
+      - ./Skuld/db:/app/Skuld/db
+      # Logs persistent
+      - ./Skuld/logs:/app/Skuld/logs
+      # Secrets (Production: /etc/skuld/secrets/, Local: ./)
+      - ${SECRETS_PATH:-./service_account.json}:/app/service_account.json:ro
+      # Optional: Streamlit secrets
+      # - ${SECRETS_PATH:-./}/.streamlit/secrets.toml:/app/Skuld/.streamlit/secrets.toml:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TZ=Europe/Berlin
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
