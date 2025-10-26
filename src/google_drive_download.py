@@ -1,7 +1,6 @@
 import os
 import io
 import streamlit as st
-import pandas as pd
 import logging
 from datetime import datetime, time
 from zoneinfo import ZoneInfo
@@ -9,8 +8,7 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 from googleapiclient.errors import HttpError
-from config import PATH_DATAFRAME_DATA_MERGED_FEATHER, FILENAME_GOOGLE_DRIVE, PATH_ON_GOOGLE_DRIVE, \
-     PATH_DATABASE_FILE, DATABASE_FILENAME
+from config import PATH_ON_GOOGLE_DRIVE, PATH_DATABASE_FILE, DATABASE_FILENAME
 
 # logging
 logger = logging.getLogger(__name__)
@@ -18,12 +16,9 @@ logger.info("Start google drive download")
 
 """
 Configuration:
-- Local storage location for the Feather file.
-- The file on Google Drive is now in Feather format.
+- Local storage location for the database file.
 - Google Drive folder ID, local timezone, and update times (in local timezone).
 """
-PATH_DATAFRAME_DATA_MERGED_FEATHER = PATH_DATAFRAME_DATA_MERGED_FEATHER
-FILE_NAME = FILENAME_GOOGLE_DRIVE
 PARENT_FOLDER_ID = PATH_ON_GOOGLE_DRIVE
 LOCAL_TZ = "Europe/Berlin"
 UPDATE_TIMES = [time(10, 15), time(16, 15)]
@@ -69,39 +64,6 @@ def find_file_id_by_name(file_name, parent_folder_id=None):
         return None
 
 
-def download_feather_from_drive(file_id):
-    """Downloads the Feather file from Google Drive.
-    Returns a BytesIO stream containing the file.
-    """
-    try:
-        creds = get_credentials()
-        service = build("drive", "v3", credentials=creds)
-        file_info = service.files().get(
-            fileId=file_id,
-            fields="id, name, mimeType, modifiedTime"
-        ).execute()
-        mime_type = file_info.get("mimeType", "")
-        modified_time_str = file_info.get("modifiedTime")
-        if modified_time_str:
-            modified_time_utc = datetime.fromisoformat(modified_time_str.replace("Z", "+00:00"))
-            modified_time_local = modified_time_utc.astimezone(ZoneInfo(LOCAL_TZ))
-            logger.info(f"File last modified (Google Drive): {modified_time_local.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-        # Directly download the file without export since it's a Feather file
-        request = service.files().get_media(fileId=file_id)
-        file_stream = io.BytesIO()
-        downloader = MediaIoBaseDownload(file_stream, request)
-        done = False
-        while not done:
-            status, done = downloader.next_chunk()
-            if status:
-                logger.info(f"Download progress: {int(status.progress() * 100)}%")
-        file_stream.seek(0)
-        return file_stream
-    except HttpError as error:
-        logger.error(f"An error occurred: {error}")
-        return None
-
-
 def get_update_datetime(local_update_time: time, tz_name=LOCAL_TZ) -> datetime:
     """Creates a timezone-aware datetime for the given update time (e.g. 10:15 or 16:15)
     in the local timezone and converts it to UTC.
@@ -134,49 +96,6 @@ def should_update_file(local_file, update_times, tz_name=LOCAL_TZ) -> bool:
             if now >= update_dt_utc and last_mod < update_dt_utc:
                 return True
     return False
-
-
-def load_updated_data():
-    """Loads data in Feather format. If the local file is outdated, downloads the Feather file from Google Drive,
-    reads it into a DataFrame, and saves it locally. Otherwise, loads the local file.
-    Note: Caching is handled by the caller (e.g., app.py) to avoid warnings in non-Streamlit contexts.
-    """
-    if should_update_file(PATH_DATAFRAME_DATA_MERGED_FEATHER, UPDATE_TIMES):
-        logger.info("New file available – starting download from Google Drive ...")
-        file_id = find_file_id_by_name(FILE_NAME, PARENT_FOLDER_ID)
-        if file_id is None:
-            logger.error("File with the specified name was not found on Google Drive.")
-            return None
-        file_stream = download_feather_from_drive(file_id)
-        if file_stream is None:
-            return None
-        os.makedirs(os.path.dirname(PATH_DATAFRAME_DATA_MERGED_FEATHER), exist_ok=True)
-        # Read Feather from the downloaded stream
-        try:
-            df = pd.read_feather(file_stream)
-            logger.info("Feather file successfully read from the downloaded stream.")
-        except Exception as e:
-            logger.error(f"Error reading the Feather file: {e}")
-            return None
-        # Save the DataFrame as a local Feather file
-        try:
-            df.to_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
-            logger.info("Downloaded Feather file saved locally.")
-        except Exception as e:
-            logger.error(f"Error saving the Feather file: {e}")
-            return None
-        return df
-    else:
-        logger.info("Loading local Feather file ...")
-        try:
-            df = pd.read_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
-            last_mod = file_last_modified(PATH_DATAFRAME_DATA_MERGED_FEATHER)
-            last_mod_local = last_mod.astimezone(ZoneInfo(LOCAL_TZ))
-            logger.info(f"Local file last modified on: {last_mod_local.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-            return df
-        except Exception as e:
-            logger.error(f"Error reading the local Feather file: {e}")
-            return None
 
 
 def download_database_from_drive(file_id):
