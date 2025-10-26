@@ -57,7 +57,7 @@ fi\n\
 \n\
 # Start Streamlit\n\
 echo "Starting Streamlit on port 8501..."\n\
-exec python -m streamlit run Skuld/app.py' > /app/start.sh && \
+exec python -m streamlit run /app/Skuld/app.py' > /app/start.sh && \
     chmod +x /app/start.sh
 
 CMD ["/app/start.sh"]
