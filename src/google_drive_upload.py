@@ -6,7 +6,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 from google.oauth2 import service_account
-from config import PATH_DATAFRAME_DATA_MERGED_FEATHER , FILENAME_GOOGLE_DRIVE, PATH_ON_GOOGLE_DRIVE, PATH_FOR_SERVICE_ACCOUNT_FILE, PATH_DATABASE_FILE
+from config import PATH_ON_GOOGLE_DRIVE, PATH_FOR_SERVICE_ACCOUNT_FILE, PATH_DATABASE_FILE
 
 # logging
 logger = logging.getLogger(__name__)
@@ -81,29 +81,6 @@ def upload_feather_to_drive(service_account_file, file_path, file_name, parent_f
     except HttpError as error:
         logger.error(f"An error occurred: {error}")
         return None
-
-
-def upload_merged_data():
-    """
-    Executes the upload of the merged Feather file to Google Drive.
-    This function encapsulates the upload step and internally calls upload_feather_to_drive.
-    """
-    # Example paths/variables: Replace them with your constants or variables
-    service_account_file = PATH_FOR_SERVICE_ACCOUNT_FILE  # Path to the Service Account JSON file
-    parent_folder_id = PATH_ON_GOOGLE_DRIVE  # Target folder ID in Google Drive
-    file_path = PATH_DATAFRAME_DATA_MERGED_FEATHER  # Local path to the merged Feather file
-    file_name = FILENAME_GOOGLE_DRIVE  # Name under which the file will be saved on Google Drive
-
-    logger.info("Starting upload to Google Drive ...")
-    upload_feather_to_drive(
-        service_account_file=service_account_file,
-        file_path=file_path,
-        file_name=file_name,
-        parent_folder_id=parent_folder_id,
-        convert_to_google_format=False  # Set to True if conversion to Google Spreadsheet is desired (not typical for Feather files)
-    )
-    logger.info("Upload completed.")
-
 
 def upload_database_to_drive(service_account_file, file_path, file_name, parent_folder_id):
     """
