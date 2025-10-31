@@ -16,16 +16,16 @@ services:
       - TZ=Europe/Berlin
     restart: unless-stopped
     networks:
-      - traefik_default
+      - web
     labels:
       # Traefik aktivieren
       - "traefik.enable=true"
-      # Domain für SKULD (WICHTIG: Ersetze mit deiner echten Domain!)
-      - "traefik.http.routers.skuld.rule=Host(`skuld.deine-domain.de`)"
+      # Domain für SKULD
+      - "traefik.http.routers.skuld.rule=Host(`app.skuld-options.com`)"
       # HTTPS Endpoint
       - "traefik.http.routers.skuld.entrypoints=websecure"
       # Automatisches SSL Certificate via Let's Encrypt
-      - "traefik.http.routers.skuld.tls.certresolver=myresolver"
+      - "traefik.http.routers.skuld.tls.certresolver=letsencrypt"
       # Port auf dem Streamlit läuft
       - "traefik.http.services.skuld.loadbalancer.server.port=8501"
     healthcheck:
@@ -36,5 +36,5 @@ services:
       start_period: 40s
 
 networks:
-  traefik_default:
+  web:
     external: true
