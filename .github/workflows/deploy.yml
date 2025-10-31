@@ -1,0 +1,53 @@
+name: Deploy SKULD to Hetzner
+
+on:
+  push:
+    branches: [ docker ]   # Deployment nur bei Push auf docker branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Sync application files to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          # Nur bestimmte Dateien/Ordner synchronisieren (NICHT db/ und logs/)
+          source: "Dockerfile,docker-compose.yml,requirements.txt,crontab,.dockerignore,.gitattributes,src/,pages/,*.py"
+          target: "/opt/skuld"
+          strip_components: 0
+          overwrite: true
+          rm: false  # WICHTIG: Nicht löschen, sonst ist DB weg!
+
+      - name: Build and deploy Docker container
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd /opt/skuld
+            
+            echo " Pulling latest changes..."
+            sudo git status
+            
+            echo " Building Docker image..."
+            sudo docker compose build --pull
+            
+            echo " Deploying container..."
+            sudo docker compose up -d --remove-orphans
+            
+            echo " Cleaning up old images..."
+            sudo docker image prune -f
+            
+            echo " Deployment complete. Container status:"
+            sudo docker compose ps
+            
+            echo " Last 20 log lines:"
+            sudo docker compose logs --tail=20
