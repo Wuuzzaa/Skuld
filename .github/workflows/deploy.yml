@@ -14,7 +14,7 @@ jobs:
       - name: Setup SSH Key
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" | base64 -d > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
 
@@ -28,7 +28,6 @@ jobs:
             --exclude '.github/' \
             --exclude '__pycache__/' \
             --exclude '*.pyc' \
-            --exclude '.gitignore' \
             ./ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/skuld/
 
       - name: Build and deploy Docker container
@@ -38,25 +37,16 @@ jobs:
             set -euo pipefail
             cd /opt/skuld
             
-            echo "🔄 Current directory contents:"
-            ls -la
-            
             echo "🏗️ Building Docker image..."
-            echo '${{ secrets.DEPLOY_PASSWORD }}' | sudo -S docker compose build --pull
+            sudo docker compose build --pull
             
             echo "🚀 Deploying container..."
-            echo '${{ secrets.DEPLOY_PASSWORD }}' | sudo -S docker compose up -d --remove-orphans
+            sudo docker compose up -d --remove-orphans
             
             echo "🧹 Cleaning up old images..."
-            echo '${{ secrets.DEPLOY_PASSWORD }}' | sudo -S docker image prune -f
+            sudo docker image prune -f
             
-            echo "✅ Deployment complete. Container status:"
-            echo '${{ secrets.DEPLOY_PASSWORD }}' | sudo -S docker compose ps
-            
-            echo "📋 Last 20 log lines:"
-            echo '${{ secrets.DEPLOY_PASSWORD }}' | sudo -S docker compose logs --tail=20
+            echo "✅ Deployment complete:"
+            sudo docker compose ps
+            sudo docker compose logs --tail=20
           ENDSSH
-          
-          
-
-
