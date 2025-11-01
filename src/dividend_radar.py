@@ -10,7 +10,6 @@ from config import *
 
 # logging
 logger = logging.getLogger(__name__)
-logger.info("Start SKULD")
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
