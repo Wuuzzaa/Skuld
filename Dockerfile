@@ -53,3 +53,4 @@ exec streamlit run /app/Skuld/app.py --server.headless=true --server.enableCORS=
     chmod +x /app/start.sh
 
 CMD ["/app/start.sh"]
+
