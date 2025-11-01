@@ -1,16 +1,13 @@
 import sys
 import os
-
+import requests
+import pandas as pd
+from config import SYMBOLS_EXCHANGE, TABLE_OPTION_DATA_TRADINGVIEW
 from src.database import insert_into_table, truncate_table
+from src.util import opra_to_osi
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-import requests
-import pandas as pd
-
-from src.util import opra_to_osi
-from config import *
 
 BASE_URL_OPTION_DATA = "https://scanner.tradingview.com/options/scan2?label-product=symbols-options"
 
@@ -51,22 +48,6 @@ def scrape_option_data_trading_view(symbols):
            print(f"Fetching TradingView option data for batch of {len(symbol_batch)} symbols...")
         
         # Additional fields: https://shner-elmo.github.io/TradingView-Screener/fields/options.html
-
-        # root = symbol
-        # expiration = expiration date in YYYYMMDD format
-        # JSON Request data
-        # request_json = {
-        #     "columns": ["ask", "bid", "delta", "gamma", "iv", "option-type", "rho", "strike", "theoPrice", "theta", "vega"],
-        #     "filter": [
-        #         {"left": "type", "operation": "equal", "right": "option"},
-        #         {"left": "expiration", "operation": "equal", "right": expiration_date},
-        #         {"left": "root", "operation": "equal", "right": f"{symbol}"}
-        #     ],
-        #     "ignore_unknown_fields": False,
-        #     "sort": {"sortBy": "name", "sortOrder": "asc"},
-        #     "index_filters": [{"name": "underlying_symbol", "values": [f"{exchange}:{symbol}"]}]
-        # }
-
 
         request_json = {
             "columns": ["root","expiration","exchange","strike","ask", "bid", "delta", "gamma", "iv", "option-type", "rho", "theoPrice", "theta", "vega"],
