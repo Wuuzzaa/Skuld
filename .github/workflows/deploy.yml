@@ -11,43 +11,48 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Setup SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+
       - name: Sync application files to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          password: ${{ secrets.DEPLOY_PASSWORD }}  # Password statt Key
-          # Nur bestimmte Dateien/Ordner synchronisieren (NICHT db/ und logs/)
-          source: "Dockerfile,docker-compose.yml,requirements.txt,crontab,.dockerignore,.gitattributes,src/,pages/,*.py"
-          target: "/opt/skuld"
-          strip_components: 0
-          overwrite: true
-          rm: false
+        run: |
+          rsync -avz --delete \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
+            --exclude 'db/' \
+            --exclude 'logs/' \
+            --exclude '.git/' \
+            --exclude '.github/' \
+            --exclude '__pycache__/' \
+            --exclude '*.pyc' \
+            --exclude '.gitignore' \
+            ./ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/skuld/
 
       - name: Build and deploy Docker container
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          password: ${{ secrets.DEPLOY_PASSWORD }}  # Password statt Key
-          script: |
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'ENDSSH'
             set -euo pipefail
             cd /opt/skuld
             
-            echo "🔄 Pulling latest changes..."
-            echo '<DEPLOY_PASSWORD>' | sudo -S git status
+            echo "🔄 Current directory contents:"
+            ls -la
             
             echo "🏗️ Building Docker image..."
-            echo '<DEPLOY_PASSWORD>' | sudo -S docker compose build --pull
+            echo '${{ secrets.DEPLOY_PASSWORD }}' | sudo -S docker compose build --pull
             
             echo "🚀 Deploying container..."
-            echo '<DEPLOY_PASSWORD>' | sudo -S docker compose up -d --remove-orphans
+            echo '${{ secrets.DEPLOY_PASSWORD }}' | sudo -S docker compose up -d --remove-orphans
             
             echo "🧹 Cleaning up old images..."
-            echo '<DEPLOY_PASSWORD>' | sudo -S docker image prune -f
+            echo '${{ secrets.DEPLOY_PASSWORD }}' | sudo -S docker image prune -f
             
             echo "✅ Deployment complete. Container status:"
-            echo '<DEPLOY_PASSWORD>' | sudo -S docker compose ps
+            echo '${{ secrets.DEPLOY_PASSWORD }}' | sudo -S docker compose ps
             
             echo "📋 Last 20 log lines:"
-            echo '<DEPLOY_PASSWORD>' | sudo -S docker compose logs --tail=20
+            echo '${{ secrets.DEPLOY_PASSWORD }}' | sudo -S docker compose logs --tail=20
+          ENDSSH
