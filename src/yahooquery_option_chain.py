@@ -10,80 +10,9 @@ from src.yahooquery_scraper import YahooQueryScraper
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import *
-from config_utils import get_filtered_symbols_with_logging
 from yahooquery import Ticker
 
-
 def get_yahooquery_option_chain():
-    # Test mode logic and logging centrally from config
-    symbols = get_filtered_symbols_with_logging("Yahoo Option Chain")
-
-    # https://yahooquery.dpguthrie.com/guide/ticker/intro/
-
-    all_option_data = []
-    successful_symbols = []
-    failed_symbols = []
-
-    # Symbole in 500er-Pakete aufteilen
-    batch_size = 500
-    symbol_batches = [symbols[i:i + batch_size] for i in range(0, len(symbols), batch_size)]
-
-    for symbol_batch in symbol_batches:
-        try:
-            print(f"Fetching Yahoo option chain for batch of {len(symbol_batch)} symbols...")
-            ticker = Ticker(symbol_batch)
-            df = ticker.option_chain
-            
-            if df is not None and not df.empty:
-                # symbol expiration_date and option-type from index to column
-                df = df.reset_index()
-                all_option_data.append(df)
-                successful_symbols.extend(symbol_batch)
-                print(f"SUCCESS: {len(df)} options found")
-            else:
-                print(f"WARNING {symbol_batch}: No option data available")
-                failed_symbols.extend(symbol_batch)
-                
-        except Exception as e:
-            print(f"ERROR {symbol_batch}: Error fetching options - {str(e)}")
-            failed_symbols.extend(symbol_batch)
-    
-
-    if not all_option_data:
-        print("WARNING: No option data found for any symbols")
-        return
-    
-    # Combine all data
-    df = pd.concat(all_option_data, ignore_index=True)
-    
-    print(f"\n=== SUMMARY ===")
-    print(f"Successfully processed: {len(successful_symbols)} symbols")
-    print(f"Failed: {len(failed_symbols)} symbols")
-    if failed_symbols:
-        print(f"Failed symbols: {failed_symbols}")
-    print(f"Total options collected: {len(df)}")
-
-    # Process the combined data
-    df = df.rename(columns={
-        'symbol': 'symbol',
-        'expiration': 'expiration_date',
-        'optionType': 'option-type',
-        'volume': 'option_volume',
-        'openInterest': 'option_open_interest',
-    })
-
-    df.to_feather(PATH_DATAFRAME_YAHOOQUERY_OPTION_CHAIN_FEATHER)
-    print(f"SUCCESS: Yahoo option chain data saved to: {PATH_DATAFRAME_YAHOOQUERY_OPTION_CHAIN_FEATHER}")
-
-    # --- Database Persistence ---
-    truncate_table(TABLE_OPTION_DATA_YAHOO)
-    insert_into_table(
-        table_name=TABLE_OPTION_DATA_YAHOO,
-        dataframe=df,
-        if_exists="append"
-    )
-
-def get_yahooquery_option_chain2():
     yahoo_query = YahooQueryScraper.instance()
     df = yahoo_query.get_option_chain()
 
@@ -97,9 +26,6 @@ def get_yahooquery_option_chain2():
         'volume': 'option_volume',
         'openInterest': 'option_open_interest',
     })
-
-    df.to_feather(PATH_DATAFRAME_YAHOOQUERY_OPTION_CHAIN_FEATHER)
-    print(f"SUCCESS: Yahoo option chain data saved to: {PATH_DATAFRAME_YAHOOQUERY_OPTION_CHAIN_FEATHER}")
 
     # --- Database Persistence ---
     truncate_table(TABLE_OPTION_DATA_YAHOO)

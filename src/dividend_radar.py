@@ -114,7 +114,7 @@ def _add_classification(df_all, content):
 
 
 # -------------------- Öffentliche Funktionen --------------------
-def process_dividend_data(path_outputfile):
+def process_dividend_data():
     """
     Downloads and processes the XLSX file from the dividend radar webpage,
     adds a 'Classification' column from the category tabs, displays and saves as Feather.
@@ -145,12 +145,6 @@ def process_dividend_data(path_outputfile):
         # show_log_messages()
         return
 
-    try:
-        df.to_feather(str(path_outputfile))
-        # log_info(f"DataFrame saved as {path_outputfile}.")
-    except Exception as e:
-        logger.error(f"Error saving as Feather: {e}")
-
     # --- Database Persistence ---
     truncate_table(TABLE_FUNDAMENTAL_DATA_DIVIDEND_RADAR)
     insert_into_table(
@@ -158,30 +152,3 @@ def process_dividend_data(path_outputfile):
         dataframe=df,
         if_exists="append"
     )
-
-def force_data_download(path_outputfile):
-    """
-    Forces the download of dividend data and overwrites the existing Feather file.
-    Adds 'Classification' from category tabs before saving.
-    """
-    # log_info("Forcing dividend data download and overwriting the Feather file.")
-    
-    content = download_xlsx_file()
-    if not content:
-        # log_error("Error downloading the XLSX file during forced download.")
-        return
-
-    try:
-        df = _read_excel_sheet(content, "All", header_row=2)
-        # log_info("Excel 'All' sheet read successfully during forced download.")
-        df = _add_classification(df, content)
-        logger.info("Classification column added (forced).")
-    except Exception as e:
-        logger.error(f"Error reading/classifying during forced download: {e}")
-        return
-
-    try:
-        df.to_feather(str(path_outputfile))
-        logger.info(f"DataFrame saved successfully as {path_outputfile} (overwritten).")
-    except Exception as e:
-        logger.error(f"Error saving DataFrame as Feather during forced download: {e}")

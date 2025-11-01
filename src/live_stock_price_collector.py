@@ -6,7 +6,7 @@ import os
 from datetime import datetime
 
 # Import config and helpers for backward compatibility
-from config import PATH_DATAFRAME_LIVE_STOCK_PRICES_FEATHER, TABLE_STOCK_PRICE
+from config import TABLE_STOCK_PRICE
 from config_utils import get_filtered_symbols_with_logging
 from src.database import insert_into_table, truncate_table
 
@@ -27,71 +27,13 @@ No caching, no history requests — only immediate price lookups and a timestamp
 """
 
 
-def fetch_current_prices(symbols, batch_size=50, delay=0.5):
-    """
-    Fetch current prices for a list of symbols using yfinance in batches.
-
-    Returns a DataFrame with columns: symbol, live_stock_price, price_source, live_price_timestamp
-    """
-    symbols = list(dict.fromkeys([s for s in symbols if s]))  # unique, preserve order, filter falsy
-    results = []
-
-    for i in range(0, len(symbols), batch_size):
-        batch = symbols[i:i + batch_size]
-        tickers = yf.Tickers(' '.join(batch))
-
-        for symbol in batch:
-            try:
-                ticker = tickers.tickers.get(symbol)
-                price = None
-                source = 'unknown'
-
-                if ticker is not None:
-                    # Try fast_info first for a lightweight value
-                    fast = getattr(ticker, 'fast_info', None)
-                    if fast and isinstance(fast, dict) and fast.get('lastPrice'):
-                        price = float(fast.get('lastPrice'))
-                        source = 'fast_info.lastPrice'
-                    else:
-                        info = getattr(ticker, 'info', {}) or {}
-                        # prefer regularMarketPrice / currentPrice
-                        for k, src in (('regularMarketPrice', 'regularMarketPrice'), ('currentPrice', 'currentPrice')):
-                            if k in info and info[k]:
-                                try:
-                                    price = float(info[k])
-                                    source = src
-                                    break
-                                except Exception:
-                                    continue
-
-                timestamp = datetime.now()
-                results.append({'symbol': symbol, 'live_stock_price': price, 'price_source': source, 'live_price_timestamp': timestamp})
-            except Exception as e:
-                results.append({'symbol': symbol, 'live_stock_price': None, 'price_source': f'error:{type(e).__name__}', 'live_price_timestamp': datetime.now()})
-
-        # small delay between batches to avoid bursts
-        if i + batch_size < len(symbols):
-            time.sleep(delay)
-    
-    df = pd.DataFrame(results)
-
-    # --- Database Persistence ---
-    truncate_table(TABLE_STOCK_PRICE)
-    insert_into_table(
-        table_name=TABLE_STOCK_PRICE,
-        dataframe=df,
-        if_exists="append"
-    )
-    return df
-
-
 def ticker_to_symbol(ticker):
     """Convert a ticker string like 'NASDAQ:AAPL' to 'AAPL'."""
     if ':' in ticker:
         return ticker.split(':', 1)[1]
     return ticker
 
-def fetch_current_prices3():
+def fetch_current_prices():
     """
     Fetch current prices for a list of symbols using yfinance in batches.
 

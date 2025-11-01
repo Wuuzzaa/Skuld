@@ -1,7 +1,7 @@
 import logging
 import sys
 import streamlit as st
-from src.google_drive_download import load_updated_data, load_updated_database
+from src.google_drive_download import load_updated_database
 from src.logger_config import setup_logging
 from config import *
 
