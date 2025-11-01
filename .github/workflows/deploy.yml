@@ -57,4 +57,5 @@ jobs:
             echo '${{ secrets.DEPLOY_PASSWORD }}' | sudo -S docker compose logs --tail=20
           ENDSSH
           
+          
 
