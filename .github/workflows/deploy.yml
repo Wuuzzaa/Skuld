@@ -14,29 +14,34 @@ jobs:
       - name: Setup SSH Key
         run: |
           mkdir -p ~/.ssh
-          # Private Key direkt (NICHT Base64!)
           echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
+          # Nur EINMAL ssh-keyscan (statt bei jedem rsync/ssh)
           ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Sync application files to server
+      - name: Deploy everything in one SSH session
         run: |
-          rsync -avz --delete \
-            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
-            --exclude 'db/' \
-            --exclude 'logs/' \
-            --exclude '.git/' \
-            --exclude '.github/' \
-            --exclude '__pycache__/' \
-            --exclude '*.pyc' \
-            ./ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/skuld/
-
-      - name: Build and deploy Docker container
-        run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'ENDSSH'
+          # Tar Archive erstellen (lokal)
+          tar czf /tmp/skuld.tar.gz \
+            --exclude='db' \
+            --exclude='logs' \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='__pycache__' \
+            --exclude='*.pyc' \
+            .
+          
+          # EINE SSH Session: Upload + Extract + Deploy
+          cat /tmp/skuld.tar.gz | ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            'bash -s' << 'ENDSSH'
             set -euo pipefail
+            
+            echo "📦 Receiving and extracting files..."
             cd /opt/skuld
+            cat > /tmp/skuld.tar.gz
+            tar xzf /tmp/skuld.tar.gz
+            rm /tmp/skuld.tar.gz
             
             echo "🏗️ Building Docker image..."
             sudo docker compose build --pull
@@ -51,4 +56,3 @@ jobs:
             sudo docker compose ps
             sudo docker compose logs --tail=20
           ENDSSH
-
