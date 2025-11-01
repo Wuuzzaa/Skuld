@@ -1,4 +1,5 @@
-from config import *
+import pandas as pd
+from config import NUM_SIMULATIONS, RANDOM_SEED, RISK_FREE_RATE, PATH_LOG_FILE
 from src.decorator_log_function import log_function
 from src.monte_carlo_simulation import UniversalOptionsMonteCarloSimulator
 
@@ -204,5 +205,3 @@ if __name__ == "__main__":
     print(spreads_df.head())
     print(spreads_df.shape)
     print(f"Runtime: {ende - start:.6f} seconds")
-
-    pass
