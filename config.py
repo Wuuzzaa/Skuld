@@ -9,20 +9,6 @@ PATH_LOG_FILE = BASE_DIR / "logs" /"log.log"
 
 # Filename merged dataframe the final file for the streamlit app
 FILENAME_MERGED_DATAFRAME = 'merged_df.feather'
-
-# Data folder
-PATH_DATA = BASE_DIR / 'data'
-
-PATH_OPTION_DATA_TRADINGVIEW = PATH_DATA / 'json' / 'option_data_tradingview'
-PATH_DATAFRAME_OPTION_DATA_FEATHER = PATH_DATA / 'option_data.feather'
-PATH_DATAFRAME_PRICE_AND_INDICATOR_DATA_FEATHER = PATH_DATA / 'price_and_indicators.feather'
-PATH_DATAFRAME_DATA_MERGED_FEATHER = PATH_DATA / FILENAME_MERGED_DATAFRAME
-PATH_DATAFRAME_DATA_ANALYST_PRICE_TARGET_FEATHER = PATH_DATA / 'price_target_df.feather'
-PATH_DATAFRAME_EARNING_DATES_FEATHER = PATH_DATA / 'earning_dates.feather'
-PATH_DATAFRAME_YAHOOQUERY_OPTION_CHAIN_FEATHER = PATH_DATA / 'yahooquery_option_chain.feather'
-PATH_DATAFRAME_YAHOOQUERY_FINANCIAL_FEATHER = PATH_DATA / 'yahooquery_financial.feather'
-PATH_DATAFRAME_YAHOOQUERY_FINANCIAL_PROCESSED_FEATHER = PATH_DATA / 'yahooquery_financial_processed.feather'
-PATH_DATAFRAME_LIVE_STOCK_PRICES_FEATHER = PATH_DATA / 'live_stock_prices.feather'
  
 # Database
 DATABASE_FILENAME = 'financial_data.db'
@@ -47,7 +33,6 @@ VIEW_FUNDAMENTAL_DATA = 'FundamentalData'
  
  # Dividend Radar
 URL_DIVIDEND_RADAR = "https://www.portfolio-insight.com/dividend-radar"
-PATH_DIVIDEND_RADAR = PATH_DATA / 'dividend_radar.feather'
 
 # App Logfile
 PATH_APP_LOGFILE = BASE_DIR / 'app.log'
@@ -59,13 +44,6 @@ PATH_SYMBOLS_EXCHANGE_FILE = BASE_DIR / 'symbols_exchange.xlsx'
 PATH_ON_GOOGLE_DRIVE = "1ahLHST1IEUDf03TT3hEdbVm1r7rcxJcu"
 FILENAME_GOOGLE_DRIVE = FILENAME_MERGED_DATAFRAME
 PATH_FOR_SERVICE_ACCOUNT_FILE = "service_account.json"
-
-# FOLDERPATHS relative to main.py
-FOLDERPATHS = \
-    [
-        PATH_DATA,
-        PATH_OPTION_DATA_TRADINGVIEW
-    ]
 
 # Symbols and exchange
 df =pd.read_excel(PATH_SYMBOLS_EXCHANGE_FILE)
@@ -581,7 +559,7 @@ SYMBOL_SELECTION = {
     "symbols": ["MO"],             # Used when mode="list"
     "file_path": None,               # Used when mode="file"
     "max_symbols": 1000,               # Used when mode="max" or as limit for "all"
-    "use_max_limit": False            # If True, applies max_symbols limit to any mode
+    "use_max_limit": True            # If True, applies max_symbols limit to any mode
 }
 
 # =============================================================================

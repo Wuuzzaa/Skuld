@@ -1,6 +1,8 @@
 from config import *
 import pandas as pd
 
+from src.database import select_into_dataframe
+
 
 def calc_multi_indicator_score_direction(
         df,
@@ -64,9 +66,8 @@ def calc_multi_indicator_score_direction(
 
 
 if __name__ == "__main__":
-    df = pd.read_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER, columns=[
-        "symbol", "open", "high", "low", "close", "RSI", "Stoch.K", "ADX", "MACD.macd", "VWMA", "BB.lower", "BB.upper"
-    ]).drop_duplicates()
+    df = select_into_dataframe('SELECT "symbol", "open", "high", "low", "close", "RSI", "Stoch.K", "ADX", "MACD.macd", "VWMA", "BB.lower", "BB.upper" FROM OptionsDataMerged')
+    df.drop_duplicates()
 
     filtered_df = calc_multi_indicator_score_direction(
         df,

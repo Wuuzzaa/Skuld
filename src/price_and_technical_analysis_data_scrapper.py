@@ -59,8 +59,6 @@ def scrape_and_save_price_and_technical_indicators():
     # make a dataframe from the results
     df = pd.DataFrame(results)
 
-    df.to_feather(PATH_DATAFRAME_PRICE_AND_INDICATOR_DATA_FEATHER)
-
     # --- Database Persistence ---
     truncate_table(TABLE_TECHNICAL_INDICATORS)
     insert_into_table(
