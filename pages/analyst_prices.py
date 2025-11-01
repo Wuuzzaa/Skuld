@@ -1,5 +1,4 @@
 import streamlit as st
-
 from config import PATH_DATABASE_QUERY_FOLDER
 from src.database import select_into_dataframe
 from src.page_display_dataframe import page_display_dataframe
