@@ -2,7 +2,7 @@ name: Deploy SKULD to Hetzner
 
 on:
   push:
-    branches: [ docker ]   # Deployment nur bei Push auf docker branch
+    branches: [ docker ]
 
 jobs:
   deploy:
@@ -16,38 +16,38 @@ jobs:
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}  # Password statt Key
           # Nur bestimmte Dateien/Ordner synchronisieren (NICHT db/ und logs/)
           source: "Dockerfile,docker-compose.yml,requirements.txt,crontab,.dockerignore,.gitattributes,src/,pages/,*.py"
           target: "/opt/skuld"
           strip_components: 0
           overwrite: true
-          rm: false  # WICHTIG: Nicht löschen, sonst ist DB weg!
+          rm: false
 
       - name: Build and deploy Docker container
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}  # Password statt Key
           script: |
             set -euo pipefail
             cd /opt/skuld
             
-            echo " Pulling latest changes..."
-            sudo git status
+            echo "🔄 Pulling latest changes..."
+            echo '<DEPLOY_PASSWORD>' | sudo -S git status
             
-            echo " Building Docker image..."
-            sudo docker compose build --pull
+            echo "🏗️ Building Docker image..."
+            echo '<DEPLOY_PASSWORD>' | sudo -S docker compose build --pull
             
-            echo " Deploying container..."
-            sudo docker compose up -d --remove-orphans
+            echo "🚀 Deploying container..."
+            echo '<DEPLOY_PASSWORD>' | sudo -S docker compose up -d --remove-orphans
             
-            echo " Cleaning up old images..."
-            sudo docker image prune -f
+            echo "🧹 Cleaning up old images..."
+            echo '<DEPLOY_PASSWORD>' | sudo -S docker image prune -f
             
-            echo " Deployment complete. Container status:"
-            sudo docker compose ps
+            echo "✅ Deployment complete. Container status:"
+            echo '<DEPLOY_PASSWORD>' | sudo -S docker compose ps
             
-            echo " Last 20 log lines:"
-            sudo docker compose logs --tail=20
+            echo "📋 Last 20 log lines:"
+            echo '<DEPLOY_PASSWORD>' | sudo -S docker compose logs --tail=20
