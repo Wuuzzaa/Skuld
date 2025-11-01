@@ -1,20 +1,18 @@
-import pandas as pd
 import time
 import sys
 import os
+import pandas as pd
 
+from config import TABLE_OPTION_DATA_YAHOO
 from src.database import insert_into_table, truncate_table
 from src.yahooquery_scraper import YahooQueryScraper
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import *
-from yahooquery import Ticker
-
 def get_yahooquery_option_chain():
     yahoo_query = YahooQueryScraper.instance()
-    df = yahoo_query.get_option_chain()
+    df: pd.DataFrame = yahoo_query.get_option_chain()
 
     print(f"Total options collected: {len(df)}")
 
@@ -34,28 +32,6 @@ def get_yahooquery_option_chain():
         dataframe=df,
         if_exists="append"
     )
-
-def get_live_stock_prices(symbols):
-    """Get live stock prices for unique symbols only"""
-    unique_symbols = list(set(symbols))
-    prices = {}
-    
-    for symbol in unique_symbols:
-        try:
-            # Use yfinance to get current price
-            import yfinance as yf
-            ticker = yf.Ticker(symbol)
-            hist = ticker.history(period="1d")
-            if not hist.empty:
-                prices[symbol] = hist['Close'].iloc[-1]
-            else:
-                prices[symbol] = None
-        except Exception as e:
-            print(f"Error getting price for {symbol}: {e}")
-            prices[symbol] = None
-    
-    return prices
-
 
 if __name__ == '__main__':
     start = time.time()
