@@ -1,18 +1,16 @@
-import pandas as pd
-import numpy as np
 import time
 import sys
 import os
+import numpy as np
+import pandas as pd
 
+from config import TABLE_FUNDAMENTAL_DATA_YAHOO
 from src.database import insert_into_table, truncate_table
 from src.yahooquery_scraper import YahooQueryScraper
+from config_utils import get_filtered_symbols_with_logging
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from config import *
-from config_utils import get_filtered_symbols_with_logging
-from yahooquery import Ticker
 
 def generate_fundamental_data():
 
