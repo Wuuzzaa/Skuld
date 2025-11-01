@@ -1,23 +1,18 @@
 import sys
 import os
-
+import pandas as pd
+from config import TABLE_EARNING_DATES
 from src.database import insert_into_table, truncate_table
 from src.yahooquery_scraper import YahooQueryScraper
+from datetime import datetime
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from yahooquery import Ticker
-from datetime import datetime
-from config import *
-import pandas as pd
-
 def scrape_earning_dates():
     earnings_dates = {}
-
     yahoo_query = YahooQueryScraper.instance()
     data = yahoo_query.get_modules()
-
 
     for symbol, symbol_data in data.items():
         calendar_data = symbol_data.get('calendarEvents')
@@ -50,6 +45,3 @@ if __name__ == '__main__':
     duration = end - start
 
     print(f"\nRuntime: {duration:.4f} seconds")
-
-    # Runtime: 8.5962 seconds Async
-    # Runtime: 61.5521
