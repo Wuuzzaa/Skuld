@@ -56,3 +56,4 @@ jobs:
             echo "📋 Last 20 log lines:"
             echo '${{ secrets.DEPLOY_PASSWORD }}' | sudo -S docker compose logs --tail=20
           ENDSSH
+          
