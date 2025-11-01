@@ -1,16 +1,9 @@
 import pandas as pd
-import yfinance as yf
-import time
 import sys
 import os
 from datetime import datetime
-
-# Import config and helpers for backward compatibility
 from config import TABLE_STOCK_PRICE
-from config_utils import get_filtered_symbols_with_logging
 from src.database import insert_into_table, truncate_table
-
-
 from src.yahooquery_scraper import YahooQueryScraper
 
 # Add parent directory to path for imports
@@ -64,27 +57,6 @@ def fetch_current_prices():
     )
     return df
 
-def merge_prices_to_dataframe(df, symbol_col='symbol', how='left', batch_size=50, delay=0.5):
-    """
-    Fetch current prices for symbols that appear in `df` and return df merged with price columns.
-
-    The function does not modify the original df (returns a new DataFrame).
-    """
-    if symbol_col not in df.columns:
-        raise ValueError(f"symbol_col '{symbol_col}' not found in dataframe")
-
-    symbols = df[symbol_col].dropna().astype(str).unique().tolist()
-    prices_df = fetch_current_prices(symbols, batch_size=batch_size, delay=delay)
-
-    merged = df.merge(prices_df, left_on=symbol_col, right_on='symbol', how=how)
-
-    # drop the redundant 'symbol' column from the right side if present
-    if 'symbol_y' in merged.columns and 'symbol_x' in merged.columns:
-        merged = merged.rename(columns={'symbol_x': symbol_col}).drop(columns=['symbol_y'])
-
-    return merged
-
-
 if __name__ == '__main__':
     # quick local test when run as a script
     sample_symbols = ['AAPL', 'MSFT', 'GOOG']
@@ -92,28 +64,3 @@ if __name__ == '__main__':
     df = fetch_current_prices(sample_symbols)
     print(df.to_string(index=False))
 
-
-def get_live_stock_prices():
-    """Backward-compatible wrapper used by older pipeline code.
-
-    Fetches current prices for the configured symbol list and writes them to
-    `PATH_DATAFRAME_LIVE_STOCK_PRICES_FEATHER` so existing merge steps keep working.
-    """
-    try:
-        symbols, _ = get_filtered_symbols_with_logging("Live Stock Prices")
-    except Exception:
-        # Fallback: no symbol list available
-        symbols = []
-
-    if not symbols:
-        print("No symbols found to fetch live prices for.")
-        return False
-
-    df_prices = fetch_current_prices(symbols)
-    try:
-        df_prices.to_feather(PATH_DATAFRAME_LIVE_STOCK_PRICES_FEATHER)
-        print(f"Saved live prices to: {PATH_DATAFRAME_LIVE_STOCK_PRICES_FEATHER}")
-        return True if not df_prices.empty else False
-    except Exception as e:
-        print(f"Could not save live prices to feather: {e}")
-        return False
