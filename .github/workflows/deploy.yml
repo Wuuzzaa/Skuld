@@ -18,9 +18,8 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Sync files and deploy in one SSH call
+      - name: Sync files to server
         run: |
-          # Rsync mit ConnectionAttempts
           rsync -avz --delete \
             -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectionAttempts=1" \
             --exclude 'db/' \
@@ -30,24 +29,36 @@ jobs:
             --exclude '__pycache__/' \
             --exclude '*.pyc' \
             ./ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/skuld/
-          
-          # Deployment in EINER SSH Session
+
+      - name: Build and deploy Docker container
+        run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'ENDSSH'
-            set -euo pipefail
+            set -euxo pipefail
             cd /opt/skuld
             
-            echo "🏗️ Building Docker image..."
-            sudo docker compose build --pull
+            echo "=== Current container status ==="
+            sudo docker compose ps
             
-            echo "🚀 Deploying container..."
+            echo "=== Current images ==="
+            sudo docker images | grep skuld || echo "No skuld images"
+            
+            echo "=== Stopping old container ==="
+            sudo docker compose down
+            
+            echo "=== Building new image ==="
+            sudo docker compose build --pull --no-cache
+            
+            echo "=== Starting new container ==="
             sudo docker compose up -d --remove-orphans
             
-            echo "🧹 Cleaning up old images..."
+            echo "=== Cleaning up old images ==="
             sudo docker image prune -f
             
-            echo "✅ Deployment complete:"
+            echo "=== New container status ==="
             sudo docker compose ps
-            sudo docker compose logs --tail=20
+            
+            echo "=== Container logs ==="
+            sudo docker compose logs --tail=30
           ENDSSH
 
