@@ -1,18 +1,12 @@
 import sys
 import os
-
+import pandas as pd
+from config import TABLE_ANALYST_PRICE_TARGETS
 from src.database import insert_into_table, truncate_table
 from src.yahooquery_scraper import YahooQueryScraper
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from config import *
-from config_utils import get_filtered_symbols_with_logging
-import yfinance as yf
-import yahooquery as yq
-import pandas as pd
-import time
 
 def scrape_yahoo_finance_analyst_price_targets():
     print("#" * 80)
@@ -24,7 +18,6 @@ def scrape_yahoo_finance_analyst_price_targets():
     results = []
 
     # Test mode logic and logging centrally from config
-    
     print(f"Scraping symbols on Yahoo Finance...")
     yahoo_query = YahooQueryScraper.instance()
     data = yahoo_query.get_modules()
