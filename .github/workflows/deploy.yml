@@ -51,3 +51,5 @@ jobs:
             sudo docker compose ps
             sudo docker compose logs --tail=20
           ENDSSH
+
+          
