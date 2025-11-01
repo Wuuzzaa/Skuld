@@ -1,0 +1,55 @@
+name: Debug SSH Connection
+
+on:
+  push:
+    branches: [ docker ]
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: Test 1 - Network connectivity
+        run: |
+          echo "=== PING TEST ==="
+          ping -c 4 ${{ secrets.DEPLOY_HOST }} || echo "⚠️ Ping failed"
+          
+          echo "=== PORT 22 TEST ==="
+          timeout 10 bash -c "echo > /dev/tcp/${{ secrets.DEPLOY_HOST }}/22" && echo "✅ Port 22 open" || echo "❌ Port 22 closed/filtered"
+          
+          echo "=== TRACEROUTE ==="
+          traceroute -m 10 ${{ secrets.DEPLOY_HOST }} || true
+
+      - name: Test 2 - SSH with verbose logging
+        run: |
+          echo "=== SSH CONNECTION TEST ==="
+          ssh -vvv -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=no \
+            -o ConnectTimeout=30 \
+            -o BatchMode=yes \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "echo 'SSH connection successful!'; hostname; whoami; date" 2>&1 | tee ssh-debug.log || echo "❌ SSH failed"
+          
+          echo "=== SSH DEBUG OUTPUT ==="
+          cat ssh-debug.log
+
+      - name: Test 3 - SSH Key validation
+        run: |
+          echo "=== SSH KEY INFO ==="
+          ssh-keygen -l -f ~/.ssh/deploy_key || echo "Invalid key format"
+          
+          echo "=== PUBLIC KEY FINGERPRINT ==="
+          ssh-keygen -lf ~/.ssh/deploy_key.pub 2>/dev/null || ssh-keygen -y -f ~/.ssh/deploy_key | ssh-keygen -lf - || echo "Cannot derive public key"
+
+      - name: Test 4 - Alternative connection methods
+        run: |
+          echo "=== TELNET TEST (Port 22) ==="
+          timeout 5 telnet ${{ secrets.DEPLOY_HOST }} 22 || echo "Telnet failed"
+          
+          echo "=== NMAP SCAN ==="
+          nmap -p 22 ${{ secrets.DEPLOY_HOST }} || echo "nmap not available"
