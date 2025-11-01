@@ -1,15 +1,13 @@
-import pandas as pd
 import sys
 import os
-
+import pandas as pd
+from config import SYMBOLS_EXCHANGE, TABLE_TECHNICAL_INDICATORS
 from src.database import insert_into_table, truncate_table
+from tradingview_ta import Interval, get_multiple_analysis
+from config_utils import get_filtered_symbols_with_logging
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from config import *
-from tradingview_ta import TA_Handler, Interval, Exchange, get_multiple_analysis
-from config_utils import get_filtered_symbols_with_logging
 
 
 def scrape_and_save_price_and_technical_indicators():
@@ -19,7 +17,6 @@ def scrape_and_save_price_and_technical_indicators():
     symbol_exchange_pairs = [(symbol, SYMBOLS_EXCHANGE[symbol]) for symbol in symbols]
     # Erstelle die Liste für index_filters
     underlying_symbols = [f"{exchange}:{symbol}" for symbol, exchange in symbol_exchange_pairs]
-
 
     results = []
     analysis = {}  # als Dictionary initialisieren
@@ -49,8 +46,6 @@ def scrape_and_save_price_and_technical_indicators():
             indicators["recommendation_buy_amount"] = data.summary["BUY"]
             indicators["recommendation_neutral_amount"] = data.summary["NEUTRAL"]
             indicators["recommendation_sell_amount"] = data.summary["SELL"]
-            # TODO: add price data here
-
             results.append(indicators)
 
         except Exception as e:
@@ -66,4 +61,3 @@ def scrape_and_save_price_and_technical_indicators():
         dataframe=df,
         if_exists="append"
     )
-
