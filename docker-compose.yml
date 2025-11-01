@@ -5,11 +5,11 @@ services:
     build: .
     container_name: skuld-streamlit
     volumes:
-      # Datenbank persistent speichern (WICHTIG für lokale Persistenz!)
+      # Persistent database storage (IMPORTANT for local persistence!)
       - ./db:/app/Skuld/db
-      # Logs persistent
+      # Persistent logs
       - ./logs:/app/Skuld/logs
-      # Cron logs für Debugging
+      # Cron logs for debugging
       #- ./cron.log:/var/log/cron.log
     environment:
       - PYTHONUNBUFFERED=1
@@ -18,15 +18,15 @@ services:
     networks:
       - web
     labels:
-      # Traefik aktivieren
+      # Enable Traefik
       - "traefik.enable=true"
-      # Domain für SKULD
+      # Domain for SKULD
       - "traefik.http.routers.skuld.rule=Host(`app.skuld-options.com`)"
       # HTTPS Endpoint
       - "traefik.http.routers.skuld.entrypoints=websecure"
-      # Automatisches SSL Certificate via Let's Encrypt
+      # Automatic SSL Certificate via Let's Encrypt
       - "traefik.http.routers.skuld.tls.certresolver=letsencrypt"
-      # Port auf dem Streamlit läuft
+      # Port where Streamlit is running
       - "traefik.http.services.skuld.loadbalancer.server.port=8501"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
@@ -39,5 +39,5 @@ networks:
   web:
     external: true
 
-    
+
 
