@@ -11,7 +11,8 @@ jobs:
       - name: Setup SSH Key
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.DEPLOY_SSH_KEY }}" | base64 -d > ~/.ssh/deploy_key
+          # Private Key direkt (NICHT Base64!)
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
 
       - name: Test 1 - Network connectivity
@@ -34,4 +35,4 @@ jobs:
       - name: Test 3 - SSH Key validation
         run: |
           echo "=== SSH KEY INFO ==="
-          ssh-keygen -l -f ~/.ssh/deploy_key || echo "Invalid key format"
+          ssh-keygen -l -f ~/.ssh/deploy_key 2>&1 || echo "Invalid key format"
