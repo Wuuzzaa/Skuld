@@ -1,49 +1,33 @@
-import calendar
 import re
 import sys
 import os
-from pathlib import Path
+from config import *
+from config_utils import generate_expiry_dates_from_rules
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import *
-from config_utils import generate_expiry_dates_from_rules
-from datetime import date, timedelta
-
-def get_third_friday(year, month):
-    """Calculate the third Friday of a given month"""
-    # Find the first day of the month
-    first_day = date(year, month, 1)
-    # Find the first Friday
-    days_until_friday = (4 - first_day.weekday()) % 7
-    first_friday = first_day + timedelta(days=days_until_friday)
-    # The third Friday is 14 days later
-    third_friday = first_friday + timedelta(days=14)
-    return third_friday
-
-
 def get_option_expiry_dates():
     """
     Get option expiry dates based on enabled collection rules.
-    
+
     Returns:
         list: List of expiry dates in YYYYMMDD integer format
     """
     print("Generating expiry dates from collection rules...")
-    
+
     # Get dates from the new rule-based system
     expiry_date_strings = generate_expiry_dates_from_rules()
-    
+
     # Convert from "YYYY-MM-DD" strings to YYYYMMDD integers
     expiry_dates_int = []
     for date_str in expiry_date_strings:
         # Convert "2024-06-21" to 20240621
         date_int = int(date_str.replace("-", ""))
         expiry_dates_int.append(date_int)
-    
+
     print(f"Generated {len(expiry_dates_int)} expiry dates from {len([r for r in OPTIONS_COLLECTION_RULES if r.get('enabled')])} enabled rules")
-    
+
     return sorted(expiry_dates_int)
 
 def opra_to_osi(opra_code):
@@ -125,10 +109,6 @@ def opra_to_symbol(opra_code):
     symbol, year, month, day, opt_type, strike_str = match.groups()
 
     return symbol
-
-if __name__ == "__main__":
-    expiry_dates = get_option_expiry_dates()
-    pass
 
 class Singleton:
     """
