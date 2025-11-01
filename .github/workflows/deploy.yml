@@ -16,32 +16,26 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          # Nur EINMAL ssh-keyscan (statt bei jedem rsync/ssh)
           ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Deploy everything in one SSH session
+      - name: Sync files and deploy in one SSH call
         run: |
-          # Tar Archive erstellen (lokal)
-          tar czf /tmp/skuld.tar.gz \
-            --exclude='db' \
-            --exclude='logs' \
-            --exclude='.git' \
-            --exclude='.github' \
-            --exclude='__pycache__' \
-            --exclude='*.pyc' \
-            .
+          # Rsync mit ConnectionAttempts
+          rsync -avz --delete \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectionAttempts=1" \
+            --exclude 'db/' \
+            --exclude 'logs/' \
+            --exclude '.git/' \
+            --exclude '.github/' \
+            --exclude '__pycache__/' \
+            --exclude '*.pyc' \
+            ./ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/skuld/
           
-          # EINE SSH Session: Upload + Extract + Deploy
-          cat /tmp/skuld.tar.gz | ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
-            'bash -s' << 'ENDSSH'
+          # Deployment in EINER SSH Session
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'ENDSSH'
             set -euo pipefail
-            
-            echo "📦 Receiving and extracting files..."
             cd /opt/skuld
-            cat > /tmp/skuld.tar.gz
-            tar xzf /tmp/skuld.tar.gz
-            rm /tmp/skuld.tar.gz
             
             echo "🏗️ Building Docker image..."
             sudo docker compose build --pull
@@ -57,4 +51,3 @@ jobs:
             sudo docker compose logs --tail=20
           ENDSSH
 
-          
