@@ -558,7 +558,7 @@ SYMBOL_SELECTION = {
     "mode": "all",                   # "all", "list", "file", "max"
     "symbols": ["MO"],             # Used when mode="list"
     "file_path": None,               # Used when mode="file"
-    "max_symbols": 1000,               # Used when mode="max" or as limit for "all"
+    "max_symbols": 1100,               # Used when mode="max" or as limit for "all"
     "use_max_limit": True            # If True, applies max_symbols limit to any mode
 }
 
