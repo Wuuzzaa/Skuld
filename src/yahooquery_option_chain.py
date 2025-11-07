@@ -1,25 +1,22 @@
-import pandas as pd
 import time
-from config import *
-from yahooquery import Ticker
+import sys
+import os
+import pandas as pd
 
+from config import TABLE_OPTION_DATA_YAHOO
+from src.database import insert_into_table, truncate_table
+from src.yahooquery_scraper import YahooQueryScraper
 
-def get_yahooquery_option_chain(testmode):
-    # check testmode
-    if testmode:
-        tickers = Ticker(SYMBOLS[:5], asynchronous=True)
-    else:
-        tickers = Ticker(SYMBOLS, asynchronous=True)
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-    # request data
-    df = tickers.option_chain
+def get_yahooquery_option_chain():
+    yahoo_query = YahooQueryScraper.instance()
+    df: pd.DataFrame = yahoo_query.get_option_chain()
 
-    # symbol expiration_date and option-type from index to column
-    # symbol -> symbol
-    # expiration-> expiration_date
-    # optionType -> option-type
-    df = df.reset_index()
+    print(f"Total options collected: {len(df)}")
 
+    # Process the combined data
     df = df.rename(columns={
         'symbol': 'symbol',
         'expiration': 'expiration_date',
@@ -28,14 +25,18 @@ def get_yahooquery_option_chain(testmode):
         'openInterest': 'option_open_interest',
     })
 
-    df.to_feather(PATH_DATAFRAME_YAHOOQUERY_OPTION_CHAIN_FEATHER)
-
+    # --- Database Persistence ---
+    truncate_table(TABLE_OPTION_DATA_YAHOO)
+    insert_into_table(
+        table_name=TABLE_OPTION_DATA_YAHOO,
+        dataframe=df,
+        if_exists="append"
+    )
 
 if __name__ == '__main__':
-
     start = time.time()
-    get_yahooquery_option_chain(testmode=False)
+    get_yahooquery_option_chain()
     end = time.time()
     duration = end - start
 
-    print(f"\nDurchlaufzeit: {duration:.4f} Sekunden")
+    print(f"\nRuntime: {duration:.4f} seconds")

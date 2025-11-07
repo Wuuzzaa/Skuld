@@ -1,25 +1,32 @@
-import time
-from datetime import datetime
 import streamlit as st
-import pandas as pd
-from src.spreads_calculation import get_spreads
-from src.util import get_option_expiry_dates
-from src.custom_logging import *
+from src.database import select_into_dataframe
+from src.page_display_dataframe import page_display_dataframe
+from src.spreads_calculation import calc_spreads
+from config import *
 
 # Titel
 st.subheader("Spreads")
 
-# Create layout with multiple columns
+# Create a layout with multiple columns
 col_epiration_date, col_delta_target, col_spread_width = st.columns(3)
 
 # expiration date
 with col_epiration_date:
-    # Expiration dates with selectbox
-    expiration_dates = [
-        datetime.strptime(str(date), "%Y%m%d").strftime("%Y-%m-%d")
-        for date in get_option_expiry_dates()
-    ]
-    expiration_date = st.selectbox("Expiration Date", expiration_dates)
+    sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'expiration_dte_asc.sql'
+    dates_df = select_into_dataframe(sql_file_path=sql_file_path)
+
+    # dte labels  ("5 DTE - 2025-01-15")
+    dte_labels = dates_df.apply(
+        lambda row: f"{int(row['days_to_expiration'])} DTE  {row['expiration_date']}",
+        axis=1
+    ).tolist()
+
+    # selectbox with dte labels
+    selected_label = st.selectbox("Expiration Date", dte_labels)
+
+    # extract selected expiration date from dte label
+    selected_index = dte_labels.index(selected_label)
+    expiration_date = dates_df.iloc[selected_index]['expiration_date']
 
 # delta target
 with col_delta_target:
@@ -29,9 +36,11 @@ with col_delta_target:
 with col_spread_width:
     spread_width = st.number_input("Spread Width", min_value=1, max_value=20, value=5, step=1)
 
-# Filter the dataframe and calculate the spread values with loading indicator
+# calculate the spread values with a loading indicator
 with st.status("Calculating... Please wait.", expanded=True) as status:
-    spreads_df = get_spreads(st.session_state['df'], expiration_date, delta_target, spread_width)
+    sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'spreads_input.sql'
+    df = select_into_dataframe(sql_file_path=sql_file_path, params={"expiration_date": expiration_date})
+    spreads_df = calc_spreads(df, delta_target, spread_width)
     status.update(label="Calculation complete!", state="complete", expanded=True)
 
 # Dynamically extract unique values for symbol and option_type from calculated spreads_df
@@ -56,6 +65,5 @@ if symbol != "All Symbols":
 if option_type != "Put and Call":
     spreads_df = spreads_df[spreads_df['option_type'] == option_type]
 
-# Show the filtered spreads
-log_info(f"Spreads calculated for: {expiration_date}, delta {delta_target}, spread width {spread_width}, symbol {symbol}, option type {option_type}")
-st.dataframe(spreads_df, use_container_width=True)
+# show final dataframe
+page_display_dataframe(spreads_df, symbol_column='symbol')

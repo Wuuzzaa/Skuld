@@ -1,27 +1,43 @@
+import sys
+import os
 import pandas as pd
-from config import *
-from tradingview_ta import TA_Handler, Interval, Exchange
+from config import SYMBOLS_EXCHANGE, TABLE_TECHNICAL_INDICATORS
+from src.database import insert_into_table, truncate_table
+from tradingview_ta import Interval, get_multiple_analysis
+from config_utils import get_filtered_symbols_with_logging
+
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-def scrape_and_save_price_and_technical_indicators(testmode):
-    # check testmode
-    if testmode:
-        items = list(SYMBOLS_EXCHANGE.items())[:5]
-    else:
-        items = SYMBOLS_EXCHANGE.items()
+def scrape_and_save_price_and_technical_indicators():
+    # Get symbols with new configuration system
+    symbols = get_filtered_symbols_with_logging("Technical Analysis Scraping")
+    # Ermittle Exchanges für alle Symbole
+    symbol_exchange_pairs = [(symbol, SYMBOLS_EXCHANGE[symbol]) for symbol in symbols]
+    # Erstelle die Liste für index_filters
+    underlying_symbols = [f"{exchange}:{symbol}" for symbol, exchange in symbol_exchange_pairs]
+
     results = []
+    analysis = {}  # als Dictionary initialisieren
 
-    for symbol, exchange in items:
+    # Unterteile underlying_symbols in 500er-Pakete (API Limit)
+    batch_size = 500
+    symbol_batches = [underlying_symbols[i:i + batch_size] for i in range(0, len(underlying_symbols), batch_size)]
+    for symbol_batch in symbol_batches:
+        analysis_symbol_batch = get_multiple_analysis(screener="america", interval=Interval.INTERVAL_1_HOUR, symbols=symbol_batch)
+        analysis.update(analysis_symbol_batch)  # analysis_symbol_batch muss ein dict sein
+
+    # Use the exchange from SYMBOLS_EXCHANGE mapping (from Excel file)
+    for symbol_ in analysis:
+        exchange = symbol_.split(":")[0]
+        symbol = symbol_.split(":")[1]
+        if not exchange:
+            print(f"WARNING: No exchange found for symbol {symbol}. Skipping.")
+            continue
         try:
-            analysis = TA_Handler(
-                symbol=symbol,
-                screener="america",
-                exchange=exchange,
-                interval=Interval.INTERVAL_1_DAY
-            )
-
             # get indicator values
-            data = analysis.get_analysis()
+            data = analysis[symbol_]
 
             # extract values
             indicators = data.indicators
@@ -30,18 +46,18 @@ def scrape_and_save_price_and_technical_indicators(testmode):
             indicators["recommendation_buy_amount"] = data.summary["BUY"]
             indicators["recommendation_neutral_amount"] = data.summary["NEUTRAL"]
             indicators["recommendation_sell_amount"] = data.summary["SELL"]
-            #todo add price data here
-
-            # add results
             results.append(indicators)
 
         except Exception as e:
-            print(f"Error with symbl: {symbol}: {e}")
+            print(f"Error with symbol: {symbol}: {e}")  
 
     # make a dataframe from the results
     df = pd.DataFrame(results)
 
-    df.to_feather(PATH_DATAFRAME_PRICE_AND_INDICATOR_DATA_FEATHER)
-
-
-
+    # --- Database Persistence ---
+    truncate_table(TABLE_TECHNICAL_INDICATORS)
+    insert_into_table(
+        table_name=TABLE_TECHNICAL_INDICATORS,
+        dataframe=df,
+        if_exists="append"
+    )

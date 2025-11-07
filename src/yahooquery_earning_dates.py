@@ -1,21 +1,24 @@
-from yahooquery import Ticker
-from datetime import datetime
-from config import *
+import sys
+import os
 import pandas as pd
+from config import TABLE_EARNING_DATES
+from src.database import insert_into_table, truncate_table
+from src.yahooquery_scraper import YahooQueryScraper
+from datetime import datetime
 
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-def scrape_earning_dates(testmode):
-    # check testmode
-    if testmode:
-        tickers = Ticker(SYMBOLS[:5], asynchronous=True)
-    else:
-        tickers = Ticker(SYMBOLS, asynchronous=True)
-
+def scrape_earning_dates():
     earnings_dates = {}
+    yahoo_query = YahooQueryScraper.instance()
+    data = yahoo_query.get_modules()
 
-    for symbol, data in tickers.calendar_events.items():
+    for symbol, symbol_data in data.items():
+        calendar_data = symbol_data.get('calendarEvents')
+
         try:
-            raw_date = data['earnings']['earningsDate'][0][:10]  # z.B. '2025-07-30'
+            raw_date = calendar_data['earnings']['earningsDate'][0][:10]  # e.g. '2025-07-30'
             date_obj = datetime.strptime(raw_date, "%Y-%m-%d")
             formatted_date = date_obj.strftime("%d.%m.%Y")
             earnings_dates[symbol] = formatted_date
@@ -24,8 +27,13 @@ def scrape_earning_dates(testmode):
 
     # store dataframe
     df = pd.DataFrame(list(earnings_dates.items()), columns=['symbol', 'earnings_date'])
-    df.to_feather(PATH_DATAFRAME_EARNING_DATES_FEATHER)
-
+    # --- Database Persistence ---
+    truncate_table(TABLE_EARNING_DATES)
+    insert_into_table(
+        table_name=TABLE_EARNING_DATES,
+        dataframe=df,
+        if_exists="append"
+    )
 
 if __name__ == '__main__':
     import time
@@ -36,7 +44,4 @@ if __name__ == '__main__':
 
     duration = end - start
 
-    print(f"\nDurchlaufzeit: {duration:.4f} Sekunden")
-
-    # Durchlaufzeit: 8.5962 Sekunden Async
-    # Durchlaufzeit: 61.5521 Sekunden Sync
+    print(f"\nRuntime: {duration:.4f} seconds")

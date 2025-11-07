@@ -1,42 +1,48 @@
-from config import *
-import yfinance as yf
+import sys
+import os
 import pandas as pd
-import time
+from config import TABLE_ANALYST_PRICE_TARGETS
+from src.database import insert_into_table, truncate_table
+from src.yahooquery_scraper import YahooQueryScraper
 
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-def scrape_yahoo_finance_analyst_price_targets(testmode):
-    print("#"*80)
-    print(f"Scraping analyst price targets on Yahoo Finance...")
-    print("#"*80)
+def scrape_yahoo_finance_analyst_price_targets():
+    print("#" * 80)
+    print("Scraping analyst price targets on Yahoo Finance...")
+    print("#" * 80)
+    
+    # https://yahooquery.dpguthrie.com/guide/ticker/modules/
 
     results = []
 
-    # Yahoo Finance API Rate Limits:
-    # https://help.yahooinc.com/dsp-api/docs/rate-limits
+    # Test mode logic and logging centrally from config
+    print(f"Scraping symbols on Yahoo Finance...")
+    yahoo_query = YahooQueryScraper.instance()
+    data = yahoo_query.get_modules()
 
-    # check Testmode
-    if testmode:
-        symbols = SYMBOLS[:5]
-    else:
-        symbols = SYMBOLS
-
-    for symbol in symbols:
-        print(f"Scraping {symbol} on Yahoo Finance...")
-        data = yf.Ticker(symbol)
-
+    for symbol, symbol_data in data.items():
+        financial_data = symbol_data.get('financialData')
         # Get mean or set None if the yahoo finance has no data.
-        # Mostly no data for index of resources
         try:
-            mean_target = data.analyst_price_targets.get("mean", None)
+            if "targetMeanPrice" in financial_data:
+                mean_target = financial_data['targetMeanPrice']
+            else:
+                print(f"No price target available for {symbol}")
+                mean_target = None
         except Exception as e:
-            print(f"Error getting price target for {symbol}: {e}")
+            print(f"Error getting price target for {symbol}: {e} -> {financial_data}")
             mean_target = None
 
         results.append({"symbol": symbol, "analyst_mean_target": mean_target})
 
-        # 1 request per second api rate limit
-        # time.sleep(1)
-
     df = pd.DataFrame(results)
-    df.to_feather(PATH_DATAFRAME_DATA_ANALYST_PRICE_TARGET_FEATHER)
 
+    # --- Database Persistence ---
+    truncate_table(TABLE_ANALYST_PRICE_TARGETS)
+    insert_into_table(
+        table_name=TABLE_ANALYST_PRICE_TARGETS,
+        dataframe=df,
+        if_exists="append"
+    )

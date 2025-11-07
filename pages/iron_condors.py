@@ -1,10 +1,8 @@
-import time
-from datetime import datetime
+#todo still needed. if so port to db from dataframe
 import streamlit as st
-import pandas as pd
+from datetime import datetime
 from src.iron_condor_calculation import get_iron_condors
 from src.util import get_option_expiry_dates
-from src.custom_logging import *
 
 # Titel
 st.subheader("Iron Condors")
@@ -35,5 +33,4 @@ with st.status("Calculating... Please wait.", expanded=True) as status:
     status.update(label="Calculation complete!", state="complete", expanded=True)
 
 # show the spreads
-log_info(f"Iron Condors calculated for: {expiration_date} and delta {delta_target} with spread width {spread_width}")
 st.dataframe(ic_df, use_container_width=True)
