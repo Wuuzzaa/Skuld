@@ -11,14 +11,13 @@ from src.decorator_log_function import log_function
 # logging
 logger = logging.getLogger(__name__)
 
-
 def get_database_engine():
     """
     Creates and returns a SQLAlchemy engine for the SQLite database.
     """
-    # return create_engine(f'sqlite:///{PATH_DATABASE_FILE}')
-    return create_engine(f'sqlite:///{str(PATH_DATABASE_FILE.absolute())}')
 
+    engine = create_engine(f'sqlite:///{str(PATH_DATABASE_FILE.absolute())}')
+    return engine
 
 def truncate_table(table_name):
     """
@@ -38,9 +37,26 @@ def truncate_table(table_name):
     with engine.begin() as connection:
         try:
             connection.execute(text(f"DELETE FROM {table_name}"))
-            print(f"Successfully truncated table: {table_name} in {round(time.time() - start,2)}s")
+            duration = round(time.time() - start, 2)
+            print(f"Successfully truncated table: {table_name} in {duration}s")
+            connection.close()
+            _write_table_log(
+            table_name=table_name,
+            action="TRUNCATE",
+            duration_seconds=duration,
+            success=True
+        )            
+
         except Exception as e:
+            duration = round(time.time() - start, 2)
             print(f"Error truncating table {table_name}: {e}")
+            connection.close()
+            _write_table_log(
+                table_name=table_name,
+                action="TRUNCATE",
+                duration_seconds=duration,
+                success=False
+            )         
 
 def insert_into_table(
         table_name: str,
@@ -52,9 +68,28 @@ def insert_into_table(
     try:
         engine = get_database_engine()
         affected_rows = dataframe.to_sql(table_name, engine, if_exists=if_exists, index=False)
-        print(f"Successfully saved {affected_rows} rows to the database table {table_name} in {round(time.time() - start,2)}s.")
+        duration = round(time.time() - start, 2) 
+        print(f"Successfully saved {affected_rows} rows to the database table {table_name} in {duration}s.")
+        _write_table_log(
+            table_name=table_name,
+            action="INSERT",
+            details=f"if_exists={if_exists}",
+            duration_seconds=duration,
+            success=True,
+            rows_affected=affected_rows
+        )
     except Exception as e:
+        duration = round(time.time() - start, 2)
         print(f"Error saving to the database table {table_name}: {e}")
+        _write_table_log(
+            table_name=table_name,
+            action="INSERT",
+            details=f"if_exists={if_exists}",
+            duration_seconds=duration,
+            success=False,
+            rows_affected=affected_rows,
+            error_message=str(e)
+        )
 
     return affected_rows
 
@@ -161,3 +196,54 @@ def run_migrations():
             connection.execute(text(f"UPDATE DbVersion SET version = {last_migration_version}"))
             print(f"Database version updated to {last_migration_version}.")
     print(f"Database migration completed in {round(time.time() - start,2)}s")
+
+def _write_table_log(
+    table_name: str,
+    action: str,
+    duration_seconds: float,
+    success: bool,
+    rows_affected: int = None,
+    details: str = None,
+    error_message: str = None,
+    additional_info: str = None
+):
+    engine = get_database_engine()
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("""
+                INSERT INTO TableLog
+                (table_name, action, details, duration_seconds, success, rows_affected, error_message, additional_info)
+                VALUES (:table_name, :action, :details, :duration_seconds, :success, :rows_affected, :error_message, :additional_info)
+            """), {
+                "table_name": table_name,
+                "action": action,
+                "details": details,
+                "duration_seconds": duration_seconds,
+                # SQLite speichert Booleans als 0/1
+                "success": 1 if success else 0,
+                "rows_affected": rows_affected,
+                "error_message": error_message,
+                "additional_info": additional_info
+            })
+    except Exception as log_err:
+        logger.error(f"Failed to write TableLog for {table_name} ({action}): {log_err}")
+
+def last_modified_time_of_table(table_name: str, action: Literal["INSERT", "TRUNCATE"] = "") -> pd.Timestamp:
+    """
+    Returns the last modified time of a table based on the TableLog entries.
+    If no entries exist, returns None.
+    """
+    engine = get_database_engine()
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text(f"""
+                SELECT MAX(timestamp) as last_modified
+                FROM TableLog
+                WHERE table_name = :table_name AND success = 1
+                   {f'AND action = :action' if action else ''}
+            """), {"table_name": table_name}).fetchone()
+            if result and result['last_modified']:
+                return pd.to_datetime(result['last_modified'])
+    except Exception as e:
+        logger.error(f"Error fetching last modified time for table {table_name}: {e}")
+    return None
