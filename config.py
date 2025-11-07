@@ -26,6 +26,7 @@ TABLE_FUNDAMENTAL_DATA_YAHOO = 'FundamentalDataYahoo'
 TABLE_FUNDAMENTAL_DATA_YAHOO_PROCESSED = 'FundamentalDataYahooProcessed'
 TABLE_TECHNICAL_INDICATORS = 'TechnicalIndicators'
 TABLE_STOCK_PRICE = 'StockPrice'
+TABLE_STOCK_DATA_BARCHART = 'StockDataBarchart'
 
 #Views
 VIEW_OPTION_DATA = 'OptionData'
