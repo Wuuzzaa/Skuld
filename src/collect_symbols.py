@@ -1,3 +1,5 @@
+#TODO DO NOT DELETE THIS FILE UNTIL WE MOVED TO A NEW API AS DATASOURCE. ALL SYMBOLS AND EXCHANGES ARE MATCHED IN THIS SCRIPT
+
 import io
 import pandas as pd
 import requests
@@ -120,7 +122,7 @@ if __name__ == '__main__':
     # todo make this run with symbols containing a "."
     symbols = [s for s in symbols if '.' not in s]
 
-    print(f"symbols after merge(without '.' in symbolname): {len(symbols)}")
+    print(f"symbols after merge (without '.' in symbolname): {len(symbols)}")
 
     symbols_exchange = get_symbols_exchange_dict(symbols)
 

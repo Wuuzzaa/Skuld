@@ -1,110 +1,34 @@
-import calendar
 import re
-from pathlib import Path
-from config import FOLDERPATHS
-from datetime import date, timedelta
+import sys
+import os
+from config import *
+from config_utils import generate_expiry_dates_from_rules
 
-
-def create_all_project_folders():
-    print("Creating all project folders if needed...")
-
-    for folder in FOLDERPATHS:
-        folder_path = Path(folder)
-        if not folder_path.exists():
-            folder_path.mkdir(parents=True, exist_ok=True)
-            print(f"Created folder: {folder_path}")
-        else:
-            print(f"Folder already exists: {folder_path}")
-
-
-# def get_option_expiry_dates():
-#     today = date.today()
-#     expiry_dates = set()
-#
-#     # Monthly expiration dates: Third Friday of the next 4 months
-#     for i in range(4):
-#         year = today.year + (today.month + i - 1) // 12  # Adjust the year if the month exceeds 12
-#         month = (today.month + i - 1) % 12 + 1  # Keep the month between 1 and 12
-#
-#         # Get the month's calendar weeks
-#         month_cal = calendar.monthcalendar(year, month)
-#         # The third Friday is in the third week (if not available, take the fourth week)
-#         third_friday = month_cal[2][4] if month_cal[2][4] != 0 else month_cal[3][4]
-#         expiry_date = date(year, month, third_friday)
-#
-#         if expiry_date >= today:  # Only future dates
-#             expiry_dates.add(expiry_date)
-#
-#     # Weekly expiration dates: Every Friday for the next 60 days
-#     for i in range(60):
-#         future_date = today + timedelta(days=i)
-#         if future_date.weekday() == 4:  # Friday
-#             expiry_dates.add(future_date)
-#
-#     expiry_dates_list = sorted(int(d.strftime('%Y%m%d')) for d in expiry_dates)
-#
-#     return expiry_dates_list
-
-
-def get_third_friday(year, month):
-    """Calculate the third Friday of a given month"""
-    # Find the first day of the month
-    first_day = date(year, month, 1)
-    # Find the first Friday
-    days_until_friday = (4 - first_day.weekday()) % 7
-    first_friday = first_day + timedelta(days=days_until_friday)
-    # The third Friday is 14 days later
-    third_friday = first_friday + timedelta(days=14)
-    return third_friday
-
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def get_option_expiry_dates():
-    today = date.today()
-    expiry_dates = set()
+    """
+    Get option expiry dates based on enabled collection rules.
 
-    # Monthly expiration dates: Third Friday of the next 4 months
-    for i in range(4):
-        year = today.year + (today.month + i - 1) // 12  # Adjust the year if the month exceeds 12
-        month = (today.month + i - 1) % 12 + 1  # Keep the month between 1 and 12
+    Returns:
+        list: List of expiry dates in YYYYMMDD integer format
+    """
+    print("Generating expiry dates from collection rules...")
 
-        expiry_date = get_third_friday(year, month)
+    # Get dates from the new rule-based system
+    expiry_date_strings = generate_expiry_dates_from_rules()
 
-        if expiry_date >= today:  # Only future dates
-            expiry_dates.add(expiry_date)
+    # Convert from "YYYY-MM-DD" strings to YYYYMMDD integers
+    expiry_dates_int = []
+    for date_str in expiry_date_strings:
+        # Convert "2024-06-21" to 20240621
+        date_int = int(date_str.replace("-", ""))
+        expiry_dates_int.append(date_int)
 
-    # Weekly expiration dates: Every Friday for the next 60 days
-    for i in range(60):
-        future_date = today + timedelta(days=i)
-        if future_date.weekday() == 4:  # Friday
-            expiry_dates.add(future_date)
+    print(f"Generated {len(expiry_dates_int)} expiry dates from {len([r for r in OPTIONS_COLLECTION_RULES if r.get('enabled')])} enabled rules")
 
-    # Additional third Fridays: first third Friday after 180 and 360 days
-    for target_days in [180, 360]:
-        target_date = today + timedelta(days=target_days)
-
-        # Start from the target month and look for the first third Friday after target_date
-        current_month = target_date.month
-        current_year = target_date.year
-
-        found = False
-        while not found:
-            # Get the third Friday of the current month
-            expiry_date = get_third_friday(current_year, current_month)
-
-            # If this third Friday is after the target date, we found our expiry
-            if expiry_date > target_date:
-                expiry_dates.add(expiry_date)
-                found = True
-            else:
-                # Move to next month
-                current_month += 1
-                if current_month > 12:
-                    current_month = 1
-                    current_year += 1
-
-    expiry_dates_list = sorted(int(d.strftime('%Y%m%d')) for d in expiry_dates)
-
-    return expiry_dates_list
+    return sorted(expiry_dates_int)
 
 def opra_to_osi(opra_code):
     """
@@ -151,6 +75,75 @@ def opra_to_osi(opra_code):
     osi_code = f"{symbol}{year}{month}{day}{opt_type}{strike_osi}"
     return osi_code
 
-if __name__ == "__main__":
-    expiry_dates = get_option_expiry_dates()
-    pass
+def opra_to_symbol(opra_code):
+    """
+    Extracts symbol from OPRA option code.
+
+    OPRA format (used by many APIs and market data providers) looks like:
+        OPRA:<SYMBOL><YY><MM><DD><C/P><STRIKE>
+        Example: 'OPRA:AAPL250606C110.0'
+
+    Parameters:
+        opra_code (str): The OPRA-style option symbol (e.g. 'OPRA:AAPL250606C110.0')
+
+    Returns:
+        str: The corresponding OSI code (e.g. 'AAPL250606C00110000')
+
+    Raises:
+        ValueError: If the input does not match the expected OPRA format.
+
+    Example:
+        >>> opra_to_osi("OPRA:AAPL250606C110.0")
+        'AAPL'
+    """
+
+    # Remove optional "OPRA:" prefix if present
+    if opra_code.startswith("OPRA:"):
+        opra_code = opra_code[5:]
+
+    # Extract components: Symbol, Date (YYMMDD), Option Type, and Strike
+    match = re.match(r'^([A-Z]+)(\d{2})(\d{2})(\d{2})([CP])([\d.]+)$', opra_code)
+    if not match:
+        raise ValueError("Invalid OPRA format: " + opra_code)
+
+    symbol, year, month, day, opt_type, strike_str = match.groups()
+
+    return symbol
+
+class Singleton:
+    """
+    A non-thread-safe helper class to ease implementing singletons.
+    This should be used as a decorator -- not a metaclass -- to the
+    class that should be a singleton.
+
+    The decorated class can define one `__init__` function that
+    takes only the `self` argument. Also, the decorated class cannot be
+    inherited from. Other than that, there are no restrictions that apply
+    to the decorated class.
+
+    To get the singleton instance, use the `instance` method. Trying
+    to use `__call__` will result in a `TypeError` being raised.
+
+    """
+
+    def __init__(self, decorated):
+        self._decorated = decorated
+
+    def instance(self):
+        """
+        Returns the singleton instance. Upon its first call, it creates a
+        new instance of the decorated class and calls its `__init__` method.
+        On all subsequent calls, the already created instance is returned.
+
+        """
+        try:
+            return self._instance
+        except AttributeError:
+            self._instance = self._decorated()
+            return self._instance
+
+    def __call__(self):
+        raise TypeError('Singletons must be accessed through `instance()`.')
+
+    def __instancecheck__(self, inst):
+        return isinstance(inst, self._decorated)

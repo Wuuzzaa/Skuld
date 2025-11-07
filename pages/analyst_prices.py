@@ -1,25 +1,16 @@
 import streamlit as st
+from config import PATH_DATABASE_QUERY_FOLDER
+from src.database import select_into_dataframe
+from src.page_display_dataframe import page_display_dataframe
 
 # Titel
 st.subheader("Analyst Prices")
 
-
-df = st.session_state['df']
-
-df_tab3 = df[
-    [
-        "symbol",
-        "close",
-        "analyst_mean_target",
-        "recommendation",
-        "Recommend.All",
-        "target-close$",
-        "target-close%"
-    ]
-].drop_duplicates().reset_index(drop=True)
+sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'analyst_prices.sql'
+df = select_into_dataframe(sql_file_path=sql_file_path)
 
 # rename columns for the app-view
-df_tab3 = df_tab3.rename(
+df = df.rename(
     columns={
         "symbol": "Symbol",
         "close": "Price",
@@ -31,4 +22,5 @@ df_tab3 = df_tab3.rename(
     }
 )
 
-st.dataframe(df_tab3, use_container_width=True)
+# show final dataframe
+page_display_dataframe(df, symbol_column='Symbol')
