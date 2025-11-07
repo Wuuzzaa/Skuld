@@ -5,6 +5,8 @@ import pandas as pd
 import numpy as np
 from bs4 import BeautifulSoup
 from config import *
+from config_utils import get_filtered_symbols_with_logging
+from src.database import insert_into_table, truncate_table
 
 """
 ================================================================================
@@ -272,7 +274,8 @@ def scrape_barchart(testmode=False, delay_seconds=0):
     Returns:
         pd.DataFrame: DataFrame with all scraped options data
     """
-    symbols = SYMBOLS[:5] if testmode else SYMBOLS
+    symbols = get_filtered_symbols_with_logging("BarchartScraper")
+    symbols = symbols[:5] if testmode else symbols
 
     print(f"\n{'=' * 60}")
     print(f"BARCHART OPTIONS DATA SCRAPER")
@@ -289,11 +292,21 @@ def scrape_barchart(testmode=False, delay_seconds=0):
     # Parse to correct data types
     df = _parse_dataframe(df)
 
-    # Save to feather format
-    df.to_feather(PATH_DATAFRAME_BARCHART_FEATHER)
+    if testmode:
+        # Save to feather format
+        df.to_feather(PATH_DATAFRAME_BARCHART_FEATHER)
+        print(f"Data saved to {PATH_DATAFRAME_BARCHART_FEATHER}")
+
+    # --- Database Persistence ---
+    truncate_table(TABLE_STOCK_DATA_BARCHART)
+    insert_into_table(
+        table_name=TABLE_STOCK_DATA_BARCHART,
+        dataframe=df,
+        if_exists="append"
+    )
 
     print(f"\n{'=' * 60}")
-    print(f"✓ Completed! Data saved to {PATH_DATAFRAME_BARCHART_FEATHER}")
+    print(f"✓ Completed!")
     print(f"{'=' * 60}\n")
 
     return df

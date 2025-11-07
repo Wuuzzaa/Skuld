@@ -1,6 +1,7 @@
 import argparse
 import time
 import logging
+from src.barchart_scrapper import scrape_barchart
 from src.live_stock_price_collector import fetch_current_prices
 from src.logger_config import setup_logging
 from src.database import run_migrations
@@ -111,6 +112,13 @@ def main(upload_google_drive=True):
     start = time.time()
     fetch_current_prices()
     logger.info(f"Fetch current stock prices - Done - Runtime: {int(time.time() - start)}s")
+
+    logger.info("#" * 80)
+    logger.info("Get additional stock data from Barchart")
+    start = time.time()
+    logger.info("#" * 80)
+    scrape_barchart()
+    logger.info(f"Get additional stock data from Barchart - Done - Runtime: {int(time.time() - start)}s")
 
     if upload_google_drive:
         logger.info("#" * 80)

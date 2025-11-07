@@ -189,3 +189,4 @@ service_account.json
 
 db/
 /logs/
+.vscode/
