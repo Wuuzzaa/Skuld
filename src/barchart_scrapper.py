@@ -309,6 +309,11 @@ def scrape_barchart(testmode):
 # Test mit Timer
 if __name__ == "__main__":
     import datetime
+
+    testmode = False
+
+    PATH_DATAFRAME_BARCHART_FEATHER = "barchart.feather"
+
     pd.set_option('display.max_columns', None)
 
     start_time = time.time()
@@ -319,7 +324,7 @@ if __name__ == "__main__":
     print("VOLLSTÄNDIGE OPTIONS-DATEN EXTRAKTION")
     print("=" * 60)
 
-    scrape_barchart(testmode=True)
+    scrape_barchart(testmode=testmode)
 
     # Timer-Statistiken
     total_duration = time.time() - start_time
