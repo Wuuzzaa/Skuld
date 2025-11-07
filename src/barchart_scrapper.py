@@ -4,7 +4,7 @@ import re
 import pandas as pd
 import numpy as np
 from bs4 import BeautifulSoup
-from config import *
+from config import TABLE_STOCK_DATA_BARCHART
 from config_utils import get_filtered_symbols_with_logging
 from src.database import insert_into_table, truncate_table
 
@@ -179,7 +179,7 @@ def _scrape_symbol(symbol):
             ]}}
 
 # Helper function: safely parse percentage strings
-def parse_percent(x):
+def _parse_percent(x):
     if isinstance(x, str):
         x = x.strip().replace('%', '')
         if x in ['', '.', '-', 'None', 'nan']:
@@ -193,7 +193,7 @@ def parse_percent(x):
     return np.nan
 
 # Helper function: safely parse comma-separated ints
-def parse_int(x):
+def _parse_int(x):
     if isinstance(x, str):
         x = x.replace(',', '').strip()
         if x in ['', '.', '-', 'None', 'nan']:
@@ -235,10 +235,10 @@ def _parse_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 
     # Apply conversions
     for col in percent_cols:
-        df[col] = df[col].apply(parse_percent)
+        df[col] = df[col].apply(_parse_percent)
 
     for col in int_cols:
-        df[col] = df[col].apply(parse_int)
+        df[col] = df[col].apply(_parse_int)
 
     for col in ratio_cols:
         if col in df.columns:
@@ -255,7 +255,7 @@ def _scrape(symbols, delay_seconds):
         symbol_data = _scrape_symbol(symbol)
         results.append(symbol_data)
 
-        # Pause between requests to avoid rate limiting
+        # Pause between requests to avoid rate limiting.
         if i < len(symbols):
             time.sleep(delay_seconds)
 
@@ -264,18 +264,11 @@ def _scrape(symbols, delay_seconds):
     return df
 
 
-def scrape_barchart(testmode=False, delay_seconds=0):
+def scrape_barchart(delay_seconds=0):
     """
     Main function to scrape options data for all symbols.
-
-    Args:
-        testmode (bool): If True, only process first 5 symbols
-
-    Returns:
-        pd.DataFrame: DataFrame with all scraped options data
     """
     symbols = get_filtered_symbols_with_logging("BarchartScraper")
-    symbols = symbols[:5] if testmode else symbols
 
     print(f"\n{'=' * 60}")
     print(f"BARCHART OPTIONS DATA SCRAPER")
@@ -285,17 +278,8 @@ def scrape_barchart(testmode=False, delay_seconds=0):
     # scrape
     df = _scrape(symbols, delay_seconds)
 
-    # # debug store before parse
-    # df.to_feather(PATH_DATAFRAME_BARCHART_FEATHER_PRE_PARSE)
-    # df = pd.read_feather(PATH_DATAFRAME_BARCHART_FEATHER_PRE_PARSE)
-
-    # Parse to correct data types
+    # Parse to correct data types and format
     df = _parse_dataframe(df)
-
-    if testmode:
-        # Save to feather format
-        df.to_feather(PATH_DATAFRAME_BARCHART_FEATHER)
-        print(f"Data saved to {PATH_DATAFRAME_BARCHART_FEATHER}")
 
     # --- Database Persistence ---
     truncate_table(TABLE_STOCK_DATA_BARCHART)
@@ -305,38 +289,4 @@ def scrape_barchart(testmode=False, delay_seconds=0):
         if_exists="append"
     )
 
-    print(f"\n{'=' * 60}")
-    print(f"✓ Completed!")
-    print(f"{'=' * 60}\n")
 
-    return df
-
-
-if __name__ == "__main__":
-    import datetime
-
-    testmode = False
-    delay_seconds = 0
-
-    PATH_DATAFRAME_BARCHART_FEATHER_PRE_PARSE = "barchart_pre_parse.feather"
-    PATH_DATAFRAME_BARCHART_FEATHER = "barchart.feather"
-
-    pd.set_option('display.max_columns', None)
-    pd.set_option('display.width', None)
-
-    start_time = time.time()
-    start_dt = datetime.datetime.now()
-
-    print(f"🚀 Started at: {start_dt.strftime('%H:%M:%S')}")
-
-    df = scrape_barchart(testmode=testmode, delay_seconds=delay_seconds)
-
-    # Show results
-    print("\nResults preview:")
-    print(df.head())
-    print(f"\nDataFrame shape: {df.shape}")
-    print(f"\nMissing values per column:")
-    print(df.isnull().sum())
-
-    elapsed = time.time() - start_time
-    print(f"\n⏱️  Total time: {elapsed:.2f}s ({elapsed / len(df):.2f}s per symbol)")
