@@ -14,7 +14,10 @@ SELECT
     days_to_expiration,
     days_to_ernings,
     spread,
-    spread_ptc
+    spread_ptc,
+    iv_rank,
+    iv_percentile,
+    option_open_interest
 FROM
     OptionDataMerged
 WHERE
