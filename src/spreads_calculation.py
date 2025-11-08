@@ -19,14 +19,14 @@ def _calculate_expected_value_for_symbol(row):
         # SELL OPTION
         {
             'strike': row['strike_sell'],
-            'premium': row['bid_sell'],
+            'premium': row['mid_sell'],
             'is_call': True if row['option_type'] == 'calls' else False,
             'is_long': False
         },
         # BUY OPTION
         {
             'strike': row['strike_buy'],
-            'premium': row['ask_buy'],
+            'premium': row['mid_buy'],
             'is_call': True if row['option_type'] == 'calls' else False,
             'is_long': True
         }]
