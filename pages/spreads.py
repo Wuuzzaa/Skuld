@@ -55,15 +55,15 @@ with col_symbol:
 
 # option type
 with col_option_type:
-    option_type = st.selectbox("Option Type", ["Put and Call"] + unique_option_types)
+    option_type = st.selectbox("Option Type", unique_option_types)
 
 # Apply filters if specific values are selected
 # let it on "All" "" does not work
 if symbol != "All Symbols":
     spreads_df = spreads_df[spreads_df['symbol'] == symbol]
 
-if option_type != "Put and Call":
-    spreads_df = spreads_df[spreads_df['option_type'] == option_type]
+# show only the calculated option type
+spreads_df = spreads_df[spreads_df['option_type'] == option_type]
 
 # show final dataframe
 page_display_dataframe(spreads_df, symbol_column='symbol')
