@@ -11,8 +11,7 @@ SELECT
     close,
     earnings_date,
     days_to_expiration,
-    days_to_ernings,
-    days_to_expiration - days_to_ernings AS delta_expiration_date_to_earnings_date
+    days_to_ernings
 FROM
     OptionDataMerged
 WHERE
