@@ -125,9 +125,19 @@ def calc_spreads(df:pd.DataFrame, delta_target:float, spread_width:float):
     spreads['option_type'] = spreads['option-type_sell']
     spreads["spread_width"] = abs(spreads['strike_sell'] - spreads['strike_buy'])
     spreads["max_profit"] = 100 * (spreads["bid_sell"] - spreads["ask_buy"])
+
+    # remove spreads without any profit potential
+    spreads = spreads[spreads['max_profit'] > 0].reset_index(drop=True)
+
     spreads["bpr"] = spreads["spread_width"] * 100 - spreads["max_profit"]
+
+    # remove spreads with negative bpr
+    spreads = spreads[spreads['bpr'] > 0].reset_index(drop=True)
+
     spreads["profit_to_bpr"] = spreads["max_profit"] / spreads["bpr"]
     spreads["spread_theta"] = spreads["theta_sell"] - spreads["theta_buy"]
+
+    # expected_value at last here is the heavy load with monte carlo simulation
     spreads["expected_value"] = spreads.apply(_calculate_expected_value_for_symbol, axis=1)
 
     # Konvertiere Datums-Felder zu datetime
