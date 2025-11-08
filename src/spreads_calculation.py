@@ -127,10 +127,12 @@ def calc_spreads(df:pd.DataFrame, delta_target:float, spread_width:float):
     spreads["spread_theta"] = spreads["theta_sell"] - spreads["theta_buy"]
     spreads["expected_value"] = spreads.apply(_calculate_expected_value_for_symbol, axis=1)
 
-    # Add earnings warning column. Warning for 7 days or less left.
-    spreads['earnings_warning'] = spreads['delta_expiration_date_to_earnings_date_sell'].apply(
-        lambda x: '⚠️' if pd.notna(x) and x >= -7 else ''
-    )
+    # Konvertiere Datums-Felder zu datetime
+    spreads['earnings_date_sell'] = pd.to_datetime(spreads['earnings_date_sell'], errors='coerce')
+    spreads['expiration_date_sell'] = pd.to_datetime(spreads['expiration_date_sell'], errors='coerce')
+
+    # earnings warninng
+    spreads['earnings_warning'] = spreads.apply(_earnings_warning, axis=1)
 
     # remove unnecessary columns for streamlit data view
     spreads_columns = [
@@ -155,6 +157,19 @@ def calc_spreads(df:pd.DataFrame, delta_target:float, spread_width:float):
 
     return spreads[spreads_columns]
 
+# Add earnings warning column. Warning for 7 days or less before expiration.
+def _earnings_warning(row):
+    if (pd.notna(row['earnings_date_sell']) and
+            pd.notna(row['expiration_date_sell']) and
+            row['earnings_date_sell'] > pd.Timestamp.now()):  # Earnings in der Zukunft
+
+        days_before_expiration = (row['expiration_date_sell'] - row['earnings_date_sell']).days
+
+        # Warnung nur wenn Earnings VOR Expiration und innerhalb 7 Tage
+        if 0 <= days_before_expiration <= 7:
+            return f'⚠️ {days_before_expiration} days'
+
+    return ''
 
 if __name__ == "__main__":
     """
