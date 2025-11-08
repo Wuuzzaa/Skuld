@@ -1,4 +1,5 @@
 import pandas as pd
+from datetime import datetime
 from config import NUM_SIMULATIONS, RANDOM_SEED, RISK_FREE_RATE, PATH_LOG_FILE
 from src.decorator_log_function import log_function
 from src.monte_carlo_simulation import UniversalOptionsMonteCarloSimulator
@@ -147,6 +148,9 @@ def calc_spreads(df:pd.DataFrame, delta_target:float, spread_width:float):
     # earnings warninng
     spreads['earnings_warning'] = spreads.apply(_earnings_warning, axis=1)
 
+    # Generate URLs - using earnings_date as expiration
+    spreads['optionstrat_url'] = spreads.apply(lambda row: build_optionstrat_url(row), axis=1)
+
     # remove unnecessary columns for streamlit data view
     spreads_columns = [
         'symbol',
@@ -166,9 +170,67 @@ def calc_spreads(df:pd.DataFrame, delta_target:float, spread_width:float):
         'profit_to_bpr',
         'spread_theta',
         "expected_value",
+        "optionstrat_url",
     ]
 
     return spreads[spreads_columns]
+
+
+def build_optionstrat_url(row):
+    """
+    Builds an OptionStrat URL based on the spreads DataFrame.
+    Works for both Bull Put Spreads AND Bear Call Spreads.
+
+    Expected DataFrame columns:
+    - symbol: Ticker symbol (e.g. 'KO')
+    - option-type: 'puts' for Bull Put Spread, 'calls' for Bear Call Spread
+    - strike_sell: Strike of the sold option (short)
+    - strike_buy: Strike of the bought option (long)
+    - expiration_date: datetime or string in format 'YYYY-MM-DD'
+
+    Returns:
+    - Complete OptionStrat URL as string
+
+    E.G
+    https://optionstrat.com/build/bull-put-spread/KO/.KO260220P57.5,-.KO260220P70
+    """
+
+    base_url = "https://optionstrat.com/build"
+
+    # Symbol
+    symbol = row['symbol'].upper()
+
+    # Format date: YYMMDD
+    if isinstance(row['expiration_date_sell'], str):
+        exp_date = datetime.strptime(row['expiration_date_sell'], '%Y-%m-%d')
+    else:
+        exp_date = row['expiration_date_sell']
+
+    date_str = exp_date.strftime('%y%m%d')
+
+    # Option type (puts or calls)
+    opt_type_str = row['option-type_sell'].lower()
+
+    # Determine strategy and option letter based on option type of the sell option
+    if opt_type_str == 'puts':
+        strategy = 'bull-put-spread'
+        opt_letter = 'P'
+        # Bull Put: Sell lower strike (no -), Buy higher strike (with -)
+        first_option = f".{symbol}{date_str}{opt_letter}{row['strike_sell']}"
+        second_option = f"-.{symbol}{date_str}{opt_letter}{row['strike_buy']}"
+    else:  # calls
+        strategy = 'bear-call-spread'
+        opt_letter = 'C'
+        # Bear Call: Buy lower strike (with -), Sell higher strike (no -)
+        first_option = f"-.{symbol}{date_str}{opt_letter}{row['strike_sell']}"
+        second_option = f".{symbol}{date_str}{opt_letter}{row['strike_buy']}"
+
+    options_string = f"{first_option},{second_option}"
+
+    # Complete URL
+    url = f"{base_url}/{strategy}/{symbol}/{options_string}"
+
+    return url
 
 # Add earnings warning column. Warning for 7 days or less before expiration.
 def _earnings_warning(row):
@@ -199,7 +261,7 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     logger.info(f"Start {__name__} ({__file__})")
 
-    expiration_date = '2025-10-24'
+    expiration_date = '2025-11-21'
     delta_target = 0.2
     spread_width = 5
 
@@ -211,6 +273,7 @@ if __name__ == "__main__":
         strike,
         ask,
         bid,
+        (ask + bid) / 2 as mid,
         delta,
         iv,
         theta,
@@ -218,7 +281,8 @@ if __name__ == "__main__":
         earnings_date,
         days_to_expiration,
         days_to_ernings,
-        days_to_expiration - days_to_ernings AS delta_expiration_date_to_earnings_date
+        spread,
+        spread_ptc
     FROM
         OptionDataMerged
     WHERE
