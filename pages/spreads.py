@@ -65,5 +65,14 @@ if symbol != "All Symbols":
 # show only the calculated option type
 spreads_df = spreads_df[spreads_df['option_type'] == option_type]
 
+# optionstrat_url is only on the spread page so declare it here
+column_config = {
+    "optionstrat_url":  st.column_config.LinkColumn(
+        label="",
+        help="OptionStrat",
+        display_text="🎯",
+    )
+}
+
 # show final dataframe
-page_display_dataframe(spreads_df, symbol_column='symbol')
+page_display_dataframe(spreads_df, symbol_column='symbol', column_config=column_config)
