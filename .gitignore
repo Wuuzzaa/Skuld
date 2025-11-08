@@ -187,6 +187,5 @@ db/SQL/supportability/
 db/financial_data.db
 service_account.json
 
-db/
 /logs/
 .vscode/
