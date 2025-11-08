@@ -117,6 +117,9 @@ def calc_spreads(df:pd.DataFrame, delta_target:float, spread_width:float):
     # clear memory
     del puts, calls, sell_puts, sell_calls
 
+    # remove all symbols without matching buy strike. the calculations would make no sense at all.
+    spreads = spreads.dropna(subset=['strike_buy'])
+
     # spread values calculation
     spreads["earnings_date"] = spreads['earnings_date_sell']
     spreads['option_type'] = spreads['option-type_sell']
