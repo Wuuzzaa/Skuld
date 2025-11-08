@@ -183,16 +183,17 @@ def build_optionstrat_url(row):
 
     Expected DataFrame columns:
     - symbol: Ticker symbol (e.g. 'KO')
-    - option-type: 'puts' for Bull Put Spread, 'calls' for Bear Call Spread
+    - option-type_sell: 'puts' for Bull Put Spread, 'calls' for Bear Call Spread
     - strike_sell: Strike of the sold option (short)
     - strike_buy: Strike of the bought option (long)
-    - expiration_date: datetime or string in format 'YYYY-MM-DD'
+    - expiration_date_sell: datetime or string in format 'YYYY-MM-DD'
 
     Returns:
     - Complete OptionStrat URL as string
 
-    E.G
-    https://optionstrat.com/build/bull-put-spread/KO/.KO260220P57.5,-.KO260220P70
+    Examples:
+    - Bull Put: https://optionstrat.com/build/bull-put-spread/KO/.KO260220P57.5,-.KO260220P70
+    - Bear Call: https://optionstrat.com/build/bear-call-spread/KO/-.KO260220C57.5,.KO260220C70
     """
 
     base_url = "https://optionstrat.com/build"
@@ -211,19 +212,35 @@ def build_optionstrat_url(row):
     # Option type (puts or calls)
     opt_type_str = row['option-type_sell'].lower()
 
+    # Format strikes - remove unnecessary decimals (.0)
+    def format_strike(strike):
+        """Remove .0 from integer strikes (68.0 -> 68, but keep 57.5 -> 57.5)"""
+        if strike == int(strike):
+            return str(int(strike))
+        else:
+            return str(strike)
+
     # Determine strategy and option letter based on option type of the sell option
     if opt_type_str == 'puts':
         strategy = 'bull-put-spread'
         opt_letter = 'P'
-        # Bull Put: Sell lower strike (no -), Buy higher strike (with -)
-        first_option = f".{symbol}{date_str}{opt_letter}{row['strike_sell']}"
-        second_option = f"-.{symbol}{date_str}{opt_letter}{row['strike_buy']}"
+        # Bull Put: Sell LOWER strike (no -), Buy HIGHER strike (with -)
+        # Ensure correct ordering regardless of DataFrame values
+        lower_strike = min(row['strike_sell'], row['strike_buy'])
+        higher_strike = max(row['strike_sell'], row['strike_buy'])
+
+        first_option = f".{symbol}{date_str}{opt_letter}{format_strike(lower_strike)}"
+        second_option = f"-.{symbol}{date_str}{opt_letter}{format_strike(higher_strike)}"
     else:  # calls
         strategy = 'bear-call-spread'
         opt_letter = 'C'
-        # Bear Call: Buy lower strike (with -), Sell higher strike (no -)
-        first_option = f"-.{symbol}{date_str}{opt_letter}{row['strike_sell']}"
-        second_option = f".{symbol}{date_str}{opt_letter}{row['strike_buy']}"
+        # Bear Call: Buy LOWER strike (with -), Sell HIGHER strike (no -)
+        # Ensure correct ordering regardless of DataFrame values
+        lower_strike = min(row['strike_sell'], row['strike_buy'])
+        higher_strike = max(row['strike_sell'], row['strike_buy'])
+
+        first_option = f"-.{symbol}{date_str}{opt_letter}{format_strike(lower_strike)}"
+        second_option = f".{symbol}{date_str}{opt_letter}{format_strike(higher_strike)}"
 
     options_string = f"{first_option},{second_option}"
 
@@ -286,7 +303,8 @@ if __name__ == "__main__":
     FROM
         OptionDataMerged
     WHERE
-        expiration_date =:expiration_date;
+        expiration_date =:expiration_date
+        AND symbol = "KO";
     """
 
     start = time.time()
