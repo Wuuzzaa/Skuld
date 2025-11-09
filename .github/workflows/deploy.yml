@@ -2,7 +2,7 @@ name: Deploy SKULD to Hetzner
 
 on:
   push:
-    branches: [ master ]
+    branches: [ docker_trial ]
 
 jobs:
   deploy:

@@ -5,6 +5,7 @@ SELECT
     strike,
     ask,
     bid,
+    (ask + bid) / 2 as mid,
     delta,
     iv,
     theta,
@@ -12,7 +13,12 @@ SELECT
     earnings_date,
     days_to_expiration,
     days_to_ernings,
-    days_to_expiration - days_to_ernings AS delta_expiration_date_to_earnings_date
+    spread,
+    spread_ptc,
+    iv_rank,
+    iv_percentile,
+    option_open_interest,
+    expected_move
 FROM
     OptionDataMerged
 WHERE

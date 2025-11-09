@@ -26,6 +26,7 @@ TABLE_FUNDAMENTAL_DATA_YAHOO = 'FundamentalDataYahoo'
 TABLE_FUNDAMENTAL_DATA_YAHOO_PROCESSED = 'FundamentalDataYahooProcessed'
 TABLE_TECHNICAL_INDICATORS = 'TechnicalIndicators'
 TABLE_STOCK_PRICE = 'StockPrice'
+TABLE_STOCK_DATA_BARCHART = 'StockDataBarchart'
 
 #Views
 VIEW_OPTION_DATA = 'OptionData'
@@ -555,10 +556,10 @@ TRANSACTION_COST_PER_CONTRACT = 3.5 # in USD
 
 # Symbol selection
 SYMBOL_SELECTION = {
-    "mode": "all",                   # "all", "list", "file", "max"
-    "symbols": ["MO"],             # Used when mode="list"
+    "mode": "max",                   # "all", "list", "file", "max"
+    "symbols": [""],             # Used when mode="list"
     "file_path": None,               # Used when mode="file"
-    "max_symbols": 1100,               # Used when mode="max" or as limit for "all"
+    "max_symbols": 100,               # Used when mode="max" or as limit for "all"
     "use_max_limit": True            # If True, applies max_symbols limit to any mode
 }
 

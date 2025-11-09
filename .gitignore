@@ -178,7 +178,6 @@ cython_debug/
 /service_account.json
 /.streamlit/
 /Tasty List.pdf
-/Tasty List.pdf
 /.idea/codeStyles/codeStyleConfig.xml
 /experiments/
 src/.streamlit/secrets.toml
@@ -188,4 +187,5 @@ db/SQL/supportability/
 db/financial_data.db
 service_account.json
 
-db/
+/logs/
+.vscode/

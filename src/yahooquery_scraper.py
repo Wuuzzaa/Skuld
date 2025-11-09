@@ -1,15 +1,15 @@
-from datetime import datetime
 import sys
 import os
 import time
-
-# Add parent directory to path for imports
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 import pandas as pd
 from yahooquery import Ticker
 from config_utils import get_filtered_symbols_with_logging
 from src.util import Singleton
+from datetime import datetime
+
+
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # https://yahooquery.dpguthrie.com/guide/ticker/modules/
 MODULES = 'calendarEvents summaryDetail financialData earningsTrend defaultKeyStatistics price'
