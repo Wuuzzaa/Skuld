@@ -5,8 +5,8 @@ services:
     build: .
     container_name: skuld-streamlit
     volumes:
-      # Persistent database storage (IMPORTANT for local persistence!)
-      - ./db:/app/Skuld/db
+      # Persistent database file only (not entire db folder!)
+      - ./financial_data.db:/app/Skuld/financial_data.db
       # Persistent logs
       - ./logs:/app/Skuld/logs
       # Cron logs for debugging

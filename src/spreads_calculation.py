@@ -159,12 +159,12 @@ def _calculate_spread_metrics(spreads: pd.DataFrame) -> pd.DataFrame:
         DataFrame with calculated metrics
     """
     # Copy sell columns to standardized names
-    spreads["expected_move"] = spreads.get("expected_move_sell", spreads.get("expected_move"))
-    spreads["ivr"] = spreads.get("iv_rank_sell", spreads.get("iv_rank"))
-    spreads["ivp"] = spreads.get("iv_percentile_sell", spreads.get("iv_percentile"))
-    spreads["open_intrest"] = spreads.get("option_open_interest_sell", spreads.get("option_open_interest"))
-    spreads["earnings_date"] = spreads.get('earnings_date_sell', spreads.get('earnings_date'))
-    spreads['option_type'] = spreads.get('option-type_sell', spreads.get('option-type'))
+    spreads["expected_move"] = spreads["expected_move_sell"]
+    spreads["ivr"] = spreads["iv_rank_sell"]
+    spreads["ivp"] = spreads["iv_percentile_sell"]
+    spreads["open_intrest"] = spreads["option_open_interest_sell"]
+    spreads["earnings_date"] = spreads['earnings_date_sell']
+    spreads['option_type'] = spreads['option-type_sell']
 
     # Calculate spread width
     spreads["spread_width"] = abs(spreads['strike_sell'] - spreads['strike_buy'])
