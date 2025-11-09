@@ -122,6 +122,10 @@ def calc_spreads(df:pd.DataFrame, delta_target:float, spread_width:float):
     spreads = spreads.dropna(subset=['strike_buy'])
 
     # spread values calculation
+    spreads["expected_move"] = spreads["expected_move_sell"]
+    spreads["ivr"] = spreads["iv_rank_sell"]
+    spreads["ivp"] = spreads["iv_percentile_sell"]
+    spreads["open_intrest"] = spreads["option_open_interest_sell"]
     spreads["earnings_date"] = spreads['earnings_date_sell']
     spreads['option_type'] = spreads['option-type_sell']
     spreads["spread_width"] = abs(spreads['strike_sell'] - spreads['strike_buy'])
@@ -156,19 +160,23 @@ def calc_spreads(df:pd.DataFrame, delta_target:float, spread_width:float):
         'symbol',
         'earnings_date',
         'earnings_warning',
+        "ivr",
+        "ivp",
+        "open_intrest",
         'close',
-        'option_type',
+        'option_type',  # must be returned because the page filters on this field
         'strike_sell',
         'bid_sell',
         'delta_sell',
         'iv_sell',
         'strike_buy',
         'ask_buy',
-        'delta_buy',
+        #'delta_buy',
         'max_profit',
         'bpr',
         'profit_to_bpr',
-        'spread_theta',
+        #'spread_theta',
+        "expected_move",
         "expected_value",
         "optionstrat_url",
     ]
