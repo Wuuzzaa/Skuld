@@ -17,7 +17,8 @@ SELECT
     spread_ptc,
     iv_rank,
     iv_percentile,
-    option_open_interest
+    option_open_interest,
+    expected_move
 FROM
     OptionDataMerged
 WHERE
