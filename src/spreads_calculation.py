@@ -170,7 +170,7 @@ def _calculate_spread_metrics(spreads: pd.DataFrame) -> pd.DataFrame:
     spreads["spread_width"] = abs(spreads['strike_sell'] - spreads['strike_buy'])
 
     # Calculate max profit
-    spreads["max_profit"] = MULTIPLIER * (spreads["bid_sell"] - spreads["ask_buy"])
+    spreads["max_profit"] = MULTIPLIER * (spreads["mid_sell"] - spreads["mid_buy"])
 
     # Remove spreads without profit potential
     spreads = spreads[spreads['max_profit'] > 0].reset_index(drop=True)
@@ -309,11 +309,11 @@ def calc_spreads(
         'close',
         'option_type',
         'strike_sell',
-        'bid_sell',
+        'mid_sell',
         'delta_sell',
         'iv_sell',
         'strike_buy',
-        'ask_buy',
+        'mid_buy',
         'max_profit',
         'bpr',
         'profit_to_bpr',
@@ -446,12 +446,36 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     logger.info(f"Start {__name__} ({__file__})")
 
-    expiration_date = '2025-11-21'
+    expiration_date = '2025-12-26'
     delta_target = 0.2
     spread_width = 5
 
     sql_query = """
-    SOME SUPPER NICE QUERY HERE
+    SELECT
+        symbol,
+        expiration_date,
+        "option-type",
+        strike,
+        ask,
+        bid,
+        (ask + bid) / 2 as mid,
+        delta,
+        iv,
+        theta,
+        close,
+        earnings_date,
+        days_to_expiration,
+        days_to_ernings,
+        spread,
+        spread_ptc,
+        iv_rank,
+        iv_percentile,
+        option_open_interest,
+        expected_move
+    FROM
+        OptionDataMerged
+    WHERE
+        expiration_date =:expiration_date;
     """
 
     start = time.time()
