@@ -4,10 +4,10 @@ from src.page_display_dataframe import page_display_dataframe
 from src.spreads_calculation import calc_spreads
 from config import *
 
-# Titel
-st.subheader("Spreads")
+# Page header
+st.title("Spreads")
 
-# Create a layout with multiple columns
+# Main configuration section
 col_epiration_date, col_delta_target, col_spread_width = st.columns(3)
 
 # expiration date
@@ -37,37 +37,148 @@ with col_spread_width:
     spread_width = st.number_input("Spread Width", min_value=1, max_value=20, value=5, step=1)
 
 # calculate the spread values with a loading indicator
-with st.status("Calculating... Please wait.", expanded=True) as status:
+with st.spinner("Calculating spreads..."):
     sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'spreads_input.sql'
-    df = select_into_dataframe(sql_file_path=sql_file_path, params={"expiration_date": expiration_date})
+    df = select_into_dataframe(sql_file_path=sql_file_path, params={
+        "expiration_date": expiration_date})
     spreads_df = calc_spreads(df, delta_target, spread_width)
-    status.update(label="Calculation complete!", state="complete", expanded=True)
 
 # Dynamically extract unique values for symbol and option_type from calculated spreads_df
 unique_symbols = sorted(spreads_df['symbol'].unique())
 unique_option_types = sorted(spreads_df['option_type'].unique())
 
+st.divider()
+
+# Basic filters
 col_symbol, col_option_type = st.columns(2)
 
-# symbol
 with col_symbol:
     symbol = st.selectbox("Symbol", ["All Symbols"] + unique_symbols)
 
-# option type
 with col_option_type:
     option_type = st.selectbox("Option Type", unique_option_types)
 
-# Apply filters if specific values are selected
-# let it on "All" "" does not work
-if symbol != "All Symbols":
-    spreads_df = spreads_df[spreads_df['symbol'] == symbol]
+# Advanced filters
+st.markdown("##### Advanced Filters")
+col_ivr, col_ivp, col_open_interest, col_profit_bpr = st.columns(4)
 
-# show only the calculated option type
-spreads_df = spreads_df[spreads_df['option_type'] == option_type]
+# IVR Filter
+with col_ivr:
+    ivr_min = float(spreads_df['ivr'].min())
+    ivr_max = float(spreads_df['ivr'].max())
+    if ivr_min == ivr_max:
+        st.text_input("IVR", value=f"{ivr_min:.2f}", disabled=True)
+        ivr_range = (ivr_min, ivr_max)
+    else:
+        # Default minimum value of 0.3
+        default_min = max(ivr_min, 0.3)
+        ivr_range = st.slider(
+            "IVR Range",
+            min_value=ivr_min,
+            max_value=ivr_max,
+            value=(default_min, ivr_max),
+            step=0.01
+        )
+
+# IVP Filter
+with col_ivp:
+    ivp_min = float(spreads_df['ivp'].min())
+    ivp_max = float(spreads_df['ivp'].max())
+    if ivp_min == ivp_max:
+        st.text_input("IVP", value=f"{ivp_min:.2f}", disabled=True)
+        ivp_range = (ivp_min, ivp_max)
+    else:
+        # Default minimum value of 0.3
+        default_min = max(ivp_min, 0.3)
+        ivp_range = st.slider(
+            "IVP Range",
+            min_value=ivp_min,
+            max_value=ivp_max,
+            value=(default_min, ivp_max),
+            step=0.01
+        )
+
+# Open Interest Filter
+with col_open_interest:
+    oi_min = int(spreads_df['open_intrest'].min())
+    oi_max = int(spreads_df['open_intrest'].max())
+    if oi_min == oi_max:
+        st.text_input("Open Interest", value=f"{oi_min}", disabled=True)
+        oi_threshold = oi_min
+    else:
+        # Default minimum value of 100
+        default_oi = max(oi_min, 100)
+        oi_threshold = st.number_input(
+            "Min Open Interest",
+            min_value=oi_min,
+            max_value=oi_max,
+            value=default_oi,
+            step=100
+        )
+
+# Profit to BPR Filter
+with col_profit_bpr:
+    profit_bpr_min = float(spreads_df['profit_to_bpr'].min())
+    profit_bpr_max = float(spreads_df['profit_to_bpr'].max())
+    if profit_bpr_min == profit_bpr_max:
+        st.text_input("Profit/BPR", value=f"{profit_bpr_min:.3f}", disabled=True)
+        profit_bpr_threshold = profit_bpr_min
+    else:
+        # Default minimum value of 0.1, but not exceeding max
+        default_profit = min(max(profit_bpr_min, 0.1), profit_bpr_max)
+        profit_bpr_threshold = st.number_input(
+            "Min Profit/BPR",
+            min_value=profit_bpr_min,
+            max_value=profit_bpr_max,
+            value=default_profit,
+            step=0.01,
+            format="%.3f"
+        )
+
+st.divider()
+
+# Apply filters
+filtered_df = spreads_df.copy()
+
+# Apply symbol filter
+if symbol != "All Symbols":
+    filtered_df = filtered_df[filtered_df['symbol'] == symbol]
+
+# Apply option type filter
+filtered_df = filtered_df[filtered_df['option_type'] == option_type]
+
+# Apply IVR filter
+filtered_df = filtered_df[
+    (filtered_df['ivr'] >= ivr_range[0]) &
+    (filtered_df['ivr'] <= ivr_range[1])
+    ]
+
+# Apply IVP filter
+filtered_df = filtered_df[
+    (filtered_df['ivp'] >= ivp_range[0]) &
+    (filtered_df['ivp'] <= ivp_range[1])
+    ]
+
+# Apply Open Interest filter
+filtered_df = filtered_df[filtered_df['open_intrest'] >= oi_threshold]
+
+# Apply Profit to BPR filter
+filtered_df = filtered_df[filtered_df['profit_to_bpr'] >= profit_bpr_threshold]
+
+# Results summary
+col_results, col_spacer = st.columns([1, 3])
+with col_results:
+    st.metric(
+        label="Results",
+        value=f"{len(filtered_df)}",
+        delta=f"{len(filtered_df) - len(spreads_df)} from total"
+    )
+
+st.markdown("### Results")
 
 # optionstrat_url is only on the spread page so declare it here
 column_config = {
-    "optionstrat_url":  st.column_config.LinkColumn(
+    "optionstrat_url": st.column_config.LinkColumn(
         label="",
         help="OptionStrat",
         display_text="🎯",
@@ -75,4 +186,4 @@ column_config = {
 }
 
 # show final dataframe
-page_display_dataframe(spreads_df, symbol_column='symbol', column_config=column_config)
+page_display_dataframe(filtered_df, symbol_column='symbol', column_config=column_config)
