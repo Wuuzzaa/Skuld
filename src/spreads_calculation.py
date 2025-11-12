@@ -165,6 +165,7 @@ def _calculate_spread_metrics(spreads: pd.DataFrame) -> pd.DataFrame:
     spreads["open_intrest"] = spreads["option_open_interest_sell"]
     spreads["earnings_date"] = spreads['earnings_date_sell']
     spreads['option_type'] = spreads['option-type_sell']
+    spreads["days_to_expiration"] = spreads["days_to_expiration_sell"]
 
     # Calculate spread width
     spreads["spread_width"] = abs(spreads['strike_sell'] - spreads['strike_buy'])
@@ -186,6 +187,18 @@ def _calculate_spread_metrics(spreads: pd.DataFrame) -> pd.DataFrame:
 
     # Calculate spread theta
     spreads["spread_theta"] = spreads["theta_sell"] - spreads["theta_buy"]
+
+    # Calculate expected value (computationally expensive)
+    spreads["expected_value"] = spreads.apply(
+        _calculate_expected_value_for_symbol,
+        axis=1
+    )
+
+    # Annualized Profit per Dollar Invested
+    spreads["APDI"] = (spreads["max_profit"] / spreads["days_to_expiration"] / spreads["bpr"]) * 36500
+
+    # Annualized Profit per Dollar Invested with Expected Value as base instead of max profit
+    spreads["APDI_EV"] = (spreads["expected_value"] / spreads["days_to_expiration"] / spreads["bpr"]) * 36500
 
     return spreads
 
@@ -289,16 +302,10 @@ def calc_spreads(
     # Step 4: Calculate spread metrics
     spreads = _calculate_spread_metrics(spreads)
 
-    # Step 5: Calculate expected value (computationally expensive)
-    spreads["expected_value"] = spreads.apply(
-        _calculate_expected_value_for_symbol,
-        axis=1
-    )
-
-    # Step 6: Add earnings warnings and URLs
+    # Step 5: Add earnings warnings and URLs
     spreads = _add_earnings_and_urls(spreads)
 
-    # Step 7: Select relevant columns for output
+    # Step 6: Select relevant columns for output
     output_columns = [
         'symbol',
         'earnings_date',
@@ -319,6 +326,8 @@ def calc_spreads(
         'profit_to_bpr',
         'expected_move',
         'expected_value',
+        "APDI",
+        "APDI_EV",
         'optionstrat_url',
     ]
 
