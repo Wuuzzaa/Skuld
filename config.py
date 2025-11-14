@@ -1,10 +1,12 @@
 import pandas as pd
 from pathlib import Path
+from src.get_version import get_version
 
-VERSION = 1
 
 # Base path relative to base folder
 BASE_DIR = Path(__file__).resolve().parent
+
+VERSION = get_version(BASE_DIR)
 
 # Logfile
 PATH_LOG_FILE = BASE_DIR / "logs" /"log.log"
@@ -593,3 +595,4 @@ OPTIONS_COLLECTION_RULES = [
 ]
 
 # =============================================================================
+
