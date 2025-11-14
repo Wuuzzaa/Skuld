@@ -1,6 +1,8 @@
 import pandas as pd
 from pathlib import Path
 
+VERSION = 1
+
 # Base path relative to base folder
 BASE_DIR = Path(__file__).resolve().parent
 
