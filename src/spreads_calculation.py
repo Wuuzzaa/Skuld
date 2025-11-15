@@ -166,6 +166,7 @@ def _calculate_spread_metrics(spreads: pd.DataFrame) -> pd.DataFrame:
     spreads["earnings_date"] = spreads['earnings_date_sell']
     spreads['option_type'] = spreads['option-type_sell']
     spreads["days_to_expiration"] = spreads["days_to_expiration_sell"]
+    spreads["expiration_date"] = spreads["expiration_date_sell"]
 
     # Calculate spread width
     spreads["spread_width"] = abs(spreads['strike_sell'] - spreads['strike_buy'])
@@ -308,6 +309,7 @@ def calc_spreads(
     # Step 6: Select relevant columns for output
     output_columns = [
         'symbol',
+        'expiration_date'
         'earnings_date',
         'earnings_warning',
         'ivr',
