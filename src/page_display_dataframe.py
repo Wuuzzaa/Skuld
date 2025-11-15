@@ -16,9 +16,11 @@ def _add_tradingview_superchart_link(df:pd.DataFrame, symbol_column='symbol'):
     return df
 
 
-def _add_claude_analysis_link(df: pd.DataFrame, page):
+def _add_claude_analysis_link(df: pd.DataFrame, page=None):
     """Adds Claude AI analysis link with pre-filled prompt"""
-    if page == 'spreads':
+    if page is None:
+        df['Claude'] = df.apply(_create_claude_prompt_default, axis=1)
+    elif page == 'spreads':
         df['Claude'] = df.apply(_create_claude_prompt_page_spreads, axis=1)
     else:
         raise ValueError('Page not recognized')
@@ -27,26 +29,28 @@ def _add_claude_analysis_link(df: pd.DataFrame, page):
 def _create_claude_prompt_page_spreads(row):
     prompt = f"""
 Erstelle eine kompakte Aktienanalyse für {row['symbol']}:
-Unternehmen: Geschäftsmodell und Branche in 1-2 Sätzen
+Unternehmen: Geschäftsmodell und Branche (1-2 Sätzen):
+
 Aktuelle News: Wichtigste Entwicklungen der letzten 4 Wochen
-Anstehende Events: Earnings, Produktlaunches oder relevante Termine
+Anstehende Events: Earnings, Produktlaunches oder relevante Termine (in 3-7 Sätzen).
 
-Einschätzung:
-
+Einschätzung (maximal 8 Sätze):
 Kauf/Halten/Verkaufen mit Begründung
 Aktuelles Kursziel (Analystenkonsens)
-Eigenes Kursziel durch Fundamentaldaten, News, Technische Analyse State of the Art
-Wichtigste Chance und größtes Risiko
+Eigenes Kursziel durch Fundamentaldaten, News, Technische Analyse State of the Art.
+Wichtigste Chance und größtes Risiko. 
 
-Beurteile folgende Strategie mit Optionen für {row['symbol']}: 
-Gehe besonders auf die Gewinnwahrscheinlichkeit ein und gebe eine Empfehlung Strategie umsetzen oder nicht ab. 
-Begründe deine Entscheidung nachvollziehbar.
+Beurteile folgende Strategie mit Optionen für {row['symbol']} (So viele Sätze wie nötig): 
+Gehe besonders auf die Gewinnwahrscheinlichkeit ein. Kombiniere hier fundamental, news, Vola technische indikatoren auf 
+maximalem Expertenwissen und gebe eine klare Empfehlung Strategie umsetzen oder nicht ab. 
+Begründe deine Entscheidung nachvollziehbar mit KPIs.
 
 Verkaufe einen {row['option_type']} Strike {row['strike_sell']} für eine Prämie von {row['mid_sell']} bei einem Delta 
 von {row['delta_sell']} bei einer IVP von {row['ivp']}. Kaufe einen {row['option_type']} mit Strike {row['strike_buy']}
 für eine Prämie von {row['mid_buy']}. Expirationdate ist jeweils {row['expiration_date']}
 
 Format: Prägnant, faktenbasiert, keine Füllwörter, max. eine Seite.
+Rolle: Aktien und Finanzexperte.
     """
 
     # URL-encode the prompt
@@ -57,18 +61,18 @@ def _create_claude_prompt_default(row):
     symbol = row['symbol']
 
     prompt = f"""
-        Erstelle eine kompakte Aktienanalyse für {symbol}:
-        Unternehmen: Geschäftsmodell und Branche in 1-2 Sätzen
-        Aktuelle News: Wichtigste Entwicklungen der letzten 4 Wochen
-        Anstehende Events: Earnings, Produktlaunches oder relevante Termine
-        Einschätzung:
+Erstelle eine kompakte Aktienanalyse für {symbol}:
+Unternehmen: Geschäftsmodell und Branche in 1-2 Sätzen
+Aktuelle News: Wichtigste Entwicklungen der letzten 4 Wochen
+Anstehende Events: Earnings, Produktlaunches oder relevante Termine
+Einschätzung:
 
-        Kauf/Halten/Verkaufen mit Begründung
-        Aktuelles Kursziel (Analystenkonsens)
-        Eigenes Kursziel durch Fundamentaldaten, News, Technische Analyse State of the Art
-        Wichtigste Chance und größtes Risiko
+Kauf/Halten/Verkaufen mit Begründung
+Aktuelles Kursziel (Analystenkonsens)
+Eigenes Kursziel durch Fundamentaldaten, News, Technische Analyse State of the Art
+Wichtigste Chance und größtes Risiko
 
-        Format: Prägnant, faktenbasiert, keine Füllwörter, max. eine Seite.
+Format: Prägnant, faktenbasiert, keine Füllwörter, max. eine Seite.
     """
 
     # URL-encode the prompt
@@ -77,9 +81,9 @@ def _create_claude_prompt_default(row):
 
 def page_display_dataframe(
     df: pd.DataFrame,
-    page,
-    symbol_column='symbol',
-    column_config: dict = None
+    page: str | None = None,
+    symbol_column: str = 'symbol',
+    column_config: dict | None = None
 ):
     """
     Displays DataFrame with TradingView links configured.
@@ -90,6 +94,7 @@ def page_display_dataframe(
         symbol_column: Name of the column containing symbols (default: 'symbol')
         column_config: Optional dictionary of column configurations to merge with TradingView config.
                         These settings have higher priority than the default settings.
+        page: String with the name of the page. Used for selecting the optimal prompt.
     """
     df = _add_tradingview_link(df, symbol_column)
     df = _add_tradingview_superchart_link(df, symbol_column)
