@@ -309,7 +309,7 @@ def calc_spreads(
     # Step 6: Select relevant columns for output
     output_columns = [
         'symbol',
-        'expiration_date'
+        'expiration_date',
         'earnings_date',
         'earnings_warning',
         'ivr',
