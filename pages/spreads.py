@@ -186,4 +186,4 @@ column_config = {
 }
 
 # show final dataframe
-page_display_dataframe(filtered_df, symbol_column='symbol', column_config=column_config)
+page_display_dataframe(filtered_df, page='spreads', symbol_column='symbol', column_config=column_config)
