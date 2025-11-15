@@ -12,7 +12,7 @@ df = select_into_dataframe(sql_file_path=sql_file_path)
 # rename columns for the app-view
 df = df.rename(
     columns={
-        "symbol": "Symbol",
+        #"symbol": "Symbol", # let it lowercase
         "close": "Price",
         "analyst_mean_target": "Mean Analyst Target",
         "recommendation": "Indicators Recommendation",
@@ -23,4 +23,4 @@ df = df.rename(
 )
 
 # show final dataframe
-page_display_dataframe(df, symbol_column='Symbol')
+page_display_dataframe(df, symbol_column='symbol')
