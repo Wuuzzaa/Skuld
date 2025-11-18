@@ -165,12 +165,14 @@ def _calculate_spread_metrics(spreads: pd.DataFrame) -> pd.DataFrame:
     spreads["open_intrest"] = spreads["option_open_interest_sell"]
     spreads["earnings_date"] = spreads['earnings_date_sell']
     spreads['option_type'] = spreads['option-type_sell']
+    spreads["days_to_expiration"] = spreads["days_to_expiration_sell"]
+    spreads["expiration_date"] = spreads["expiration_date_sell"]
 
     # Calculate spread width
     spreads["spread_width"] = abs(spreads['strike_sell'] - spreads['strike_buy'])
 
     # Calculate max profit
-    spreads["max_profit"] = MULTIPLIER * (spreads["bid_sell"] - spreads["ask_buy"])
+    spreads["max_profit"] = MULTIPLIER * (spreads["mid_sell"] - spreads["mid_buy"])
 
     # Remove spreads without profit potential
     spreads = spreads[spreads['max_profit'] > 0].reset_index(drop=True)
@@ -186,6 +188,18 @@ def _calculate_spread_metrics(spreads: pd.DataFrame) -> pd.DataFrame:
 
     # Calculate spread theta
     spreads["spread_theta"] = spreads["theta_sell"] - spreads["theta_buy"]
+
+    # Calculate expected value (computationally expensive)
+    spreads["expected_value"] = spreads.apply(
+        _calculate_expected_value_for_symbol,
+        axis=1
+    )
+
+    # Annualized Profit per Dollar Invested
+    spreads["APDI"] = (spreads["max_profit"] / spreads["days_to_expiration"] / spreads["bpr"]) * 36500
+
+    # Annualized Profit per Dollar Invested with Expected Value as base instead of max profit
+    spreads["APDI_EV"] = (spreads["expected_value"] / spreads["days_to_expiration"] / spreads["bpr"]) * 36500
 
     return spreads
 
@@ -289,18 +303,13 @@ def calc_spreads(
     # Step 4: Calculate spread metrics
     spreads = _calculate_spread_metrics(spreads)
 
-    # Step 5: Calculate expected value (computationally expensive)
-    spreads["expected_value"] = spreads.apply(
-        _calculate_expected_value_for_symbol,
-        axis=1
-    )
-
-    # Step 6: Add earnings warnings and URLs
+    # Step 5: Add earnings warnings and URLs
     spreads = _add_earnings_and_urls(spreads)
 
-    # Step 7: Select relevant columns for output
+    # Step 6: Select relevant columns for output
     output_columns = [
         'symbol',
+        'expiration_date',
         'earnings_date',
         'earnings_warning',
         'ivr',
@@ -309,16 +318,18 @@ def calc_spreads(
         'close',
         'option_type',
         'strike_sell',
-        'bid_sell',
+        'mid_sell',
         'delta_sell',
         'iv_sell',
         'strike_buy',
-        'ask_buy',
+        'mid_buy',
         'max_profit',
         'bpr',
         'profit_to_bpr',
         'expected_move',
         'expected_value',
+        "APDI",
+        "APDI_EV",
         'optionstrat_url',
     ]
 
@@ -446,12 +457,36 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     logger.info(f"Start {__name__} ({__file__})")
 
-    expiration_date = '2025-11-21'
+    expiration_date = '2025-12-26'
     delta_target = 0.2
     spread_width = 5
 
     sql_query = """
-    SOME SUPPER NICE QUERY HERE
+    SELECT
+        symbol,
+        expiration_date,
+        "option-type",
+        strike,
+        ask,
+        bid,
+        (ask + bid) / 2 as mid,
+        delta,
+        iv,
+        theta,
+        close,
+        earnings_date,
+        days_to_expiration,
+        days_to_ernings,
+        spread,
+        spread_ptc,
+        iv_rank,
+        iv_percentile,
+        option_open_interest,
+        expected_move
+    FROM
+        OptionDataMerged
+    WHERE
+        expiration_date =:expiration_date;
     """
 
     start = time.time()
