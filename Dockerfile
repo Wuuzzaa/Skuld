@@ -19,7 +19,9 @@ COPY . ./Skuld/
 
 # Cronjob einrichten für 2x tägliche Datensammlung
 COPY crontab /etc/cron.d/skuld-cron
+COPY run_data_collection.sh /app/Skuld/run_data_collection.sh
 RUN chmod 0644 /etc/cron.d/skuld-cron && \
+    chmod +x /app/Skuld/run_data_collection.sh && \
     crontab /etc/cron.d/skuld-cron && \
     touch /var/log/cron.log
 
