@@ -15,10 +15,10 @@ logger = logging.getLogger(__name__)
 class VPNManager:
     """Verwaltet VPN-Verbindung über SSH SOCKS5 Proxy zum Raspberry Pi"""
     
-    def __init__(self, raspberry_host="raspberry-vpn", socks_port=1080):
+    def __init__(self, raspberry_host="pi@10.0.0.1", socks_port=1080):
         """
         Args:
-            raspberry_host: SSH-Host (aus ~/.ssh/config) oder pi@10.0.0.1
+            raspberry_host: SSH-Host (pi@10.0.0.1 oder aus ~/.ssh/config)
             socks_port: Port für SOCKS5 Proxy (default 1080)
         """
         self.raspberry_host = raspberry_host
@@ -30,17 +30,23 @@ class VPNManager:
     def start(self):
         """SOCKS5-Proxy über SSH zum Raspberry Pi aufbauen"""
         try:
-            logger.info(f"🔐 Starte SOCKS5-Proxy zu {self.raspberry_host}:{self.socks_port}...")
+            logger.info("=" * 80)
+            logger.info(f"🔐 VPN: Starte SOCKS5-Proxy zu {self.raspberry_host}:{self.socks_port}...")
+            logger.info("=" * 80)
             
             # SSH-Tunnel mit SOCKS5 Proxy starten
             # -f: Background, -N: Kein Remote Command, -D: SOCKS5 Proxy
+            # -o StrictHostKeyChecking=no: Keine Hostkey-Prüfung
             self.ssh_process = subprocess.Popen(
-                ['ssh', '-f', '-N', '-D', f'127.0.0.1:{self.socks_port}', 
+                ['ssh', '-f', '-N', '-D', f'127.0.0.1:{self.socks_port}',
+                 '-o', 'StrictHostKeyChecking=no',
+                 '-o', 'UserKnownHostsFile=/dev/null',
                  self.raspberry_host],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE
             )
             
+            logger.info("🔄 VPN: Warte auf SSH-Tunnel...")
             # Kurz warten bis Tunnel steht
             time.sleep(3)
             
@@ -52,15 +58,22 @@ class VPNManager:
             
             # IP prüfen über Proxy
             try:
+                logger.info("🔍 VPN: Prüfe öffentliche IP über VPN-Tunnel...")
                 response = requests.get('https://api.ipify.org', 
                                         proxies=self.proxies, 
                                         timeout=10)
                 ip = response.text
-                logger.info(f"✅ SOCKS5-Proxy aktiv. Öffentliche IP: {ip}")
+                logger.info("=" * 80)
+                logger.info(f"✅ VPN AKTIV! Öffentliche IP: {ip}")
+                logger.info(f"✅ VPN: Traffic läuft jetzt über Raspberry Pi / Home-Netzwerk")
+                logger.info("=" * 80)
                 self.is_connected = True
                 return True
             except Exception as e:
-                logger.error(f"❌ IP-Check fehlgeschlagen: {e}")
+                logger.error("=" * 80)
+                logger.error(f"❌ VPN: IP-Check fehlgeschlagen: {e}")
+                logger.error("❌ VPN: SSH-Tunnel läuft, aber kein Internet-Zugriff")
+                logger.error("=" * 80)
                 self.stop()
                 return False
                 
@@ -72,7 +85,8 @@ class VPNManager:
     def stop(self):
         """SOCKS5-Proxy beenden"""
         try:
-            logger.info("🔓 Beende SOCKS5-Proxy...")
+            logger.info("=" * 80)
+            logger.info("🔓 VPN: Beende SOCKS5-Proxy...")
             
             # SSH-Prozess beenden
             if self.ssh_process:
@@ -86,7 +100,8 @@ class VPNManager:
             
             self.is_connected = False
             self.proxies = None
-            logger.info("✅ Proxy beendet")
+            logger.info("✅ VPN: Proxy beendet - zurück zu normaler Hetzner-IP")
+            logger.info("=" * 80)
             return True
         except Exception as e:
             logger.error(f"Fehler beim Proxy-Stop: {e}")
