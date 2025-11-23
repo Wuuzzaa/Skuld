@@ -107,6 +107,7 @@ def main():
     logger.info(f"All parallel tasks completed in {parallel_duration}s")
     logger.info(f"{'=' * 80}\n")
 
+
     logger.info("#" * 80)
     logger.info("Data collection pipeline completed successfully!")
     end_main = time.time()
