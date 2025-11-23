@@ -1,5 +1,139 @@
 # VPN Setup via SSH SOCKS5 Proxy
 
+## 🎯 Quick Overview - Was wo gemacht werden muss
+
+### ✅ Bereits erledigt:
+- **Raspberry Pi**: WireGuard Server läuft, NAT konfiguriert
+- **Hetzner Server**: WireGuard Client verbunden, kann Raspberry Pi erreichen (ping 10.0.0.1)
+- **GitHub**: Code ist deployed, wartet auf Container-Neustart
+
+### 🔧 Noch zu tun:
+
+#### **AUF DEM HETZNER SERVER** (als User `deploy`):
+
+1. **SSH-Keys einrichten** (damit Container passwortlos auf Raspberry Pi zugreifen kann)
+2. **Container neu starten** (mit neuer VPN-via-SSH Funktionalität)
+3. **Testen** ob VPN funktioniert
+
+#### **AUF DEM RASPBERRY PI**:
+- ✅ **Nichts!** Alles bereits fertig.
+
+---
+
+## 📋 Schritt-für-Schritt Anleitung
+
+### 🖥️ HETZNER SERVER - SSH-Key Setup
+
+```bash
+# 1. Auf Hetzner Server einloggen
+ssh deploy@docker-ce-ubuntu-4gb-fsn1-1
+
+# 2. SSH-Key generieren (wird vom Container genutzt)
+ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_vpn -N ""
+# Ausgabe: 
+#   Your identification has been saved in /home/deploy/.ssh/id_ed25519_vpn
+#   Your public key has been saved in /home/deploy/.ssh/id_ed25519_vpn.pub
+
+# 3. Public Key zum Raspberry Pi kopieren
+ssh-copy-id -i ~/.ssh/id_ed25519_vpn.pub pi@10.0.0.1
+# Wenn nach Passwort gefragt: Raspberry Pi Passwort eingeben
+# Ausgabe sollte zeigen: "Number of key(s) added: 1"
+
+# 4. SSH-Config erstellen (vereinfacht Zugriff)
+cat >> ~/.ssh/config << 'EOF'
+Host raspberry-vpn
+    HostName 10.0.0.1
+    User pi
+    IdentityFile ~/.ssh/id_ed25519_vpn
+    StrictHostKeyChecking no
+    UserKnownHostsFile=/dev/null
+EOF
+
+chmod 600 ~/.ssh/config
+
+# 5. Test - sollte OHNE Passwort funktionieren!
+ssh raspberry-vpn "echo SSH works!"
+# Erwartete Ausgabe: "SSH works!"
+```
+
+### 🐳 HETZNER SERVER - Container Deployment
+
+```bash
+# 6. Warten bis GitHub Actions fertig ist (~2 Minuten)
+# Prüfen auf: https://github.com/Wuuzzaa/Skuld/actions
+
+# 7. Container neu starten mit neuer VPN-Funktionalität
+cd /opt/skuld-vpn-test
+docker-compose down
+docker-compose up -d --build
+
+# 8. Logs prüfen (sollte "SSH VPN config found" zeigen)
+docker logs skuld-streamlit-vpn-test | grep -i vpn
+```
+
+### ✅ HETZNER SERVER - VPN Testen
+
+```bash
+# 9. VPN-Funktionalität direkt testen
+docker exec -it skuld-streamlit-vpn-test python3 << 'PYTHON'
+from vpn_manager import VPNManager
+import logging
+logging.basicConfig(level=logging.INFO)
+
+with VPNManager() as vpn:
+    if vpn.is_connected:
+        session = vpn.get_session()
+        response = session.get('https://api.ipify.org')
+        print(f'\n🎉 SUCCESS! Your IP through VPN: {response.text}')
+        print(f'Expected: 46.223.163.242 (your home IP)\n')
+    else:
+        print('❌ VPN connection failed')
+PYTHON
+```
+
+**Erwartete Ausgabe:**
+```
+🔐 Starte SOCKS5-Proxy zu raspberry-vpn:1080...
+✅ SOCKS5-Proxy aktiv. Öffentliche IP: 46.223.163.242
+🎉 SUCCESS! Your IP through VPN: 46.223.163.242
+Expected: 46.223.163.242 (your home IP)
+🔓 Beende SOCKS5-Proxy...
+✅ Proxy beendet
+```
+
+---
+
+## 🚀 Verwendung in main.py
+
+Nach erfolgreichem Setup wird Barchart automatisch mit VPN gescrapt:
+
+```python
+# In main.py
+from src.barchart_scrapper_with_vpn import scrape_barchart_with_vpn
+
+# Statt:
+# from src.barchart_scrapper import scrape_barchart
+# scrape_barchart()
+
+# Nutze:
+scrape_barchart_with_vpn()  # ← Nutzt automatisch deine Home-IP!
+```
+
+---
+
+## 🎯 Zusammenfassung - WO WIRD WAS GEMACHT
+
+| Aktion | Ort | Befehl |
+|--------|-----|--------|
+| SSH-Keys generieren | **Hetzner** (`deploy` user) | `ssh-keygen -t ed25519...` |
+| Public Key kopieren | **Hetzner → Raspberry** | `ssh-copy-id pi@10.0.0.1` |
+| SSH-Config erstellen | **Hetzner** | `cat >> ~/.ssh/config` |
+| Container neustarten | **Hetzner** | `docker-compose up -d --build` |
+| VPN testen | **Hetzner** (im Container) | `docker exec... python3` |
+| NAT/WireGuard | **Raspberry** | ✅ Bereits fertig! |
+
+---
+
 ## Übersicht
 
 Statt WireGuard direkt im Container zu nutzen, verwenden wir einen **SSH-Tunnel mit SOCKS5-Proxy** zum Raspberry Pi. Das ist einfacher und zuverlässiger.
