@@ -38,7 +38,7 @@ class VPNManager:
             # -f: Background, -N: Kein Remote Command, -D: SOCKS5 Proxy
             # -o StrictHostKeyChecking=no: Keine Hostkey-Prüfung
             self.ssh_process = subprocess.Popen(
-                ['ssh', '-f', '-N', '-D', f'127.0.0.1:{self.socks_port}',
+                ['ssh', '-i', '/root/.ssh/id_ed25519_vpn', '-f', '-N', '-D', f'127.0.0.1:{self.socks_port}',
                  '-o', 'StrictHostKeyChecking=no',
                  '-o', 'UserKnownHostsFile=/dev/null',
                  self.raspberry_host],
