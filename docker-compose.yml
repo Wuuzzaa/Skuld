@@ -6,6 +6,7 @@ services:
     container_name: skuld-streamlit-vpn-test
     cap_add:
       - NET_ADMIN  # Required for WireGuard VPN
+      - SYS_ADMIN  # Required for sysctl
     devices:
       - /dev/net/tun:/dev/net/tun  # Required for WireGuard
     volumes:
