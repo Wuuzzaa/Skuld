@@ -57,6 +57,7 @@ class VPNManager:
             }
             
             
+
             # IP prüfen über Proxy
             try:
                 logger.info("🔍 VPN: Prüfe öffentliche IP über VPN-Tunnel...")
