@@ -3,11 +3,14 @@ FROM python:3.11-slim
 # Arbeitsverzeichnis
 WORKDIR /app
 
-# System Dependencies (inkl. Cron für automatische Datensammlung)
+# System Dependencies (inkl. Cron für automatische Datensammlung + WireGuard)
 RUN apt-get update && apt-get install -y \
     git \
     curl \
     cron \
+    wireguard-tools \
+    iproute2 \
+    iputils-ping \
     && rm -rf /var/lib/apt/lists/*
 
 # Python Dependencies kopieren und installieren
@@ -32,10 +35,18 @@ EXPOSE 8501
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8501/_stcore/health || exit 1
 
-# Start Script für Cron + Streamlit
+# Start Script für Cron + Streamlit + VPN
 RUN echo '#!/bin/bash\n\
 set -e\n\
 echo "Starting SKULD container..."\n\
+\n\
+# Check if WireGuard config exists\n\
+if [ -f "/etc/wireguard/wg0.conf" ]; then\n\
+  echo "✓ WireGuard config found (VPN will be started on-demand by scripts)"\n\
+else\n\
+  echo "⚠ WireGuard config not found - VPN features disabled"\n\
+  echo "  See WIREGUARD_SETUP.md for setup instructions"\n\
+fi\n\
 \n\
 # Start Cron Service\n\
 service cron start\n\

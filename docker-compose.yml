@@ -4,11 +4,17 @@ services:
   skuld-app:
     build: .
     container_name: skuld-streamlit
+    cap_add:
+      - NET_ADMIN  # Required for WireGuard VPN
+    devices:
+      - /dev/net/tun:/dev/net/tun  # Required for WireGuard
     volumes:
       # Persistent database file only (not entire db folder!)
       - ./financial_data.db:/app/Skuld/financial_data.db
       # Persistent logs
       - ./logs:/app/Skuld/logs
+      # WireGuard configuration
+      - ./wireguard:/etc/wireguard:ro
       # Cron logs for debugging
       #- ./cron.log:/var/log/cron.log
     environment:
