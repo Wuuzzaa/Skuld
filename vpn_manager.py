@@ -56,6 +56,7 @@ class VPNManager:
                 'https': f'socks5h://127.0.0.1:{self.socks_port}'
             }
             
+            
             # IP prüfen über Proxy
             try:
                 logger.info("🔍 VPN: Prüfe öffentliche IP über VPN-Tunnel...")
