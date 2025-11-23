@@ -2,6 +2,7 @@ import time
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from src.barchart_scrapper import scrape_barchart
+from src.barchart_scrapper_with_vpn import scrape_barchart_with_vpn
 from src.live_stock_price_collector import fetch_current_prices
 from src.logger_config import setup_logging
 from src.database import run_migrations
@@ -73,7 +74,7 @@ def main():
         ("Yahoo Query Option Chain", get_yahooquery_option_chain, ()),
         ("Yahoo Query Fundamentals", generate_fundamental_data, ()),
         ("Fetch Current Stock Prices", fetch_current_prices, ()),
-        ("Barchart Data", scrape_barchart, ()),
+        ("Barchart Data", scrape_barchart_with_vpn, ()),
     ]
 
     logger.info(f"\n{'=' * 80}")
