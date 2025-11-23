@@ -11,6 +11,9 @@ RUN apt-get update && apt-get install -y \
     wireguard-tools \
     iproute2 \
     iputils-ping \
+    procps \
+    iptables \
+    nftables \
     && rm -rf /var/lib/apt/lists/*
 
 # Python Dependencies kopieren und installieren
