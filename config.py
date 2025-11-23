@@ -72,7 +72,7 @@ SYMBOL_SELECTION = {
     "mode": "max",                   # "all", "list", "file", "max"
     "symbols": [""],             # Used when mode="list"
     "file_path": None,               # Used when mode="file"
-    "max_symbols": 21,               # Used when mode="max" or as limit for "all"
+    "max_symbols": 20,               # Used when mode="max" or as limit for "all"
     "use_max_limit": False            # If True, applies max_symbols limit to any mode
 }
 

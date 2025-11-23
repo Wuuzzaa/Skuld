@@ -4,29 +4,42 @@ services:
   skuld-app:
     build: .
     container_name: skuld-streamlit-vpn-test
-    network_mode: "host"  # Required for WireGuard to reach external IPs
-    privileged: true  # Required for WireGuard VPN
-    devices:
-      - /dev/net/tun:/dev/net/tun  # Required for WireGuard
     volumes:
       # Persistent database file only (not entire db folder!)
       - ./financial_data.db:/app/Skuld/financial_data.db
       # Persistent logs
       - ./logs:/app/Skuld/logs
-      # WireGuard configuration
-      - ./wireguard:/etc/wireguard:ro
+      # SSH directory for VPN access
+      - /root/.ssh:/root/.ssh:ro
       # Cron logs for debugging
       #- ./cron.log:/var/log/cron.log
     environment:
       - PYTHONUNBUFFERED=1
       - TZ=Europe/Berlin
     restart: unless-stopped
+    networks:
+      - web
+    labels:
+      # Enable Traefik
+      - "traefik.enable=true"
+      # Domain for SKULD VPN Test
+      - "traefik.http.routers.skuld-vpn-test.rule=Host(`vpn-test.skuld-options.com`)"
+      # HTTPS Endpoint
+      - "traefik.http.routers.skuld-vpn-test.entrypoints=websecure"
+      # Automatic SSL Certificate via Let's Encrypt
+      - "traefik.http.routers.skuld-vpn-test.tls.certresolver=letsencrypt"
+      # Port where Streamlit is running
+      - "traefik.http.services.skuld-vpn-test.loadbalancer.server.port=8501"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+
+networks:
+  web:
+    external: true
 
 
 

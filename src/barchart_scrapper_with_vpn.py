@@ -1,9 +1,8 @@
 """
-Barchart Scraper mit VPN-Unterstützung
+Barchart Scraper mit VPN-Unterstützung über SOCKS5 Proxy
 
-Dieses Modul zeigt, wie der Barchart Scraper mit VPN genutzt werden kann.
-Verwende dies als Vorlage, um die VPN-Funktionalität in deinen bestehenden
-Barchart Scraper zu integrieren.
+Dieses Modul nutzt einen SSH-Tunnel zum Raspberry Pi (über WireGuard VPN)
+um Barchart-Scraping mit Home-IP durchzuführen und IP-Blocking zu vermeiden.
 """
 import sys
 from pathlib import Path
@@ -21,13 +20,13 @@ logger = logging.getLogger(__name__)
 
 def scrape_barchart_with_vpn():
     """
-    Scrapt Barchart-Daten mit VPN-Verbindung.
+    Scrapt Barchart-Daten mit VPN-Verbindung über SOCKS5 Proxy.
     
     Die VPN-Verbindung wird automatisch aufgebaut und nach dem Scraping
-    wieder beendet, sodass bei jedem Lauf eine neue Home-IP verwendet wird.
+    wieder beendet, sodass bei jedem Lauf die Home-IP verwendet wird.
     """
     logger.info("=" * 80)
-    logger.info("Starting Barchart scraping with VPN")
+    logger.info("Starting Barchart scraping with VPN (SOCKS5)")
     logger.info("=" * 80)
     
     try:
@@ -39,9 +38,12 @@ def scrape_barchart_with_vpn():
             
             logger.info("✅ VPN connected - proceeding with Barchart scraping")
             
-            # Hier den eigentlichen Barchart Scraper aufrufen
+            # Session mit Proxy holen
+            session = vpn.get_session()
+            
+            # Barchart Scraper mit der Proxy-Session aufrufen
             from src.barchart_scrapper import scrape_barchart
-            result = scrape_barchart()
+            result = scrape_barchart(session=session)
             
             logger.info("✅ Barchart scraping completed successfully")
             return result
