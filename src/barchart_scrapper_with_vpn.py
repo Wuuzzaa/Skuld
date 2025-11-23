@@ -22,8 +22,10 @@ def scrape_barchart_with_vpn():
     """
     Scrapt Barchart-Daten mit VPN-Verbindung über SOCKS5 Proxy.
     
-    Die VPN-Verbindung wird automatisch aufgebaut und nach dem Scraping
-    wieder beendet, sodass bei jedem Lauf die Home-IP verwendet wird.
+    WICHTIG: Barchart MUSS durch VPN (Raspberry Pi) gescrapt werden,
+    sonst kommt es zu IP-Blocking von Barchart!
+    
+    Wenn VPN nicht funktioniert, wird das Scraping abgebrochen.
     """
     logger.info("=" * 80)
     logger.info("Starting Barchart scraping with VPN (SOCKS5)")
@@ -33,7 +35,9 @@ def scrape_barchart_with_vpn():
         # VPN-Verbindung aufbauen
         with VPNManager() as vpn:
             if not vpn.is_connected:
-                logger.error("❌ VPN connection failed - aborting Barchart scraping")
+                logger.error("❌ VPN connection failed - ABORTING Barchart scraping")
+                logger.error("❌ Barchart MUST be scraped through VPN to avoid IP blocking!")
+                logger.error("❌ Fix VPN setup before running Barchart scraper")
                 return False
             
             logger.info("✅ VPN connected - proceeding with Barchart scraping")
@@ -50,10 +54,8 @@ def scrape_barchart_with_vpn():
             
     except Exception as e:
         logger.error(f"❌ Error during Barchart scraping with VPN: {e}")
+        logger.error("❌ Barchart scraping FAILED - data will be missing!")
         return False
-    
-    finally:
-        logger.info("VPN connection closed")
 
 
 def main():
