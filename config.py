@@ -102,6 +102,5 @@ OPTIONS_COLLECTION_RULES = [
         "description": "LEAPS options for married put strategies"
     }
 ]
-
 # =============================================================================
 
