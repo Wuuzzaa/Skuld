@@ -34,6 +34,7 @@ def scrape_barchart_with_vpn():
     try:
         # VPN-Verbindung aufbauen
         with VPNManager() as vpn:
+            print("[DEBUG] scrape_barchart_with_vpn wird ausgeführt!")
             if not vpn.is_connected:
                 logger.error("❌ VPN connection failed - ABORTING Barchart scraping")
                 logger.error("❌ Barchart MUST be scraped through VPN to avoid IP blocking!")
