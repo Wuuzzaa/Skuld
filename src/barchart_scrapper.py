@@ -7,6 +7,7 @@ from bs4 import BeautifulSoup
 from config import TABLE_STOCK_DATA_BARCHART
 from config_utils import get_filtered_symbols_with_logging
 from src.database import insert_into_table, truncate_table
+import logging
 
 """
 ================================================================================
@@ -276,6 +277,14 @@ def scrape_barchart(delay_seconds=0, session=None):
         delay_seconds: Delay between requests (default 0)
         session: Optional requests.Session (e.g. with proxy for VPN)
     """
+    logger = logging.getLogger("barchart_scrapper")
+    try:
+        ip = (session if session else requests).get('https://api.ipify.org', timeout=10).text
+        logger.info(f"[BarchartScraper] Aktuelle öffentliche IP: {ip}")
+        logger.info(f"[BarchartScraper] Session-Typ: {'VPN-Session' if session else 'Direkt (Hetzner)'}")
+    except Exception as e:
+        logger.warning(f"[BarchartScraper] Konnte öffentliche IP nicht abrufen: {e}")
+
     symbols = get_filtered_symbols_with_logging("BarchartScraper")
 
     print(f"\n{'=' * 60}")
