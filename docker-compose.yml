@@ -3,7 +3,7 @@ version: '3.8'
 services:
   skuld-app:
     build: .
-    container_name: skuld-streamlit
+    container_name: skuld-streamlit-vpn-test
     cap_add:
       - NET_ADMIN  # Required for WireGuard VPN
     devices:
@@ -26,14 +26,14 @@ services:
     labels:
       # Enable Traefik
       - "traefik.enable=true"
-      # Domain for SKULD
-      - "traefik.http.routers.skuld.rule=Host(`app.skuld-options.com`)"
+      # Domain for SKULD VPN Test
+      - "traefik.http.routers.skuld-vpn-test.rule=Host(`vpn-test.skuld-options.com`)"
       # HTTPS Endpoint
-      - "traefik.http.routers.skuld.entrypoints=websecure"
+      - "traefik.http.routers.skuld-vpn-test.entrypoints=websecure"
       # Automatic SSL Certificate via Let's Encrypt
-      - "traefik.http.routers.skuld.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.skuld-vpn-test.tls.certresolver=letsencrypt"
       # Port where Streamlit is running
-      - "traefik.http.services.skuld.loadbalancer.server.port=8501"
+      - "traefik.http.services.skuld-vpn-test.loadbalancer.server.port=8501"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
       interval: 30s

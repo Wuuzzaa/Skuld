@@ -1,8 +1,8 @@
-name: Deploy SKULD to Hetzner
+name: Deploy SKULD VPN Test to Hetzner
 
 on:
   push:
-    branches: [ docker_trial ]
+    branches: [ wireguard-vpn-setup ]
 
 jobs:
   deploy:
@@ -18,7 +18,7 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Sync files to server
+      - name: Sync files to server (VPN test deployment)
         run: |
           rsync -avz --delete \
             -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectionAttempts=1" \
@@ -28,14 +28,17 @@ jobs:
             --exclude '.github/' \
             --exclude '__pycache__/' \
             --exclude '*.pyc' \
-            ./ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/skuld/
+            --exclude 'wireguard/wg0.conf' \
+            --exclude 'wireguard/*_privatekey' \
+            --exclude 'wireguard/*_publickey' \
+            ./ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/skuld-vpn-test/
 
-      - name: Build and deploy Docker container
+      - name: Build and deploy Docker container (VPN Test)
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'ENDSSH'
             set -euxo pipefail
-            cd /opt/skuld
+            cd /opt/skuld-vpn-test
             
             echo "=== Current container status ==="
             sudo docker compose ps
