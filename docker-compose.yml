@@ -10,7 +10,7 @@ services:
       # Persistent logs
       - ./logs:/app/Skuld/logs
       # SSH directory for VPN access
-      - /root/.ssh:/root/.ssh:ro
+      - ~/.ssh:/root/.ssh:ro
       # Cron logs for debugging
       #- ./cron.log:/var/log/cron.log
     environment:
