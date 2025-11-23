@@ -7,7 +7,7 @@ Address = 10.0.0.2/24
 
 [Peer]
 PublicKey = 2PjU2No7D98ZA8s8kdRruRp8zWAGW3lUZWCYpGQeISs=
-Endpoint = [2a02:8071:5101:4880::4a97]:51820
+Endpoint = 46.223.163.242:51820
 AllowedIPs = 0.0.0.0/0, ::/0
 PersistentKeepalive = 25
 
