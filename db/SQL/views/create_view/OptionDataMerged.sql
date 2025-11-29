@@ -2,7 +2,7 @@ DROP VIEW IF EXISTS OptionDataMerged;
 CREATE VIEW OptionDataMerged AS
 SELECT 
 	-- Option Data
-    a.symbol, 
+	a.symbol, 
 	a.has_option_data_tradingview,
 	a.has_option_pricing_metrics,
 	a."option-type", 
@@ -576,7 +576,7 @@ SELECT
 	c.todays_volume, 
 	c.volume_avg_30d, 
 	c.todays_open_interest, 
-	c.open_int_30d
+	c.open_int_30d,
 
     -- Technical Indicators
 	CASE WHEN d.symbol IS NOT NULL THEN TRUE ELSE FALSE END as has_technical_indicators,
@@ -680,8 +680,6 @@ SELECT
 	ROUND(c.analyst_mean_target - d.close,2) as "target-close$",
 	ROUND(ROUND(c.analyst_mean_target - d.close,2) / d.close * 100.0, 2) as "target-close%",
     ROUND(d.close * a.iv * sqrt(a.days_to_expiration / 365.0), 2) as expected_move
-
-
 FROM 
     OptionData AS a
 JOIN 
