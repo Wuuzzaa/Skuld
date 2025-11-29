@@ -1,4 +1,5 @@
 import time
+import datetime
 import os
 import re
 import pandas as pd
@@ -39,8 +40,32 @@ def truncate_table(table_name):
         try:
             connection.execute(text(f"DELETE FROM {table_name}"))
             print(f"Successfully truncated table: {table_name} in {round(time.time() - start,2)}s")
+            
+            # Log the operation
+            log_data_change(connection, "TRUNCATE", table_name, affected_rows=None)
+            
         except Exception as e:
             print(f"Error truncating table {table_name}: {e}")
+
+def log_data_change(connection, operation_type, table_name, affected_rows=None, additional_data=None):
+    """
+    Logs a data change operation to the DataChangeLogs table.
+    """
+    try:
+        timestamp = datetime.datetime.now().isoformat()
+        query = text("""
+            INSERT INTO DataChangeLogs (timestamp, operation_type, table_name, affected_rows, additional_data)
+            VALUES (:timestamp, :operation_type, :table_name, :affected_rows, :additional_data)
+        """)
+        connection.execute(query, {
+            "timestamp": timestamp,
+            "operation_type": operation_type,
+            "table_name": table_name,
+            "affected_rows": affected_rows,
+            "additional_data": additional_data
+        })
+    except Exception as e:
+        print(f"Error logging data change: {e}")
 
 def insert_into_table(
         table_name: str,
@@ -53,6 +78,11 @@ def insert_into_table(
         engine = get_database_engine()
         affected_rows = dataframe.to_sql(table_name, engine, if_exists=if_exists, index=False)
         print(f"Successfully saved {affected_rows} rows to the database table {table_name} in {round(time.time() - start,2)}s.")
+        
+        # Log the operation
+        with engine.begin() as connection:
+            log_data_change(connection, "INSERT", table_name, affected_rows=affected_rows)
+            
     except Exception as e:
         print(f"Error saving to the database table {table_name}: {e}")
 
