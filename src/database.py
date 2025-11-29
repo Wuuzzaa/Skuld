@@ -157,6 +157,7 @@ def run_migrations():
         migrations_path = "db/SQL/migrations/"
         if not os.path.exists(migrations_path):
             print(f"Migrations directory not found at {migrations_path}. Skipping migrations.")
+            recreate_views()
             return
             
         migration_files = [f for f in os.listdir(migrations_path) if re.match(r"\d+\.sql", f)]
@@ -166,6 +167,7 @@ def run_migrations():
 
         if not pending_migrations:
             print("Database is up to date.")
+            recreate_views()
             return
 
         for migration_file in pending_migrations:
@@ -190,4 +192,64 @@ def run_migrations():
             last_migration_version = int(pending_migrations[-1].split(".")[0])
             connection.execute(text(f"UPDATE DbVersion SET version = {last_migration_version}"))
             print(f"Database version updated to {last_migration_version}.")
+    
+    # Recreate views after migrations
+    recreate_views()
+
     print(f"Database migration completed in {round(time.time() - start,2)}s")
+
+
+def recreate_views():
+    """
+    Recreates all views in the database.
+    Handles dependencies by retrying failed view creations until all succeed or no progress is made.
+    """
+    print("Recreating views...")
+    start = time.time()
+    engine = get_database_engine()
+    views_path = "db/SQL/views/create_view/"
+    
+    if not os.path.exists(views_path):
+        print(f"Views directory not found at {views_path}. Skipping view recreation.")
+        return
+
+    view_files = [f for f in os.listdir(views_path) if f.endswith(".sql")]
+    pending_views = view_files.copy()
+    
+    with engine.connect() as connection:
+        while pending_views:
+            progress_made = False
+            failed_views = []
+            
+            for view_file in pending_views:
+                try:
+                    with open(os.path.join(views_path, view_file), "r") as f:
+                        sql_script = f.read()
+                    
+                    # Execute the view creation script
+                    # We assume the script contains DROP VIEW IF EXISTS and CREATE VIEW
+                    statements = [s.strip() for s in sql_script.split(';') if s.strip()]
+                    
+                    with connection.begin():
+                        for statement in statements:
+                            connection.execute(text(statement))
+                    
+                    # print(f"Successfully created view from {view_file}")
+                    progress_made = True
+                except Exception as e:
+                    # If it fails, it might be due to missing dependency, so we try again later
+                    print(f"Failed to create view {view_file}: {e}")
+                    failed_views.append(view_file)
+            
+            if not progress_made and failed_views:
+                print(f"Error: Could not create the following views due to potential circular dependencies or errors: {failed_views}")
+                # We stop here to avoid infinite loop
+                # Optionally raise an error, but for now just printing
+                break
+            
+            pending_views = failed_views
+
+    if not pending_views:
+        print(f"All views recreated successfully in {round(time.time() - start, 2)}s.")
+    else:
+        print(f"View recreation finished with errors in {round(time.time() - start, 2)}s.")
