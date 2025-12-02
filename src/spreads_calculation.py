@@ -282,6 +282,9 @@ def calc_spreads(
     Returns:
         DataFrame containing calculated spreads with relevant columns
     """
+    if df.empty:
+        raise ValueError("Input DataFrame is empty no data")
+
     # Step 1: Select sell options by delta
     sell_puts, sell_calls = _get_sell_options_by_delta_target(df, delta_target)
 
@@ -457,7 +460,7 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     logger.info(f"Start {__name__} ({__file__})")
 
-    expiration_date = '2025-12-26'
+    expiration_date = "2026-01-02"
     delta_target = 0.2
     spread_width = 5
 
@@ -491,6 +494,10 @@ if __name__ == "__main__":
 
     start = time.time()
     df = select_into_dataframe(query=sql_query, params={"expiration_date": expiration_date})
+
+    if df.empty:
+        raise ValueError("Input DataFrame ist leer - keine Optionsdaten vorhanden")
+
     spreads_df = calc_spreads(df, delta_target, spread_width)
     ende = time.time()
 
