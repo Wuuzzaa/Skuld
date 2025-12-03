@@ -79,14 +79,14 @@ def main():
 
     logger.info(f"\n{'=' * 80}")
     logger.info(f"Running ALL {len(parallel_tasks)} data collection tasks in parallel")
-    logger.info(f"Max workers: 1 (limited for 4GB RAM server)")
+    logger.info(f"Max workers: 4 (limited for 4GB RAM server)")
     logger.info(f"{'=' * 80}\n")
 
     parallel_start = time.time()
 
     # Use ThreadPoolExecutor for I/O-bound tasks (web scraping)
     # Limit to 3 workers to prevent OOM on 4GB server
-    with ThreadPoolExecutor(max_workers=1) as executor:
+    with ThreadPoolExecutor(max_workers=4) as executor:
         future_to_task = {
             executor.submit(run_task_with_timing, name, func, *args): name
             for name, func, args in parallel_tasks
