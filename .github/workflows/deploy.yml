@@ -51,8 +51,9 @@ jobs:
             
             echo "=== Ensuring financial_data.db is a file ==="
             if [ -d "financial_data.db" ]; then
-              echo "⚠️  financial_data.db is a directory, converting to file..."
-              sudo rm -rf financial_data.db
+              echo "⚠️  financial_data.db is a directory, converting to file using Docker..."
+              # Use docker to remove the directory since it was created by docker (root)
+              sudo docker run --rm -v $(pwd):/work -w /work alpine rm -rf financial_data.db
               touch financial_data.db
             elif [ ! -f "financial_data.db" ]; then
               echo "📝 Creating empty financial_data.db..."
