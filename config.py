@@ -69,10 +69,10 @@ TRANSACTION_COST_PER_CONTRACT = 3.5 # in USD
 
 # Symbol selection
 SYMBOL_SELECTION = {
-    "mode": "max",                   # "all", "list", "file", "max"
+    "mode": "all",                   # "all", "list", "file", "max"
     "symbols": [""],             # Used when mode="list"
     "file_path": None,               # Used when mode="file"
-    "max_symbols": 200,               # Used when mode="max" or as limit for "all"
+    "max_symbols": "",               # Used when mode="max" or as limit for "all"
     "use_max_limit": False            # If True, applies max_symbols limit to any mode
 }
 

@@ -15,6 +15,13 @@ with col_epiration_date:
     sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'expiration_dte_asc.sql'
     dates_df = select_into_dataframe(sql_file_path=sql_file_path)
 
+    # Drop rows with NaN in days_to_expiration
+    dates_df = dates_df.dropna(subset=['days_to_expiration'])
+
+    if dates_df.empty:
+        st.warning("No expiration dates found.")
+        st.stop()
+
     # dte labels  ("5 DTE - 2025-01-15")
     dte_labels = dates_df.apply(
         lambda row: f"{int(row['days_to_expiration'])} DTE  {row['expiration_date']}",
