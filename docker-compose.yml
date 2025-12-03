@@ -9,8 +9,8 @@ services:
       - ./financial_data.db:/app/Skuld/financial_data.db
       # Persistent logs
       - ./logs:/app/Skuld/logs
-      # SSH directory for VPN access
-      - ~/.ssh:/root/.ssh      # <--- ohne :ro !
+      # SSH directory for VPN access (explicit path to deploy user's ssh keys)
+      - /home/deploy/.ssh:/root/.ssh
       # Cron logs for debugging
       #- ./cron.log:/var/log/cron.log
     environment:
