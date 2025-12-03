@@ -2,9 +2,10 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 import os
+from config import PATH_DATABASE_FILE
 
 # Datenbankpfad (wie im Docker-Compose gemountet)
-DB_PATH = os.path.join(os.path.dirname(__file__), '../financial_data.db')
+DB_PATH = PATH_DATABASE_FILE
 
 def get_data():
     try:

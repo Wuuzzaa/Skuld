@@ -38,7 +38,7 @@ analyst_prices = st.Page("pages/analyst_prices.py", title="Analyst Prices")
 spreads = st.Page("pages/spreads.py", title="Spreads")
 marrieds = st.Page("pages/married_put_analysis.py", title="Married Puts")
 multifactor_swingtrading = st.Page('pages/multifactor_swingtrading.py', title="Multifactor Swingtrading")
-DataLogs = st.Page('pages/data_change_logs.py', title="Data Logs", use_local_data=use_local_data)
+DataLogs = st.Page('pages/data_change_logs.py', title="Data Logs")
 
 # Set up navigation
 page = st.navigation(
