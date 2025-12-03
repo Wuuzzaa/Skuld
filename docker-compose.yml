@@ -6,7 +6,8 @@ services:
     container_name: skuld-streamlit-vpn-test
     volumes:
       # Persistent database file only (not entire db folder!)
-      - ./financial_data.db:/app/Skuld/financial_data.db
+      # App writes to /app/Skuld/db/financial_data.db, so we mount host file there
+      - ./financial_data.db:/app/Skuld/db/financial_data.db
       # Persistent logs
       - ./logs:/app/Skuld/logs
       # SSH directory for VPN access (explicit path to deploy user's ssh keys)
