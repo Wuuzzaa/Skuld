@@ -71,14 +71,21 @@ col_ivr, col_ivp, col_open_interest, col_profit_bpr = st.columns(4)
 
 # IVR Filter
 with col_ivr:
-    ivr_min = float(spreads_df['ivr'].min())
-    ivr_max = float(spreads_df['ivr'].max())
+    # Handle NaN values
+    spreads_df['ivr'] = spreads_df['ivr'].fillna(0)
+    
+    ivr_min = float(spreads_df['ivr'].min()) if not spreads_df.empty else 0.0
+    ivr_max = float(spreads_df['ivr'].max()) if not spreads_df.empty else 0.0
+    
     if ivr_min == ivr_max:
         st.text_input("IVR", value=f"{ivr_min:.2f}", disabled=True)
         ivr_range = (ivr_min, ivr_max)
     else:
         # Default minimum value of 0.3
         default_min = max(ivr_min, 0.3)
+        # Ensure default_min is not greater than max
+        default_min = min(default_min, ivr_max)
+        
         ivr_range = st.slider(
             "IVR Range",
             min_value=ivr_min,
@@ -89,14 +96,21 @@ with col_ivr:
 
 # IVP Filter
 with col_ivp:
-    ivp_min = float(spreads_df['ivp'].min())
-    ivp_max = float(spreads_df['ivp'].max())
+    # Handle NaN values
+    spreads_df['ivp'] = spreads_df['ivp'].fillna(0)
+    
+    ivp_min = float(spreads_df['ivp'].min()) if not spreads_df.empty else 0.0
+    ivp_max = float(spreads_df['ivp'].max()) if not spreads_df.empty else 0.0
+    
     if ivp_min == ivp_max:
         st.text_input("IVP", value=f"{ivp_min:.2f}", disabled=True)
         ivp_range = (ivp_min, ivp_max)
     else:
         # Default minimum value of 0.3
         default_min = max(ivp_min, 0.3)
+        # Ensure default_min is not greater than max
+        default_min = min(default_min, ivp_max)
+        
         ivp_range = st.slider(
             "IVP Range",
             min_value=ivp_min,
@@ -107,14 +121,21 @@ with col_ivp:
 
 # Open Interest Filter
 with col_open_interest:
-    oi_min = int(spreads_df['open_intrest'].min())
-    oi_max = int(spreads_df['open_intrest'].max())
+    # Handle NaN values by filling with 0
+    spreads_df['open_intrest'] = spreads_df['open_intrest'].fillna(0)
+    
+    oi_min = int(spreads_df['open_intrest'].min()) if not spreads_df.empty else 0
+    oi_max = int(spreads_df['open_intrest'].max()) if not spreads_df.empty else 0
+    
     if oi_min == oi_max:
         st.text_input("Open Interest", value=f"{oi_min}", disabled=True)
         oi_threshold = oi_min
     else:
         # Default minimum value of 100
         default_oi = max(oi_min, 100)
+        # Ensure default_oi is not greater than max
+        default_oi = min(default_oi, oi_max)
+        
         oi_threshold = st.number_input(
             "Min Open Interest",
             min_value=oi_min,
@@ -125,8 +146,12 @@ with col_open_interest:
 
 # Profit to BPR Filter
 with col_profit_bpr:
-    profit_bpr_min = float(spreads_df['profit_to_bpr'].min())
-    profit_bpr_max = float(spreads_df['profit_to_bpr'].max())
+    # Handle NaN values
+    spreads_df['profit_to_bpr'] = spreads_df['profit_to_bpr'].fillna(0)
+    
+    profit_bpr_min = float(spreads_df['profit_to_bpr'].min()) if not spreads_df.empty else 0.0
+    profit_bpr_max = float(spreads_df['profit_to_bpr'].max()) if not spreads_df.empty else 0.0
+    
     if profit_bpr_min == profit_bpr_max:
         st.text_input("Profit/BPR", value=f"{profit_bpr_min:.3f}", disabled=True)
         profit_bpr_threshold = profit_bpr_min
