@@ -214,6 +214,9 @@ def _add_earnings_and_urls(spreads: pd.DataFrame) -> pd.DataFrame:
     Returns:
         DataFrame with earnings warnings and URLs added
     """
+    # Remove duplicate columns if any, to prevent issues with apply
+    spreads = spreads.loc[:, ~spreads.columns.duplicated()]
+
     # Convert date fields to datetime
     spreads['earnings_date_sell'] = pd.to_datetime(
         spreads['earnings_date_sell'],
@@ -228,7 +231,10 @@ def _add_earnings_and_urls(spreads: pd.DataFrame) -> pd.DataFrame:
     spreads['earnings_warning'] = spreads.apply(_create_earnings_warning, axis=1)
 
     # Generate OptionStrat URLs
-    spreads['optionstrat_url'] = spreads.apply(_build_optionstrat_url, axis=1)
+    # Use list comprehension to avoid potential pandas issue where apply returns a DataFrame
+    spreads['optionstrat_url'] = [
+        _build_optionstrat_url(row) for _, row in spreads.iterrows()
+    ]
 
     return spreads
 
