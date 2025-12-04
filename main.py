@@ -93,14 +93,19 @@ def main():
         }
 
         results = {}
-        for future in as_completed(future_to_task):
-            task_name = future_to_task[future]
-            try:
-                result, error = future.result()
-                results[task_name] = (result, error)
-            except Exception as e:
-                logger.error(f"Critical error in {task_name}: {e}")
-                results[task_name] = (None, e)
+        try:
+            for future in as_completed(future_to_task):
+                task_name = future_to_task[future]
+                try:
+                    result, error = future.result()
+                    results[task_name] = (result, error)
+                except Exception as e:
+                    logger.error(f"Critical error in {task_name}: {e}")
+                    results[task_name] = (None, e)
+        except KeyboardInterrupt:
+            logger.warning("KeyboardInterrupt received! Shutting down executor...")
+            executor.shutdown(wait=False, cancel_futures=True)
+            raise
 
     parallel_duration = int(time.time() - parallel_start)
     logger.info(f"\n{'=' * 80}")
