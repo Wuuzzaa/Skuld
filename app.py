@@ -34,11 +34,11 @@ if not PATH_DATABASE_FILE.exists():
 logger.info(f"✓ Database found at: {PATH_DATABASE_FILE}")
 
 # Define pages
-analyst_prices = st.Page("pages/analyst_prices.py", title="Analyst Prices")
-spreads = st.Page("pages/spreads.py", title="Spreads")
-marrieds = st.Page("pages/married_put_analysis.py", title="Married Puts")
-multifactor_swingtrading = st.Page('pages/multifactor_swingtrading.py', title="Multifactor Swingtrading")
-DataLogs = st.Page('pages/data_change_logs.py', title="Data Logs")
+analyst_prices = st.Page("views/analyst_prices.py", title="Analyst Prices")
+spreads = st.Page("views/spreads.py", title="Spreads")
+marrieds = st.Page("views/married_put_analysis.py", title="Married Puts")
+multifactor_swingtrading = st.Page('views/multifactor_swingtrading.py', title="Multifactor Swingtrading")
+DataLogs = st.Page('views/data_change_logs.py', title="Data Logs")
 
 # Set up navigation
 page = st.navigation(
