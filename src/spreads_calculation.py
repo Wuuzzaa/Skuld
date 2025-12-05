@@ -175,13 +175,15 @@ def _calculate_spread_metrics(spreads: pd.DataFrame) -> pd.DataFrame:
     spreads["max_profit"] = MULTIPLIER * (spreads["mid_sell"] - spreads["mid_buy"])
 
     # Remove spreads without profit potential
-    spreads = spreads[spreads['max_profit'] > 0].reset_index(drop=True)
+    # Allow NaNs to pass through (treat as potentially profitable or at least visible)
+    spreads = spreads[(spreads['max_profit'] > 0) | spreads['max_profit'].isna()].reset_index(drop=True)
 
     # Calculate buying power reduction (BPR)
     spreads["bpr"] = spreads["spread_width"] * MULTIPLIER - spreads["max_profit"]
 
     # Remove spreads with negative BPR
-    spreads = spreads[spreads['bpr'] > 0].reset_index(drop=True)
+    # Allow NaNs to pass through
+    spreads = spreads[(spreads['bpr'] > 0) | spreads['bpr'].isna()].reset_index(drop=True)
 
     # Calculate profit-to-BPR ratio
     spreads["profit_to_bpr"] = spreads["max_profit"] / spreads["bpr"]
