@@ -360,20 +360,27 @@ def _build_optionstrat_url(row: pd.Series) -> str:
         Bull Put: https://optionstrat.com/build/bull-put-spread/KO/.KO260220P57.5,-.KO260220P70
         Bear Call: https://optionstrat.com/build/bear-call-spread/KO/-.KO260220C57.5,.KO260220C70
     """
-    base_url = "https://optionstrat.com/build"
+    try:
+        base_url = "https://optionstrat.com/build"
 
-    symbol = row['symbol'].upper()
-    date_str = _format_expiration_date(row['expiration_date_sell'])
-    opt_type_str = row['option-type_sell'].lower()
+        # Check for required fields
+        if pd.isna(row['symbol']) or pd.isna(row['expiration_date_sell']) or pd.isna(row['option-type_sell']):
+            return ""
 
-    if opt_type_str == COL_PUTS:
-        strategy = 'bull-put-spread'
-        options_string = _build_put_spread_options(row, symbol, date_str)
-    else:  # calls
-        strategy = 'bear-call-spread'
-        options_string = _build_call_spread_options(row, symbol, date_str)
+        symbol = str(row['symbol']).upper()
+        date_str = _format_expiration_date(row['expiration_date_sell'])
+        opt_type_str = str(row['option-type_sell']).lower()
 
-    return f"{base_url}/{strategy}/{symbol}/{options_string}"
+        if opt_type_str == COL_PUTS:
+            strategy = 'bull-put-spread'
+            options_string = _build_put_spread_options(row, symbol, date_str)
+        else:  # calls
+            strategy = 'bear-call-spread'
+            options_string = _build_call_spread_options(row, symbol, date_str)
+
+        return f"{base_url}/{strategy}/{symbol}/{options_string}"
+    except Exception:
+        return ""
 
 
 def _format_expiration_date(exp_date: Any) -> str:
@@ -386,6 +393,9 @@ def _format_expiration_date(exp_date: Any) -> str:
     Returns:
         Formatted date string (YYMMDD)
     """
+    if pd.isna(exp_date):
+        raise ValueError("Expiration date is NaN")
+        
     if isinstance(exp_date, str):
         exp_date = datetime.strptime(exp_date, '%Y-%m-%d')
 
