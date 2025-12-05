@@ -51,6 +51,12 @@ with st.spinner("Calculating spreads..."):
         "expiration_date": expiration_date})
     spreads_df = calc_spreads(df, delta_target, spread_width)
 
+# Ensure numeric types for filtering columns to prevent comparison errors
+cols_to_numeric = ['ivr', 'ivp', 'open_intrest', 'profit_to_bpr']
+for col in cols_to_numeric:
+    if col in spreads_df.columns:
+        spreads_df[col] = pd.to_numeric(spreads_df[col], errors='coerce')
+
 # Dynamically extract unique values for symbol and option_type from calculated spreads_df
 unique_symbols = sorted(spreads_df['symbol'].unique())
 unique_option_types = sorted(spreads_df['option_type'].unique())
@@ -83,10 +89,8 @@ with col_ivr:
         st.text_input("IVR", value=f"{ivr_min:.2f}", disabled=True)
         ivr_range = (ivr_min, ivr_max)
     else:
-        # Default minimum value of 0.3
-        default_min = max(ivr_min, 0.3)
-        # Ensure default_min is not greater than max
-        default_min = min(default_min, ivr_max)
+        # Default minimum value to min available (inclusive)
+        default_min = ivr_min
         
         ivr_range = st.slider(
             "IVR Range",
@@ -109,10 +113,8 @@ with col_ivp:
         st.text_input("IVP", value=f"{ivp_min:.2f}", disabled=True)
         ivp_range = (ivp_min, ivp_max)
     else:
-        # Default minimum value of 0.3
-        default_min = max(ivp_min, 0.3)
-        # Ensure default_min is not greater than max
-        default_min = min(default_min, ivp_max)
+        # Default minimum value to min available (inclusive)
+        default_min = ivp_min
         
         ivp_range = st.slider(
             "IVP Range",
@@ -135,10 +137,8 @@ with col_open_interest:
         st.text_input("Open Interest", value=f"{oi_min}", disabled=True)
         oi_threshold = oi_min
     else:
-        # Default minimum value of 100
-        default_oi = max(oi_min, 100)
-        # Ensure default_oi is not greater than max
-        default_oi = min(default_oi, oi_max)
+        # Default minimum value to min available (inclusive)
+        default_oi = oi_min
         
         oi_threshold = st.number_input(
             "Min Open Interest",
@@ -161,8 +161,9 @@ with col_profit_bpr:
         st.text_input("Profit/BPR", value=f"{profit_bpr_min:.3f}", disabled=True)
         profit_bpr_threshold = profit_bpr_min
     else:
-        # Default minimum value of 0.1, but not exceeding max
-        default_profit = min(max(profit_bpr_min, 0.1), profit_bpr_max)
+        # Default minimum value to min available (inclusive)
+        default_profit = profit_bpr_min
+        
         profit_bpr_threshold = st.number_input(
             "Min Profit/BPR",
             min_value=profit_bpr_min,
