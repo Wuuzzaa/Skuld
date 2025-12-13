@@ -2,7 +2,7 @@ name: Debug SSH Connection
 
 on:
   push:
-    branches: [ docker ]
+    branches: [ "docker_trial" ]
 
 jobs:
   debug:
