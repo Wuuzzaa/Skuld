@@ -1,7 +1,12 @@
 import pandas as pd
+from dotenv import load_dotenv
+import os
 from pathlib import Path
 from src.get_version import get_version
 
+# Massiv API
+load_dotenv()
+MASSIVE_API_KEY = os.getenv('MASSIVE_API_KEY')
 
 # Base path relative to base folder
 BASE_DIR = Path(__file__).resolve().parent
