@@ -78,8 +78,8 @@ async def get_all_stocks_and_indices():
     }
 
 
-async def get_all_option_contracts():
-    """Holt ALLE Options-Contracts mit Pagination"""
+async def get_all_symbols_with_options():
+    """Holt ALLE Options-Contracts mit Pagination. Keine Preise keine Griechen"""
     url = "https://api.massive.com/v3/reference/options/contracts"
     params = {
         "limit": 1000,  # Max 1000 pro Request
@@ -129,7 +129,10 @@ async def get_all_option_contracts():
 
     print(f"✓ Unique Symbole: {len(underlying_tickers)}")
 
-    return all_contracts
+    df = pd.DataFrame(underlying_tickers)
+    df.to_feather("option_symbols.feather")
+
+    return underlying_tickers
 
 
 async def get_all_option_chains_for_ticker(ticker, session, limit=250):
@@ -182,7 +185,7 @@ async def get_all_option_chains_for_ticker(ticker, session, limit=250):
 
 
 async def get_option_chains_tickers_async(tickers, limit=250):
-    """Holt ALLE Options-Chains für alle Tickers parallel"""
+    """Holt ALLE Options-Chains für alle Tickers parallel. Inkl. Griechen und Preise sowie IV"""
     connector = aiohttp.TCPConnector(limit=0)
     timeout = aiohttp.ClientTimeout(total=600)
 
@@ -329,15 +332,17 @@ async def get_active_tickers_with_options_fast():
 
 if __name__ == "__main__":
     ticker = "MSFT"
-    tickers = [
-        "MSFT",
-        "AAPL",
-        "AMZN",
-        "KO",
-        "GOOGL",
-        "QQQ",
-        "TSLA",
-    ]
+    # tickers = [
+    #     "MSFT",
+    #     "AAPL",
+    #     "AMZN",
+    #     "KO",
+    #     "GOOGL",
+    #     "QQQ",
+    #     "TSLA",
+    # ]
+
+    tickers = sorted(pd.read_feather("option_symbols.feather").iloc[:, 0].tolist())
 
     # # One symbol option chains
     # start_time = time.time()
@@ -349,15 +354,15 @@ if __name__ == "__main__":
     # get_option_chains_tickers(tickers)
     # print(f"Ausführungszeit: {time.time() - start_time:.2f} Sekunden")
 
-    # # Multiple symbols option chains
-    # start_time = time.time()
-    # #option_chains = asyncio.run(get_option_chains_tickers_async(tickers, limit=250))
-    # option_chains = asyncio.run(get_option_chains_tickers_async(SYMBOLS, limit=250))
-    # print(f"Ausführungszeit: {time.time() - start_time:.2f} Sekunden")
+    # Multiple symbols option chains
+    start_time = time.time()
+    option_chains = asyncio.run(get_option_chains_tickers_async(tickers, limit=250))
+    print(f"Ausführungszeit: {time.time() - start_time:.2f} Sekunden")
+    pass
 
     # # All symbols option chains
     # start_time = time.time()
-    # option_chains = asyncio.run(get_all_option_contracts())
+    # symbols_with_options = asyncio.run(get_all_symbols_with_options())
     # print(f"Ausführungszeit: {time.time() - start_time:.2f} Sekunden")
 
     # # All symbols (stock and indices)
@@ -365,14 +370,21 @@ if __name__ == "__main__":
     # result = asyncio.run(get_all_stocks_and_indices())
     # print(f"Ausführungszeit: {time.time() - start_time:.2f} Sekunden")
 
-    # All symbols with options (stock and indices)
-    start_time = time.time()
-    result = asyncio.run(get_active_tickers_with_options_fast())
-    print(f"Ausführungszeit: {time.time() - start_time:.2f} Sekunden")
+    # # All symbols with options (stock and indices)
+    # start_time = time.time()
+    # result = asyncio.run(get_active_tickers_with_options_fast())
+    # print(f"Ausführungszeit: {time.time() - start_time:.2f} Sekunden")
 
     # # all contracts
     # start_time = time.time()
     # all_contracts()
     # print(f"Ausführungszeit: {time.time() - start_time:.2f} Sekunden")
 
+"""
+https://massive.com/docs/rest/options/snapshots/option-chain-snapshot 
+
+über den Beispielcode ist es zu langsam. Zwar 250 Einträge gleichzeitig. Geht aber besser bei ca. 1,8 Mio Einträgen.
+Dazu erst jedes Optionssymbol speichern.
+Dann für jedes Optionssymbol eine Query async ebenfalls mit 250 batch -> viel schneller.
+"""
 
