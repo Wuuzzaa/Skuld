@@ -2,6 +2,7 @@ import argparse
 import time
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from src.backtesting.dummy_strategy import DummyStrategy
 from src.barchart_scrapper import scrape_barchart
 from src.live_stock_price_collector import fetch_current_prices
 from src.logger_config import setup_logging
@@ -21,6 +22,11 @@ from config_utils import generate_expiry_dates_from_rules
 setup_logging(log_file=PATH_LOG_FILE, log_level=logging.DEBUG, console_output=True)
 logger = logging.getLogger(__name__)
 logger.info("Start SKULD")
+
+# Backtesting imports
+from src.backtesting.snapshot_manager import SnapshotManager
+# from src.backtesting.dummy_strategy import DummyStrategy # Uncomment when created
+
 
 
 def run_task_with_timing(task_name, func, *args, **kwargs):
@@ -108,6 +114,22 @@ def main(upload_google_drive=True):
     logger.info(f"\n{'=' * 80}")
     logger.info(f"All parallel tasks completed in {parallel_duration}s")
     logger.info(f"{'=' * 80}\n")
+
+    # Backtesting Snapshot
+    try:
+        logger.info(f"\n{'=' * 80}")
+        logger.info(f"Starting Backtesting Data Snapshot")
+        logger.info(f"{'=' * 80}\n")
+        
+        snapshot_manager = SnapshotManager()
+        
+        # TODO: Register actual strategies here
+        snapshot_manager.register_strategy(DummyStrategy())
+        
+        snapshot_manager.perform_snapshot()
+        
+    except Exception as e:
+        logger.error(f"Backtesting Snapshot failed: {e}")
 
     # Upload (must be last)
     if upload_google_drive:
