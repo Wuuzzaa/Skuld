@@ -18,6 +18,14 @@ services:
       - PYTHONUNBUFFERED=1
       - TZ=Europe/Berlin
     restart: unless-stopped
+    # === DOCKER LOG ROTATION CONFIGURATION ===
+    # This prevents the container's output logs (stdout/stderr) from filling up the disk.
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m" # Maximum size of a single log file (10 MB)
+        max-file: "3"   # Keep a maximum of 3 rotated log files
+    # ========================================
     networks:
       - web
     labels:
