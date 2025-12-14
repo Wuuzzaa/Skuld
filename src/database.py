@@ -34,18 +34,9 @@ def truncate_table(table_name):
       for database connection.
     - table_name (str): The name of the table to truncate.
     """
-    start = time.time()
     engine = get_database_engine()
     with engine.begin() as connection:
-        try:
-            connection.execute(text(f"DELETE FROM {table_name}"))
-            print(f"Successfully truncated table: {table_name} in {round(time.time() - start,2)}s")
-            
-            # Log the operation
-            log_data_change(connection, "TRUNCATE", table_name, affected_rows=None)
-            
-        except Exception as e:
-            print(f"Error truncating table {table_name}: {e}")
+        execute_sql(connection, f"DELETE FROM {table_name}", table_name, "TRUNCATE")
 
 def log_data_change(connection, operation_type, table_name, affected_rows=None, additional_data=None):
     """
@@ -87,6 +78,31 @@ def insert_into_table(
         print(f"Error saving to the database table {table_name}: {e}")
 
     return affected_rows
+
+def execute_sql(connection, sql: str, table_name: str, operation_type: str = "INSERT"):
+    """
+    Executes a raw SQL statement and logs the data change.
+    
+    Parameters:
+    - connection: SQLAlchemy connection object (must be inside a transaction).
+    - sql (str): The raw SQL statement to execute.
+    - table_name (str): The name of the table being modified.
+    - operation_type (str): The type of operation (INSERT, UPDATE, DELETE).
+    """
+    try:
+        start = time.time()
+        result = connection.execute(text(sql))
+        affected_rows = result.rowcount
+        
+        print(f"Successfully executed {operation_type} SQL on {table_name} in {round(time.time() - start, 2)}s. Rows affected: {affected_rows}")
+        
+        # Log the operation
+        log_data_change(connection, operation_type, table_name, affected_rows=affected_rows)
+        
+        return affected_rows
+    except Exception as e:
+        print(f"Error executing SQL on {table_name}: {e}")
+        raise e
 
 @log_function
 def select_into_dataframe(query: str = None, sql_file_path: str = None, params: dict = None):

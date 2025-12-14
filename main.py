@@ -17,6 +17,7 @@ from src.google_drive_upload import upload_database
 from src.dividend_radar import process_dividend_data
 from config_utils import get_filtered_symbols_and_dates_with_logging
 from config_utils import generate_expiry_dates_from_rules
+from src.historization import run_historization_pipeline
 
 setup_logging(log_file=PATH_LOG_FILE, log_level=logging.DEBUG, console_output=True)
 logger = logging.getLogger(__name__)
@@ -107,7 +108,11 @@ def main(upload_google_drive=True):
     parallel_duration = int(time.time() - parallel_start)
     logger.info(f"\n{'=' * 80}")
     logger.info(f"All parallel tasks completed in {parallel_duration}s")
+    logger.info(f"All parallel tasks completed in {parallel_duration}s")
     logger.info(f"{'=' * 80}\n")
+
+    # Historization
+    run_historization_pipeline()
 
     # Upload (must be last)
     if upload_google_drive:

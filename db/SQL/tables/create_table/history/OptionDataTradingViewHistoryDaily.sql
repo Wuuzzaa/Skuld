@@ -1,5 +1,5 @@
-DROP TABLE IF EXISTS "OptionDataTradingView";
-CREATE TABLE "OptionDataTradingView" (
+CREATE TABLE "OptionDataTradingViewHistoryDaily" (
+	snapshot_date DATE NOT NULL,
 	ask FLOAT, 
 	bid FLOAT, 
 	delta FLOAT, 
@@ -17,5 +17,5 @@ CREATE TABLE "OptionDataTradingView" (
 	exchange TEXT, 
 	expiration_date BIGINT, 
 	option_osi TEXT,
-	UNIQUE(option_osi)
+	UNIQUE(snapshot_date, option_osi)
 );
