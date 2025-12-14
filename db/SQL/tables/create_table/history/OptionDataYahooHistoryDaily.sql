@@ -1,6 +1,6 @@
-DROP TABLE IF EXISTS "OptionDataYahoo";
-CREATE TABLE "OptionDataYahoo" (
-	symbol TEXT, 
+CREATE TABLE "OptionDataYahooHistoryDaily" (
+	snapshot_date DATE NOT NULL,
+	symbol TEXT NOT NULL,
 	expiration_date DATETIME, 
 	"option-type" TEXT, 
 	"contractSymbol" TEXT, 
@@ -17,5 +17,5 @@ CREATE TABLE "OptionDataYahoo" (
 	"impliedVolatility" FLOAT, 
 	"inTheMoney" BOOLEAN, 
 	option_volume FLOAT,
-	UNIQUE("contractSymbol")
+	UNIQUE(snapshot_date, "contractSymbol")
 );
