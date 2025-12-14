@@ -87,7 +87,7 @@ def main():
 
     # Use ThreadPoolExecutor for I/O-bound tasks (web scraping)
     # Limit to 3 workers to prevent OOM on 4GB server
-    with ThreadPoolExecutor(max_workers=4) as executor:
+    with ThreadPoolExecutor(max_workers=1) as executor:
         future_to_task = {
             executor.submit(run_task_with_timing, name, func, *args): name
             for name, func, args in parallel_tasks

@@ -35,20 +35,45 @@ class VPNManager:
             logger.info("=" * 80)
             
             # SSH-Tunnel mit SOCKS5 Proxy starten
-            # -f: Background, -N: Kein Remote Command, -D: SOCKS5 Proxy
+            # -N: Kein Remote Command, -D: SOCKS5 Proxy
             # -o StrictHostKeyChecking=no: Keine Hostkey-Prüfung
+            # Wir entfernen -f, damit der Prozess ein Child-Prozess bleibt und wir Fehler sehen können
+            cmd = [
+                'ssh', 
+                '-i', '/root/.ssh/id_ed25519_vpn', 
+                '-N', 
+                '-D', f'127.0.0.1:{self.socks_port}',
+                '-o', 'StrictHostKeyChecking=no',
+                '-o', 'UserKnownHostsFile=/dev/null',
+                '-o', 'ConnectTimeout=10',  # Timeout für Verbindungsaufbau
+                '-o', 'ExitOnForwardFailure=yes', # Beenden wenn Port-Forwarding fehlschlägt
+                self.raspberry_host
+            ]
+            
+            logger.info(f"🚀 VPN: Führe SSH-Befehl aus: {' '.join(cmd)}")
+            
             self.ssh_process = subprocess.Popen(
-                ['ssh', '-i', '/root/.ssh/id_ed25519_vpn', '-f', '-N', '-D', f'127.0.0.1:{self.socks_port}',
-                 '-o', 'StrictHostKeyChecking=no',
-                 '-o', 'UserKnownHostsFile=/dev/null',
-                 self.raspberry_host],
+                cmd,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
+                stderr=subprocess.PIPE,
+                text=True # Text-Modus für einfacheres Logging
             )
             
             logger.info("🔄 VPN: Warte auf SSH-Tunnel...")
             # Kurz warten bis Tunnel steht
-            time.sleep(3)
+            time.sleep(5)
+            
+            # Prüfen ob Prozess noch lebt
+            if self.ssh_process.poll() is not None:
+                # Prozess hat sich beendet -> Fehler!
+                _, stderr = self.ssh_process.communicate()
+                logger.error("=" * 80)
+                logger.error(f"❌ VPN: SSH-Tunnel konnte nicht aufgebaut werden!")
+                logger.error(f"❌ SSH Fehler: {stderr}")
+                logger.error("=" * 80)
+                return False
+            
+            logger.info("✅ VPN: SSH-Prozess läuft noch, versuche Proxy-Verbindung...")
             
             # Proxy-Config für requests
             self.proxies = {
