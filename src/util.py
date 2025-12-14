@@ -1,6 +1,7 @@
 import re
 import sys
 import os
+import threading
 from config import *
 from config_utils import generate_expiry_dates_from_rules
 
@@ -128,6 +129,7 @@ class Singleton:
 
     def __init__(self, decorated):
         self._decorated = decorated
+        self._lock = threading.Lock()
 
     def instance(self):
         """
@@ -139,8 +141,13 @@ class Singleton:
         try:
             return self._instance
         except AttributeError:
-            self._instance = self._decorated()
-            return self._instance
+            with self._lock:
+                # Double-checked locking
+                try:
+                    return self._instance
+                except AttributeError:
+                    self._instance = self._decorated()
+                    return self._instance
 
     def __call__(self):
         raise TypeError('Singletons must be accessed through `instance()`.')
