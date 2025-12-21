@@ -27,6 +27,16 @@ services:
         max-file: "3"   # Keep a maximum of 3 rotated log files
     # ========================================
 
+ # RESOURCE MANAGEMENT: Tailored for 2 vCPUs and 4GB RAM
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'      # Max 75% of your 2 vCPUs
+          memory: 3000M    # Max 3GB of your 4GB RAM
+        reservations:
+          cpus: '0.25'     # Guaranteed minimum CPU share
+          memory: 512M     # Guaranteed minimum RAM
+
     labels:
       # Enable Traefik for this service
       - "traefik.enable=true"
