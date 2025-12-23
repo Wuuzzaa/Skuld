@@ -189,3 +189,5 @@ service_account.json
 
 /logs/
 .vscode/
+db/SQL/tables/create_table/history/
+db/SQL/views/create_view/history/

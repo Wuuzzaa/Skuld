@@ -1,8 +1,11 @@
 import logging
+import pathlib
 import time
 from sqlalchemy import text
-from src.database import get_database_engine, execute_sql
+from config import HISTORY_ENABLED_TABLES
+from src.database import get_database_engine, execute_sql, get_table_key_and_data_columns, table_exists, view_exists
 from src.decorator_log_function import log_function
+from src.data_aging import DataAgingService
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +22,7 @@ class HistorizationService:
             query = text(f"SELECT name, type FROM pragma_table_info('{table_name}')")
             result = connection.execute(query).fetchall()
             columns = [{"name": row[0], "type": row[1]} for row in result]
-            logger.info(f"Found columns: {columns}")
+            # logger.info(f"Found columns: {columns}")
             return columns
         except Exception as e:
             logger.error(f"Error fetching columns for {table_name}: {e}")
@@ -27,14 +30,20 @@ class HistorizationService:
 
     @staticmethod
     @log_function
-    def run_daily_historization(source_table: str, history_table: str, conflict_keys: list[str]):
+    def run_daily_historization(source_table: str):
         """
         Copies data from source_table to history_table with an UPSERT strategy.
         Adds a 'snapshot_date' column with the current date.
         """
         start_time = time.time()
-        logger.info(f"Starting historization from {source_table} to {history_table}")
         
+        history_table = f"{source_table}HistoryDaily"
+        key_columns, _ = get_table_key_and_data_columns(source_table)
+        key_column_names = [col['name'] for col in key_columns]
+
+        logger.info(f"Starting historization from {source_table} to {history_table}")
+        _create_history_tables_and_view_if_not_exist(source_table)
+
         engine = get_database_engine()
         with engine.begin() as connection:
             # 1. Get columns from source table
@@ -48,23 +57,22 @@ class HistorizationService:
             # 2. Build the SQL statement
             # Target columns: snapshot_date + original columns
             target_cols_str = "snapshot_date, " + ", ".join([f'"{c}"' for c in column_names])
-            select_cols_str = "date('now'), " + ", ".join([f'"{c}"' for c in column_names])
+            select_cols_str = f"date('now'), " + ", ".join([f'"{c}"' for c in column_names])
             
             # Update clause for UPSERT
             # Exclude conflict keys from the update set
             update_set = []
             for col in column_names:
-                if col not in conflict_keys:
+                if col not in key_column_names:
                     update_set.append(f'"{col}" = excluded."{col}"')
             
             update_clause = ", ".join(update_set)
-            conflict_target = ", ".join([f'"{k}"' for k in conflict_keys])
+            conflict_target = ", ".join([f'"{k}"' for k in key_column_names])
             
             sql = f"""
                 INSERT INTO "{history_table}" ({target_cols_str})
                 SELECT {select_cols_str}
                 FROM "{source_table}"
-                WHERE 1=1
                 ON CONFLICT(snapshot_date, {conflict_target}) DO UPDATE SET
                 {update_clause}
             """
@@ -72,33 +80,216 @@ class HistorizationService:
             # 3. Execute
             try:
                 # Use the new helper function to execute and log
-                execute_sql(connection, sql, history_table, "UPSERT")
+                execute_sql(connection, sql, history_table, "UPSERT", f"Historize data from {source_table} to {history_table}")
             except Exception as e:
                 logger.error(f"Error during historization execution: {e}")
                 raise e
 
+        DataAgingService.run(source_table=source_table)
         duration = time.time() - start_time
-        logger.info(f"Historization finished in {duration:.2f}s")
+        logger.info(f"Historization for {source_table} finished in {duration:.2f}s")
 
 def run_historization_pipeline():
     """
     Orchestrates the historization process for all configured tables.
     """
+    start_time = time.time()
     logger.info("Running Historization Pipeline...")
     try:
-        # OptionDataYahoo configuration
-        HistorizationService.run_daily_historization(
-            source_table="OptionDataYahoo",
-            history_table="OptionDataYahooHistoryDaily",
-            conflict_keys=["contractSymbol"]
-        )
-
-        # OptionDataTradingView configuration
-        HistorizationService.run_daily_historization(
-            source_table="OptionDataTradingView",
-            history_table="OptionDataTradingViewHistoryDaily",
-            conflict_keys=["option_osi"]
-        )
+        for table in HISTORY_ENABLED_TABLES:
+            HistorizationService.run_daily_historization(
+                source_table=table
+            )
         logger.info("Historization Pipeline Completed Successfully.")
     except Exception as e:
         logger.error(f"Historization Pipeline Failed: {e}")
+    
+    logger.info(f"Historization Pipeline Finished in {round(time.time() - start_time, 2)}s.")
+
+def _create_history_tables_and_view_if_not_exist(source_table: str):
+    """
+    Creates the history tables if they do not exist.
+    """
+    path_sql_create_table_statements = pathlib.Path("db/SQL/tables/create_table/history")
+    path_sql_create_table_statements.mkdir(parents=True, exist_ok=True)
+    engine = get_database_engine()
+    table = source_table
+  
+    daily_history_table_name, create_daily_table_sql = _get_daily_history_table_name_create_statement(table)
+    if not table_exists(daily_history_table_name):
+        # write sql to file "{daily_history_table_name}.sql" to db/SQL/tables/create_table/history/
+        with open(f"{path_sql_create_table_statements}/{daily_history_table_name}.sql", "w") as f:
+            f.write(create_daily_table_sql)
+        with engine.begin() as connection:
+            execute_sql(connection, create_daily_table_sql, daily_history_table_name, "CREATE TABLE")
+    
+    weekly_history_table_name, create_weekly_table_sql = _get_weekly_history_table_name_create_statement(table)
+    if not table_exists(weekly_history_table_name):
+        # write sql to file "{weekly_history_table_name}.sql" to db/SQL/tables/create_table/history/
+        with open(f"{path_sql_create_table_statements}/{weekly_history_table_name}.sql", "w") as f:
+            f.write(create_weekly_table_sql)
+        with engine.begin() as connection:
+            execute_sql(connection, create_weekly_table_sql, weekly_history_table_name, "CREATE TABLE")
+    
+    monthly_history_table_name, create_monthly_table_sql = _get_monthly_history_table_name_create_statement(table)
+    if not table_exists(monthly_history_table_name):
+        # write sql to file "{monthly_history_table_name}.sql" to db/SQL/tables/create_table/history/
+        with open(f"{path_sql_create_table_statements}/{monthly_history_table_name}.sql", "w") as f:
+            f.write(create_monthly_table_sql)
+        with engine.begin() as connection:
+            execute_sql(connection, create_monthly_table_sql, monthly_history_table_name, "CREATE TABLE")
+    
+    master_data_table_name, create_master_data_table_sql = _get_master_data_table_name_create_statement(table)
+    if not table_exists(master_data_table_name):
+        # write sql to file "{master_data_table_name}.sql" to db/SQL/tables/create_table/history/
+        with open(f"{path_sql_create_table_statements}/{master_data_table_name}.sql", "w") as f:
+            f.write(create_master_data_table_sql)
+        with engine.begin() as connection:
+            execute_sql(connection, create_master_data_table_sql, master_data_table_name, "CREATE TABLE")
+        
+    history_view_name = f"{table}History"
+    if not view_exists(history_view_name):
+        path_sql_create_view_statements = pathlib.Path("db/SQL/views/create_view/history")
+        path_sql_create_view_statements.mkdir(parents=True, exist_ok=True)
+        create_view_sql = _get_history_view_create_statement(table)
+        with open(f"{path_sql_create_view_statements}/{history_view_name}.sql", "w") as f:
+            f.write(create_view_sql)
+        with engine.begin() as connection:
+            execute_sql(connection, create_view_sql, table, "CREATE VIEW")
+    logger.info(f"Ensured that {daily_history_table_name}, {weekly_history_table_name}, {monthly_history_table_name}, {master_data_table_name} tables exist.")
+            
+
+def _get_daily_history_table_name_create_statement(table_name: str):
+    """
+    Retrieves the create statement for the specified daily history table.
+    """
+    daily_history_table_name = f"{table_name}HistoryDaily"
+
+    create_statement_sql =  f"""
+    -- generated by HistorizationService
+    CREATE TABLE IF NOT EXISTS "{daily_history_table_name}" (
+        snapshot_date DATE NOT NULL,
+        {_get_column_definitions_str(table_name)},
+        PRIMARY KEY(snapshot_date, {_get_key_columns_str(table_name)})
+    );
+    """
+
+    return daily_history_table_name, create_statement_sql
+
+def _get_weekly_history_table_name_create_statement(table_name: str):
+    """
+    Retrieves the create statement for the specified weekly history table.
+    """
+    weekly_history_table_name = f"{table_name}HistoryWeekly"
+
+    create_statement_sql =  f"""
+    -- generated by HistorizationService
+    CREATE TABLE IF NOT EXISTS "{weekly_history_table_name}" (
+        year INT NOT NULL,
+        week INT NOT NULL,
+        {_get_column_definitions_str(table_name)},
+        PRIMARY KEY(year, week, {_get_key_columns_str(table_name)})
+    );
+    """
+    return weekly_history_table_name, create_statement_sql
+
+def _get_monthly_history_table_name_create_statement(table_name: str):
+    """
+    Retrieves the create statement for the specified monthly history table.
+    """
+    monthly_history_table_name = f"{table_name}HistoryMonthly"
+
+    create_statement_sql =  f"""
+    -- generated by HistorizationService
+    CREATE TABLE IF NOT EXISTS "{monthly_history_table_name}" (
+        year INT NOT NULL,
+        month INT NOT NULL,
+        {_get_column_definitions_str(table_name)},
+        PRIMARY KEY(year, month, {_get_key_columns_str(table_name)})
+    );
+    """
+
+    return monthly_history_table_name, create_statement_sql
+
+def _get_master_data_table_name_create_statement(table_name: str):
+    """
+    Retrieves the create statement for the specified master data table.
+    """
+    master_data_table_name = f"{table_name}MasterData"
+
+    create_statement_sql = f"""
+    -- generated by HistorizationService
+    CREATE TABLE IF NOT EXISTS "{master_data_table_name}" (
+        {_get_column_definitions_str(table_name)},
+        PRIMARY KEY({_get_key_columns_str(table_name)})
+    );
+    """
+    return master_data_table_name, create_statement_sql
+
+def _get_column_definitions_str(table_name: str):
+    """
+    Retrieves column definitions for the specified table.
+    """
+    key_columns, data_columns = get_table_key_and_data_columns(table_name)
+    key_column_definitions_str = ",\n\t\t\t".join([f'"{col["name"]}" {col["type"]}' for col in key_columns])
+    data_column_definitions_str = ",\n\t\t\t".join([f'"{col["name"]}" {col["type"]}' for col in data_columns])
+    
+    column_definitions_str = f"""
+        {key_column_definitions_str},
+        {data_column_definitions_str}
+    """.strip()
+
+    return column_definitions_str
+
+def _get_key_columns_str(table_name: str):
+    """
+    Retrieves the key columns for the specified table.
+    """
+    key_columns, _ = get_table_key_and_data_columns(table_name)
+    key_columns_str = ", ".join([f'"{col["name"]}"' for col in key_columns])
+    return key_columns_str
+
+def _get_history_view_create_statement(table_name: str):
+    """
+    Create statement for history view of the specified table.
+    """
+
+    key_columns, data_columns = get_table_key_and_data_columns(table_name)
+    key_column_definitions_str = ",\n\t\t\t".join([f'daily."{col["name"]}"' for col in key_columns])
+    data_column_definitions_str = ",\n\t\t\t".join([f"""
+        coalesce(
+            daily."{col["name"]}",
+            weekly."{col["name"]}",
+            monthly."{col["name"]}",
+            master_data."{col["name"]}"
+        ) as "{col["name"]}"
+        """.strip() for col in data_columns])
+    
+    column_definitions_str = f"""
+        {key_column_definitions_str},
+        {data_column_definitions_str}
+    """.strip()
+    
+    key_columns, _ = get_table_key_and_data_columns(table_name)
+    key_columns_on_condition_str_weekly = " AND ".join([f'daily."{col["name"]}" = weekly."{col["name"]}"' for col in key_columns])
+    key_columns_on_condition_str_monthly = " AND ".join([f'daily."{col["name"]}" = monthly."{col["name"]}"' for col in key_columns])
+    key_columns_on_condition_str_master_data = " AND ".join([f'daily."{col["name"]}" = master_data."{col["name"]}"' for col in key_columns])
+
+    create_statement_sql =  f"""
+    -- generated by HistorizationService
+    CREATE VIEW
+        "{table_name}History" AS
+    SELECT
+        daily.snapshot_date as date,
+        {column_definitions_str}
+    FROM
+        "{table_name}HistoryDaily" as daily
+        LEFT JOIN "{table_name}HistoryWeekly" as weekly ON strftime ('%Y', daily.snapshot_date) = weekly.year
+        AND strftime ('%W', daily.snapshot_date) = weekly.week
+        AND {key_columns_on_condition_str_weekly}
+        LEFT JOIN "{table_name}HistoryMonthly" as monthly ON strftime ('%Y', daily.snapshot_date) = monthly.year
+        AND strftime ('%m', daily.snapshot_date) = monthly.month
+        AND {key_columns_on_condition_str_monthly}
+        LEFT JOIN "{table_name}MasterData" as master_data ON {key_columns_on_condition_str_master_data};
+    """
+    return create_statement_sql
