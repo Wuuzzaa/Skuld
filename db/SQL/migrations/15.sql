@@ -953,15 +953,73 @@ CREATE TABLE "AnalystPriceTargets" (
 	analyst_mean_target FLOAT
 );
 INSERT INTO "DataAgingFieldClassification"
-(table_name, field_name, tier, last_value, last_change_date, tier_entry_date) 
+(table_name, field_name, tier, tier_entry_date) 
 VALUES
-('OptionDataTradingView', 'strike', 'Master', NULL, NULL, DATE('now')),
-('OptionDataTradingView', 'expiration_date', 'Master', NULL, NULL, DATE('now')),
-('OptionDataTradingView', 'option-type', 'Master', NULL, NULL, DATE('now')),
-('OptionDataTradingView', 'exchange', 'Master', NULL, NULL, DATE('now')),
-('OptionDataTradingView', 'symbol', 'Master', NULL, NULL, DATE('now'))
+('OptionDataTradingView', 'strike', 'Master', DATE('now')),
+('OptionDataTradingView', 'expiration_date', 'Master', DATE('now')),
+('OptionDataTradingView', 'option-type', 'Master',, DATE('now')),
+('OptionDataTradingView', 'exchange', 'Master', DATE('now')),
+('OptionDataTradingView', 'symbol', 'Master', DATE('now'))
 ON CONFLICT(table_name, field_name) DO UPDATE SET
     tier = excluded.tier,
-    last_value = excluded.last_value,
-    last_change_date = excluded.last_change_date,
+    tier_entry_date = excluded.tier_entry_date;
+
+INSERT INTO "DataAgingFieldClassification"
+(table_name, field_name, tier, tier_entry_date) 
+VALUES
+-- Kategorie: Master (Ändern sich nie)
+('OptionDataTradingView', 'option_osi', 'Master', DATE('now')),
+('OptionDataTradingView', 'symbol', 'Master', DATE('now')),
+('OptionDataTradingView', 'option-type', 'Master', DATE('now')),
+('OptionDataTradingView', 'expiration_date', 'Master', DATE('now')),
+('OptionDataTradingView', 'strike', 'Master', DATE('now')),
+('OptionDataTradingView', 'option', 'Master', DATE('now')),
+('OptionDataTradingView', 'exchange', 'Master', DATE('now')),
+
+-- Kategorie: Market (Ändern sich daily/realtime)
+('OptionDataTradingView', 'ask', 'Daily', DATE('now')),
+('OptionDataTradingView', 'bid', 'Daily', DATE('now')),
+('OptionDataTradingView', 'iv', 'Daily', DATE('now')),
+('OptionDataTradingView', 'theoPrice', 'Daily', DATE('now')),
+('OptionDataTradingView', 'time', 'Daily', DATE('now')),
+
+-- Kategorie: Greeks (Ändern sich daily/realtime)
+('OptionDataTradingView', 'delta', 'Daily', DATE('now')),
+('OptionDataTradingView', 'gamma', 'Daily', DATE('now')),
+('OptionDataTradingView', 'rho', 'Daily', DATE('now')),
+('OptionDataTradingView', 'theta', 'Daily', DATE('now')),
+('OptionDataTradingView', 'vega', 'Daily', DATE('now'))
+
+ON CONFLICT(table_name, field_name) DO UPDATE SET
+    tier = excluded.tier,
+    tier_entry_date = excluded.tier_entry_date;
+
+INSERT INTO "DataAgingFieldClassification"
+(table_name, field_name, tier, tier_entry_date) 
+VALUES
+-- Kategorie: Master (Statische Kontraktinformationen)
+('OptionDataYahoo', 'contractSymbol', 'Master', DATE('now')),
+('OptionDataYahoo', 'symbol', 'Master', DATE('now')),
+('OptionDataYahoo', 'option-type', 'Master', DATE('now')),
+('OptionDataYahoo', 'expiration_date', 'Master', DATE('now')),
+('OptionDataYahoo', 'strike', 'Master', DATE('now')),
+('OptionDataYahoo', 'currency', 'Master', DATE('now')),
+('OptionDataYahoo', 'contractSize', 'Master', DATE('now')),
+
+-- Kategorie: Market (Preisrelevante Daten)
+('OptionDataYahoo', 'lastPrice', 'Daily', DATE('now')),
+('OptionDataYahoo', 'bid', 'Daily', DATE('now')),
+('OptionDataYahoo', 'ask', 'Daily', DATE('now')),
+('OptionDataYahoo', 'change', 'Daily', DATE('now')),
+('OptionDataYahoo', 'percentChange', 'Daily', DATE('now')),
+('OptionDataYahoo', 'impliedVolatility', 'Daily', DATE('now')),
+('OptionDataYahoo', 'lastTradeDate', 'Daily', DATE('now')),
+('OptionDataYahoo', 'inTheMoney', 'Daily', DATE('now')),
+
+-- Kategorie: Volume (Handelsaktivität)
+('OptionDataYahoo', 'option_open_interest', 'Daily', DATE('now')),
+('OptionDataYahoo', 'option_volume', 'Daily', DATE('now'))
+
+ON CONFLICT(table_name, field_name) DO UPDATE SET
+    tier = excluded.tier,
     tier_entry_date = excluded.tier_entry_date;
