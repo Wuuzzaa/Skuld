@@ -1,5 +1,6 @@
+DROP TABLE IF EXISTS "FundamentalDataDividendRadar";
 CREATE TABLE "FundamentalDataDividendRadar" (
-	"Symbol" TEXT, 
+	"Symbol" TEXT PRIMARY KEY, 
 	"Company" TEXT, 
 	"FV" FLOAT, 
 	"Sector" TEXT, 
