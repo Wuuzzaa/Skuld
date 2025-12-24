@@ -17,6 +17,9 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - TZ=Europe/Berlin
+      # Telegram Alert Configuration
+      - TELEGRAM_BOT_TOKEN=8546562521:AAFZ9qkFSbJ46ESZ8MMINJ2Jb0_4NX_i8kw
+      - TELEGRAM_CHAT_ID=6114645134
     restart: unless-stopped
     # === DOCKER LOG ROTATION CONFIGURATION ===
     # This prevents the container's output logs (stdout/stderr) from filling up the disk.
