@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from sqlalchemy import text
 from config import HISTORY_ENABLED_TABLES
-from src.database import get_database_engine, execute_sql, get_table_key_and_data_columns, select_into_dataframe, table_exists, view_exists
+from src.database import get_database_engine, execute_sql, get_table_key_and_data_columns, select_into_dataframe
 import pathlib
 
 logger = logging.getLogger(__name__)
@@ -144,9 +144,13 @@ class DataAgingService:
 
         # We process each data column
         for col in data_columns:
+            col_name = col['name']
+            logger.info(f"Processing {source_table} column {col_name}...")
+            if is_classified_for_master_data(source_table, col_name):
+                logger.info(f"Skipping column {col_name} as it is not classified for Weekly promotion.")
+                continue
+
             with engine.begin() as conn:
-                col_name = col['name']
-                logger.info(f"Processing {source_table} column {col_name}...")
                 # 1. Promote to Weekly (Insert/Update)
                 # We insert the constant value. We primarily use min(val) since min=max.
                 
@@ -224,6 +228,7 @@ class DataAgingService:
         monthly_table = f"{table}HistoryMonthly"     
         master_data_table = f"{table}MasterData" 
         history_view = f"{table}History" 
+        history_select = get_history_select_statement(source_table, optimized=False)
         logger.info(f"Processing {monthly_table}...")     
     
         key_columns, data_columns = get_table_key_and_data_columns(master_data_table)
@@ -231,9 +236,12 @@ class DataAgingService:
 
         # We process each data column
         for col in data_columns:
+            col_name = col['name']
+            logger.info(f"Processing {source_table} column {col_name}...")
+            if is_classified_for_master_data(source_table, col_name):
+                logger.info(f"Skipping column {col_name} as it is not classified for Monthly promotion.")
+                continue
             with engine.begin() as conn:
-                col_name = col['name']
-                logger.info(f"Processing {source_table} column {col_name}...")
                 # 1. Promote to Monthly (Insert/Update)
                 # We insert the constant value. We primarily use min(val) since min=max.
                 
@@ -246,7 +254,7 @@ class DataAgingService:
                         strftime('%m', date) as month,
                         {key_columns_str},
                         min("{col_name}") as val
-                    FROM {history_view}
+                    FROM ({history_select})
                     WHERE "{col_name}" IS NOT NULL
                         AND strftime('%Y-%m', date) < strftime('%Y-%m', 'now') -- exclude current month
                         AND (year, month, {key_columns_str}) NOT IN (
@@ -295,7 +303,7 @@ class DataAgingService:
                             CAST(strftime('%Y', date) AS INT) AS ayear,
                             CAST(strftime('%W', date) AS INT) AS aweek,
                             {", ".join([f'a."{key_col["name"]}"' for key_col in key_columns])}
-                        FROM {history_view} AS a 
+                        FROM ({history_select}) AS a 
                         LEFT OUTER JOIN {monthly_table} AS b
                         ON ayear = b.year AND CAST(strftime('%m', date) AS INT) = b.month 
                             AND {" AND ".join([f'a."{key_col["name"]}" = b."{key_col["name"]}"' for key_col in key_columns])}
@@ -323,6 +331,7 @@ class DataAgingService:
         monthly_table = f"{table}HistoryMonthly"     
         master_data_table = f"{table}MasterData" 
         history_view = f"{table}History" 
+        history_select = get_history_select_statement(source_table, optimized=False)
         logger.info(f"Processing {monthly_table}...")     
     
         key_columns, data_columns = get_table_key_and_data_columns(master_data_table)
@@ -343,7 +352,7 @@ class DataAgingService:
                     SELECT
                         {key_columns_str},
                         min("{col_name}") as val
-                    FROM {history_view}
+                    FROM ({history_select})
                     WHERE "{col_name}" IS NOT NULL
                         AND ({key_columns_str}) NOT IN (
                             SELECT 
@@ -445,3 +454,74 @@ class DataAgingService:
                     conn.rollback()
                     logger.error(f"Error nulling out {monthly_table} column {col_name}: {e}")
         logger.info(f"Data promoted to Master Data in {round(time.time() - start_time, 2)}s.")
+
+def is_classified_for_master_data(source_table: str, column_name: str) -> bool:
+    classification_check_sql = select_into_dataframe(f"""
+        SELECT 1
+        FROM DataAgingFieldClassification
+        WHERE table_name = '{source_table}' 
+            AND field_name = '{column_name}' 
+            AND tier = 'Master'
+    """)
+    return not classification_check_sql.empty     
+
+def get_history_select_statement(table_name: str, optimized: bool = True):
+    """
+    Select statement for history view of the specified table.
+    """
+
+    key_columns, data_columns = get_table_key_and_data_columns(table_name)
+    key_column_definitions_str = ",\n\t\t".join([f'daily."{col["name"]}"' for col in key_columns])
+    data_column_definitions = []
+    for col in data_columns:
+        col_name = col["name"]
+        if is_classified_for_master_data(table_name, col["name"]) and optimized:
+            data_column_definitions.append(f'master_data."{col_name}" as "{col_name}"')
+        else:
+            data_column_definitions.append(f"""
+            coalesce(
+                daily."{col["name"]}",
+                weekly."{col["name"]}",
+                monthly."{col["name"]}",
+                master_data."{col["name"]}"  
+            ) as "{col_name}"                            
+            """.strip()                               
+            )
+    data_column_definitions_str = ",\n\t\t".join(data_column_definitions)
+    
+    column_definitions_str = f"""
+        {key_column_definitions_str},
+        {data_column_definitions_str}
+    """.strip()
+    
+    key_columns, _ = get_table_key_and_data_columns(table_name)
+    key_columns_on_condition_str_weekly = " AND ".join([f'daily."{col["name"]}" = weekly."{col["name"]}"' for col in key_columns])
+    key_columns_on_condition_str_monthly = " AND ".join([f'daily."{col["name"]}" = monthly."{col["name"]}"' for col in key_columns])
+    key_columns_on_condition_str_master_data = " AND ".join([f'daily."{col["name"]}" = master_data."{col["name"]}"' for col in key_columns])
+
+    select_statement_sql =  f"""
+    SELECT
+        daily.snapshot_date as date,
+        {column_definitions_str}
+    FROM
+        "{table_name}HistoryDaily" as daily
+        LEFT JOIN "{table_name}HistoryWeekly" as weekly ON strftime ('%Y', daily.snapshot_date) = weekly.year
+        AND strftime ('%W', daily.snapshot_date) = weekly.week
+        AND {key_columns_on_condition_str_weekly}
+        LEFT JOIN "{table_name}HistoryMonthly" as monthly ON strftime ('%Y', daily.snapshot_date) = monthly.year
+        AND strftime ('%m', daily.snapshot_date) = monthly.month
+        AND {key_columns_on_condition_str_monthly}
+        LEFT JOIN "{table_name}MasterData" as master_data ON {key_columns_on_condition_str_master_data}
+    """
+    return select_statement_sql
+
+def get_history_enabled_views():
+    
+    pattern_search = f" OR ".join([f"sql LIKE '%{table}%' " for table in HISTORY_ENABLED_TABLES])
+    history_enabled_views = select_into_dataframe("""
+        SELECT name AS view_name
+        FROM sqlite_schema
+        WHERE type='view' AND {pattern_search}
+    """)
+    
+    return history_enabled_views
