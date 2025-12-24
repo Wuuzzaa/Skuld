@@ -43,8 +43,15 @@ jobs:
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'ENDSSH'
-            set -euxo pipefail
+            set -euo pipefail
             cd /opt/skuld-vpn-test
+            
+            # Create .env file with secrets (disable xtrace to avoid logging secrets)
+            echo "=== Creating .env file ==="
+            echo "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" > .env
+            echo "TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}" >> .env
+            
+            set -x # Enable xtrace for the rest of the script
             
             echo "=== Current container status ==="
             sudo docker compose ps
