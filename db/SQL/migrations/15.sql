@@ -1,3 +1,4 @@
+DROP TABLE IF EXISTS "DataAgingFieldClassification";
 CREATE TABLE "DataAgingFieldClassification" (
     table_name TEXT NOT NULL,
     field_name TEXT NOT NULL,
@@ -7,6 +8,7 @@ CREATE TABLE "DataAgingFieldClassification" (
     tier_entry_date DATE,
     PRIMARY KEY (table_name, field_name)
 );
+DROP TABLE "OldOptionDataTradingViewHistoryDaily";
 ALTER TABLE "OptionDataTradingViewHistoryDaily" RENAME TO "OldOptionDataTradingViewHistoryDaily";
 CREATE TABLE "OptionDataTradingViewHistoryDaily" (
 	snapshot_date DATE,
@@ -957,7 +959,7 @@ INSERT INTO "DataAgingFieldClassification"
 VALUES
 ('OptionDataTradingView', 'strike', 'Master', DATE('now')),
 ('OptionDataTradingView', 'expiration_date', 'Master', DATE('now')),
-('OptionDataTradingView', 'option-type', 'Master',, DATE('now')),
+('OptionDataTradingView', 'option-type', 'Master', DATE('now')),
 ('OptionDataTradingView', 'exchange', 'Master', DATE('now')),
 ('OptionDataTradingView', 'symbol', 'Master', DATE('now'))
 ON CONFLICT(table_name, field_name) DO UPDATE SET
