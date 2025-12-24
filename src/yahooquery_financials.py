@@ -8,6 +8,7 @@ from config import TABLE_FUNDAMENTAL_DATA_YAHOO
 from src.database import insert_into_table, truncate_table
 from src.yahooquery_scraper import YahooQueryScraper
 from config_utils import get_filtered_symbols_with_logging
+from src.util import log_memory_usage
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -24,6 +25,7 @@ def generate_fundamental_data():
     """
 
     print("Processing fundamentals: collecting ALL available metrics from multiple endpoints...")
+    log_memory_usage("Start generate_fundamental_data: ")
     
     symbols = get_filtered_symbols_with_logging("Yahoo Fundamentals")
 
@@ -31,6 +33,7 @@ def generate_fundamental_data():
     print("Fetching comprehensive financial data using all_financial_data()...")
     yahoo_query = YahooQueryScraper.instance()
     df_all_financial = yahoo_query.get_all_financial_data()
+    log_memory_usage("After get_all_financial_data: ")
     
     if df_all_financial is not None and not df_all_financial.empty:
 

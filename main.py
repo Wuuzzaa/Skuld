@@ -17,6 +17,7 @@ from src.dividend_radar import process_dividend_data
 from config_utils import get_filtered_symbols_and_dates_with_logging
 from config_utils import generate_expiry_dates_from_rules
 from src.historization import run_historization_pipeline
+from src.util import log_memory_usage, MemoryMonitor
 
 setup_logging(log_file=PATH_LOG_FILE, log_level=logging.DEBUG, console_output=True)
 logger = logging.getLogger(__name__)
@@ -28,20 +29,35 @@ def run_task_with_timing(task_name, func, *args, **kwargs):
     start = time.time()
     logger.info("#" * 80)
     logger.info(f"Starting: {task_name}")
+    start_mem = log_memory_usage(f"[MEM] Start {task_name}: ")
     logger.info("#" * 80)
 
     try:
         result = func(*args, **kwargs)
         duration = int(time.time() - start)
-        logger.info(f"✓ {task_name} - Done - Runtime: {duration}s")
-        return result, None
+        end_mem = log_memory_usage(f"[MEM] End {task_name}: ")
+        
+        mem_diff = 0
+        peak_mem = 0
+        if start_mem is not None and end_mem is not None:
+            mem_diff = end_mem - start_mem
+            peak_mem = end_mem
+            logger.info(f"[MEM] {task_name} consumed: {mem_diff:+.2f} MB")
+            
+        logger.info(f"[OK] {task_name} - Done - Runtime: {duration}s")
+        return result, None, mem_diff, peak_mem
     except Exception as e:
         duration = int(time.time() - start)
-        logger.error(f"✗ {task_name} - Failed after {duration}s: {e}")
-        return None, e
+        log_memory_usage(f"[MEM] Fail {task_name}: ")
+        logger.error(f"[ERROR] {task_name} - Failed after {duration}s: {e}")
+        return None, e, 0, 0
 
 
 def main():
+    # Start background memory monitor
+    monitor = MemoryMonitor(interval=5.0)
+    monitor.start()
+
     start_main = time.time()
     run_migrations()
 
@@ -80,13 +96,13 @@ def main():
 
     logger.info(f"\n{'=' * 80}")
     logger.info(f"Running ALL {len(parallel_tasks)} data collection tasks in parallel")
-    logger.info(f"Max workers: 4 (limited for 4GB RAM server)")
+    logger.info(f"Max workers: 1 (limited for 4GB RAM server)")
     logger.info(f"{'=' * 80}\n")
 
     parallel_start = time.time()
 
     # Use ThreadPoolExecutor for I/O-bound tasks (web scraping)
-    # Limit to 3 workers to prevent OOM on 4GB server
+    # Limit to 1 worker to prevent OOM on 4GB server
     with ThreadPoolExecutor(max_workers=1) as executor:
         future_to_task = {
             executor.submit(run_task_with_timing, name, func, *args): name
@@ -94,15 +110,18 @@ def main():
         }
 
         results = {}
+        memory_stats = {}
         try:
             for future in as_completed(future_to_task):
                 task_name = future_to_task[future]
                 try:
-                    result, error = future.result()
+                    result, error, mem_diff, peak_mem = future.result()
                     results[task_name] = (result, error)
+                    memory_stats[task_name] = {"diff": mem_diff, "peak": peak_mem}
                 except Exception as e:
                     logger.error(f"Critical error in {task_name}: {e}")
                     results[task_name] = (None, e)
+                    memory_stats[task_name] = {"diff": 0, "peak": 0}
         except KeyboardInterrupt:
             logger.warning("KeyboardInterrupt received! Shutting down executor...")
             executor.shutdown(wait=False, cancel_futures=True)
@@ -128,16 +147,35 @@ def main():
     logger.info(f"Total Runtime: {total_duration}s ({total_duration / 60:.1f} minutes)")
     logger.info(f"Parallel Execution: {parallel_duration}s")
     logger.info(f"Time Saved: ~{(len(parallel_tasks) * 60 - parallel_duration)}s (estimated)")
+    
+    # Memory Summary
+    logger.info("-" * 80)
+    logger.info("MEMORY USAGE SUMMARY")
+    logger.info("-" * 80)
+    if memory_stats:
+        # Sort by peak memory
+        sorted_mem = sorted(memory_stats.items(), key=lambda x: x[1]['peak'], reverse=True)
+        for task, stats in sorted_mem:
+            logger.info(f"{task:<40} | Peak: {stats['peak']:6.2f} MB | Diff: {stats['diff']:+6.2f} MB")
+        
+        max_peak_task = sorted_mem[0]
+        logger.info("-" * 80)
+        logger.info(f"Highest Peak Memory: {max_peak_task[1]['peak']:.2f} MB ({max_peak_task[0]})")
+    else:
+        logger.info("No memory stats available.")
 
     # Check for failures
     failed_tasks = [name for name, (_, error) in results.items() if error is not None]
     if failed_tasks:
-        logger.warning(f"\n⚠ {len(failed_tasks)} task(s) failed:")
+        logger.warning(f"\n[WARN] {len(failed_tasks)} task(s) failed:")
         for task in failed_tasks:
             logger.warning(f"  - {task}")
     else:
-        logger.info("\n✓ All tasks completed successfully!")
+        logger.info("\n[OK] All tasks completed successfully!")
 
+    # Stop memory monitor
+    monitor.stop()
+    
     logger.info("#" * 80 + "\n")
 
 

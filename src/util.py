@@ -8,6 +8,67 @@ from config_utils import generate_expiry_dates_from_rules
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+def log_memory_usage(prefix=""):
+    """Logs current memory usage and returns it in MB"""
+    memory_mb = 0
+    try:
+        import psutil
+        process = psutil.Process(os.getpid())
+        memory_mb = process.memory_info().rss / 1024 / 1024
+        print(f"{prefix} Current RSS Memory: {memory_mb:.2f} MB")
+        return memory_mb
+    except ImportError:
+        pass
+
+    try:
+        import resource
+        usage = resource.getrusage(resource.RUSAGE_SELF)
+        # Linux: ru_maxrss is in kilobytes
+        # Mac: ru_maxrss is in bytes
+        # We assume Linux for Docker
+        memory_mb = usage.ru_maxrss / 1024 
+        print(f"{prefix} Max RSS Memory: {memory_mb:.2f} MB")
+        return memory_mb
+        
+        # Try to get current RSS from /proc/self/status if available
+        if os.path.exists('/proc/self/status'):
+            with open('/proc/self/status', 'r') as f:
+                for line in f:
+                    if line.startswith('VmRSS:'):
+                        rss_kb = int(line.split()[1])
+                        print(f"{prefix} Current RSS Memory: {rss_kb/1024:.2f} MB")
+                        break
+    except ImportError:
+        # resource module is not available on Windows
+        print(f"{prefix} Memory logging not available (resource module missing and psutil not installed)")
+        return None
+    except Exception as e:
+        print(f"{prefix} Error checking memory: {e}")
+        return None
+    
+    return memory_mb
+
+class MemoryMonitor(threading.Thread):
+    """
+    Background thread to monitor and log memory usage periodically.
+    Useful for debugging OOM crashes where the process dies before logging.
+    """
+    def __init__(self, interval=2.0):
+        super().__init__()
+        self.interval = interval
+        self.stop_event = threading.Event()
+        self.daemon = True  # Daemon thread dies when main thread dies
+
+    def run(self):
+        print(f"[Monitor] Starting memory monitor (interval={self.interval}s)...")
+        while not self.stop_event.is_set():
+            log_memory_usage("[Monitor] ")
+            self.stop_event.wait(self.interval)
+        print("[Monitor] Memory monitor stopped.")
+
+    def stop(self):
+        self.stop_event.set()
+
 def get_option_expiry_dates():
     """
     Get option expiry dates based on enabled collection rules.

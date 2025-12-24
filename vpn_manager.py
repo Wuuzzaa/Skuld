@@ -31,7 +31,7 @@ class VPNManager:
         """SOCKS5-Proxy über SSH zum Raspberry Pi aufbauen"""
         try:
             logger.info("=" * 80)
-            logger.info(f"🔐 VPN: Starte SOCKS5-Proxy zu {self.raspberry_host}:{self.socks_port}...")
+            logger.info(f"[VPN] Starte SOCKS5-Proxy zu {self.raspberry_host}:{self.socks_port}...")
             logger.info("=" * 80)
             
             # SSH-Tunnel mit SOCKS5 Proxy starten
@@ -50,7 +50,7 @@ class VPNManager:
                 self.raspberry_host
             ]
             
-            logger.info(f"🚀 VPN: Führe SSH-Befehl aus: {' '.join(cmd)}")
+            logger.info(f"[VPN] Führe SSH-Befehl aus: {' '.join(cmd)}")
             
             self.ssh_process = subprocess.Popen(
                 cmd,
@@ -59,7 +59,7 @@ class VPNManager:
                 text=True # Text-Modus für einfacheres Logging
             )
             
-            logger.info("🔄 VPN: Warte auf SSH-Tunnel...")
+            logger.info("[VPN] Warte auf SSH-Tunnel...")
             # Kurz warten bis Tunnel steht
             time.sleep(5)
             
@@ -68,12 +68,12 @@ class VPNManager:
                 # Prozess hat sich beendet -> Fehler!
                 _, stderr = self.ssh_process.communicate()
                 logger.error("=" * 80)
-                logger.error(f"❌ VPN: SSH-Tunnel konnte nicht aufgebaut werden!")
-                logger.error(f"❌ SSH Fehler: {stderr}")
+                logger.error(f"[ERROR] VPN: SSH-Tunnel konnte nicht aufgebaut werden!")
+                logger.error(f"[ERROR] SSH Fehler: {stderr}")
                 logger.error("=" * 80)
                 return False
             
-            logger.info("✅ VPN: SSH-Prozess läuft noch, versuche Proxy-Verbindung...")
+            logger.info("[VPN] SSH-Prozess läuft noch, versuche Proxy-Verbindung...")
             
             # Proxy-Config für requests
             self.proxies = {
@@ -85,27 +85,27 @@ class VPNManager:
 
             # IP prüfen über Proxy
             try:
-                logger.info("🔍 VPN: Prüfe öffentliche IP über VPN-Tunnel...")
+                logger.info("[VPN] Prüfe öffentliche IP über VPN-Tunnel...")
                 response = requests.get('https://api.ipify.org', 
                                         proxies=self.proxies, 
                                         timeout=10)
                 ip = response.text
                 logger.info("=" * 80)
-                logger.info(f"✅ VPN AKTIV! Öffentliche IP: {ip}")
-                logger.info(f"✅ VPN: Traffic läuft jetzt über Raspberry Pi / Home-Netzwerk")
+                logger.info(f"[OK] VPN AKTIV! Öffentliche IP: {ip}")
+                logger.info(f"[OK] VPN: Traffic läuft jetzt über Raspberry Pi / Home-Netzwerk")
                 logger.info("=" * 80)
                 self.is_connected = True
                 return True
             except Exception as e:
                 logger.error("=" * 80)
-                logger.error(f"❌ VPN: IP-Check fehlgeschlagen: {e}")
-                logger.error("❌ VPN: SSH-Tunnel läuft, aber kein Internet-Zugriff")
+                logger.error(f"[ERROR] VPN: IP-Check fehlgeschlagen: {e}")
+                logger.error("[ERROR] VPN: SSH-Tunnel läuft, aber kein Internet-Zugriff")
                 logger.error("=" * 80)
                 self.stop()
                 return False
                 
         except Exception as e:
-            logger.error(f"❌ Fehler beim Proxy-Start: {e}")
+            logger.error(f"[ERROR] Fehler beim Proxy-Start: {e}")
             self.is_connected = False
             return False
     
@@ -113,7 +113,7 @@ class VPNManager:
         """SOCKS5-Proxy beenden"""
         try:
             logger.info("=" * 80)
-            logger.info("🔓 VPN: Beende SOCKS5-Proxy...")
+            logger.info("[VPN] Beende SOCKS5-Proxy...")
             
             # SSH-Prozess beenden
             if self.ssh_process:

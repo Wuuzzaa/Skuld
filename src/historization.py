@@ -3,6 +3,7 @@ import time
 from sqlalchemy import text
 from src.database import get_database_engine, execute_sql
 from src.decorator_log_function import log_function
+from src.util import log_memory_usage
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +86,7 @@ def run_historization_pipeline():
     Orchestrates the historization process for all configured tables.
     """
     logger.info("Running Historization Pipeline...")
+    log_memory_usage("[MEM] Start Historization: ")
     try:
         # OptionDataYahoo configuration
         HistorizationService.run_daily_historization(
@@ -92,6 +94,7 @@ def run_historization_pipeline():
             history_table="OptionDataYahooHistoryDaily",
             conflict_keys=["contractSymbol"]
         )
+        log_memory_usage("[MEM] After OptionDataYahoo Historization: ")
 
         # OptionDataTradingView configuration
         HistorizationService.run_daily_historization(
@@ -99,6 +102,7 @@ def run_historization_pipeline():
             history_table="OptionDataTradingViewHistoryDaily",
             conflict_keys=["option_osi"]
         )
+        log_memory_usage("[MEM] After OptionDataTradingView Historization: ")
         logger.info("Historization Pipeline Completed Successfully.")
     except Exception as e:
         logger.error(f"Historization Pipeline Failed: {e}")
