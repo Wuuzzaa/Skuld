@@ -99,28 +99,10 @@ def run_historization_pipeline():
     logger.info("Running Historization Pipeline...")
     log_memory_usage("[MEM] Start Historization: ")
     try:
-<<<<<<< HEAD
-        # OptionDataYahoo configuration
-        HistorizationService.run_daily_historization(
-            source_table="OptionDataYahoo",
-            history_table="OptionDataYahooHistoryDaily",
-            conflict_keys=["contractSymbol"]
-        )
-        log_memory_usage("[MEM] After OptionDataYahoo Historization: ")
-
-        # OptionDataTradingView configuration
-        HistorizationService.run_daily_historization(
-            source_table="OptionDataTradingView",
-            history_table="OptionDataTradingViewHistoryDaily",
-            conflict_keys=["option_osi"]
-        )
-        log_memory_usage("[MEM] After OptionDataTradingView Historization: ")
-=======
         for table in HISTORY_ENABLED_TABLES:
             HistorizationService.run_daily_historization(
                 source_table=table
             )
->>>>>>> origin/data_history_3
         logger.info("Historization Pipeline Completed Successfully.")
     except Exception as e:
         logger.error(f"Historization Pipeline Failed: {e}")
@@ -170,7 +152,7 @@ def _create_history_tables_and_view_if_not_exist(source_table: str):
         
     history_view_name = f"{table}History"
     if not view_exists(history_view_name) or True:
-        path_sql_create_view_statements = pathlib.Path("db/SQL/views/create_view/history")
+        path_sql_create_view_statements = pathlib.Path("db/SQL/views/create_view/history/table_views")
         path_sql_create_view_statements.mkdir(parents=True, exist_ok=True)
         create_view_sql = _get_history_view_create_statement(table)
         with open(f"{path_sql_create_view_statements}/{history_view_name}.sql", "w") as f:
