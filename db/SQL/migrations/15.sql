@@ -8,7 +8,7 @@ CREATE TABLE "DataAgingFieldClassification" (
     tier_entry_date DATE,
     PRIMARY KEY (table_name, field_name)
 );
-DROP TABLE "OldOptionDataTradingViewHistoryDaily";
+DROP TABLE IF EXISTS "OldOptionDataTradingViewHistoryDaily";
 ALTER TABLE "OptionDataTradingViewHistoryDaily" RENAME TO "OldOptionDataTradingViewHistoryDaily";
 CREATE TABLE "OptionDataTradingViewHistoryDaily" (
 	snapshot_date DATE,
