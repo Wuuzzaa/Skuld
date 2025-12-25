@@ -31,6 +31,7 @@ service_account.json
 
 # Data & Database
 Skuld/db/*.db
+*.db
 Skuld/data/
 
 # Logs
