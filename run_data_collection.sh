@@ -1,6 +1,13 @@
 #!/bin/bash
 # Wrapper script for cron: prevents multiple instances of main.py
 
+# Load environment variables (Telegram Token etc.)
+if [ -f /app/env.sh ]; then
+    set -a
+    . /app/env.sh
+    set +a
+fi
+
 LOCKFILE="/tmp/skuld_data_collection.lock"
 LOGFILE="/var/log/cron.log"
 

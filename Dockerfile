@@ -39,6 +39,10 @@ RUN echo '#!/bin/bash\n\
 set -e\n\
 echo "Starting SKULD container..."\n\
 \n\
+# Export environment variables for Cron\n\
+printenv | grep -E "TELEGRAM|PYTHON" > /app/env.sh\n\
+chmod 0644 /app/env.sh\n\
+\n\
 # Check SSH config for VPN\n\
 if [ -f "/root/.ssh/config" ] && grep -q "raspberry-vpn" /root/.ssh/config; then\n\
   echo "✓ SSH VPN config found (VPN will be used for Barchart scraping)"\n\
