@@ -1,5 +1,6 @@
 DROP TABLE IF EXISTS "StockDataBarchart";
 CREATE TABLE "StockDataBarchart" (
+	symbol TEXT PRIMARY KEY,
 	implied_volatility FLOAT, 
 	historical_volatility FLOAT, 
 	iv_percentile FLOAT, 
@@ -11,6 +12,5 @@ CREATE TABLE "StockDataBarchart" (
 	todays_volume BIGINT, 
 	volume_avg_30d BIGINT, 
 	todays_open_interest BIGINT, 
-	open_int_30d BIGINT, 
-	symbol TEXT
+	open_int_30d BIGINT
 );
