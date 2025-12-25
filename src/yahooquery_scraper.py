@@ -3,9 +3,10 @@ import os
 import time
 import threading
 import pandas as pd
+import gc
 from yahooquery import Ticker
 from config_utils import get_filtered_symbols_with_logging
-from src.util import Singleton
+from src.util import Singleton, log_memory_usage
 from datetime import datetime
 
 
@@ -79,7 +80,9 @@ class YahooQueryScraper:
             all_data = []
             if self._financial_data_cache is None or force_refresh:    
                 print(f"Loading for {len(self.symbols)} symbols all financial data from Yahoo Finance")
-                for ticker_batch in self.ticker_batches:
+                log_memory_usage("Before fetching financial data: ")
+                for i, ticker_batch in enumerate(self.ticker_batches):
+                    log_memory_usage(f"Before batch {i}: ")
                     for attempt in range(self.retries):
                         try:
                             if len(self.symbols) > self.batch_size:
@@ -89,6 +92,8 @@ class YahooQueryScraper:
                             if df is not None and not df.empty:
                                 all_data.append(df)
                                 print(f"SUCCESS: {len(df)} financial data found")
+                                log_memory_usage(f"After batch {i} success: ")
+                                gc.collect()
                             else:
                                 print(f"WARNING: No option data available")
                         except Exception as e:
@@ -108,7 +113,9 @@ class YahooQueryScraper:
                 if all_data is None:
                     print("WARNING: No financial data found for any symbols")
                     return
+                log_memory_usage("Before concat: ")
                 df = pd.concat(all_data)
+                log_memory_usage("After concat: ")
                 self._financial_data_cache = df
             else:
                 print(f"Using cached Yahoo Fiance financial data - symbols: {len(self.symbols)}")

@@ -1,0 +1,29 @@
+# WireGuard Client Configuration für Hetzner Server
+# WICHTIG: Ersetze die Platzhalter mit deinen echten Werten!
+
+[Interface]
+PrivateKey = SERVER_PRIVATE_KEY_HIER_EINFUEGEN
+Address = 10.0.0.2/24
+
+[Peer]
+PublicKey = 2PjU2No7D98ZA8s8kdRruRp8zWAGW3lUZWCYpGQeISs=
+sdafEndpoint = 46.223.163.242:51820
+AllowedIPs = 10.0.0.0/24
+PersistentKeepalive = 25
+
+# ANLEITUNG:
+# 1. Keys auf dem Server generieren:
+#    wg genkey | tee server_privatekey | wg pubkey > server_publickey
+#
+# 2. SERVER_PRIVATE_KEY_HIER_EINFUEGEN durch deinen Private Key ersetzen
+#
+# 3. Server Public Key in Raspberry Pi Config eintragen:
+#    sudo nano /etc/wireguard/wg0.conf
+#    [Peer]
+#    PublicKey = DEIN_SERVER_PUBLIC_KEY
+#    AllowedIPs = 10.0.0.2/32
+#
+# 4. Diese Datei umbenennen zu: wg0.conf
+#
+# 5. Berechtigungen setzen:
+#    chmod 600 wireguard/wg0.conf

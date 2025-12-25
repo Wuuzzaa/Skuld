@@ -5,6 +5,7 @@ from sqlalchemy import text
 from config import HISTORY_ENABLED_TABLES
 from src.database import get_database_engine, execute_sql, get_table_key_and_data_columns, select_into_dataframe, table_exists, view_exists
 from src.decorator_log_function import log_function
+from src.util import log_memory_usage
 from src.data_aging import DataAgingService, get_history_select_statement, is_classified_for_master_data
 
 logger = logging.getLogger(__name__)
@@ -96,6 +97,7 @@ def run_historization_pipeline():
     """
     start_time = time.time()
     logger.info("Running Historization Pipeline...")
+    log_memory_usage("[MEM] Start Historization: ")
     try:
         for table in HISTORY_ENABLED_TABLES:
             HistorizationService.run_daily_historization(

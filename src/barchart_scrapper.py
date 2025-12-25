@@ -7,6 +7,7 @@ from bs4 import BeautifulSoup
 from config import TABLE_STOCK_DATA_BARCHART
 from config_utils import get_filtered_symbols_with_logging
 from src.database import insert_into_table, truncate_table
+import logging
 
 """
 ================================================================================
@@ -136,15 +137,20 @@ def _find_options_data(soup):
     return results
 
 
-def _scrape_symbol(symbol):
+def _scrape_symbol(symbol, session=None):
     """
     Scrapes options data for a single symbol.
     Returns dictionary with symbol and all available data fields.
+    Args:
+        symbol: Stock symbol to scrape
+        session: Optional requests.Session (e.g. with proxy for VPN)
     """
     url = f"https://www.barchart.com/stocks/quotes/{symbol}/overview"
 
     try:
-        response = requests.get(url, headers=_get_browser_headers(), timeout=15)
+        # Use provided session or default requests
+        requester = session if session else requests
+        response = requester.get(url, headers=_get_browser_headers(), timeout=15)
         response.raise_for_status()
 
         soup = BeautifulSoup(response.content, 'html.parser')
@@ -246,13 +252,13 @@ def _parse_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 
     return df
 
-def _scrape(symbols, delay_seconds):
+def _scrape(symbols, delay_seconds, session=None):
     results = []
 
     for i, symbol in enumerate(symbols, 1):
         print(f"[{i}/{len(symbols)}] {symbol}")
 
-        symbol_data = _scrape_symbol(symbol)
+        symbol_data = _scrape_symbol(symbol, session=session)
         results.append(symbol_data)
 
         # Pause between requests to avoid rate limiting.
@@ -264,10 +270,21 @@ def _scrape(symbols, delay_seconds):
     return df
 
 
-def scrape_barchart(delay_seconds=0):
+def scrape_barchart(delay_seconds=0, session=None):
     """
     Main function to scrape options data for all symbols.
+    Args:
+        delay_seconds: Delay between requests (default 0)
+        session: Optional requests.Session (e.g. with proxy for VPN)
     """
+    logger = logging.getLogger("barchart_scrapper")
+    try:
+        ip = (session if session else requests).get('https://api.ipify.org', timeout=10).text
+        logger.info(f"[BarchartScraper] Aktuelle öffentliche IP: {ip}")
+        logger.info(f"[BarchartScraper] Session-Typ: {'VPN-Session' if session else 'Direkt (Hetzner)'}")
+    except Exception as e:
+        logger.warning(f"[BarchartScraper] Konnte öffentliche IP nicht abrufen: {e}")
+
     symbols = get_filtered_symbols_with_logging("BarchartScraper")
 
     print(f"\n{'=' * 60}")
@@ -276,7 +293,7 @@ def scrape_barchart(delay_seconds=0):
     print(f"Processing {len(symbols)} symbols...\n")
 
     # scrape
-    df = _scrape(symbols, delay_seconds)
+    df = _scrape(symbols, delay_seconds, session=session)
 
     # Parse to correct data types and format
     df = _parse_dataframe(df)

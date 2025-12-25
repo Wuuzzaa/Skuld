@@ -1,0 +1,94 @@
+name: Deploy SKULD VPN Test to Hetzner
+
+on:
+  push:
+    branches: [ wireguard-vpn-setup ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # ssh-keyscan removed to avoid failures, we use StrictHostKeyChecking=no later anyway
+
+      - name: Pre-cleanup on server to free space
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "sudo docker system prune -af --volumes || true"
+
+      - name: Sync files to server (VPN test deployment)
+        run: |
+          rsync -avz --delete \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectionAttempts=1" \
+            --exclude 'financial_data.db' \
+            --exclude 'logs/' \
+            --exclude '.git/' \
+            --exclude '.github/' \
+            --exclude '__pycache__/' \
+            --exclude '*.pyc' \
+            --exclude 'wireguard/wg0.conf' \
+            --exclude 'wireguard/*_privatekey' \
+            --exclude 'wireguard/*_publickey' \
+            ./ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/skuld-vpn-test/
+
+      - name: Build and deploy Docker container (VPN Test)
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'ENDSSH'
+            set -euo pipefail
+            cd /opt/skuld-vpn-test
+            
+            # Create .env file with secrets (disable xtrace to avoid logging secrets)
+            echo "=== Creating .env file ==="
+            echo "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" > .env
+            echo "TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}" >> .env
+            
+            set -x # Enable xtrace for the rest of the script
+            
+            echo "=== Current container status ==="
+            sudo docker compose ps
+            
+            echo "=== Current images ==="
+            sudo docker images | grep skuld || echo "No skuld images"
+            
+            echo "=== Stopping old container ==="
+            sudo docker compose down
+            
+            echo "=== Ensuring financial_data.db is a file ==="
+            if [ -d "financial_data.db" ]; then
+              echo "⚠️  financial_data.db is a directory, converting to file using Docker..."
+              # Use docker to remove the directory since it was created by docker (root)
+              sudo docker run --rm -v $(pwd):/work -w /work alpine rm -rf financial_data.db
+              touch financial_data.db
+            elif [ ! -f "financial_data.db" ]; then
+              echo "📝 Creating empty financial_data.db..."
+              touch financial_data.db
+            fi
+            
+            echo "=== Ensuring logs directory exists ==="
+            mkdir -p logs
+            
+            echo "=== Building new image ==="
+            sudo docker compose build --pull --no-cache
+            
+            echo "=== Starting new container ==="
+            sudo docker compose up -d --remove-orphans
+            
+            echo "=== Cleaning up old images ==="
+            sudo docker image prune -f
+            
+            echo "=== New container status ==="
+            sudo docker compose ps
+            
+            echo "=== Container logs ==="
+            sudo docker compose logs --tail=30
+          ENDSSH
+

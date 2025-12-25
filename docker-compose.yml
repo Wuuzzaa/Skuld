@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  skuld-app:
+    build: .
+    container_name: skuld-streamlit-vpn-test
+    volumes:
+      # Persistent database file only (not entire db folder!)
+      # App writes to /app/Skuld/db/financial_data.db, so we mount host file there
+      - ./financial_data.db:/app/Skuld/db/financial_data.db
+      # Persistent logs
+      - ./logs:/app/Skuld/logs
+      # SSH directory for VPN access (explicit path to deploy user's ssh keys)
+      - /home/deploy/.ssh:/root/.ssh
+      # Cron logs for debugging
+      #- ./cron.log:/var/log/cron.log
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TZ=Europe/Berlin
+      # Telegram Alert Configuration
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+    restart: unless-stopped
+
+    # Begrenzung der Ressourcen (Sicherheit für deinen Server)
+    deploy:
+      resources:
+        limits:
+          # CPU: 1.5 entspricht 75% Auslastung bei einem 2-Kern Server (Standard bei 4GB RAM)
+          # Falls du nur 1 Kern hast, wird es einfach auf 100% dieses Kerns begrenzt.
+          cpus: '1.5'
+          # RAM: Maximal 3GB RAM für den Container
+          memory: 3G
+
+    # === DOCKER LOG ROTATION CONFIGURATION ===
+    # This prevents the container's output logs (stdout/stderr) from filling up the disk.
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m" # Maximum size of a single log file (10 MB)
+        max-file: "3"   # Keep a maximum of 3 rotated log files
+    # ========================================
+    networks:
+      - web
+    labels:
+      # Enable Traefik
+      - "traefik.enable=true"
+      # Domain for SKULD VPN Test
+      - "traefik.http.routers.skuld-vpn-test.rule=Host(`vpn-test.skuld-options.com`)"
+      # HTTPS Endpoint
+      - "traefik.http.routers.skuld-vpn-test.entrypoints=websecure"
+      # Automatic SSL Certificate via Let's Encrypt
+      - "traefik.http.routers.skuld-vpn-test.tls.certresolver=letsencrypt"
+      # Port where Streamlit is running
+      - "traefik.http.services.skuld-vpn-test.loadbalancer.server.port=8501"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  web:
+    external: true
+
+
+

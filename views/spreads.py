@@ -1,4 +1,5 @@
 import streamlit as st
+import pandas as pd
 from src.database import select_into_dataframe
 from src.page_display_dataframe import page_display_dataframe
 from src.spreads_calculation import calc_spreads
@@ -14,6 +15,13 @@ col_epiration_date, col_delta_target, col_spread_width = st.columns(3)
 with col_epiration_date:
     sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'expiration_dte_asc.sql'
     dates_df = select_into_dataframe(sql_file_path=sql_file_path)
+
+    # Drop rows with NaN in days_to_expiration
+    dates_df = dates_df.dropna(subset=['days_to_expiration'])
+
+    if dates_df.empty:
+        st.warning("No expiration dates found.")
+        st.stop()
 
     # dte labels  ("5 DTE - 2025-01-15")
     dte_labels = dates_df.apply(
@@ -43,6 +51,12 @@ with st.spinner("Calculating spreads..."):
         "expiration_date": expiration_date})
     spreads_df = calc_spreads(df, delta_target, spread_width)
 
+# Ensure numeric types for filtering columns to prevent comparison errors
+cols_to_numeric = ['ivr', 'ivp', 'open_intrest', 'profit_to_bpr']
+for col in cols_to_numeric:
+    if col in spreads_df.columns:
+        spreads_df[col] = pd.to_numeric(spreads_df[col], errors='coerce')
+
 # Dynamically extract unique values for symbol and option_type from calculated spreads_df
 unique_symbols = sorted(spreads_df['symbol'].unique())
 unique_option_types = sorted(spreads_df['option_type'].unique())
@@ -64,14 +78,20 @@ col_ivr, col_ivp, col_open_interest, col_profit_bpr = st.columns(4)
 
 # IVR Filter
 with col_ivr:
-    ivr_min = float(spreads_df['ivr'].min())
-    ivr_max = float(spreads_df['ivr'].max())
+    # Calculate min/max safely without modifying original dataframe
+    ivr_min_val = spreads_df['ivr'].min()
+    ivr_max_val = spreads_df['ivr'].max()
+    
+    ivr_min = float(ivr_min_val) if pd.notna(ivr_min_val) else 0.0
+    ivr_max = float(ivr_max_val) if pd.notna(ivr_max_val) else 0.0
+    
     if ivr_min == ivr_max:
         st.text_input("IVR", value=f"{ivr_min:.2f}", disabled=True)
         ivr_range = (ivr_min, ivr_max)
     else:
-        # Default minimum value of 0.3
-        default_min = max(ivr_min, 0.3)
+        # Default minimum value to min available (inclusive)
+        default_min = ivr_min
+        
         ivr_range = st.slider(
             "IVR Range",
             min_value=ivr_min,
@@ -82,14 +102,20 @@ with col_ivr:
 
 # IVP Filter
 with col_ivp:
-    ivp_min = float(spreads_df['ivp'].min())
-    ivp_max = float(spreads_df['ivp'].max())
+    # Calculate min/max safely without modifying original dataframe
+    ivp_min_val = spreads_df['ivp'].min()
+    ivp_max_val = spreads_df['ivp'].max()
+    
+    ivp_min = float(ivp_min_val) if pd.notna(ivp_min_val) else 0.0
+    ivp_max = float(ivp_max_val) if pd.notna(ivp_max_val) else 0.0
+    
     if ivp_min == ivp_max:
         st.text_input("IVP", value=f"{ivp_min:.2f}", disabled=True)
         ivp_range = (ivp_min, ivp_max)
     else:
-        # Default minimum value of 0.3
-        default_min = max(ivp_min, 0.3)
+        # Default minimum value to min available (inclusive)
+        default_min = ivp_min
+        
         ivp_range = st.slider(
             "IVP Range",
             min_value=ivp_min,
@@ -100,14 +126,20 @@ with col_ivp:
 
 # Open Interest Filter
 with col_open_interest:
-    oi_min = int(spreads_df['open_intrest'].min())
-    oi_max = int(spreads_df['open_intrest'].max())
+    # Calculate min/max safely without modifying original dataframe
+    oi_min_val = spreads_df['open_intrest'].min()
+    oi_max_val = spreads_df['open_intrest'].max()
+    
+    oi_min = int(oi_min_val) if pd.notna(oi_min_val) else 0
+    oi_max = int(oi_max_val) if pd.notna(oi_max_val) else 0
+    
     if oi_min == oi_max:
         st.text_input("Open Interest", value=f"{oi_min}", disabled=True)
         oi_threshold = oi_min
     else:
-        # Default minimum value of 100
-        default_oi = max(oi_min, 100)
+        # Default minimum value to min available (inclusive)
+        default_oi = oi_min
+        
         oi_threshold = st.number_input(
             "Min Open Interest",
             min_value=oi_min,
@@ -118,14 +150,20 @@ with col_open_interest:
 
 # Profit to BPR Filter
 with col_profit_bpr:
-    profit_bpr_min = float(spreads_df['profit_to_bpr'].min())
-    profit_bpr_max = float(spreads_df['profit_to_bpr'].max())
+    # Calculate min/max safely without modifying original dataframe
+    profit_bpr_min_val = spreads_df['profit_to_bpr'].min()
+    profit_bpr_max_val = spreads_df['profit_to_bpr'].max()
+    
+    profit_bpr_min = float(profit_bpr_min_val) if pd.notna(profit_bpr_min_val) else 0.0
+    profit_bpr_max = float(profit_bpr_max_val) if pd.notna(profit_bpr_max_val) else 0.0
+    
     if profit_bpr_min == profit_bpr_max:
         st.text_input("Profit/BPR", value=f"{profit_bpr_min:.3f}", disabled=True)
         profit_bpr_threshold = profit_bpr_min
     else:
-        # Default minimum value of 0.1, but not exceeding max
-        default_profit = min(max(profit_bpr_min, 0.1), profit_bpr_max)
+        # Default minimum value to min available (inclusive)
+        default_profit = profit_bpr_min
+        
         profit_bpr_threshold = st.number_input(
             "Min Profit/BPR",
             min_value=profit_bpr_min,
@@ -149,21 +187,27 @@ filtered_df = filtered_df[filtered_df['option_type'] == option_type]
 
 # Apply IVR filter
 filtered_df = filtered_df[
-    (filtered_df['ivr'] >= ivr_range[0]) &
-    (filtered_df['ivr'] <= ivr_range[1])
-    ]
+    ((filtered_df['ivr'] >= ivr_range[0]) & (filtered_df['ivr'] <= ivr_range[1])) |
+    filtered_df['ivr'].isna()
+]
 
 # Apply IVP filter
 filtered_df = filtered_df[
-    (filtered_df['ivp'] >= ivp_range[0]) &
-    (filtered_df['ivp'] <= ivp_range[1])
-    ]
+    ((filtered_df['ivp'] >= ivp_range[0]) & (filtered_df['ivp'] <= ivp_range[1])) |
+    filtered_df['ivp'].isna()
+]
 
 # Apply Open Interest filter
-filtered_df = filtered_df[filtered_df['open_intrest'] >= oi_threshold]
+filtered_df = filtered_df[
+    (filtered_df['open_intrest'] >= oi_threshold) |
+    filtered_df['open_intrest'].isna()
+]
 
 # Apply Profit to BPR filter
-filtered_df = filtered_df[filtered_df['profit_to_bpr'] >= profit_bpr_threshold]
+filtered_df = filtered_df[
+    (filtered_df['profit_to_bpr'] >= profit_bpr_threshold) |
+    filtered_df['profit_to_bpr'].isna()
+]
 
 # Results summary
 col_results, col_spacer = st.columns([1, 3])

@@ -175,13 +175,15 @@ def _calculate_spread_metrics(spreads: pd.DataFrame) -> pd.DataFrame:
     spreads["max_profit"] = MULTIPLIER * (spreads["mid_sell"] - spreads["mid_buy"])
 
     # Remove spreads without profit potential
-    spreads = spreads[spreads['max_profit'] > 0].reset_index(drop=True)
+    # Allow NaNs to pass through (treat as potentially profitable or at least visible)
+    spreads = spreads[(spreads['max_profit'] > 0) | spreads['max_profit'].isna()].reset_index(drop=True)
 
     # Calculate buying power reduction (BPR)
     spreads["bpr"] = spreads["spread_width"] * MULTIPLIER - spreads["max_profit"]
 
     # Remove spreads with negative BPR
-    spreads = spreads[spreads['bpr'] > 0].reset_index(drop=True)
+    # Allow NaNs to pass through
+    spreads = spreads[(spreads['bpr'] > 0) | spreads['bpr'].isna()].reset_index(drop=True)
 
     # Calculate profit-to-BPR ratio
     spreads["profit_to_bpr"] = spreads["max_profit"] / spreads["bpr"]
@@ -214,6 +216,9 @@ def _add_earnings_and_urls(spreads: pd.DataFrame) -> pd.DataFrame:
     Returns:
         DataFrame with earnings warnings and URLs added
     """
+    # Remove duplicate columns if any, to prevent issues with apply
+    spreads = spreads.loc[:, ~spreads.columns.duplicated()]
+
     # Convert date fields to datetime
     spreads['earnings_date_sell'] = pd.to_datetime(
         spreads['earnings_date_sell'],
@@ -228,7 +233,10 @@ def _add_earnings_and_urls(spreads: pd.DataFrame) -> pd.DataFrame:
     spreads['earnings_warning'] = spreads.apply(_create_earnings_warning, axis=1)
 
     # Generate OptionStrat URLs
-    spreads['optionstrat_url'] = spreads.apply(_build_optionstrat_url, axis=1)
+    # Use list comprehension to avoid potential pandas issue where apply returns a DataFrame
+    spreads['optionstrat_url'] = [
+        _build_optionstrat_url(row) for _, row in spreads.iterrows()
+    ]
 
     return spreads
 
@@ -355,20 +363,27 @@ def _build_optionstrat_url(row: pd.Series) -> str:
         Bull Put: https://optionstrat.com/build/bull-put-spread/KO/.KO260220P57.5,-.KO260220P70
         Bear Call: https://optionstrat.com/build/bear-call-spread/KO/-.KO260220C57.5,.KO260220C70
     """
-    base_url = "https://optionstrat.com/build"
+    try:
+        base_url = "https://optionstrat.com/build"
 
-    symbol = row['symbol'].upper()
-    date_str = _format_expiration_date(row['expiration_date_sell'])
-    opt_type_str = row['option-type_sell'].lower()
+        # Check for required fields
+        if pd.isna(row['symbol']) or pd.isna(row['expiration_date_sell']) or pd.isna(row['option-type_sell']):
+            return ""
 
-    if opt_type_str == COL_PUTS:
-        strategy = 'bull-put-spread'
-        options_string = _build_put_spread_options(row, symbol, date_str)
-    else:  # calls
-        strategy = 'bear-call-spread'
-        options_string = _build_call_spread_options(row, symbol, date_str)
+        symbol = str(row['symbol']).upper()
+        date_str = _format_expiration_date(row['expiration_date_sell'])
+        opt_type_str = str(row['option-type_sell']).lower()
 
-    return f"{base_url}/{strategy}/{symbol}/{options_string}"
+        if opt_type_str == COL_PUTS:
+            strategy = 'bull-put-spread'
+            options_string = _build_put_spread_options(row, symbol, date_str)
+        else:  # calls
+            strategy = 'bear-call-spread'
+            options_string = _build_call_spread_options(row, symbol, date_str)
+
+        return f"{base_url}/{strategy}/{symbol}/{options_string}"
+    except Exception:
+        return ""
 
 
 def _format_expiration_date(exp_date: Any) -> str:
@@ -381,6 +396,9 @@ def _format_expiration_date(exp_date: Any) -> str:
     Returns:
         Formatted date string (YYMMDD)
     """
+    if pd.isna(exp_date):
+        raise ValueError("Expiration date is NaN")
+        
     if isinstance(exp_date, str):
         exp_date = datetime.strptime(exp_date, '%Y-%m-%d')
 

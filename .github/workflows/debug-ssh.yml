@@ -1,0 +1,38 @@
+name: Debug SSH Connection
+
+on:
+  push:
+    branches: [ docker ]
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          # Private Key direkt (NICHT Base64!)
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: Test 1 - Network connectivity
+        run: |
+          echo "=== PING TEST ==="
+          ping -c 4 ${{ secrets.DEPLOY_HOST }} || echo "⚠️ Ping failed"
+          
+          echo "=== PORT 22 TEST ==="
+          nc -zv -w 5 ${{ secrets.DEPLOY_HOST }} 22 2>&1 || echo "❌ Port 22 not reachable"
+
+      - name: Test 2 - SSH with verbose logging
+        run: |
+          echo "=== SSH CONNECTION TEST ==="
+          ssh -vvv -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=no \
+            -o ConnectTimeout=30 \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "echo 'SSH connection successful!'; hostname; whoami; date" 2>&1 || echo "❌ SSH failed"
+
+      - name: Test 3 - SSH Key validation
+        run: |
+          echo "=== SSH KEY INFO ==="
+          ssh-keygen -l -f ~/.ssh/deploy_key 2>&1 || echo "Invalid key format"

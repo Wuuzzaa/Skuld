@@ -189,3 +189,15 @@ service_account.json
 
 /logs/
 .vscode/
+
+# WireGuard Keys und Configs (NIEMALS committen!)
+wireguard/wg0.conf
+wireguard/*_privatekey
+wireguard/*_publickey
+wireguard/*.key
+
+# Documentation
+docs/
+
+db/SQL/tables/create_table/history/
+db/SQL/views/create_view/history/
