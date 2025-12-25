@@ -21,6 +21,17 @@ services:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
     restart: unless-stopped
+
+    # Begrenzung der Ressourcen (Sicherheit für deinen Server)
+    deploy:
+      resources:
+        limits:
+          # CPU: 1.5 entspricht 75% Auslastung bei einem 2-Kern Server (Standard bei 4GB RAM)
+          # Falls du nur 1 Kern hast, wird es einfach auf 100% dieses Kerns begrenzt.
+          cpus: '1.5'
+          # RAM: Maximal 3GB RAM für den Container
+          memory: 3G
+
     # === DOCKER LOG ROTATION CONFIGURATION ===
     # This prevents the container's output logs (stdout/stderr) from filling up the disk.
     logging:
