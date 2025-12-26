@@ -1,4 +1,6 @@
+DROP TABLE IF EXISTS "TechnicalIndicators";
 CREATE TABLE "TechnicalIndicators" (
+	symbol TEXT PRIMARY KEY,
 	"Recommend.Other" FLOAT, 
 	"Recommend.All" FLOAT, 
 	"Recommend.MA" FLOAT, 
@@ -90,7 +92,6 @@ CREATE TABLE "TechnicalIndicators" (
 	change FLOAT, 
 	low FLOAT, 
 	high FLOAT, 
-	symbol TEXT, 
 	recommendation TEXT, 
 	recommendation_buy_amount BIGINT, 
 	recommendation_neutral_amount BIGINT, 
