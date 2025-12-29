@@ -39,13 +39,13 @@ def truncate_table(table_name):
     with engine.begin() as connection:
         try:
             connection.execute(text(f"DELETE FROM {table_name}"))
-            print(f"Successfully truncated table: {table_name} in {round(time.time() - start,2)}s")
+            logger.info(f"Successfully truncated table: {table_name} in {round(time.time() - start,2)}s")
             
             # Log the operation
             log_data_change(connection, "TRUNCATE", table_name, affected_rows=None)
             
         except Exception as e:
-            print(f"Error truncating table {table_name}: {e}")
+            logger.error(f"Error truncating table {table_name}: {e}")
 
 def log_data_change(connection, operation_type, table_name, affected_rows=None, additional_data=None):
     """
@@ -65,7 +65,7 @@ def log_data_change(connection, operation_type, table_name, affected_rows=None, 
             "additional_data": additional_data
         })
     except Exception as e:
-        print(f"Error logging data change: {e}")
+        logger.error(f"Error logging data change: {e}")
 
 def insert_into_table(
         table_name: str,
@@ -77,14 +77,14 @@ def insert_into_table(
     try:
         engine = get_database_engine()
         affected_rows = dataframe.to_sql(table_name, engine, if_exists=if_exists, index=False)
-        print(f"Successfully saved {affected_rows} rows to the database table {table_name} in {round(time.time() - start,2)}s.")
+        logger.info(f"Successfully saved {affected_rows} rows to the database table {table_name} in {round(time.time() - start,2)}s.")
         
         # Log the operation
         with engine.begin() as connection:
             log_data_change(connection, "INSERT", table_name, affected_rows=affected_rows)
             
     except Exception as e:
-        print(f"Error saving to the database table {table_name}: {e}")
+        logger.error(f"Error saving to the database table {table_name}: {e}")
 
     return affected_rows
 
@@ -135,7 +135,7 @@ def run_migrations():
     """
     Runs the database migration system.
     """
-    print("Starting database migration...")
+    logger.info("Starting database migration...")
     start = time.time() 
     engine = get_database_engine()
     inspector = inspect(engine)
@@ -143,20 +143,20 @@ def run_migrations():
     with engine.connect() as connection:
         if not inspector.has_table("DbVersion"):
             with connection.begin():
-                print("DbVersion table not found. Creating it...")
+                logger.info("DbVersion table not found. Creating it...")
                 with open("db/SQL/tables/create_table/DbVersion.sql", "r") as f:
                     connection.execute(text(f.read()))
                 connection.execute(text("INSERT INTO DbVersion (version) VALUES (0)"))
-                print("DbVersion table created and initialized with version 0.")
+                logger.info("DbVersion table created and initialized with version 0.")
 
         with connection.begin():
             result = connection.execute(text("SELECT version FROM DbVersion")).fetchone()
             current_version = result[0]
-        print(f"Current database version: {current_version}")
+        logger.info(f"Current database version: {current_version}")
 
         migrations_path = "db/SQL/migrations/"
         if not os.path.exists(migrations_path):
-            print(f"Migrations directory not found at {migrations_path}. Skipping migrations.")
+            logger.info(f"Migrations directory not found at {migrations_path}. Skipping migrations.")
             recreate_views()
             return
             
@@ -166,13 +166,13 @@ def run_migrations():
         pending_migrations = [f for f in migration_files if int(f.split(".")[0]) > current_version]
 
         if not pending_migrations:
-            print("Database is up to date.")
+            logger.info("Database is up to date.")
             recreate_views()
             return
 
         for migration_file in pending_migrations:
             version = int(migration_file.split(".")[0])
-            print(f"Applying migration {migration_file}...")
+            logger.info(f"Applying migration {migration_file}...")
             try:
                 with open(os.path.join(migrations_path, migration_file), "r") as f:
                     sql_script = f.read()
@@ -183,20 +183,20 @@ def run_migrations():
                     for statement in statements:
                         connection.execute(text(statement))
                         
-                print(f"Migration {migration_file} applied successfully.")
+                logger.info(f"Migration {migration_file} applied successfully.")
             except Exception as e:
-                print(f"Error applying migration {migration_file}: {e}")
+                logger.error(f"Error applying migration {migration_file}: {e}")
                 raise
 
         with connection.begin():
             last_migration_version = int(pending_migrations[-1].split(".")[0])
             connection.execute(text(f"UPDATE DbVersion SET version = {last_migration_version}"))
-            print(f"Database version updated to {last_migration_version}.")
+            logger.info(f"Database version updated to {last_migration_version}.")
     
     # Recreate views after migrations
     recreate_views()
 
-    print(f"Database migration completed in {round(time.time() - start,2)}s")
+    logger.info(f"Database migration completed in {round(time.time() - start,2)}s")
 
 
 def recreate_views():
@@ -204,13 +204,13 @@ def recreate_views():
     Recreates all views in the database.
     Handles dependencies by retrying failed view creations until all succeed or no progress is made.
     """
-    print("Recreating views...")
+    logger.info("Recreating views...")
     start = time.time()
     engine = get_database_engine()
     views_path = "db/SQL/views/create_view/"
     
     if not os.path.exists(views_path):
-        print(f"Views directory not found at {views_path}. Skipping view recreation.")
+        logger.info(f"Views directory not found at {views_path}. Skipping view recreation.")
         return
 
     view_files = [f for f in os.listdir(views_path) if f.endswith(".sql")]
@@ -238,11 +238,11 @@ def recreate_views():
                     progress_made = True
                 except Exception as e:
                     # If it fails, it might be due to missing dependency, so we try again later
-                    print(f"Failed to create view {view_file}: {e}")
+                    logger.error(f"Failed to create view {view_file}: {e}")
                     failed_views.append(view_file)
             
             if not progress_made and failed_views:
-                print(f"Error: Could not create the following views due to potential circular dependencies or errors: {failed_views}")
+                logger.error(f"Error: Could not create the following views due to potential circular dependencies or errors: {failed_views}")
                 # We stop here to avoid infinite loop
                 # Optionally raise an error, but for now just printing
                 break
@@ -250,6 +250,6 @@ def recreate_views():
             pending_views = failed_views
 
     if not pending_views:
-        print(f"All views recreated successfully in {round(time.time() - start, 2)}s.")
+        logger.info(f"All views recreated successfully in {round(time.time() - start, 2)}s.")
     else:
-        print(f"View recreation finished with errors in {round(time.time() - start, 2)}s.")
+        logger.info(f"View recreation finished with errors in {round(time.time() - start, 2)}s.")

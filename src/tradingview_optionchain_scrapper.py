@@ -1,3 +1,4 @@
+import logging
 import sys
 import os
 import requests
@@ -5,6 +6,8 @@ import pandas as pd
 from config import SYMBOLS_EXCHANGE, TABLE_OPTION_DATA_TRADINGVIEW
 from src.database import insert_into_table, truncate_table
 from src.util import opra_to_osi
+
+logger = logging.getLogger(__name__)
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -32,20 +35,24 @@ def _response_to_df(data):
     return df
 
 def scrape_option_data_trading_view(symbols):
-    print(f"Loading for {len(symbols)} symbols option data from TradingView")
+    logger.info(f"Loading for {len(symbols)} symbols option data from TradingView")
+    
+    # --- Database Persistence ---
+    truncate_table(TABLE_OPTION_DATA_TRADINGVIEW)
+
     # Ermittle Exchanges für alle Symbole
     symbol_exchange_pairs = [(symbol, SYMBOLS_EXCHANGE[symbol]) for symbol in symbols]
     # Erstelle die Liste für index_filters
     underlying_symbols = [f"{exchange}:{symbol}" for symbol, exchange in symbol_exchange_pairs]
 
-    all_option_data = []
+    total_count = 0
 
-    # Unterteile underlying_symbols in 500er-Pakete (API Limit unbekannt, 500 sollte aber sicher sein)
-    batch_size = 500
+    # Unterteile underlying_symbols in 100er-Pakete (API Limit unbekannt, 500 sollte aber sicher sein)
+    batch_size = 100
     symbol_batches = [underlying_symbols[i:i + batch_size] for i in range(0, len(underlying_symbols), batch_size)]
     for symbol_batch in symbol_batches:
         if len(underlying_symbols) > batch_size:
-           print(f"Fetching TradingView option data for batch of {len(symbol_batch)} symbols...")
+           logger.info(f"Fetching TradingView option data for batch of {len(symbol_batch)} symbols...")
         
         # Additional fields: https://shner-elmo.github.io/TradingView-Screener/fields/options.html
 
@@ -69,25 +76,25 @@ def scrape_option_data_trading_view(symbols):
 
         # Handling the response
         if response.status_code == 200:
-            print(f"Request batch of {len(symbol_batch)} symbols was successful:")
+            logger.info(f"Request batch of {len(symbol_batch)} symbols was successful:")
             data = response.json()
             if data['totalCount'] > 0:
                 df = _response_to_df(data=data)
-                all_option_data.append(df)
+                
+                insert_into_table(
+                    table_name=TABLE_OPTION_DATA_TRADINGVIEW,
+                    dataframe=df,
+                    if_exists="append"
+                )
+                
+                count = len(df)
+                total_count += count
+                logger.info(f"Saved {count} records to DB")
             else:
-                print("No data was found")
+                logger.warning("No data was found")
         else:
-            print(f"Request {symbols} has failed:")
-            print(f"Error: {response.status_code}")
-            print(response.text)
-    
-    # Combine all data
-    df = pd.concat(all_option_data, ignore_index=True)  
-        
-    # --- Database Persistence ---
-    truncate_table(TABLE_OPTION_DATA_TRADINGVIEW)
-    insert_into_table(
-        table_name=TABLE_OPTION_DATA_TRADINGVIEW,
-        dataframe=df,
-        if_exists="append"
-    )
+            logger.error(f"Request {symbols} has failed:")
+            logger.error(f"Error: {response.status_code}")
+            logger.error(response.text)
+            
+    logger.info(f"Total options collected and saved: {total_count}")
