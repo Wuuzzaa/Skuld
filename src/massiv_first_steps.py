@@ -342,6 +342,7 @@ if __name__ == "__main__":
     #     "TSLA",
     # ]
 
+    #tickers = sorted(pd.read_feather("option_symbols.feather").iloc[:, 0].tolist())[0:1] # only first symbol
     tickers = sorted(pd.read_feather("option_symbols.feather").iloc[:, 0].tolist())
 
     # # One symbol option chains
@@ -386,5 +387,11 @@ https://massive.com/docs/rest/options/snapshots/option-chain-snapshot
 über den Beispielcode ist es zu langsam. Zwar 250 Einträge gleichzeitig. Geht aber besser bei ca. 1,8 Mio Einträgen.
 Dazu erst jedes Optionssymbol speichern.
 Dann für jedes Optionssymbol eine Query async ebenfalls mit 250 batch -> viel schneller.
+
+get_option_chains_tickers_async
+enthält nur die optionsdaten. 
+
+Stockpreise müssen noch gezogen werden.
+https://massive.com/docs/rest/stocks/snapshots/full-market-snapshot
 """
 
