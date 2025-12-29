@@ -18,7 +18,7 @@ from src.dividend_radar import process_dividend_data
 from config_utils import get_filtered_symbols_and_dates_with_logging
 from config_utils import generate_expiry_dates_from_rules
 from src.historization import run_historization_pipeline
-from src.util import log_memory_usage, MemoryMonitor
+from src.util import log_memory_usage, MemoryMonitor, executed_as_github_action
 
 setup_logging(component="data_collector", log_level=logging.DEBUG, console_output=True)
 logger = logging.getLogger(__name__)
@@ -93,8 +93,14 @@ def main(upload_google_drive=True):
         ("Yahoo Query Option Chain", get_yahooquery_option_chain, ()),
         ("Yahoo Query Fundamentals", generate_fundamental_data, ()),
         ("Fetch Current Stock Prices", fetch_current_prices, ()),
-        ("Barchart Data", scrape_barchart, ()),
     ]
+
+    # Barchart scraping only on GitHub Actions
+    if executed_as_github_action():
+        logger.info("Running on GitHub Actions: Adding Barchart Data collection task")
+        parallel_tasks.append(("Barchart Data", scrape_barchart, ()))
+    else:
+        logger.info("Not running on GitHub Actions: Skipping Barchart Data collection task")
 
     logger.info(f"\n{'=' * 80}")
     logger.info(f"Running ALL {len(parallel_tasks)} data collection tasks in parallel")

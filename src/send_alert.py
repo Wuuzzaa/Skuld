@@ -3,10 +3,19 @@ import os
 import sys
 import logging
 
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from src.util import executed_as_github_action
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def send_telegram_message(title, message):
+    # Check if running on GitHub Actions
+    if executed_as_github_action():
+        logging.info("Skipping Telegram Message on Github Actions")
+        return
+
     bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
     chat_id = os.environ.get('TELEGRAM_CHAT_ID')
 
