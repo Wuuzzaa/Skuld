@@ -1,8 +1,9 @@
+DROP TABLE IF EXISTS "OptionDataYahoo";
 CREATE TABLE "OptionDataYahoo" (
-	symbol TEXT, 
-	expiration_date DATETIME, 
+	"contractSymbol" TEXT,
+	symbol TEXT,
 	"option-type" TEXT, 
-	"contractSymbol" TEXT, 
+	expiration_date DATETIME, 
 	strike FLOAT, 
 	currency TEXT, 
 	"lastPrice" FLOAT, 
@@ -15,5 +16,6 @@ CREATE TABLE "OptionDataYahoo" (
 	"lastTradeDate" DATETIME, 
 	"impliedVolatility" FLOAT, 
 	"inTheMoney" BOOLEAN, 
-	option_volume FLOAT
+	option_volume FLOAT,
+	PRIMARY KEY("contractSymbol")
 );

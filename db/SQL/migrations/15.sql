@@ -1,3 +1,316 @@
+DROP TABLE IF EXISTS "DataAgingFieldClassification";
+CREATE TABLE "DataAgingFieldClassification" (
+    table_name TEXT NOT NULL,
+    field_name TEXT NOT NULL,
+    tier TEXT DEFAULT 'Daily', -- 'Daily', 'Weekly', 'Monthly', 'Master'
+    last_value TEXT,
+    last_change_date DATE,
+    tier_entry_date DATE,
+    PRIMARY KEY (table_name, field_name)
+);
+DROP TABLE IF EXISTS "OldOptionDataTradingViewHistoryDaily";
+ALTER TABLE "OptionDataTradingViewHistoryDaily" RENAME TO "OldOptionDataTradingViewHistoryDaily";
+CREATE TABLE "OptionDataTradingViewHistoryDaily" (
+	snapshot_date DATE,
+	option_osi TEXT,
+	symbol TEXT, 
+	"option-type" TEXT,
+	expiration_date BIGINT,
+	strike FLOAT, 
+	ask FLOAT, 
+	bid FLOAT, 
+	delta FLOAT, 
+	gamma FLOAT, 
+	iv FLOAT, 
+	rho FLOAT, 
+	"theoPrice" FLOAT, 
+	theta FLOAT, 
+	vega FLOAT, 
+	option TEXT, 
+	time TEXT, 
+	exchange TEXT,
+	PRIMARY KEY(snapshot_date, option_osi)
+);
+INSERT INTO "OptionDataTradingViewHistoryDaily" (
+    snapshot_date,
+	option_osi,
+	symbol, 
+	"option-type",
+	expiration_date,
+	strike, 
+	ask, 
+	bid, 
+	delta, 
+	gamma, 
+	iv, 
+	rho, 
+	"theoPrice", 
+	theta, 
+	vega, 
+	option, 
+	time, 
+	exchange
+)
+SELECT
+    snapshot_date,
+	option_osi,
+	symbol, 
+	"option-type",
+	expiration_date,
+	strike, 
+	ask, 
+	bid, 
+	delta, 
+	gamma, 
+	iv, 
+	rho, 
+	"theoPrice", 
+	theta, 
+	vega, 
+	option, 
+	time, 
+	exchange
+FROM
+    "OldOptionDataTradingViewHistoryDaily";
+DROP TABLE "OldOptionDataTradingViewHistoryDaily";
+CREATE TABLE "OptionDataTradingViewHistoryMonthly" (
+	year INT,
+	month INT,
+	option_osi TEXT,
+	symbol TEXT, 
+	"option-type" TEXT,
+	expiration_date BIGINT,
+	strike FLOAT, 
+	ask FLOAT, 
+	bid FLOAT, 
+	delta FLOAT, 
+	gamma FLOAT, 
+	iv FLOAT, 
+	rho FLOAT, 
+	"theoPrice" FLOAT, 
+	theta FLOAT, 
+	vega FLOAT, 
+	option TEXT, 
+	time TEXT, 
+	exchange TEXT,
+	PRIMARY KEY(year, month, option_osi)
+);
+CREATE TABLE "OptionDataTradingViewHistoryWeekly" (
+	year INT,
+	week INT,
+	option_osi TEXT,
+	symbol TEXT, 
+	"option-type" TEXT,
+	expiration_date BIGINT,
+	strike FLOAT, 
+	ask FLOAT, 
+	bid FLOAT, 
+	delta FLOAT, 
+	gamma FLOAT, 
+	iv FLOAT, 
+	rho FLOAT, 
+	"theoPrice" FLOAT, 
+	theta FLOAT, 
+	vega FLOAT, 
+	option TEXT, 
+	time TEXT, 
+	exchange TEXT,
+	PRIMARY KEY(year, week, option_osi)
+);
+CREATE TABLE "OptionDataTradingViewMasterData" (
+	option_osi TEXT PRIMARY KEY,
+	symbol TEXT, 
+	"option-type" TEXT,
+	expiration_date BIGINT,
+	strike FLOAT, 
+	ask FLOAT, 
+	bid FLOAT, 
+	delta FLOAT, 
+	gamma FLOAT, 
+	iv FLOAT, 
+	rho FLOAT, 
+	"theoPrice" FLOAT, 
+	theta FLOAT, 
+	vega FLOAT, 
+	option TEXT, 
+	time TEXT, 
+	exchange TEXT
+);
+ALTER TABLE "OptionDataYahooHistoryDaily" RENAME TO "OldOptionDataYahooHistoryDaily";
+CREATE TABLE "OptionDataYahooHistoryDaily" (
+	snapshot_date DATE NOT NULL,
+	"contractSymbol" TEXT,
+	symbol TEXT,
+	"option-type" TEXT, 
+	expiration_date DATETIME, 
+	strike FLOAT, 
+	currency TEXT, 
+	"lastPrice" FLOAT, 
+	change FLOAT, 
+	"percentChange" FLOAT, 
+	option_open_interest BIGINT, 
+	bid FLOAT, 
+	ask FLOAT, 
+	"contractSize" TEXT, 
+	"lastTradeDate" DATETIME, 
+	"impliedVolatility" FLOAT, 
+	"inTheMoney" BOOLEAN, 
+	option_volume FLOAT,
+	PRIMARY KEY(snapshot_date, "contractSymbol")
+);
+INSERT INTO "OptionDataYahooHistoryDaily" (
+    snapshot_date,
+	"contractSymbol",
+	symbol,
+	"option-type", 
+	expiration_date, 
+	strike, 
+	currency, 
+	"lastPrice", 
+	change, 
+	"percentChange", 
+	option_open_interest, 
+	bid, 
+	ask, 
+	"contractSize", 
+	"lastTradeDate", 
+	"impliedVolatility", 
+	"inTheMoney", 
+	option_volume
+)
+SELECT
+    snapshot_date,
+	"contractSymbol",
+	symbol,
+	"option-type", 
+	expiration_date, 
+	strike, 
+	currency, 
+	"lastPrice", 
+	change, 
+	"percentChange", 
+	option_open_interest, 
+	bid, 
+	ask, 
+	"contractSize", 
+	"lastTradeDate", 
+	"impliedVolatility", 
+	"inTheMoney", 
+	option_volume
+FROM
+    "OldOptionDataYahooHistoryDaily";
+DROP TABLE "OldOptionDataYahooHistoryDaily";
+CREATE TABLE "OptionDataYahooHistoryMonthly" (
+	year INT,
+	month INT,
+	"contractSymbol" TEXT,
+	symbol TEXT,
+	"option-type" TEXT, 
+	expiration_date DATETIME, 
+	strike FLOAT, 
+	currency TEXT, 
+	"lastPrice" FLOAT, 
+	change FLOAT, 
+	"percentChange" FLOAT, 
+	option_open_interest BIGINT, 
+	bid FLOAT, 
+	ask FLOAT, 
+	"contractSize" TEXT, 
+	"lastTradeDate" DATETIME, 
+	"impliedVolatility" FLOAT, 
+	"inTheMoney" BOOLEAN, 
+	option_volume FLOAT,
+	PRIMARY KEY(year, month, "contractSymbol")
+);
+CREATE TABLE "OptionDataYahooHistoryWeekly" (
+	year INT,
+	week INT,
+	"contractSymbol" TEXT,
+	symbol TEXT,
+	"option-type" TEXT, 
+	expiration_date DATETIME, 
+	strike FLOAT, 
+	currency TEXT, 
+	"lastPrice" FLOAT, 
+	change FLOAT, 
+	"percentChange" FLOAT, 
+	option_open_interest BIGINT, 
+	bid FLOAT, 
+	ask FLOAT, 
+	"contractSize" TEXT, 
+	"lastTradeDate" DATETIME, 
+	"impliedVolatility" FLOAT, 
+	"inTheMoney" BOOLEAN, 
+	option_volume FLOAT,
+	PRIMARY KEY(year, week, "contractSymbol")
+);
+CREATE TABLE "OptionDataYahooMasterData" (
+	"contractSymbol" TEXT PRIMARY KEY,
+	symbol TEXT,
+	"option-type" TEXT, 
+	expiration_date DATETIME, 
+	strike FLOAT, 
+	currency TEXT, 
+	"lastPrice" FLOAT, 
+	change FLOAT, 
+	"percentChange" FLOAT, 
+	option_open_interest BIGINT, 
+	bid FLOAT, 
+	ask FLOAT, 
+	"contractSize" TEXT, 
+	"lastTradeDate" DATETIME, 
+	"impliedVolatility" FLOAT, 
+	"inTheMoney" BOOLEAN, 
+	option_volume FLOAT
+);
+DROP TABLE IF EXISTS "EarningDates";
+CREATE TABLE "EarningDates" (
+	symbol TEXT PRIMARY KEY, 
+	earnings_date TEXT
+);
+DROP TABLE IF EXISTS "FundamentalDataDividendRadar";
+CREATE TABLE "FundamentalDataDividendRadar" (
+	"Symbol" TEXT PRIMARY KEY, 
+	"Company" TEXT, 
+	"FV" FLOAT, 
+	"Sector" TEXT, 
+	"No-Years" BIGINT, 
+	"Price" FLOAT, 
+	"Div-Yield" FLOAT, 
+	"5Y-Avg-Yield" FLOAT, 
+	"Current-Div" FLOAT, 
+	"Payouts/-Year" BIGINT, 
+	"Annualized" FLOAT, 
+	"Previous-Div" FLOAT, 
+	"Ex-Date" DATETIME, 
+	"Pay-Date" DATETIME, 
+	"Low" FLOAT, 
+	"High" FLOAT, 
+	"DGR-1Y" FLOAT, 
+	"DGR-3Y" FLOAT, 
+	"DGR-5Y" FLOAT, 
+	"DGR-10Y" FLOAT, 
+	"TTR-1Y" FLOAT, 
+	"TTR-3Y" FLOAT, 
+	"Fair-Value" TEXT, 
+	"FV-%" FLOAT, 
+	"Streak-Basis" TEXT, 
+	"Chowder-Number" FLOAT, 
+	"EPS-1Y" FLOAT, 
+	"Revenue-1Y" FLOAT, 
+	"NPM" FLOAT, 
+	"CF/Share" FLOAT, 
+	"ROE" FLOAT, 
+	"Current-R" FLOAT, 
+	"Debt/Capital" FLOAT, 
+	"ROTC" FLOAT, 
+	"P/E" FLOAT, 
+	"P/BV" FLOAT, 
+	"PEG" FLOAT, 
+	"New-Member" FLOAT, 
+	"Industry" TEXT, 
+	"Classification" TEXT
+);
 DROP TABLE IF EXISTS "FundamentalDataYahoo";
 CREATE TABLE "FundamentalDataYahoo" (
 	symbol TEXT PRIMARY KEY, 
@@ -472,3 +785,243 @@ CREATE TABLE "FundamentalDataYahoo" (
 	"Summary_totalAssets" FLOAT, 
 	"Summary_navPrice" FLOAT
 );
+DROP TABLE IF EXISTS "OptionDataTradingView";
+CREATE TABLE "OptionDataTradingView" (
+	option_osi TEXT,
+	symbol TEXT, 
+	"option-type" TEXT,
+	expiration_date BIGINT,
+	strike FLOAT, 
+	ask FLOAT, 
+	bid FLOAT, 
+	delta FLOAT, 
+	gamma FLOAT, 
+	iv FLOAT, 
+	rho FLOAT, 
+	"theoPrice" FLOAT, 
+	theta FLOAT, 
+	vega FLOAT, 
+	option TEXT, 
+	time TEXT, 
+	exchange TEXT,
+	PRIMARY KEY(option_osi)
+);
+DROP TABLE IF EXISTS "OptionDataYahoo";
+CREATE TABLE "OptionDataYahoo" (
+	"contractSymbol" TEXT,
+	symbol TEXT,
+	"option-type" TEXT, 
+	expiration_date DATETIME, 
+	strike FLOAT, 
+	currency TEXT, 
+	"lastPrice" FLOAT, 
+	change FLOAT, 
+	"percentChange" FLOAT, 
+	option_open_interest BIGINT, 
+	bid FLOAT, 
+	ask FLOAT, 
+	"contractSize" TEXT, 
+	"lastTradeDate" DATETIME, 
+	"impliedVolatility" FLOAT, 
+	"inTheMoney" BOOLEAN, 
+	option_volume FLOAT,
+	PRIMARY KEY("contractSymbol")
+);
+DROP TABLE IF EXISTS "StockDataBarchart";
+CREATE TABLE "StockDataBarchart" (
+	symbol TEXT PRIMARY KEY,
+	implied_volatility FLOAT, 
+	historical_volatility FLOAT, 
+	iv_percentile FLOAT, 
+	iv_rank FLOAT, 
+	iv_high FLOAT, 
+	iv_low FLOAT, 
+	put_call_vol_ratio FLOAT, 
+	put_call_oi_ratio FLOAT, 
+	todays_volume BIGINT, 
+	volume_avg_30d BIGINT, 
+	todays_open_interest BIGINT, 
+	open_int_30d BIGINT
+);
+DROP TABLE IF EXISTS "StockPrice";
+CREATE TABLE "StockPrice" (
+	symbol TEXT PRIMARY KEY, 
+	live_stock_price FLOAT, 
+	price_source TEXT, 
+	live_price_timestamp DATETIME
+);
+DROP TABLE IF EXISTS "TechnicalIndicators";
+CREATE TABLE "TechnicalIndicators" (
+	symbol TEXT PRIMARY KEY,
+	"Recommend.Other" FLOAT, 
+	"Recommend.All" FLOAT, 
+	"Recommend.MA" FLOAT, 
+	"RSI" FLOAT, 
+	"RSI[1]" FLOAT, 
+	"Stoch.K" FLOAT, 
+	"Stoch.D" FLOAT, 
+	"Stoch.K[1]" FLOAT, 
+	"Stoch.D[1]" FLOAT, 
+	"CCI20" FLOAT, 
+	"CCI20[1]" FLOAT, 
+	"ADX" FLOAT, 
+	"ADX+DI" FLOAT, 
+	"ADX-DI" FLOAT, 
+	"ADX+DI[1]" FLOAT, 
+	"ADX-DI[1]" FLOAT, 
+	"AO" FLOAT, 
+	"AO[1]" FLOAT, 
+	"Mom" FLOAT, 
+	"Mom[1]" FLOAT, 
+	"MACD.macd" FLOAT, 
+	"MACD.signal" FLOAT, 
+	"Rec.Stoch.RSI" BIGINT, 
+	"Stoch.RSI.K" FLOAT, 
+	"Rec.WR" BIGINT, 
+	"W.R" FLOAT, 
+	"Rec.BBPower" BIGINT, 
+	"BBPower" FLOAT, 
+	"Rec.UO" BIGINT, 
+	"UO" FLOAT, 
+	close FLOAT, 
+	"EMA5" FLOAT, 
+	"SMA5" FLOAT, 
+	"EMA10" FLOAT, 
+	"SMA10" FLOAT, 
+	"EMA20" FLOAT, 
+	"SMA20" FLOAT, 
+	"EMA30" FLOAT, 
+	"SMA30" FLOAT, 
+	"EMA50" FLOAT, 
+	"SMA50" FLOAT, 
+	"EMA100" FLOAT, 
+	"SMA100" FLOAT, 
+	"EMA200" FLOAT, 
+	"SMA200" FLOAT, 
+	"Rec.Ichimoku" BIGINT, 
+	"Ichimoku.BLine" FLOAT, 
+	"Rec.VWMA" BIGINT, 
+	"VWMA" FLOAT, 
+	"Rec.HullMA9" BIGINT, 
+	"HullMA9" FLOAT, 
+	"Pivot.M.Classic.S3" FLOAT, 
+	"Pivot.M.Classic.S2" FLOAT, 
+	"Pivot.M.Classic.S1" FLOAT, 
+	"Pivot.M.Classic.Middle" FLOAT, 
+	"Pivot.M.Classic.R1" FLOAT, 
+	"Pivot.M.Classic.R2" FLOAT, 
+	"Pivot.M.Classic.R3" FLOAT, 
+	"Pivot.M.Fibonacci.S3" FLOAT, 
+	"Pivot.M.Fibonacci.S2" FLOAT, 
+	"Pivot.M.Fibonacci.S1" FLOAT, 
+	"Pivot.M.Fibonacci.Middle" FLOAT, 
+	"Pivot.M.Fibonacci.R1" FLOAT, 
+	"Pivot.M.Fibonacci.R2" FLOAT, 
+	"Pivot.M.Fibonacci.R3" FLOAT, 
+	"Pivot.M.Camarilla.S3" FLOAT, 
+	"Pivot.M.Camarilla.S2" FLOAT, 
+	"Pivot.M.Camarilla.S1" FLOAT, 
+	"Pivot.M.Camarilla.Middle" FLOAT, 
+	"Pivot.M.Camarilla.R1" FLOAT, 
+	"Pivot.M.Camarilla.R2" FLOAT, 
+	"Pivot.M.Camarilla.R3" FLOAT, 
+	"Pivot.M.Woodie.S3" FLOAT, 
+	"Pivot.M.Woodie.S2" FLOAT, 
+	"Pivot.M.Woodie.S1" FLOAT, 
+	"Pivot.M.Woodie.Middle" FLOAT, 
+	"Pivot.M.Woodie.R1" FLOAT, 
+	"Pivot.M.Woodie.R2" FLOAT, 
+	"Pivot.M.Woodie.R3" FLOAT, 
+	"Pivot.M.Demark.S1" FLOAT, 
+	"Pivot.M.Demark.Middle" FLOAT, 
+	"Pivot.M.Demark.R1" FLOAT, 
+	open FLOAT, 
+	"P.SAR" FLOAT, 
+	"BB.lower" FLOAT, 
+	"BB.upper" FLOAT, 
+	"AO[2]" FLOAT, 
+	volume BIGINT, 
+	change FLOAT, 
+	low FLOAT, 
+	high FLOAT, 
+	recommendation TEXT, 
+	recommendation_buy_amount BIGINT, 
+	recommendation_neutral_amount BIGINT, 
+	recommendation_sell_amount BIGINT
+);
+DROP TABLE IF EXISTS "AnalystPriceTargets";
+CREATE TABLE "AnalystPriceTargets" (
+	symbol TEXT PRIMARY KEY, 
+	analyst_mean_target FLOAT
+);
+INSERT INTO "DataAgingFieldClassification"
+(table_name, field_name, tier, tier_entry_date) 
+VALUES
+('OptionDataTradingView', 'strike', 'Master', DATE('now')),
+('OptionDataTradingView', 'expiration_date', 'Master', DATE('now')),
+('OptionDataTradingView', 'option-type', 'Master', DATE('now')),
+('OptionDataTradingView', 'exchange', 'Master', DATE('now')),
+('OptionDataTradingView', 'symbol', 'Master', DATE('now'))
+ON CONFLICT(table_name, field_name) DO UPDATE SET
+    tier = excluded.tier,
+    tier_entry_date = excluded.tier_entry_date;
+
+INSERT INTO "DataAgingFieldClassification"
+(table_name, field_name, tier, tier_entry_date) 
+VALUES
+-- Kategorie: Master (Ändern sich nie)
+('OptionDataTradingView', 'option_osi', 'Master', DATE('now')),
+('OptionDataTradingView', 'symbol', 'Master', DATE('now')),
+('OptionDataTradingView', 'option-type', 'Master', DATE('now')),
+('OptionDataTradingView', 'expiration_date', 'Master', DATE('now')),
+('OptionDataTradingView', 'strike', 'Master', DATE('now')),
+('OptionDataTradingView', 'option', 'Master', DATE('now')),
+('OptionDataTradingView', 'exchange', 'Master', DATE('now')),
+
+-- Kategorie: Market (Ändern sich daily/realtime)
+('OptionDataTradingView', 'ask', 'Daily', DATE('now')),
+('OptionDataTradingView', 'bid', 'Daily', DATE('now')),
+('OptionDataTradingView', 'iv', 'Daily', DATE('now')),
+('OptionDataTradingView', 'theoPrice', 'Daily', DATE('now')),
+('OptionDataTradingView', 'time', 'Daily', DATE('now')),
+
+-- Kategorie: Greeks (Ändern sich daily/realtime)
+('OptionDataTradingView', 'delta', 'Daily', DATE('now')),
+('OptionDataTradingView', 'gamma', 'Daily', DATE('now')),
+('OptionDataTradingView', 'rho', 'Daily', DATE('now')),
+('OptionDataTradingView', 'theta', 'Daily', DATE('now')),
+('OptionDataTradingView', 'vega', 'Daily', DATE('now'))
+
+ON CONFLICT(table_name, field_name) DO UPDATE SET
+    tier = excluded.tier,
+    tier_entry_date = excluded.tier_entry_date;
+
+INSERT INTO "DataAgingFieldClassification"
+(table_name, field_name, tier, tier_entry_date) 
+VALUES
+-- Kategorie: Master (Statische Kontraktinformationen)
+('OptionDataYahoo', 'contractSymbol', 'Master', DATE('now')),
+('OptionDataYahoo', 'symbol', 'Master', DATE('now')),
+('OptionDataYahoo', 'option-type', 'Master', DATE('now')),
+('OptionDataYahoo', 'expiration_date', 'Master', DATE('now')),
+('OptionDataYahoo', 'strike', 'Master', DATE('now')),
+('OptionDataYahoo', 'currency', 'Master', DATE('now')),
+('OptionDataYahoo', 'contractSize', 'Master', DATE('now')),
+
+-- Kategorie: Market (Preisrelevante Daten)
+('OptionDataYahoo', 'lastPrice', 'Daily', DATE('now')),
+('OptionDataYahoo', 'bid', 'Daily', DATE('now')),
+('OptionDataYahoo', 'ask', 'Daily', DATE('now')),
+('OptionDataYahoo', 'change', 'Daily', DATE('now')),
+('OptionDataYahoo', 'percentChange', 'Daily', DATE('now')),
+('OptionDataYahoo', 'impliedVolatility', 'Daily', DATE('now')),
+('OptionDataYahoo', 'lastTradeDate', 'Daily', DATE('now')),
+('OptionDataYahoo', 'inTheMoney', 'Daily', DATE('now')),
+
+-- Kategorie: Volume (Handelsaktivität)
+('OptionDataYahoo', 'option_open_interest', 'Daily', DATE('now')),
+('OptionDataYahoo', 'option_volume', 'Daily', DATE('now'))
+
+ON CONFLICT(table_name, field_name) DO UPDATE SET
+    tier = excluded.tier,
+    tier_entry_date = excluded.tier_entry_date;
