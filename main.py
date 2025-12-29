@@ -18,7 +18,7 @@ from src.dividend_radar import process_dividend_data
 from config_utils import get_filtered_symbols_and_dates_with_logging
 from config_utils import generate_expiry_dates_from_rules
 
-setup_logging(log_file=PATH_LOG_FILE, log_level=logging.DEBUG, console_output=True)
+setup_logging(component="data_collector", log_level=logging.DEBUG, console_output=True)
 logger = logging.getLogger(__name__)
 logger.info("Start SKULD")
 
