@@ -6,7 +6,7 @@ from src.logger_config import setup_logging
 from config import *
 
 # enable logging
-setup_logging(log_file=PATH_LOG_FILE, log_level=logging.DEBUG, console_output=True)
+setup_logging(component="streamlit", log_level=logging.DEBUG, console_output=True)
 logger = logging.getLogger(__name__)
 logger.info("Start SKULD")
 

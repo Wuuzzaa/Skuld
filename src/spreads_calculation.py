@@ -1,7 +1,7 @@
 import pandas as pd
 from datetime import datetime
 from typing import Tuple, Dict, Any
-from config import NUM_SIMULATIONS, RANDOM_SEED, RISK_FREE_RATE, PATH_LOG_FILE
+from config import NUM_SIMULATIONS, RANDOM_SEED, RISK_FREE_RATE
 from src.decorator_log_function import log_function
 from src.monte_carlo_simulation import UniversalOptionsMonteCarloSimulator
 
@@ -456,7 +456,7 @@ if __name__ == "__main__":
     from src.database import select_into_dataframe
 
     # enable logging
-    setup_logging(log_file=PATH_LOG_FILE, log_level=logging.DEBUG, console_output=True)
+    setup_logging(component="script_spreads_calculation", log_level=logging.DEBUG, console_output=True)
     logger = logging.getLogger(__name__)
     logger.info(f"Start {__name__} ({__file__})")
 

@@ -27,9 +27,21 @@ from pathlib import Path
 
 def setup_logging(
     log_level: int = logging.INFO,
-    log_file: str = None,
+    component: str = "default",
     console_output: bool = True
 ) -> logging.Logger:
+    """
+    Sets up logging for the application.
+
+    Args:
+        log_level (int): Logging level (e.g., logging.INFO, logging.DEBUG).
+        component (str): Name of the component (e.g., 'streamlit', 'data_collector').
+                         This will create a folder structure: logs/{component}/{date}/
+        console_output (bool): Whether to output logs to console.
+
+    Returns:
+        logging.Logger: The root logger.
+    """
     root_logger = logging.getLogger()
     root_logger.setLevel(log_level)
 
@@ -49,13 +61,23 @@ def setup_logging(
         console_handler.setFormatter(log_format)
         root_logger.addHandler(console_handler)
 
-    # File handler (optional)
-    if log_file:
-        # Create logs directory if it doesn't exist
-        log_path = Path(log_file)
-        log_path.parent.mkdir(parents=True, exist_ok=True)
+    # File handler
+    if component:
+        from datetime import datetime
+        # Base logs directory
+        base_logs_dir = Path(__file__).resolve().parent.parent / "logs"
 
-        file_handler = logging.FileHandler(log_file)
+        # Logs directory structure: logs/{component}/{YYYY-MM-DD}/
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        log_dir = base_logs_dir / component / today_str
+        log_dir.mkdir(parents=True, exist_ok=True)
+
+        # Log filename: {YYYYMMDD_HHMMSS}_{component}.log
+        timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+        log_filename = f"{timestamp_str}_{component}.log"
+        log_file_path = log_dir / log_filename
+
+        file_handler = logging.FileHandler(str(log_file_path))
         file_handler.setLevel(log_level)
         file_handler.setFormatter(log_format)
         root_logger.addHandler(file_handler)
@@ -68,7 +90,7 @@ def get_logger(name: str) -> logging.Logger:
 
 if __name__ == "__main__":
     # Example usage
-    setup_logging(log_level=logging.DEBUG, log_file="logs/test.log")
+    setup_logging(log_level=logging.DEBUG, component="test")
 
     logger = get_logger(__name__)
 
