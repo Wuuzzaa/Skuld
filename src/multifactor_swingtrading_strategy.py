@@ -4,7 +4,7 @@ from config import *
 from src.decorator_log_function import log_function
 
 # enable logging
-setup_logging(log_file=PATH_LOG_FILE, log_level=logging.DEBUG, console_output=True)
+setup_logging(component="script_multifactor_swingtrading", log_level=logging.DEBUG, console_output=True)
 logger = logging.getLogger(__name__)
 logger.info(f"Start {__name__} ({__file__})")
 
@@ -88,7 +88,7 @@ if __name__ == "__main__":
     from src.database import select_into_dataframe
 
     # enable logging
-    setup_logging(log_file=PATH_LOG_FILE, log_level=logging.DEBUG, console_output=True)
+    setup_logging(component="script_multifactor_swingtrading", log_level=logging.DEBUG, console_output=True)
     logger = logging.getLogger(__name__)
     logger.info(f"Start {__name__} ({__file__})")
 

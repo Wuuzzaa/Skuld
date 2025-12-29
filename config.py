@@ -9,7 +9,7 @@ BASE_DIR = Path(__file__).resolve().parent
 VERSION = get_version(BASE_DIR)
 
 # Logfile
-PATH_LOG_FILE = BASE_DIR / "logs" /"log.log"
+PATH_LOGS_DIR = BASE_DIR / "logs"
 
 # Filename merged dataframe the final file for the streamlit app
 FILENAME_MERGED_DATAFRAME = 'merged_df.feather'
