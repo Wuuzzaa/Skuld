@@ -1,3 +1,5 @@
+import pickle
+
 from massive import RESTClient
 from config import MASSIVE_API_KEY, SYMBOLS
 import pandas as pd
@@ -329,6 +331,65 @@ async def get_active_tickers_with_options_fast():
     print(f"\n🎉 ERGEBNIS: {len(tickers_with_options)} aktive Tickers mit Optionen")
     return sorted(tickers_with_options)
 
+def write_pickle(data, filename):
+    with open(filename, 'wb') as f:
+        pickle.dump(data, file=f)
+
+def load_pickle(filename):
+    with open(filename, 'rb') as f:
+        return pickle.load(f)
+
+def option_chains_to_dataframe(option_chains):
+    """
+    Flatten a list of nested dictionaries (option_chains) into a Pandas DataFrame.
+
+    Args:
+        option_chains (list of dict): List of nested dictionaries containing option data.
+
+    Returns:
+        pd.DataFrame: Flattened DataFrame with each row representing an option chain entry.
+    """
+    #todo last updated menschenlesbar
+    #todo noch nicht alles flach mit drin. bzw. keys überschneiden sich noch. prefix nutzen.
+    #todo close entpricht dem last price
+
+    flattened_data = []
+
+    for entry in option_chains:
+        # Create a flat dictionary
+        flat_entry = {}
+
+        # Add 'day' information
+        flat_entry.update(entry.get('day', {}))
+
+        # Add 'details' information
+        flat_entry.update(entry.get('details', {}))
+
+        # Add 'greeks' information
+        flat_entry.update(entry.get('greeks', {}))
+
+        # Add 'last_quote' information
+        flat_entry.update({f'last_quote.{key}': value for key, value in entry.get('last_quote', {}).items()})
+
+        # Add 'last_trade' information
+        flat_entry.update({f'last_trade.{key}': value for key, value in entry.get('last_trade', {}).items()})
+
+        # Add 'underlying_asset' information
+        flat_entry.update(entry.get('underlying_asset', {}))
+
+        # Add additional fields from the results
+        flat_entry['break_even_price'] = entry.get('break_even_price')
+        flat_entry['fmv'] = entry.get('fmv')
+        flat_entry['fmv_last_updated'] = entry.get('fmv_last_updated')
+        flat_entry['implied_volatility'] = entry.get('implied_volatility')
+        flat_entry['open_interest'] = entry.get('open_interest')
+
+        # Append the flattened entry to the list
+        flattened_data.append(flat_entry)
+
+    # Create a DataFrame from the flattened list
+    df = pd.DataFrame(flattened_data)
+    return df
 
 if __name__ == "__main__":
     ticker = "MSFT"
@@ -342,43 +403,27 @@ if __name__ == "__main__":
     #     "TSLA",
     # ]
 
-    #tickers = sorted(pd.read_feather("option_symbols.feather").iloc[:, 0].tolist())[0:1] # only first symbol
-    tickers = sorted(pd.read_feather("option_symbols.feather").iloc[:, 0].tolist())
-
-    # # One symbol option chains
-    # start_time = time.time()
-    # get_option_chains(ticker)
-    # print(f"Ausführungszeit: {time.time() - start_time:.2f} Sekunden")
-
+    # #tickers = sorted(pd.read_feather("option_symbols.feather").iloc[:, 0].tolist())[0:2] # only first symbols DEBUG
+    # tickers = sorted(pd.read_feather("option_symbols.feather").iloc[:, 0].tolist())
+    #
     # # Multiple symbols option chains
     # start_time = time.time()
-    # get_option_chains_tickers(tickers)
+    # option_chains = asyncio.run(get_option_chains_tickers_async(tickers, limit=250))
     # print(f"Ausführungszeit: {time.time() - start_time:.2f} Sekunden")
+    #
+    # # store option chains list of dicts
+    # write_pickle(option_chains, "option_chains.pickle")
 
-    # Multiple symbols option chains
-    start_time = time.time()
-    option_chains = asyncio.run(get_option_chains_tickers_async(tickers, limit=250))
-    print(f"Ausführungszeit: {time.time() - start_time:.2f} Sekunden")
+    #load option chains list of dicts
+    option_chains = load_pickle(f"option_chains.pickle")
+
+    df = option_chains_to_dataframe(option_chains)
     pass
 
-    # # All symbols option chains
-    # start_time = time.time()
-    # symbols_with_options = asyncio.run(get_all_symbols_with_options())
-    # print(f"Ausführungszeit: {time.time() - start_time:.2f} Sekunden")
-
-    # # All symbols (stock and indices)
-    # start_time = time.time()
-    # result = asyncio.run(get_all_stocks_and_indices())
-    # print(f"Ausführungszeit: {time.time() - start_time:.2f} Sekunden")
 
     # # All symbols with options (stock and indices)
     # start_time = time.time()
     # result = asyncio.run(get_active_tickers_with_options_fast())
-    # print(f"Ausführungszeit: {time.time() - start_time:.2f} Sekunden")
-
-    # # all contracts
-    # start_time = time.time()
-    # all_contracts()
     # print(f"Ausführungszeit: {time.time() - start_time:.2f} Sekunden")
 
 """
@@ -393,5 +438,11 @@ enthält nur die optionsdaten.
 
 Stockpreise müssen noch gezogen werden.
 https://massive.com/docs/rest/stocks/snapshots/full-market-snapshot
+
+df[     (df['ticker'] == 'KO') &     (df['expiration_date'] == '2026-01-16') &     (df['contract_type'] == 'put') &     (df['strike_price'] == 68)]
+df[     (df['ticker'] == 'AMZN') &     (df['expiration_date'] == '2026-01-16') &     (df['contract_type'] == 'put') &     (df['strike_price'] == 222.5)]
+df[     (df['ticker'] == 'PLTR') &     (df['expiration_date'] == '2026-01-16') &     (df['contract_type'] == 'put') &     (df['strike_price'] == 172.5)]
+
+df[     (df['ticker'] == 'MSFT') &     (df['expiration_date'] == '2026-01-16') &     (df['contract_type'] == 'put') &     (df['strike_price'] == 470)]
 """
 
