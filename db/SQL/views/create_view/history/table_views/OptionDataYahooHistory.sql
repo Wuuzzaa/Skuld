@@ -4,8 +4,8 @@
         "OptionDataYahooHistory" AS
     
     SELECT
-        daily.snapshot_date as date,
-        daily."contractSymbol",
+        dates.date,
+        master_data."contractSymbol",
         master_data."symbol" as "symbol",
 		master_data."option-type" as "option-type",
 		master_data."expiration_date" as "expiration_date",
@@ -73,13 +73,18 @@
                 master_data."option_volume"  
             ) as "option_volume"
     FROM
-        "OptionDataYahooHistoryDaily" as daily
-        LEFT JOIN "OptionDataYahooHistoryWeekly" as weekly ON strftime ('%Y', daily.snapshot_date) = weekly.year
-        AND strftime ('%W', daily.snapshot_date) = weekly.week
-        AND daily."contractSymbol" = weekly."contractSymbol"
-        LEFT JOIN "OptionDataYahooHistoryMonthly" as monthly ON strftime ('%Y', daily.snapshot_date) = monthly.year
-        AND strftime ('%m', daily.snapshot_date) = monthly.month
-        AND daily."contractSymbol" = monthly."contractSymbol"
-        LEFT JOIN "OptionDataYahooMasterData" as master_data ON daily."contractSymbol" = master_data."contractSymbol"
+        "DatesHistory" as dates
+        CROSS JOIN "OptionDataYahooMasterData" as master_data 
+        LEFT JOIN "OptionDataYahooHistoryDaily" as daily
+        ON dates.date = daily.snapshot_date
+        AND master_data."contractSymbol" = daily."contractSymbol"
+        LEFT JOIN "OptionDataYahooHistoryWeekly" as weekly 
+        ON dates.year = weekly.year
+        AND dates.week = weekly.week
+        AND master_data."contractSymbol" = weekly."contractSymbol"
+        LEFT JOIN "OptionDataYahooHistoryMonthly" as monthly 
+        ON dates.year = monthly.year
+        AND dates.month = monthly.month
+        AND master_data."contractSymbol" = monthly."contractSymbol"
     ;
     

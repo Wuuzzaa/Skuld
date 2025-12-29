@@ -4,8 +4,8 @@
         "AnalystPriceTargetsHistory" AS
     
     SELECT
-        daily.snapshot_date as date,
-        daily."symbol",
+        dates.date,
+        master_data."symbol",
         coalesce(
                 daily."analyst_mean_target",
                 weekly."analyst_mean_target",
@@ -13,13 +13,18 @@
                 master_data."analyst_mean_target"  
             ) as "analyst_mean_target"
     FROM
-        "AnalystPriceTargetsHistoryDaily" as daily
-        LEFT JOIN "AnalystPriceTargetsHistoryWeekly" as weekly ON strftime ('%Y', daily.snapshot_date) = weekly.year
-        AND strftime ('%W', daily.snapshot_date) = weekly.week
-        AND daily."symbol" = weekly."symbol"
-        LEFT JOIN "AnalystPriceTargetsHistoryMonthly" as monthly ON strftime ('%Y', daily.snapshot_date) = monthly.year
-        AND strftime ('%m', daily.snapshot_date) = monthly.month
-        AND daily."symbol" = monthly."symbol"
-        LEFT JOIN "AnalystPriceTargetsMasterData" as master_data ON daily."symbol" = master_data."symbol"
+        "DatesHistory" as dates
+        CROSS JOIN "AnalystPriceTargetsMasterData" as master_data 
+        LEFT JOIN "AnalystPriceTargetsHistoryDaily" as daily
+        ON dates.date = daily.snapshot_date
+        AND master_data."symbol" = daily."symbol"
+        LEFT JOIN "AnalystPriceTargetsHistoryWeekly" as weekly 
+        ON dates.year = weekly.year
+        AND dates.week = weekly.week
+        AND master_data."symbol" = weekly."symbol"
+        LEFT JOIN "AnalystPriceTargetsHistoryMonthly" as monthly 
+        ON dates.year = monthly.year
+        AND dates.month = monthly.month
+        AND master_data."symbol" = monthly."symbol"
     ;
     

@@ -111,6 +111,9 @@ def opra_to_symbol(opra_code):
 
     return symbol
 
+def executed_as_github_action():
+    return os.getenv('GITHUB_ACTIONS') == 'true'
+
 class Singleton:
     """
     A non-thread-safe helper class to ease implementing singletons.
@@ -154,3 +157,4 @@ class Singleton:
 
     def __instancecheck__(self, inst):
         return isinstance(inst, self._decorated)
+    

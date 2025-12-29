@@ -1,11 +1,13 @@
 import logging
+import os
 import pathlib
 import time
 from sqlalchemy import text
-from config import HISTORY_ENABLED_TABLES
-from src.database import get_database_engine, execute_sql, get_table_key_and_data_columns, select_into_dataframe, table_exists, view_exists
+from config import HISTORY_ENABLED_TABLES, HISTORY_ENABLED_VIEWS
+from src.database import get_database_engine, execute_sql, get_table_key_and_data_columns, recreate_views, select_into_dataframe, table_exists, view_exists
 from src.decorator_log_function import log_function
 from src.data_aging import DataAgingService, get_history_select_statement, is_classified_for_master_data
+from src.util import executed_as_github_action
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +96,10 @@ def run_historization_pipeline():
     """
     Orchestrates the historization process for all configured tables.
     """
+    if executed_as_github_action():
+        logger.info("Skipping Historization on GibHub Actions")
+        return
+    
     start_time = time.time()
     logger.info("Running Historization Pipeline...")
     try:
@@ -105,6 +111,8 @@ def run_historization_pipeline():
     except Exception as e:
         logger.error(f"Historization Pipeline Failed: {e}")
     
+    # _create_history_merge_views()
+
     logger.info(f"Historization Pipeline Finished in {round(time.time() - start_time, 2)}s.")
 
 def _create_history_tables_and_view_if_not_exist(source_table: str):
@@ -265,3 +273,20 @@ def _get_history_view_create_statement(table_name: str):
     """
     return create_statement_sql
 
+def _create_history_merge_views():
+    view_template_path = 'db/SQL/views/create_view/history/template'
+    if not os.path.exists(view_template_path):
+        logger.info(f"Views directory not found at {view_template_path}. Skipping view recreation.")
+        return
+
+    view_files = [f for f in os.listdir(view_template_path) if f.endswith(".sql")]
+      
+    for view_template_file in view_files:
+        with open(os.path.join(view_template_path, view_template_file), "r") as f:
+            sql = f.read()
+        for table in HISTORY_ENABLED_TABLES:
+           sql = sql.replace(f"<{table}HistorySelect>", get_history_select_statement(table, optimized=True))
+        
+        with open(f"db/SQL/views/create_view/history/{view_template_file.replace('_template','')}", "w") as f:
+            f.write(sql)
+    recreate_views()

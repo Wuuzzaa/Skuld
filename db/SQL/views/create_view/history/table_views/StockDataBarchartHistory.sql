@@ -4,8 +4,8 @@
         "StockDataBarchartHistory" AS
     
     SELECT
-        daily.snapshot_date as date,
-        daily."symbol",
+        dates.date,
+        master_data."symbol",
         coalesce(
                 daily."implied_volatility",
                 weekly."implied_volatility",
@@ -79,13 +79,18 @@
                 master_data."open_int_30d"  
             ) as "open_int_30d"
     FROM
-        "StockDataBarchartHistoryDaily" as daily
-        LEFT JOIN "StockDataBarchartHistoryWeekly" as weekly ON strftime ('%Y', daily.snapshot_date) = weekly.year
-        AND strftime ('%W', daily.snapshot_date) = weekly.week
-        AND daily."symbol" = weekly."symbol"
-        LEFT JOIN "StockDataBarchartHistoryMonthly" as monthly ON strftime ('%Y', daily.snapshot_date) = monthly.year
-        AND strftime ('%m', daily.snapshot_date) = monthly.month
-        AND daily."symbol" = monthly."symbol"
-        LEFT JOIN "StockDataBarchartMasterData" as master_data ON daily."symbol" = master_data."symbol"
+        "DatesHistory" as dates
+        CROSS JOIN "StockDataBarchartMasterData" as master_data 
+        LEFT JOIN "StockDataBarchartHistoryDaily" as daily
+        ON dates.date = daily.snapshot_date
+        AND master_data."symbol" = daily."symbol"
+        LEFT JOIN "StockDataBarchartHistoryWeekly" as weekly 
+        ON dates.year = weekly.year
+        AND dates.week = weekly.week
+        AND master_data."symbol" = weekly."symbol"
+        LEFT JOIN "StockDataBarchartHistoryMonthly" as monthly 
+        ON dates.year = monthly.year
+        AND dates.month = monthly.month
+        AND master_data."symbol" = monthly."symbol"
     ;
     

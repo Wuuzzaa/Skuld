@@ -4,8 +4,8 @@
         "FundamentalDataDividendRadarHistory" AS
     
     SELECT
-        daily.snapshot_date as date,
-        daily."Symbol",
+        dates.date,
+        master_data."Symbol",
         coalesce(
                 daily."Company",
                 weekly."Company",
@@ -241,13 +241,18 @@
                 master_data."Classification"  
             ) as "Classification"
     FROM
-        "FundamentalDataDividendRadarHistoryDaily" as daily
-        LEFT JOIN "FundamentalDataDividendRadarHistoryWeekly" as weekly ON strftime ('%Y', daily.snapshot_date) = weekly.year
-        AND strftime ('%W', daily.snapshot_date) = weekly.week
-        AND daily."Symbol" = weekly."Symbol"
-        LEFT JOIN "FundamentalDataDividendRadarHistoryMonthly" as monthly ON strftime ('%Y', daily.snapshot_date) = monthly.year
-        AND strftime ('%m', daily.snapshot_date) = monthly.month
-        AND daily."Symbol" = monthly."Symbol"
-        LEFT JOIN "FundamentalDataDividendRadarMasterData" as master_data ON daily."Symbol" = master_data."Symbol"
+        "DatesHistory" as dates
+        CROSS JOIN "FundamentalDataDividendRadarMasterData" as master_data 
+        LEFT JOIN "FundamentalDataDividendRadarHistoryDaily" as daily
+        ON dates.date = daily.snapshot_date
+        AND master_data."Symbol" = daily."Symbol"
+        LEFT JOIN "FundamentalDataDividendRadarHistoryWeekly" as weekly 
+        ON dates.year = weekly.year
+        AND dates.week = weekly.week
+        AND master_data."Symbol" = weekly."Symbol"
+        LEFT JOIN "FundamentalDataDividendRadarHistoryMonthly" as monthly 
+        ON dates.year = monthly.year
+        AND dates.month = monthly.month
+        AND master_data."Symbol" = monthly."Symbol"
     ;
     

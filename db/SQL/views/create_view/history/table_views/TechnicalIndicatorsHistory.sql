@@ -4,8 +4,8 @@
         "TechnicalIndicatorsHistory" AS
     
     SELECT
-        daily.snapshot_date as date,
-        daily."symbol",
+        dates.date,
+        master_data."symbol",
         coalesce(
                 daily."Recommend.Other",
                 weekly."Recommend.Other",
@@ -577,13 +577,18 @@
                 master_data."recommendation_sell_amount"  
             ) as "recommendation_sell_amount"
     FROM
-        "TechnicalIndicatorsHistoryDaily" as daily
-        LEFT JOIN "TechnicalIndicatorsHistoryWeekly" as weekly ON strftime ('%Y', daily.snapshot_date) = weekly.year
-        AND strftime ('%W', daily.snapshot_date) = weekly.week
-        AND daily."symbol" = weekly."symbol"
-        LEFT JOIN "TechnicalIndicatorsHistoryMonthly" as monthly ON strftime ('%Y', daily.snapshot_date) = monthly.year
-        AND strftime ('%m', daily.snapshot_date) = monthly.month
-        AND daily."symbol" = monthly."symbol"
-        LEFT JOIN "TechnicalIndicatorsMasterData" as master_data ON daily."symbol" = master_data."symbol"
+        "DatesHistory" as dates
+        CROSS JOIN "TechnicalIndicatorsMasterData" as master_data 
+        LEFT JOIN "TechnicalIndicatorsHistoryDaily" as daily
+        ON dates.date = daily.snapshot_date
+        AND master_data."symbol" = daily."symbol"
+        LEFT JOIN "TechnicalIndicatorsHistoryWeekly" as weekly 
+        ON dates.year = weekly.year
+        AND dates.week = weekly.week
+        AND master_data."symbol" = weekly."symbol"
+        LEFT JOIN "TechnicalIndicatorsHistoryMonthly" as monthly 
+        ON dates.year = monthly.year
+        AND dates.month = monthly.month
+        AND master_data."symbol" = monthly."symbol"
     ;
     

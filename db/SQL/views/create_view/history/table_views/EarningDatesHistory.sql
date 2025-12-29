@@ -4,8 +4,8 @@
         "EarningDatesHistory" AS
     
     SELECT
-        daily.snapshot_date as date,
-        daily."symbol",
+        dates.date,
+        master_data."symbol",
         coalesce(
                 daily."earnings_date",
                 weekly."earnings_date",
@@ -13,13 +13,18 @@
                 master_data."earnings_date"  
             ) as "earnings_date"
     FROM
-        "EarningDatesHistoryDaily" as daily
-        LEFT JOIN "EarningDatesHistoryWeekly" as weekly ON strftime ('%Y', daily.snapshot_date) = weekly.year
-        AND strftime ('%W', daily.snapshot_date) = weekly.week
-        AND daily."symbol" = weekly."symbol"
-        LEFT JOIN "EarningDatesHistoryMonthly" as monthly ON strftime ('%Y', daily.snapshot_date) = monthly.year
-        AND strftime ('%m', daily.snapshot_date) = monthly.month
-        AND daily."symbol" = monthly."symbol"
-        LEFT JOIN "EarningDatesMasterData" as master_data ON daily."symbol" = master_data."symbol"
+        "DatesHistory" as dates
+        CROSS JOIN "EarningDatesMasterData" as master_data 
+        LEFT JOIN "EarningDatesHistoryDaily" as daily
+        ON dates.date = daily.snapshot_date
+        AND master_data."symbol" = daily."symbol"
+        LEFT JOIN "EarningDatesHistoryWeekly" as weekly 
+        ON dates.year = weekly.year
+        AND dates.week = weekly.week
+        AND master_data."symbol" = weekly."symbol"
+        LEFT JOIN "EarningDatesHistoryMonthly" as monthly 
+        ON dates.year = monthly.year
+        AND dates.month = monthly.month
+        AND master_data."symbol" = monthly."symbol"
     ;
     

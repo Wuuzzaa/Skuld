@@ -4,8 +4,8 @@
         "OptionDataTradingViewHistory" AS
     
     SELECT
-        daily.snapshot_date as date,
-        daily."option_osi",
+        dates.date,
+        master_data."option_osi",
         master_data."symbol" as "symbol",
 		master_data."option-type" as "option-type",
 		master_data."expiration_date" as "expiration_date",
@@ -73,13 +73,18 @@
             ) as "time",
 		master_data."exchange" as "exchange"
     FROM
-        "OptionDataTradingViewHistoryDaily" as daily
-        LEFT JOIN "OptionDataTradingViewHistoryWeekly" as weekly ON strftime ('%Y', daily.snapshot_date) = weekly.year
-        AND strftime ('%W', daily.snapshot_date) = weekly.week
-        AND daily."option_osi" = weekly."option_osi"
-        LEFT JOIN "OptionDataTradingViewHistoryMonthly" as monthly ON strftime ('%Y', daily.snapshot_date) = monthly.year
-        AND strftime ('%m', daily.snapshot_date) = monthly.month
-        AND daily."option_osi" = monthly."option_osi"
-        LEFT JOIN "OptionDataTradingViewMasterData" as master_data ON daily."option_osi" = master_data."option_osi"
+        "DatesHistory" as dates
+        CROSS JOIN "OptionDataTradingViewMasterData" as master_data 
+        LEFT JOIN "OptionDataTradingViewHistoryDaily" as daily
+        ON dates.date = daily.snapshot_date
+        AND master_data."option_osi" = daily."option_osi"
+        LEFT JOIN "OptionDataTradingViewHistoryWeekly" as weekly 
+        ON dates.year = weekly.year
+        AND dates.week = weekly.week
+        AND master_data."option_osi" = weekly."option_osi"
+        LEFT JOIN "OptionDataTradingViewHistoryMonthly" as monthly 
+        ON dates.year = monthly.year
+        AND dates.month = monthly.month
+        AND master_data."option_osi" = monthly."option_osi"
     ;
     

@@ -19,11 +19,12 @@ class DataAgingService:
         it is promoted to the weekly history view (OptionDataYahooHistoryWeekly) and
         nulled out in the daily table.
         """
-        logger.info("Starting data aging for {source_table}...")
+        logger.info(f"Starting data aging for {source_table}...")
         start_time = time.time()
         
+        DataAgingService._insert_key_master_data(source_table)
         DataAgingService._promote_data_from_daily_to_weekly(source_table)
-        DataAgingService._promote_data_from_weekly_to_monthly(source_table)
+        # DataAgingService._promote_data_from_weekly_to_monthly(source_table)
         DataAgingService._promote_data_to_master_data(source_table)
 
         end_time = time.time()
@@ -128,6 +129,43 @@ class DataAgingService:
 
         logger.info(f"Data aging process_batch completed in {round(time.time() - start_time, 2)}s.")
 
+    def _insert_key_master_data(source_table: str):
+        start_time = time.time()
+        
+        engine = get_database_engine()
+
+        daily_table = f"{source_table}HistoryDaily"    
+        master_data_table = f"{source_table}MasterData" 
+
+        key_columns, _ = get_table_key_and_data_columns(master_data_table)
+        key_columns_str = ", ".join([f'"{col["name"]}"' for col in key_columns])
+
+        # We process each data column
+
+        with engine.begin() as conn:
+            logger.info(f"Processing {source_table} key {key_columns_str}...")
+            # Insert key to master data table
+            
+            insert_sql = f"""
+                INSERT INTO {master_data_table} (
+                    {key_columns_str}
+                )
+                SELECT DISTINCT
+                    {key_columns_str}
+                FROM ({daily_table})
+                WHERE 1=1 -- needed because of Parsing Ambiguity. Check SQLite documentation
+                ON CONFLICT({key_columns_str})
+                DO NOTHING
+            """
+            
+            try:
+                affected = execute_sql(conn, insert_sql, master_data_table, 'UPSERT', f"Insert keys to Master Data")
+            except Exception as e:
+                conn.rollback()
+                logger.error(f"Error inserting keys to Master Data: {e}")
+            
+        logger.info(f"Inserted keys to Master Data in {round(time.time() - start_time, 2)}s.")
+        
     def _promote_data_from_daily_to_weekly(source_table: str):
         start_time = time.time()
 
@@ -471,7 +509,7 @@ def get_history_select_statement(table_name: str, optimized: bool = True):
     """
 
     key_columns, data_columns = get_table_key_and_data_columns(table_name)
-    key_column_definitions_str = ",\n\t\t".join([f'daily."{col["name"]}"' for col in key_columns])
+    key_column_definitions_str = ",\n\t\t".join([f'master_data."{col["name"]}"' for col in key_columns])
     data_column_definitions = []
     for col in data_columns:
         col_name = col["name"]
@@ -495,23 +533,28 @@ def get_history_select_statement(table_name: str, optimized: bool = True):
     """.strip()
     
     key_columns, _ = get_table_key_and_data_columns(table_name)
-    key_columns_on_condition_str_weekly = " AND ".join([f'daily."{col["name"]}" = weekly."{col["name"]}"' for col in key_columns])
-    key_columns_on_condition_str_monthly = " AND ".join([f'daily."{col["name"]}" = monthly."{col["name"]}"' for col in key_columns])
-    key_columns_on_condition_str_master_data = " AND ".join([f'daily."{col["name"]}" = master_data."{col["name"]}"' for col in key_columns])
+    key_columns_on_condition_str_daily = " AND ".join([f'master_data."{col["name"]}" = daily."{col["name"]}"' for col in key_columns])
+    key_columns_on_condition_str_weekly = " AND ".join([f'master_data."{col["name"]}" = weekly."{col["name"]}"' for col in key_columns])
+    key_columns_on_condition_str_monthly = " AND ".join([f'master_data."{col["name"]}" = monthly."{col["name"]}"' for col in key_columns])
 
     select_statement_sql =  f"""
     SELECT
-        daily.snapshot_date as date,
+        dates.date,
         {column_definitions_str}
     FROM
-        "{table_name}HistoryDaily" as daily
-        LEFT JOIN "{table_name}HistoryWeekly" as weekly ON strftime ('%Y', daily.snapshot_date) = weekly.year
-        AND strftime ('%W', daily.snapshot_date) = weekly.week
+        "DatesHistory" as dates
+        CROSS JOIN "{table_name}MasterData" as master_data 
+        LEFT JOIN "{table_name}HistoryDaily" as daily
+        ON dates.date = daily.snapshot_date
+        AND {key_columns_on_condition_str_daily}
+        LEFT JOIN "{table_name}HistoryWeekly" as weekly 
+        ON dates.year = weekly.year
+        AND dates.week = weekly.week
         AND {key_columns_on_condition_str_weekly}
-        LEFT JOIN "{table_name}HistoryMonthly" as monthly ON strftime ('%Y', daily.snapshot_date) = monthly.year
-        AND strftime ('%m', daily.snapshot_date) = monthly.month
+        LEFT JOIN "{table_name}HistoryMonthly" as monthly 
+        ON dates.year = monthly.year
+        AND dates.month = monthly.month
         AND {key_columns_on_condition_str_monthly}
-        LEFT JOIN "{table_name}MasterData" as master_data ON {key_columns_on_condition_str_master_data}
     """
     return select_statement_sql
 
