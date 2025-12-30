@@ -1,0 +1,2 @@
+# Run data collection at 10:00 and 16:00
+0 10,16 * * * root /app/Skuld/run_data_collection.sh >> /var/log/cron.log 2>&1
