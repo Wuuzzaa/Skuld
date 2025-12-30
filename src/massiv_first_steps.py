@@ -1,12 +1,20 @@
+import logging
 import pickle
 
 from massive import RESTClient
-from config import MASSIVE_API_KEY, SYMBOLS
+from config import MASSIVE_API_KEY, SYMBOLS, PATH_LOG_FILE
 import pandas as pd
 import time
 
 import asyncio
 import aiohttp
+
+from src.decorator_log_function import log_function
+from src.logger_config import setup_logging
+
+setup_logging(log_file=PATH_LOG_FILE, log_level=logging.DEBUG, console_output=True)
+logger = logging.getLogger(__name__)
+logger.info("Start Massiv API test")
 
 
 async def get_tickers_by_market(market, session):
@@ -339,35 +347,27 @@ def load_pickle(filename):
     with open(filename, 'rb') as f:
         return pickle.load(f)
 
+@log_function
 def option_chains_to_dataframe(option_chains):
     """
-    Flatten a list of nested dictionaries (option_chains) into a Pandas DataFrame.
-    Each key in the top-level dictionary is used as a prefix for its nested keys.
+    Flatten a list of nested dictionaries (option_chains) into a Pandas DataFrame using json_normalize.
+    Optimized for speed and readability.
 
     Args:
         option_chains (list of dict): List of nested dictionaries containing option data.
 
     Returns:
-        pd.DataFrame: Flattened DataFrame with each row representing an option chain entry.
+        pd.DataFrame: Flattened DataFrame with human-readable timestamps.
     """
-    #todo last updated menschenlesbar
-    #todo noch nicht alles flach mit drin. bzw. keys überschneiden sich noch. prefix nutzen.
-    #todo close entpricht dem last price
+    # todo close entpricht dem last price
 
-    flattened_data = []
+    # Flatten all entries at once using json_normalize
+    df = pd.json_normalize(
+        option_chains,
+        sep="."  # Separator for nested keys (e.g., "day.last_updated")
+    )
 
-    for entry in option_chains:
-        flat_entry = {}
-        for top_key, nested_dict in entry.items():
-            if isinstance(nested_dict, dict):
-                for nested_key, value in nested_dict.items():
-                    flat_entry[f"{top_key}.{nested_key}"] = value
-            else:
-                flat_entry[top_key] = nested_dict
-        flattened_data.append(flat_entry)
-
-    df = pd.DataFrame(flattened_data)
-
+    # Convert timestamps in a vectorized way
     df["day.last_updated_humanreadable"] = (
         pd.to_datetime(df["day.last_updated"], unit='ns', utc=True)
         .dt.tz_convert('Europe/Berlin')
@@ -375,8 +375,6 @@ def option_chains_to_dataframe(option_chains):
     )
 
     return df
-
-
 
 if __name__ == "__main__":
     ticker = "MSFT"
