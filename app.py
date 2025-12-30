@@ -4,6 +4,7 @@ import streamlit as st
 from src.google_drive_download import load_updated_database
 from src.logger_config import setup_logging
 from config import *
+import os
 
 # enable logging
 setup_logging(component="streamlit", log_level=logging.DEBUG, console_output=True)
@@ -25,6 +26,12 @@ st.title("SKULD - Option Viewer")
 @st.cache_data(ttl=1800, show_spinner="Checking for database updates...")
 def ensure_database_available():
     """Downloads the database from Google Drive if needed."""
+    # Check if database exists locally
+    if os.path.exists(PATH_DATABASE_FILE):
+        logger.info(f"Database found locally at {PATH_DATABASE_FILE}. Skipping download.")
+        return True
+        
+    # Only download if not found locally AND not forced to use local (which would be an error state but we keep the flag logic)
     if not use_local_data:
         return load_updated_database()
     return True
