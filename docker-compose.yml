@@ -4,6 +4,8 @@ services:
   skuld-app:
     build: .
     container_name: skuld-streamlit
+    # Overwrite default command to disable Streamlit for testing
+    command: tail -f /dev/null
     volumes:
       # Persistent database file only (not entire db folder!)
       - ./financial_data.db:/app/Skuld/db/financial_data.db
