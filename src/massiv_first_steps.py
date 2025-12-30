@@ -2,6 +2,8 @@ import logging
 import pickle
 
 from massive import RESTClient
+from tqdm import tqdm
+
 from config import MASSIVE_API_KEY, SYMBOLS, PATH_LOG_FILE
 import pandas as pd
 import time
@@ -361,11 +363,12 @@ def option_chains_to_dataframe(option_chains):
     """
     # todo close entpricht dem last price
 
-    # Flatten all entries at once using json_normalize
-    df = pd.json_normalize(
-        option_chains,
-        sep="."  # Separator for nested keys (e.g., "day.last_updated")
-    )
+    chunks = []
+    chunk_size = 1000
+    for i in tqdm(range(0, len(option_chains), chunk_size)):
+        chunk = option_chains[i:i + chunk_size]
+        chunks.append(pd.json_normalize(chunk, sep="."))
+    df = pd.concat(chunks, ignore_index=True)
 
     # Convert timestamps in a vectorized way
     df["day.last_updated_humanreadable"] = (
