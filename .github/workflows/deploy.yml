@@ -2,7 +2,7 @@ name: Deploy SKULD Production to Hetzner
 
 on:
   push:
-    branches: [ master ]
+    branches: [ production-Setup ]
 
 jobs:
   deploy:

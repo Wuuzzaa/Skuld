@@ -26,11 +26,27 @@ fi
 # Create lockfile with current PID
 echo $$ > "$LOCKFILE"
 
+# Start Memory Monitor
+MONITOR_LOG="/var/log/memory_monitor.csv"
+echo "Timestamp,RSS_MB" > "$MONITOR_LOG"
+(
+    while true; do
+        # RSS in MB (Sum of all python processes)
+        RSS=$(ps -e -o rss,comm | grep python | awk '{s+=$1} END {print int(s/1024)}')
+        echo "$(date '+%Y-%m-%d %H:%M:%S'),${RSS:-0}" >> "$MONITOR_LOG"
+        sleep 5
+    done
+) &
+MONITOR_PID=$!
+
 # Run data collection with timeout
 cd /app/Skuld
 echo "$(date): Starting data collection..." >> "$LOGFILE"
-timeout 7200 /usr/local/bin/python main.py >> "$LOGFILE" 2>&1
+timeout 7200 /usr/local/bin/python main.py --no-upload >> "$LOGFILE" 2>&1
 EXIT_CODE=$?
+
+# Stop Memory Monitor
+kill $MONITOR_PID 2>/dev/null
 
 # Remove lockfile
 rm -f "$LOCKFILE"
