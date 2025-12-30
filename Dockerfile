@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y \
     git \
     curl \
     cron \
+    nano \
     openssh-client \
     procps \
     && rm -rf /var/lib/apt/lists/*
