@@ -1,16 +1,11 @@
 import logging
-import pickle
-
-from massive import RESTClient
-from tqdm import tqdm
-
-from config import MASSIVE_API_KEY, SYMBOLS, PATH_LOG_FILE
 import pandas as pd
-import time
-
 import asyncio
 import aiohttp
-
+from typing import Union, List
+from massive import RESTClient
+from tqdm import tqdm
+from config import MASSIVE_API_KEY, SYMBOLS, PATH_LOG_FILE
 from src.decorator_log_function import log_function
 from src.logger_config import setup_logging
 
@@ -19,7 +14,7 @@ logger = logging.getLogger(__name__)
 logger.info("Start Massiv API test")
 
 
-async def get_tickers_by_market(market, session):
+async def __get_tickers_by_market(market, session):
     """Holt alle Tickers für einen bestimmten Market (stocks oder indices)"""
     url = "https://api.massive.com/v3/reference/tickers"
     params = {
@@ -63,7 +58,7 @@ async def get_tickers_by_market(market, session):
     print(f"✓ {market.upper()}: {len(tickers)} Tickers")
     return tickers
 
-
+@log_function
 async def get_all_stocks_and_indices():
     """Holt ALLE Stocks UND Indices parallel"""
     connector = aiohttp.TCPConnector(limit=0)
@@ -71,17 +66,13 @@ async def get_all_stocks_and_indices():
 
     async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
         # Beide Markets parallel abfragen
-        stocks_task = get_tickers_by_market("stocks", session)
-        indices_task = get_tickers_by_market("indices", session)
+        stocks_task = __get_tickers_by_market("stocks", session)
+        indices_task = __get_tickers_by_market("indices", session)
 
         stocks, indices = await asyncio.gather(stocks_task, indices_task)
 
     # Kombinieren
     all_tickers = stocks + indices
-
-    print(f"\n🎉 GESAMT: {len(all_tickers)} Tickers")
-    print(f"   → Stocks: {len(stocks)}")
-    print(f"   → Indices: {len(indices)}")
 
     return {
         "all": all_tickers,
@@ -89,65 +80,7 @@ async def get_all_stocks_and_indices():
         "indices": indices
     }
 
-
-async def get_all_symbols_with_options():
-    """Holt ALLE Options-Contracts mit Pagination. Keine Preise keine Griechen"""
-    url = "https://api.massive.com/v3/reference/options/contracts"
-    params = {
-        "limit": 1000,  # Max 1000 pro Request
-        "apiKey": MASSIVE_API_KEY
-    }
-
-    all_contracts = []
-    page = 1
-
-    connector = aiohttp.TCPConnector(limit=0)
-    timeout = aiohttp.ClientTimeout(total=1800)  # 30 Min Timeout für viele Seiten
-
-    async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
-        while url:
-            async with session.get(url, params=params) as response:
-                data = await response.json()
-
-                # Status prüfen
-                if data.get('status') != 'OK':
-                    print(f"✗ Seite {page}: Status = {data.get('status')}")
-                    if 'message' in data:
-                        print(f"  Message: {data['message']}")
-                    break
-
-                results = data.get('results', [])
-                all_contracts.extend(results)
-
-                print(f"→ Seite {page}: +{len(results)} Contracts | Gesamt: {len(all_contracts)}")
-
-                # Nächste Seite
-                next_url = data.get('next_url')
-                if next_url:
-                    url = next_url
-                    params = {
-                        "apiKey": MASSIVE_API_KEY}
-                    page += 1
-                else:
-                    url = None
-
-    print(f"\n✓ ALLE CONTRACTS GELADEN: {len(all_contracts)} Contracts")
-
-    # Unique Underlying Tickers extrahieren
-    underlying_tickers = set()
-    for contract in all_contracts:
-        if contract.get('underlying_ticker'):
-            underlying_tickers.add(contract['underlying_ticker'])
-
-    print(f"✓ Unique Symbole: {len(underlying_tickers)}")
-
-    df = pd.DataFrame(underlying_tickers)
-    df.to_feather("option_symbols.feather")
-
-    return underlying_tickers
-
-
-async def get_all_option_chains_for_ticker(ticker, session, limit=250):
+async def __get_all_option_chains_for_ticker(ticker, session, limit=250):
     """Holt ALLE Options-Chains für einen Ticker mit Pagination"""
     all_results = []
     url = f"https://api.massive.com/v3/snapshot/options/{ticker}"
@@ -163,8 +96,6 @@ async def get_all_option_chains_for_ticker(ticker, session, limit=250):
 
                 # DEBUG: Komplette Response ausgeben
                 if data.get('status') != 'OK':
-                    print(f"✗ {ticker} Seite {page}: Status = {data.get('status')}")
-                    print(f"  Response: {data}")
                     break
 
                 results = data.get('results', [])
@@ -174,9 +105,6 @@ async def get_all_option_chains_for_ticker(ticker, session, limit=250):
                 next_url = data.get('next_url')
 
                 if next_url:
-                    print(f"  → {ticker}: Seite {page}, {len(all_results)} Optionen")
-                    print(f"  → next_url: {next_url}")
-
                     # WICHTIG: next_url bereits vollständig, aber API-Key könnte fehlen
                     url = next_url
                     # Für next_url: nur API-Key als Parameter
@@ -186,7 +114,6 @@ async def get_all_option_chains_for_ticker(ticker, session, limit=250):
                 else:
                     url = None
 
-        print(f"✓ {ticker}: {len(all_results)} Optionen gesamt")
         return all_results
 
     except Exception as e:
@@ -196,14 +123,14 @@ async def get_all_option_chains_for_ticker(ticker, session, limit=250):
         return []
 
 
-async def get_option_chains_tickers_async(tickers, limit=250):
+async def __get_option_chains_tickers_async(tickers, limit=250):
     """Holt ALLE Options-Chains für alle Tickers parallel. Inkl. Griechen und Preise sowie IV"""
     connector = aiohttp.TCPConnector(limit=0)
     timeout = aiohttp.ClientTimeout(total=600)
 
     async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
         tasks = [
-            get_all_option_chains_for_ticker(ticker, session, limit)
+            __get_all_option_chains_for_ticker(ticker, session, limit)
             for ticker in tickers
         ]
         results = await asyncio.gather(*tasks)
@@ -212,57 +139,10 @@ async def get_option_chains_tickers_async(tickers, limit=250):
     for result in results:
         option_chains.extend(result)
 
-    print(f"\n🎉 GESAMT: {len(option_chains)} Optionen von {len(tickers)} Tickers")
     return option_chains
 
-def get_option_chains_tickers(tickers, limit=250):
-    option_chains = []
-    for ticker in tickers:
-        option_chains.append(get_option_chains(ticker, limit=limit))
-
-def get_option_chains(ticker, limit=250):
-    """
-
-    :param ticker: Ticker or symbol of the underlying.
-    :param limit: Ratelimit is max 250. The default value.
-    :return: Dataframe with all current option chains for the requested ticker.
-    """
-    client = RESTClient(MASSIVE_API_KEY)
-
-    option_chains = []
-    list_snapshot_options_chain = client.list_snapshot_options_chain(
-            ticker,
-            params={"limit": limit} # 250 max value allowed by the API
-    )
-
-    for _ in list_snapshot_options_chain:
-        option_chains.append(_)
-        print(_.details.ticker)
-
-    print(f"Ticker: {ticker} has {len(option_chains)} option chains")
-
-    return option_chains
-
-def all_contracts():
-    client = RESTClient(MASSIVE_API_KEY)
-
-    contracts = []
-    underlying_tickers = set()
-    for c in client.list_options_contracts(
-            order="asc",
-            limit=1000,
-            sort="ticker",
-    ):
-        contracts.append(c.ticker)
-        underlying_tickers.add(c.underlying_ticker)
-        print(c)
-
-
-    print(f"Amount contracts: {len(contracts)}")
-    print(f"Amount symbols{len(underlying_tickers)}")
-
-
-async def get_active_tickers_with_options_fast():
+@log_function
+async def get_active_tickers_with_options():
     """Schnellere Version: Nutzt type=CS (Common Stock) und prüft dann Optionen"""
 
     # Hole alle aktiven Stocks und Indices
@@ -291,7 +171,6 @@ async def get_active_tickers_with_options_fast():
                     params = {
                         "apiKey": MASSIVE_API_KEY}
 
-        print(f"✓ {market}: {len(tickers)} aktive Tickers")
         return tickers
 
     # Prüfe ob Ticker Optionen hat
@@ -321,7 +200,6 @@ async def get_active_tickers_with_options_fast():
         )
 
         all_tickers = stocks + indices
-        print(f"\n📊 Prüfe {len(all_tickers)} Tickers auf Optionen...")
 
         # Prüfe parallel ob sie Optionen haben (in Batches)
         batch_size = 50
@@ -334,23 +212,10 @@ async def get_active_tickers_with_options_fast():
 
             batch_with_options = [r for r in results if r is not None]
             tickers_with_options.extend(batch_with_options)
-
-            print(
-                f"→ Batch {i // batch_size + 1}: {len(batch_with_options)}/{len(batch)} haben Optionen | Gesamt: {len(tickers_with_options)}")
-
-    print(f"\n🎉 ERGEBNIS: {len(tickers_with_options)} aktive Tickers mit Optionen")
     return sorted(tickers_with_options)
 
-def write_pickle(data, filename):
-    with open(filename, 'wb') as f:
-        pickle.dump(data, file=f)
-
-def load_pickle(filename):
-    with open(filename, 'rb') as f:
-        return pickle.load(f)
-
 @log_function
-def option_chains_to_dataframe(option_chains):
+def __option_chains_to_dataframe(option_chains):
     """
     Flatten a list of nested dictionaries (option_chains) into a Pandas DataFrame using json_normalize.
     Optimized for speed and readability.
@@ -379,43 +244,50 @@ def option_chains_to_dataframe(option_chains):
 
     return df
 
+@log_function
+def get_option_chains_df(tickers: Union[List[str], str] = "auto", limit=250) -> pd.DataFrame:
+    """
+    Fetches option chains for a list of tickers and returns the data as a pandas DataFrame.
+
+    Parameters:
+    -----------
+    tickers : Union[List[str], str], optional
+        A list of stock tickers (e.g., ["AAPL", "TSLA"]) or the string "auto".
+        If "auto" is provided, the function fetches active tickers with options automatically.
+        Default is "auto".
+    limit : int, optional
+        The maximum number of option chains to fetch per ticker. Default is 250.
+
+    Returns:
+    --------
+    pd.DataFrame
+        A DataFrame containing the option chains data for the specified tickers.
+
+    Example:
+    --------
+    >>> df = get_option_chains_df(tickers=["AAPL", "TSLA"], limit=100)
+    >>> print(df.head())
+    """
+    if tickers == "auto":
+        tickers = asyncio.run(get_active_tickers_with_options())
+    option_chains = asyncio.run(__get_option_chains_tickers_async(tickers, limit=limit))
+    df = __option_chains_to_dataframe(option_chains)
+    return df
+
 if __name__ == "__main__":
-    ticker = "MSFT"
-    # tickers = [
-    #     "MSFT",
-    #     "AAPL",
-    #     "AMZN",
-    #     "KO",
-    #     "GOOGL",
-    #     "QQQ",
-    #     "TSLA",
-    # ]
-
-    # #tickers = sorted(pd.read_feather("option_symbols.feather").iloc[:, 0].tolist())[0:2] # only first symbols DEBUG
-    # tickers = sorted(pd.read_feather("option_symbols.feather").iloc[:, 0].tolist())
-    #
-    # # Multiple symbols option chains
-    # start_time = time.time()
-    # option_chains = asyncio.run(get_option_chains_tickers_async(tickers, limit=250))
-    # print(f"Ausführungszeit: {time.time() - start_time:.2f} Sekunden")
-    #
-    # # store option chains list of dicts
-    # write_pickle(option_chains, "option_chains.pickle")
-
-    #load option chains list of dicts
-    option_chains = load_pickle(f"option_chains.pickle")
-
-    df = option_chains_to_dataframe(option_chains)
+    all_tickers = asyncio.run(get_all_stocks_and_indices())
+    tickers_with_options = asyncio.run(get_active_tickers_with_options())
+    df = get_option_chains_df(tickers=tickers_with_options)
     pass
 
 
-    # # All symbols with options (stock and indices)
-    # start_time = time.time()
-    # result = asyncio.run(get_active_tickers_with_options_fast())
-    # print(f"Ausführungszeit: {time.time() - start_time:.2f} Sekunden")
-
 """
 https://massive.com/docs/rest/options/snapshots/option-chain-snapshot 
+
+all_tickers["stocks"] enthält alle aktien -> brauchen wir
+tickers_with_options enthält alle ticker(aktien, index, rohstoffe etc.) mit optionen -> brauchen wir
+set aus den beiden bilden.
+
 
 über den Beispielcode ist es zu langsam. Zwar 250 Einträge gleichzeitig. Geht aber besser bei ca. 1,8 Mio Einträgen.
 Dazu erst jedes Optionssymbol speichern.
