@@ -20,7 +20,7 @@ from config_utils import generate_expiry_dates_from_rules
 from src.historization import run_historization_pipeline
 from src.util import log_memory_usage, MemoryMonitor, executed_as_github_action
 
-setup_logging(component="data_collector", log_level=logging.DEBUG, console_output=True)
+setup_logging(component="data_collector", log_level=logging.INFO, console_output=True)
 logger = logging.getLogger(__name__)
 logger.info("Start SKULD")
 
