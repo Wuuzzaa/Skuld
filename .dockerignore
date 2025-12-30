@@ -1,0 +1,33 @@
+# Git
+.git
+.gitignore
+.github
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Database (Do not include local DB in image!)
+*.db
+*.sqlite3
+db/*.db
+financial_data.db
+
+# Logs
+logs/
+*.log
+
+# Environment variables
+.env
+service_account.json
+
+# IDE
+.vscode
+.idea
