@@ -342,6 +342,7 @@ def load_pickle(filename):
 def option_chains_to_dataframe(option_chains):
     """
     Flatten a list of nested dictionaries (option_chains) into a Pandas DataFrame.
+    Each key in the top-level dictionary is used as a prefix for its nested keys.
 
     Args:
         option_chains (list of dict): List of nested dictionaries containing option data.
@@ -356,40 +357,26 @@ def option_chains_to_dataframe(option_chains):
     flattened_data = []
 
     for entry in option_chains:
-        # Create a flat dictionary
         flat_entry = {}
-
-        # Add 'day' information
-        flat_entry.update(entry.get('day', {}))
-
-        # Add 'details' information
-        flat_entry.update(entry.get('details', {}))
-
-        # Add 'greeks' information
-        flat_entry.update(entry.get('greeks', {}))
-
-        # Add 'last_quote' information
-        flat_entry.update({f'last_quote.{key}': value for key, value in entry.get('last_quote', {}).items()})
-
-        # Add 'last_trade' information
-        flat_entry.update({f'last_trade.{key}': value for key, value in entry.get('last_trade', {}).items()})
-
-        # Add 'underlying_asset' information
-        flat_entry.update(entry.get('underlying_asset', {}))
-
-        # Add additional fields from the results
-        flat_entry['break_even_price'] = entry.get('break_even_price')
-        flat_entry['fmv'] = entry.get('fmv')
-        flat_entry['fmv_last_updated'] = entry.get('fmv_last_updated')
-        flat_entry['implied_volatility'] = entry.get('implied_volatility')
-        flat_entry['open_interest'] = entry.get('open_interest')
-
-        # Append the flattened entry to the list
+        for top_key, nested_dict in entry.items():
+            if isinstance(nested_dict, dict):
+                for nested_key, value in nested_dict.items():
+                    flat_entry[f"{top_key}.{nested_key}"] = value
+            else:
+                flat_entry[top_key] = nested_dict
         flattened_data.append(flat_entry)
 
-    # Create a DataFrame from the flattened list
     df = pd.DataFrame(flattened_data)
+
+    df["day.last_updated_humanreadable"] = (
+        pd.to_datetime(df["day.last_updated"], unit='ns', utc=True)
+        .dt.tz_convert('Europe/Berlin')
+        .dt.strftime('%Y-%m-%d %H:%M:%S')
+    )
+
     return df
+
+
 
 if __name__ == "__main__":
     ticker = "MSFT"
