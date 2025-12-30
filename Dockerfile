@@ -35,10 +35,10 @@ EXPOSE 8501
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8501/_stcore/health || exit 1
 
-# Start Script für Cron + Streamlit + VPN via SSH
+# Start Script for Backend (Cron)
 RUN echo '#!/bin/bash\n\
 set -e\n\
-echo "Starting SKULD container..."\n\
+echo "Starting SKULD Backend..."\n\
 \n\
 # Export environment variables for Cron\n\
 printenv | grep -E "TELEGRAM|PYTHON" > /app/env.sh\n\
@@ -46,20 +46,26 @@ chmod 0644 /app/env.sh\n\
 \n\
 # Start Cron Service\n\
 service cron start\n\
-echo "✓ Cron service started (2x daily data collection: 10:00 and 16:00 CET)"\n\
+echo "✓ Cron service started"\n\
 \n\
-# Initial data collection if database does not exist\n\
+# Initial data collection check\n\
 if [ ! -f "/app/Skuld/db/financial_data.db" ]; then\n\
   echo "⚠ Database not found. Running initial data collection..."\n\
   cd /app/Skuld && python main.py || echo "Initial collection failed, will retry via cron"\n\
-else\n\
-  echo "✓ Database exists"\n\
 fi\n\
 \n\
-# Start Streamlit\n\
-echo "Starting Streamlit on port 8501..."\n\
-exec streamlit run /app/Skuld/app.py --server.headless=true --server.enableCORS=false --server.port=8501 --server.address=0.0.0.0 --server.fileWatcherType=none' > /app/start.sh && \
-    chmod +x /app/start.sh
+# Keep container alive and show cron logs\n\
+touch /var/log/cron.log\n\
+tail -f /var/log/cron.log' > /app/start_backend.sh && \
+    chmod +x /app/start_backend.sh
 
-CMD ["/app/start.sh"]
+# Start Script for Frontend (Streamlit)
+RUN echo '#!/bin/bash\n\
+set -e\n\
+echo "Starting SKULD Frontend..."\n\
+\n\
+exec streamlit run /app/Skuld/app.py --server.headless=true --server.enableCORS=false --server.port=8501 --server.address=0.0.0.0 --server.fileWatcherType=none' > /app/start_frontend.sh && \
+    chmod +x /app/start_frontend.sh
+
+CMD ["/app/start_frontend.sh"]
 

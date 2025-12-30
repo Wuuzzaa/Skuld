@@ -57,6 +57,9 @@ jobs:
             sudo docker images | grep skuld || echo "No skuld images"
             
             echo "=== Stopping old container ==="
+            # Explicitly stop old container name if it exists (migration to split services)
+            sudo docker stop skuld-streamlit || true
+            sudo docker rm skuld-streamlit || true
             sudo docker compose down
             
             echo "=== Ensuring financial_data.db is a file ==="
