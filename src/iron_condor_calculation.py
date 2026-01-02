@@ -91,7 +91,7 @@ if __name__ == "__main__":
 
     import time
 
-    df = pd.read_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
+    # df = pd.read_feather(PATH_DATAFRAME_DATA_MERGED_FEATHER)
     expiration_date = '2025-05-23'
     delta_target = 0.2
     spread_width = 5
