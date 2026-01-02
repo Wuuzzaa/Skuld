@@ -3,19 +3,13 @@ import pandas as pd
 import asyncio
 import aiohttp
 from typing import Union, List
-from massive import RESTClient
 from tqdm import tqdm
-from config import MASSIVE_API_KEY, SYMBOLS, PATH_LOG_FILE
+from config import MASSIVE_API_KEY, PATH_LOG_FILE
 from src.decorator_log_function import log_function
 from src.logger_config import setup_logging
 
-setup_logging(log_file=PATH_LOG_FILE, log_level=logging.DEBUG, console_output=True)
-logger = logging.getLogger(__name__)
-logger.info("Start Massiv API test")
-
 
 async def __get_tickers_by_market(market, session):
-    """Holt alle Tickers für einen bestimmten Market (stocks oder indices)"""
     url = "https://api.massive.com/v3/reference/tickers"
     params = {
         "market": market,
@@ -34,7 +28,6 @@ async def __get_tickers_by_market(market, session):
             data = await response.json()
 
             if data.get('status') != 'OK':
-                print(f"✗ {market.upper()} Seite {page}: Status = {data.get('status')}")
                 break
 
             results = data.get('results', [])
@@ -43,8 +36,6 @@ async def __get_tickers_by_market(market, session):
                 ticker = ticker_data.get('ticker')
                 if ticker:
                     tickers.append(ticker)
-
-            print(f"→ {market.upper()} Seite {page}: +{len(results)} | Gesamt: {len(tickers)}")
 
             next_url = data.get('next_url')
             if next_url:
@@ -55,12 +46,10 @@ async def __get_tickers_by_market(market, session):
             else:
                 url = None
 
-    print(f"✓ {market.upper()}: {len(tickers)} Tickers")
     return tickers
 
 @log_function
 async def get_all_stocks_and_indices():
-    """Holt ALLE Stocks UND Indices parallel"""
     connector = aiohttp.TCPConnector(limit=0)
     timeout = aiohttp.ClientTimeout(total=600)
 
@@ -71,7 +60,6 @@ async def get_all_stocks_and_indices():
 
         stocks, indices = await asyncio.gather(stocks_task, indices_task)
 
-    # Kombinieren
     all_tickers = stocks + indices
 
     return {
@@ -81,7 +69,6 @@ async def get_all_stocks_and_indices():
     }
 
 async def __get_all_option_chains_for_ticker(ticker, session, limit=250):
-    """Holt ALLE Options-Chains für einen Ticker mit Pagination"""
     all_results = []
     url = f"https://api.massive.com/v3/snapshot/options/{ticker}"
     params = {
@@ -143,9 +130,6 @@ async def __get_option_chains_tickers_async(tickers, limit=250):
 
 @log_function
 async def get_active_tickers_with_options():
-    """Schnellere Version: Nutzt type=CS (Common Stock) und prüft dann Optionen"""
-
-    # Hole alle aktiven Stocks und Indices
     async def get_active_by_market(market, session):
         url = "https://api.massive.com/v3/reference/tickers"
         params = {
@@ -173,7 +157,6 @@ async def get_active_tickers_with_options():
 
         return tickers
 
-    # Prüfe ob Ticker Optionen hat
     async def has_options(ticker, session):
         url = f"https://api.massive.com/v3/snapshot/options/{ticker}"
         params = {
@@ -275,6 +258,11 @@ def get_option_chains_df(tickers: Union[List[str], str] = "auto", limit=250) -> 
     return df
 
 if __name__ == "__main__":
+    # logging not needed when run from main
+    setup_logging(log_file=PATH_LOG_FILE, log_level=logging.DEBUG, console_output=True)
+    logger = logging.getLogger(__name__)
+    logger.info("Start Massiv API test")
+
     all_tickers = asyncio.run(get_all_stocks_and_indices())
     tickers_with_options = asyncio.run(get_active_tickers_with_options())
     df = get_option_chains_df(tickers=tickers_with_options)
@@ -285,24 +273,42 @@ if __name__ == "__main__":
 https://massive.com/docs/rest/options/snapshots/option-chain-snapshot 
 
 all_tickers["stocks"] enthält alle aktien -> brauchen wir
+
 tickers_with_options enthält alle ticker(aktien, index, rohstoffe etc.) mit optionen -> brauchen wir
-set aus den beiden bilden.
 
+Set aus den beiden bilden. 
+Benötigt Flag für Symbole mit Optionen um bei Strategien schnell filtern zu können.
 
-über den Beispielcode ist es zu langsam. Zwar 250 Einträge gleichzeitig. Geht aber besser bei ca. 1,8 Mio Einträgen.
-Dazu erst jedes Optionssymbol speichern.
-Dann für jedes Optionssymbol eine Query async ebenfalls mit 250 batch -> viel schneller.
+get_option_chains_df(tickers=tickers_with_options) -> Liefert Optionspreise und Griechen
 
-get_option_chains_tickers_async
-enthält nur die optionsdaten. 
+Benötigt täglich:
+'implied_volatility', 
+'open_interest', 
+'greeks.delta', 
+'greeks.gamma', 
+'greeks.theta', 
+'greeks.vega',
+'day.close', (optionspreis aktuell)
+'day.volume', 
 
-Stockpreise müssen noch gezogen werden.
-https://massive.com/docs/rest/stocks/snapshots/full-market-snapshot
+Stammdaten benötigt
+'details.contract_type',
+'details.exercise_style', 
+'details.expiration_date',
+'details.shares_per_contract', 
+'details.strike_price', 
+'details.ticker', (enthält OPRA)
+'underlying_asset.ticker',  (Symbol)
 
-df[     (df['ticker'] == 'KO') &     (df['expiration_date'] == '2026-01-16') &     (df['contract_type'] == 'put') &     (df['strike_price'] == 68)]
-df[     (df['ticker'] == 'AMZN') &     (df['expiration_date'] == '2026-01-16') &     (df['contract_type'] == 'put') &     (df['strike_price'] == 222.5)]
-df[     (df['ticker'] == 'PLTR') &     (df['expiration_date'] == '2026-01-16') &     (df['contract_type'] == 'put') &     (df['strike_price'] == 172.5)]
-
-df[     (df['ticker'] == 'MSFT') &     (df['expiration_date'] == '2026-01-16') &     (df['contract_type'] == 'put') &     (df['strike_price'] == 470)]
+Aktuell nicht benötigt:
+'day.change', 
+'day.change_percent',
+'day.high', 
+'day.last_updated',  (Timestamp)
+'day.low', 
+'day.open',
+'day.previous_close', 
+'day.vwap',
+'day.last_updated_humanreadable'
 """
 
