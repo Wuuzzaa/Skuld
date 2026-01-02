@@ -4,7 +4,7 @@ import asyncio
 import aiohttp
 from typing import Union, List
 from tqdm import tqdm
-from config import MASSIVE_API_KEY, PATH_LOG_FILE
+from config import MASSIVE_API_KEY
 from src.decorator_log_function import log_function
 from src.logger_config import setup_logging
 
@@ -112,7 +112,7 @@ async def __get_all_option_chains_for_ticker(ticker, session, limit=250):
 
 async def __get_option_chains_tickers_async(tickers, limit=250):
     """Holt ALLE Options-Chains für alle Tickers parallel. Inkl. Griechen und Preise sowie IV"""
-    connector = aiohttp.TCPConnector(limit=0)
+    connector = aiohttp.TCPConnector(limit=50)
     timeout = aiohttp.ClientTimeout(total=600)
 
     async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
@@ -200,8 +200,8 @@ async def get_active_tickers_with_options():
 @log_function
 def __option_chains_to_dataframe(option_chains):
     """
-    Flatten a list of nested dictionaries (option_chains) into a Pandas DataFrame using json_normalize.
-    Optimized for speed and readability.
+    Flatten a list of nested dictionaries (option_chains) into a Pandas DataFrame.
+    Builds the DataFrame incrementally to save memory.
 
     Args:
         option_chains (list of dict): List of nested dictionaries containing option data.
@@ -215,7 +215,9 @@ def __option_chains_to_dataframe(option_chains):
     chunk_size = 1000
     for i in tqdm(range(0, len(option_chains), chunk_size)):
         chunk = option_chains[i:i + chunk_size]
-        chunks.append(pd.json_normalize(chunk, sep="."))
+        df_chunk = pd.json_normalize(chunk, sep=".")
+        df_chunk = df_chunk.dropna()
+        chunks.append(df_chunk)
     df = pd.concat(chunks, ignore_index=True)
 
     # Convert timestamps in a vectorized way
@@ -259,11 +261,11 @@ def get_option_chains_df(tickers: Union[List[str], str] = "auto", limit=250) -> 
 
 if __name__ == "__main__":
     # logging not needed when run from main
-    setup_logging(log_file=PATH_LOG_FILE, log_level=logging.DEBUG, console_output=True)
+    setup_logging(log_level=logging.DEBUG, console_output=True)
     logger = logging.getLogger(__name__)
     logger.info("Start Massiv API test")
 
-    all_tickers = asyncio.run(get_all_stocks_and_indices())
+    #all_tickers = asyncio.run(get_all_stocks_and_indices())
     tickers_with_options = asyncio.run(get_active_tickers_with_options())
     df = get_option_chains_df(tickers=tickers_with_options)
     pass
@@ -310,5 +312,7 @@ Aktuell nicht benötigt:
 'day.previous_close', 
 'day.vwap',
 'day.last_updated_humanreadable'
+
+# print(f"Gesamt-Speicherverbrauch: {df.memory_usage(deep=True).sum() / (1024 ** 2):.2f} MB")
 """
 
