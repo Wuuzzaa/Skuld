@@ -24,7 +24,7 @@ def send_telegram_message(title, message):
         return
 
     # Format the message
-    full_message = f"🚨 *{title}*\n\n{message}"
+    full_message = f"🟢 *{title}*\n\n{message}"
     
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     payload = {
