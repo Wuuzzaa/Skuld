@@ -1,7 +1,12 @@
 import pandas as pd
+from dotenv import load_dotenv
+import os
 from pathlib import Path
 from src.get_version import get_version
 
+# Massiv API
+load_dotenv()
+MASSIVE_API_KEY = os.getenv('MASSIVE_API_KEY')
 
 # Base path relative to base folder
 BASE_DIR = Path(__file__).resolve().parent
@@ -23,6 +28,7 @@ PATH_DATABASE_QUERY_FOLDER = PATH_DATABASE_FOLDER / 'SQL' / 'query'
 # Tables
 TABLE_OPTION_DATA_TRADINGVIEW = 'OptionDataTradingView'
 TABLE_OPTION_DATA_YAHOO = 'OptionDataYahoo'
+TABLE_OPTION_DATA_MASSIVE = 'OptionDataMassive'
 TABLE_ANALYST_PRICE_TARGETS = 'AnalystPriceTargets'
 TABLE_EARNING_DATES = 'EarningDates'
 TABLE_FUNDAMENTAL_DATA_DIVIDEND_RADAR = 'FundamentalDataDividendRadar'
@@ -41,7 +47,8 @@ HISTORY_ENABLED_TABLES = [
     TABLE_ANALYST_PRICE_TARGETS,
     TABLE_STOCK_PRICE,
     TABLE_STOCK_DATA_BARCHART,
-    TABLE_EARNING_DATES
+    TABLE_EARNING_DATES,
+    TABLE_OPTION_DATA_MASSIVE
 ]
 
 #Views

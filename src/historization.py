@@ -102,6 +102,8 @@ def run_historization_pipeline():
     
     start_time = time.time()
     logger.info("Running Historization Pipeline...")
+    _insert_date()
+
     try:
         for table in HISTORY_ENABLED_TABLES:
             HistorizationService.run_daily_historization(
@@ -242,7 +244,7 @@ def _get_column_definitions_str(table_name: str):
     """
     key_columns, data_columns = get_table_key_and_data_columns(table_name)
     key_column_definitions_str = ",\n\t\t\t".join([f'"{col["name"]}" {col["type"]}' for col in key_columns])
-    data_column_definitions_str = ",\n\t\t\t".join([f'"{col["name"]}" {col["type"]}' for col in data_columns])
+    data_column_definitions_str = ",\n\t\t".join([f'"{col["name"]}" {col["type"]}' for col in data_columns])
     
     column_definitions_str = f"""
         {key_column_definitions_str},
@@ -290,3 +292,56 @@ def _create_history_merge_views():
         with open(f"db/SQL/views/create_view/history/{view_template_file.replace('_template','')}", "w") as f:
             f.write(sql)
     recreate_views()
+
+def _insert_date():
+        start_time = time.time()
+        
+        engine = get_database_engine()
+
+        with engine.begin() as conn:
+ 
+            insert_sql = f"""
+                INSERT INTO DatesHistory (
+                    date,
+                    year,
+                    month,
+                    week
+                )
+                SELECT
+                    DATE('now') as date,
+                    STRFTIME('%Y', DATE('now')) as year,
+                    STRFTIME('%m', DATE('now')) as month,
+                    STRFTIME('%W', DATE('now')) as week
+                ON CONFLICT(date) DO NOTHING
+            """
+            try:
+                affected = execute_sql(conn, insert_sql, 'DatesHistory', 'UPSERT', f"Insert date to DatesHistory")
+            except Exception as e:
+                conn.rollback()
+                logger.error(f"Error inserting keys to Master Data: {e}")
+            
+            # temprary insert for all dates in OptionDataYahooHistoryDaily
+            insert_sql = f"""
+                INSERT INTO DatesHistory (
+                    date,
+                    year,
+                    month,
+                    week
+                )
+                SELECT DISTINCT
+                    DATE(snapshot_date) as date,
+                    STRFTIME('%Y', snapshot_date) as year,
+                    STRFTIME('%m', snapshot_date) as month,
+                    STRFTIME('%W', snapshot_date) as week
+                FROM OptionDataYahooHistoryDaily
+                WHERE 1=1
+                ON CONFLICT(date) DO NOTHING
+            """
+            
+            try:
+                affected = execute_sql(conn, insert_sql, 'DatesHistory', 'UPSERT', f"Insert date to DatesHistory")
+            except Exception as e:
+                conn.rollback()
+                logger.error(f"Error inserting keys to Master Data: {e}")
+            
+        logger.info(f"Inserted date to Dates History in {round(time.time() - start_time, 2)}s.")

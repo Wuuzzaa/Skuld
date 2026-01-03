@@ -60,7 +60,7 @@ class YahooQueryScraper:
                         logger.error(" ! " * 80)
                         logger.error("RETRY LIMIT REACHED")
                         logger.error(" ! " * 80)
-                    time.sleep(1)
+                    # time.sleep(1)
 
                 if all_data is None:
                     logger.warning("WARNING: No module data found for any symbols")
@@ -103,7 +103,7 @@ class YahooQueryScraper:
                     logger.error(" ! " * 80)
                     logger.error("RETRY LIMIT REACHED")
                     logger.error(" ! " * 80)
-                time.sleep(1)
+                # time.sleep(1)
 
             if all_data is None:
                 logger.warning("WARNING: No financial data found for any symbols")
@@ -155,7 +155,7 @@ class YahooQueryScraper:
                 logger.error(" ! " * 80)
                 logger.error("RETRY LIMIT REACHED")
                 logger.error(" ! " * 80)
-            time.sleep(1)
+            # time.sleep(1)
 
         if not found_data:
             logger.warning("WARNING: No option data found for any symbols")

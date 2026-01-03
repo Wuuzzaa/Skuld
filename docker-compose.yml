@@ -7,6 +7,8 @@ services:
     build: .
     container_name: skuld-frontend
     command: /app/start_frontend.sh
+    env_file:
+      - .env
     volumes:
       - ./financial_data.db:/app/Skuld/db/financial_data.db
     environment:
@@ -51,6 +53,8 @@ services:
     build: .
     container_name: skuld-backend
     command: /app/start_backend.sh
+    env_file:
+      - .env
     volumes:
       - ./financial_data.db:/app/Skuld/db/financial_data.db
     environment:

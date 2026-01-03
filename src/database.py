@@ -104,7 +104,6 @@ def execute_sql(connection, sql: str, table_name: str, operation_type: str = "IN
         logger.error(f"Error executing SQL on {table_name}: {e}")
         raise e
 
-@log_function
 def select_into_dataframe(query: str = None, sql_file_path: str = None, params: dict = None):
     """
     Executes a SQL query and returns the result as a DataFrame.
@@ -141,7 +140,7 @@ def select_into_dataframe(query: str = None, sql_file_path: str = None, params: 
         else:
             df = pd.read_sql(sql, engine)
 
-        logger.debug(f"Query executed successfully in {round(time.time() - start, 2)}s. Top 5 rows:")
+        logger.debug(f"Query executed successfully in {round(time.time() - start, 2)}s.")
     except Exception as e:
         logger.error(f"Error executing query {query}: {e}")
 

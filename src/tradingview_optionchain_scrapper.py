@@ -4,6 +4,7 @@ import os
 import requests
 import pandas as pd
 from config import SYMBOLS_EXCHANGE, TABLE_OPTION_DATA_TRADINGVIEW
+from config_utils import get_filtered_symbols_with_logging
 from src.database import insert_into_table, truncate_table
 from src.util import opra_to_osi
 
@@ -34,8 +35,10 @@ def _response_to_df(data):
 
     return df
 
-def scrape_option_data_trading_view(symbols):
+def scrape_option_data_trading_view():
+    symbols = get_filtered_symbols_with_logging("TradingViewOptionScraper")
     logger.info(f"Loading for {len(symbols)} symbols option data from TradingView")
+
     
     # --- Database Persistence ---
     truncate_table(TABLE_OPTION_DATA_TRADINGVIEW)
