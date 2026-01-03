@@ -52,8 +52,11 @@ def scrape_option_data_trading_view():
 
     # Unterteile underlying_symbols in 100er-Pakete (API Limit unbekannt, 500 sollte aber sicher sein)
     batch_size = 100
+    batch = 1
     symbol_batches = [underlying_symbols[i:i + batch_size] for i in range(0, len(underlying_symbols), batch_size)]
     for symbol_batch in symbol_batches:
+        logger.info(f"({batch}/{len(symbol_batches)}) Batch")
+        batch += 1
         if len(underlying_symbols) > batch_size:
            logger.info(f"Fetching TradingView option data for batch of {len(symbol_batch)} symbols...")
         

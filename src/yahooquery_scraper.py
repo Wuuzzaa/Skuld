@@ -42,7 +42,9 @@ class YahooQueryScraper:
             all_data = {}
             if self._module_data_cache is None or force_refresh:
                 logger.info(f"Loading for {len(self.symbols)} symbols module data from Yahoo Finance - modules: {MODULES}")
+                batch = 1
                 for ticker_batch in self.ticker_batches:
+                    logger.info(f"({batch}/{len(self.ticker_batches)}) Batch")
                     for attempt in range(self.retries):
                         try:
                             if len(self.symbols) > self.batch_size:
@@ -78,8 +80,11 @@ class YahooQueryScraper:
     def _load_all_financial_data(self, force_refresh=False):
         with self.all_financial_data_lock:
             all_data = [] 
+            batch = 1
             logger.info(f"Loading for {len(self.symbols)} symbols all financial data from Yahoo Finance")
             for ticker_batch in self.ticker_batches:
+                logger.info(f"({batch}/{len(self.ticker_batches)}) Batch")
+                batch += 1
                 for attempt in range(self.retries):
                     try:
                         if len(self.symbols) > self.batch_size:
@@ -129,7 +134,10 @@ class YahooQueryScraper:
         logger.info(f"Loading for {len(self.symbols)} symbols option chain from Yahoo Finance")
         
         found_data = False
+        batch = 1
         for ticker_batch in self.ticker_batches:
+            logger.info(f"({batch}/{len(self.ticker_batches)}) Batch")
+            batch += 1
             for attempt in range(self.retries):
                 try:
                     if len(self.symbols) > self.batch_size:

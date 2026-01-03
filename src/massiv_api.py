@@ -303,11 +303,13 @@ def load_option_chains():
 
     # load batches of option chains for symbols
     batch_size = 100
+    total_options = 0
     symbol_batches = [symbols[i:i + batch_size] for i in range(0, len(symbols), batch_size)]
+    batch = 1
     for symbol_batch in symbol_batches:
         if len(symbols) > batch_size:
-           logger.info(f"Fetching TradingView option data for batch of {len(symbol_batch)} symbols...")
-
+           logger.info(f"({batch}/{len(symbol_batches)}) Fetching Massive API option data for batch of {len(symbol_batch)} symbols...")
+           batch += 1
         df = get_option_chains_df(tickers=symbol_batch)
 
         insert_into_table(
@@ -315,6 +317,10 @@ def load_option_chains():
             dataframe=df,
             if_exists="append"
         )
+
+        total_options += len(df)
+
+    logger.info(f"Total options collected and saved from Massive API: {total_options}")
 
 if __name__ == "__main__":
     # logging not needed when run from main
