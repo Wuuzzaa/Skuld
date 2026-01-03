@@ -29,8 +29,9 @@ jobs:
         run: echo "$SERVICE_ACCOUNT_JSON" > service_account.json
         env:
           SERVICE_ACCOUNT_JSON: ${{ secrets.SERVICE_ACCOUNT_JSON }}
-          MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY }}
-          TEST_KEY: ${{ secrets.TEST_KEY }}
 
       - name: Run main script
         run: python main.py
+        env:
+          MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY }}
+          TEST_KEY: ${{ secrets.TEST_KEY }}
