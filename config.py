@@ -7,6 +7,7 @@ from src.get_version import get_version
 # Massiv API
 load_dotenv()
 MASSIVE_API_KEY = os.getenv('MASSIVE_API_KEY')
+TEST_KEY= os.getenv('TEST_KEY') # DEBUG
 
 # Base path relative to base folder
 BASE_DIR = Path(__file__).resolve().parent
