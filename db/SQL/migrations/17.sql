@@ -1,0 +1,27 @@
+DROP TABLE IF EXISTS "OptionDataMassive";
+CREATE TABLE "OptionDataMassive" (
+	"option_osi" TEXT,
+	"symbol" TEXT, 
+	"contract_type" TEXT, 
+	"expiration_date" TEXT, 
+	"strike_price" FLOAT,  
+	open_interest BIGINT, 
+    implied_volatility FLOAT, 
+	"exercise_style" TEXT, 
+	"shares_per_contract" BIGINT, 
+	"greeks_delta" FLOAT, 
+	"greeks_gamma" FLOAT, 
+	"greeks_theta" FLOAT, 
+	"greeks_vega" FLOAT, 
+	"day_change" FLOAT, 
+	"day_change_percent" FLOAT, 
+	"day_close" FLOAT, 
+	"day_high" FLOAT, 
+	"day_low" FLOAT, 
+	"day_open" FLOAT, 
+	"day_previous_close" FLOAT, 
+	"day_volume" FLOAT, 
+	"day_vwap" FLOAT,
+	"day_last_updated" DATETIME, 
+    PRIMARY KEY("option_osi")
+)

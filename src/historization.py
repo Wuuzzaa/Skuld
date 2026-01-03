@@ -244,7 +244,7 @@ def _get_column_definitions_str(table_name: str):
     """
     key_columns, data_columns = get_table_key_and_data_columns(table_name)
     key_column_definitions_str = ",\n\t\t\t".join([f'"{col["name"]}" {col["type"]}' for col in key_columns])
-    data_column_definitions_str = ",\n\t\t\t".join([f'"{col["name"]}" {col["type"]}' for col in data_columns])
+    data_column_definitions_str = ",\n\t\t".join([f'"{col["name"]}" {col["type"]}' for col in data_columns])
     
     column_definitions_str = f"""
         {key_column_definitions_str},

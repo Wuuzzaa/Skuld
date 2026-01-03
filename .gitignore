@@ -190,3 +190,4 @@ service_account.json
 /logs/
 .vscode/
 Hetzner DB Download.txt
+db/financial_data.db-journal

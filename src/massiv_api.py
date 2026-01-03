@@ -4,10 +4,13 @@ import asyncio
 import aiohttp
 from typing import Union, List
 from tqdm import tqdm
-from config import MASSIVE_API_KEY, PATH_LOG_FILE
+from config import MASSIVE_API_KEY, TABLE_OPTION_DATA_MASSIVE
+from config_utils import get_filtered_symbols_with_logging
+from src.database import insert_into_table, truncate_table
 from src.decorator_log_function import log_function
 from src.logger_config import setup_logging
 
+logger = logging.getLogger(__name__)
 
 async def __get_tickers_by_market(market, session):
     url = "https://api.massive.com/v3/reference/tickers"
@@ -50,7 +53,7 @@ async def __get_tickers_by_market(market, session):
 
 @log_function
 async def get_all_stocks_and_indices():
-    connector = aiohttp.TCPConnector(limit=0)
+    connector = aiohttp.TCPConnector(limit=20)
     timeout = aiohttp.ClientTimeout(total=600)
 
     async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
@@ -83,6 +86,8 @@ async def __get_all_option_chains_for_ticker(ticker, session, limit=250):
 
                 # DEBUG: Komplette Response ausgeben
                 if data.get('status') != 'OK':
+                    logger.error(f"{ticker}: Error fetching option chains - {data.get('error')}")
+                    raise Exception(f"Error fetching option chains - {data.get('error')}")
                     break
 
                 results = data.get('results', [])
@@ -112,7 +117,7 @@ async def __get_all_option_chains_for_ticker(ticker, session, limit=250):
 
 async def __get_option_chains_tickers_async(tickers, limit=250):
     """Holt ALLE Options-Chains für alle Tickers parallel. Inkl. Griechen und Preise sowie IV"""
-    connector = aiohttp.TCPConnector(limit=0)
+    connector = aiohttp.TCPConnector(limit=20)
     timeout = aiohttp.ClientTimeout(total=600)
 
     async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
@@ -126,6 +131,10 @@ async def __get_option_chains_tickers_async(tickers, limit=250):
     for result in results:
         option_chains.extend(result)
 
+    if len(option_chains) == 0:
+        logger.error("No option chains data found for any tickers")
+        raise Exception("No option chains data found for any tickers")
+    
     return option_chains
 
 @log_function
@@ -172,7 +181,7 @@ async def get_active_tickers_with_options():
             pass
         return None
 
-    connector = aiohttp.TCPConnector(limit=0)
+    connector = aiohttp.TCPConnector(limit=20)
     timeout = aiohttp.ClientTimeout(total=1800)
 
     async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
@@ -185,7 +194,7 @@ async def get_active_tickers_with_options():
         all_tickers = stocks + indices
 
         # Prüfe parallel ob sie Optionen haben (in Batches)
-        batch_size = 50
+        batch_size = 20
         tickers_with_options = []
 
         for i in range(0, len(all_tickers), batch_size):
@@ -218,11 +227,35 @@ def __option_chains_to_dataframe(option_chains):
         chunks.append(pd.json_normalize(chunk, sep="."))
     df = pd.concat(chunks, ignore_index=True)
 
+    df.rename(columns={ "details.ticker": "option_osi", 
+                        "underlying_asset.ticker": "symbol",
+                        "details.contract_type": "contract_type",
+                        "details.expiration_date": "expiration_date",
+                        "details.strike_price": "strike_price",
+                        "details.exercise_style": "exercise_style",
+                        "details.shares_per_contract": "shares_per_contract",
+                        "greeks.delta": "greeks_delta",   
+                        "greeks.gamma": "greeks_gamma",
+                        "greeks.theta": "greeks_theta",
+                        "greeks.vega": "greeks_vega",
+                        "day.change": "day_change",
+                        "day.change_percent": "day_change_percent",
+                        "day.close": "day_close",
+                        "day.high": "day_high",
+                        "day.low": "day_low",
+                        "day.open": "day_open",
+                        "day.previous_close": "day_previous_close",
+                        "day.volume": "day_volume",
+                        "day.vwap": "day_vwap",
+                        "day.last_updated": "day_last_updated"
+                       }, inplace=True)
+
+    # Remove "O:" prefix from details.ticker
+    df["option_osi"] = df["option_osi"].str.replace("^O:", "", regex=True)
+
     # Convert timestamps in a vectorized way
-    df["day.last_updated_humanreadable"] = (
-        pd.to_datetime(df["day.last_updated"], unit='ns', utc=True)
-        .dt.tz_convert('Europe/Berlin')
-        .dt.strftime('%Y-%m-%d %H:%M:%S')
+    df["day_last_updated"] = (
+        pd.to_datetime(df["day_last_updated"], unit='ns', utc=True)
     )
 
     return df
@@ -257,9 +290,31 @@ def get_option_chains_df(tickers: Union[List[str], str] = "auto", limit=250) -> 
     df = __option_chains_to_dataframe(option_chains)
     return df
 
+def load_option_chains():
+    symbols = get_filtered_symbols_with_logging("MassiveAPI")
+    # symbols = asyncio.run(get_active_tickers_with_options())
+    logger.info(f"Loading for {len(symbols)} symbols option data from Massive API")
+
+    truncate_table(TABLE_OPTION_DATA_MASSIVE)
+
+    # load batches of option chains for symbols
+    batch_size = 100
+    symbol_batches = [symbols[i:i + batch_size] for i in range(0, len(symbols), batch_size)]
+    for symbol_batch in symbol_batches:
+        if len(symbols) > batch_size:
+           logger.info(f"Fetching TradingView option data for batch of {len(symbol_batch)} symbols...")
+
+        df = get_option_chains_df(tickers=symbol_batch)
+
+        insert_into_table(
+            table_name=TABLE_OPTION_DATA_MASSIVE,
+            dataframe=df,
+            if_exists="append"
+        )
+
 if __name__ == "__main__":
     # logging not needed when run from main
-    setup_logging(log_file=PATH_LOG_FILE, log_level=logging.DEBUG, console_output=True)
+    setup_logging(log_level=logging.DEBUG, console_output=True)
     logger = logging.getLogger(__name__)
     logger.info("Start Massiv API test")
 

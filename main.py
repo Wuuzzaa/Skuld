@@ -6,6 +6,7 @@ from src.barchart_scrapper import scrape_barchart
 from src.live_stock_price_collector import fetch_current_prices
 from src.logger_config import setup_logging
 from src.database import run_migrations
+from src.massiv_api import load_option_chains
 from src.tradingview_optionchain_scrapper import scrape_option_data_trading_view
 from src.price_and_technical_analysis_data_scrapper import scrape_and_save_price_and_technical_indicators
 from src.yahooquery_earning_dates import scrape_earning_dates
@@ -15,7 +16,7 @@ from src.yfinance_analyst_price_targets import scrape_yahoo_finance_analyst_pric
 from config import *
 from src.google_drive_upload import upload_database
 from src.dividend_radar import process_dividend_data
-from config_utils import get_filtered_symbols_and_dates_with_logging
+from config_utils import get_filtered_symbols_and_dates_with_logging, get_filtered_symbols_with_logging
 from config_utils import generate_expiry_dates_from_rules
 from src.historization import run_historization_pipeline
 
@@ -66,11 +67,13 @@ def main(upload_google_drive=True):
     symbols_to_use, filtered_expiry_dates = get_filtered_symbols_and_dates_with_logging(
         expiry_date_strings, "Option Data Collection"
     )
+    
+    load_option_chains()
 
     # All data collection tasks - run in parallel!
     parallel_tasks = [
         ("Yahoo Finance Analyst Price Targets", scrape_yahoo_finance_analyst_price_targets, ()),
-        ("TradingView Option Data", scrape_option_data_trading_view, (symbols_to_use,)),
+        ("TradingView Option Data", scrape_option_data_trading_view, ()),
         ("Price & Technical Indicators", scrape_and_save_price_and_technical_indicators, ()),
         ("Dividend Radar", process_dividend_data, ()),
         ("Earning Dates", scrape_earning_dates, ()),
