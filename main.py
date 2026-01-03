@@ -44,11 +44,6 @@ def run_task_with_timing(task_name, func, *args, **kwargs):
 
 
 def main(upload_google_drive=True):
-    # DEBUG TEST_KEY
-    print(f"TEST_KEY: {TEST_KEY}")
-    return
-
-
     start_main = time.time()
     run_migrations()
 
