@@ -231,7 +231,7 @@ def __option_chains_to_dataframe(option_chains):
     df = df.dropna()
     rows_no_nan = len(df)
     nan_removed = rows_total - rows_no_nan
-    logger.info(f"Number of option chains: {rows_no_nan}. Removed {nan_removed} rows with NaN.")
+    logger.info(f"Number of option chains: {rows_no_nan}. Removed {nan_removed} rows with NaN from {rows_total} rows.")
 
     df.rename(columns={ "details.ticker": "option_osi", 
                         "underlying_asset.ticker": "symbol",
