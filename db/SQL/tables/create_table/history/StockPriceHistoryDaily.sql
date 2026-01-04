@@ -4,8 +4,8 @@
         snapshot_date DATE NOT NULL,
         "symbol" TEXT,
         "live_stock_price" FLOAT,
-			"price_source" TEXT,
-			"live_price_timestamp" DATETIME,
+		"price_source" TEXT,
+		"live_price_timestamp" DATETIME,
         PRIMARY KEY(snapshot_date, "symbol")
     );
     
