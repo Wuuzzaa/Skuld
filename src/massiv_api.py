@@ -219,14 +219,19 @@ def __option_chains_to_dataframe(option_chains):
     Returns:
         pd.DataFrame: Flattened DataFrame with human-readable timestamps.
     """
-    # todo close entpricht dem last price
-
     chunks = []
     chunk_size = 1000
     for i in tqdm(range(0, len(option_chains), chunk_size)):
         chunk = option_chains[i:i + chunk_size]
         chunks.append(pd.json_normalize(chunk, sep="."))
     df = pd.concat(chunks, ignore_index=True)
+
+    # remove NaN Values
+    rows_total = len(df)
+    df = df.dropna()
+    rows_no_nan = len(df)
+    nan_removed = rows_total - rows_no_nan
+    logger.info(f"Number of option chains: {rows_no_nan}. Removed {nan_removed} rows with NaN.")
 
     df.rename(columns={ "details.ticker": "option_osi", 
                         "underlying_asset.ticker": "symbol",
