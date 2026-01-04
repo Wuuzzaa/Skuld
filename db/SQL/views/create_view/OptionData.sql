@@ -1,54 +1,73 @@
 DROP VIEW IF EXISTS OptionData;
-
 CREATE VIEW
 	OptionData AS
 SELECT
+	-- OptionDataMassive
+	a."option_osi",
+	a."symbol", 
+	a."contract_type", 
+	DATE(a."expiration_date") as expiration_date, 
+	a."strike_price",  
+	a.open_interest, 
+    a.implied_volatility, 
+	a."exercise_style", 
+	a."shares_per_contract", 
+	a."greeks_delta", 
+	a."greeks_gamma", 
+	a."greeks_theta", 
+	a."greeks_vega", 
+	a."day_change", 
+	a."day_change_percent", 
+	a."day_close", 
+	a."day_high", 
+	a."day_low", 
+	a."day_open", 
+	a."day_previous_close", 
+	a."day_volume", 
+	a."day_vwap",
+	a."day_last_updated", 
+
 	-- OptionDataYahoo
-	a.symbol, 
-	a."option-type", 
-	DATE(a.expiration_date) as expiration_date, 
-	a.strike, 
-	a.bid, 
-	a.ask, 
-	a."contractSymbol",
-	a.currency,
-	a."lastPrice",
-	a.change,
-	a."percentChange",
-	a.option_open_interest,
-	a."contractSize",
-	a."lastTradeDate",
-	a."impliedVolatility",
-	a."inTheMoney",
-	a.option_volume,
+	b."option-type", 
+	b.strike, 
+	b.bid, 
+	b.ask, 
+	b."contractSymbol",
+	b.currency,
+	b."lastPrice",
+	b.change,
+	b."percentChange",
+	b.option_open_interest,
+	b."contractSize",
+	b."lastTradeDate",
+	b."impliedVolatility",
+	b."inTheMoney",
+	b.option_volume,
+
 	-- OptionDataTradingView
-	CASE WHEN b.option_osi IS NOT NULL THEN TRUE ELSE FALSE END as has_option_data_tradingview,
-	b.delta,
-	b.gamma,
-	b.iv,
-	b.rho,
-	b."theoPrice",
-	b.theta,
-	b.vega,
-	b.option,
-	b.time,
-	b.exchange,
-	b.option_osi,
+	CASE WHEN c.option_osi IS NOT NULL THEN TRUE ELSE FALSE END as has_option_data_tradingview,
+	c.delta,
+	c.gamma,
+	c.iv,
+	c.rho,
+	c."theoPrice",
+	c.theta,
+	c.vega,
+	c.option,
+	c.time,
+	c.exchange,
 	-- OptionPricingMetrics
-	CASE WHEN c.contractSymbol IS NOT NULL THEN TRUE ELSE FALSE END as has_option_pricing_metrics,
-	c.days_to_expiration,
-	c.premium_option_price,
-	c.spread,
-    c.spread_ptc,
-	c.intrinsic_value,
-	c.extrinsic_value,
-	c.strike_stock_price_difference,
-    c.strike_stock_price_difference_ptc
+	CASE WHEN d.option_osi IS NOT NULL THEN TRUE ELSE FALSE END as has_option_pricing_metrics,
+	d.days_to_expiration,
+	d.premium_option_price,
+	d.spread,
+    d.spread_ptc,
+	d.intrinsic_value,
+	d.extrinsic_value,
+	d.strike_stock_price_difference,
+    d.strike_stock_price_difference_ptc
 FROM
-	OptionDataYahoo as a
-	LEFT OUTER JOIN OptionDataTradingView AS b ON a.contractSymbol = b.option_osi
-	-- b.symbol = b.symbol
-	-- and b.strike = b.strike
-	-- and b.expiration_date = b.expiration_date -- expiration_date in different formats 20250905 vs 2025-09-05 00:00:00.000000	
-	-- and b."option-type" = b."option-type" -- option-type in different formats call vs calls
-	LEFT OUTER JOIN OptionPricingMetrics as c ON a.contractSymbol = c.contractSymbol;
+	OptionDataMassive AS a
+	LEFT OUTER JOIN OptionDataYahoo as b ON a.option_osi = b.contractSymbol
+	LEFT OUTER JOIN OptionDataTradingView AS c ON a.option_osi = c.option_osi
+	LEFT OUTER JOIN OptionPricingMetrics as d ON a.option_osi = d.option_osi;

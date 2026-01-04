@@ -1,10 +1,9 @@
 DROP VIEW IF EXISTS OptionPricingMetrics;
-
 CREATE VIEW
     OptionPricingMetrics AS
 Select
     symbol,
-    contractSymbol,
+    option_osi,
     days_to_expiration,
     ROUND(premium_option_price, 2) as premium_option_price,
     spread,
@@ -18,26 +17,26 @@ FROM
     (
         select
             a.symbol,
-            a.contractSymbol,
+            a.option_osi,
             CAST(
-                julianday (expiration_date) - julianday ('now') AS INTEGER
+                julianday (a.expiration_date) - julianday ('now') AS INTEGER
             ) AS days_to_expiration,
-            a.strike,
-            b.live_stock_price,
-            ROUND(a.strike - b.live_stock_price, 2) as strike_stock_price_difference,
+            c.live_stock_price,
+            ROUND(a."strike_price" - c.live_stock_price, 2) as strike_stock_price_difference,
             ROUND(
-                (a.strike - b.live_stock_price) / b.live_stock_price * 100,
+                (a."strike_price" - c.live_stock_price) / c.live_stock_price * 100,
                 2
             ) as strike_stock_price_difference_ptc,
             case
-                when "option-type" = 'calls' then max(live_stock_price - strike, 0)
-                when "option-type" = 'puts' then max(strike - live_stock_price, 0)
+                when a."contract_type" = 'call' then max(c.live_stock_price - a."strike_price", 0)
+                when a."contract_type" = 'put' then max(a."strike_price" - c.live_stock_price, 0)
                 else null
             end as intrinsic_value,
-            (ask + bid) / 2 as premium_option_price,
-            ask - bid as spread,
-            ROUND((ask - bid) / bid * 100, 2) as spread_ptc
+            (b.ask + b.bid) / 2 as premium_option_price,
+            b.ask - b.bid as spread,
+            ROUND((b.ask - b.bid) / b.bid * 100, 2) as spread_ptc
         from
-            OptionDataYahoo as a
-            JOIN StockPrice as b ON a.symbol = b.symbol
+            OptionDataMassive as a
+            JOIN OptionDataYahoo as b ON a.option_osi = b."contractSymbol"
+            JOIN StockPrice as c ON a.symbol = c.symbol
     );

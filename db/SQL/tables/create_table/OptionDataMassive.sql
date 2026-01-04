@@ -24,4 +24,4 @@ CREATE TABLE "OptionDataMassive" (
 	"day_vwap" FLOAT,
 	"day_last_updated" DATETIME, 
     PRIMARY KEY("option_osi")
-)
+);
