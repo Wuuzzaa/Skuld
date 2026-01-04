@@ -228,7 +228,10 @@ def _add_earnings_and_urls(spreads: pd.DataFrame) -> pd.DataFrame:
     spreads['earnings_warning'] = spreads.apply(_create_earnings_warning, axis=1)
 
     # Generate OptionStrat URLs
-    spreads['optionstrat_url'] = spreads.apply(_build_optionstrat_url, axis=1)
+    if not spreads.empty:
+        spreads['optionstrat_url'] = spreads.apply(_build_optionstrat_url, axis=1)
+    else:
+        spreads['optionstrat_url'] = []
 
     return spreads
 

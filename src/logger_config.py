@@ -48,6 +48,12 @@ def setup_logging(
     # Remove existing handlers to avoid duplicates
     root_logger.handlers.clear()
 
+    # Suppress noisy libraries
+    logging.getLogger("watchdog").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    logging.getLogger("matplotlib").setLevel(logging.WARNING)
+    logging.getLogger("PIL").setLevel(logging.WARNING)
+
     # Log format
     log_format = logging.Formatter(
         fmt='%(asctime)s - %(name)s - %(levelname)s - %(message)s',

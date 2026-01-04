@@ -4,6 +4,7 @@ import streamlit as st
 from src.google_drive_download import load_updated_database
 from src.logger_config import setup_logging
 from config import *
+import os
 
 # enable logging
 setup_logging(component="streamlit", log_level=logging.DEBUG, console_output=True)
@@ -25,6 +26,12 @@ st.title("SKULD - Option Viewer")
 @st.cache_data(ttl=1800, show_spinner="Checking for database updates...")
 def ensure_database_available():
     """Downloads the database from Google Drive if needed."""
+    # Check if database exists locally
+    if os.path.exists(PATH_DATABASE_FILE):
+        logger.info(f"Database found locally at {PATH_DATABASE_FILE}. Skipping download.")
+        return True
+        
+    # Only download if not found locally AND not forced to use local (which would be an error state but we keep the flag logic)
     if not use_local_data:
         return load_updated_database()
     return True
@@ -36,6 +43,7 @@ analyst_prices = st.Page("pages/analyst_prices.py", title="Analyst Prices")
 spreads = st.Page("pages/spreads.py", title="Spreads")
 marrieds = st.Page("pages/married_put_analysis.py", title="Married Puts")
 multifactor_swingtrading = st.Page('pages/multifactor_swingtrading.py', title="Multifactor Swingtrading")
+data_logs = st.Page("pages/data_change_logs.py", title="Data Logs")
 
 # Set up navigation
 page = st.navigation(
@@ -43,7 +51,8 @@ page = st.navigation(
         analyst_prices,
         spreads,
         marrieds,
-        multifactor_swingtrading
+        multifactor_swingtrading,
+        data_logs
     ]
 )
 

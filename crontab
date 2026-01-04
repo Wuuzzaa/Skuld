@@ -1,0 +1,8 @@
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+PYTHONPATH=/app/Skuld
+
+# Run data collection with timeout and lock protection
+# 10:00 CET = 09:00 UTC, 16:00 CET = 15:00 UTC (Mo-Fr)
+0 9 * * 1-5 /bin/bash /app/Skuld/run_data_collection.sh
+0 15 * * 1-5 /bin/bash /app/Skuld/run_data_collection.sh

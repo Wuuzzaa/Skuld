@@ -44,6 +44,10 @@ with st.spinner("Calculating spreads..."):
     spreads_df = calc_spreads(df, delta_target, spread_width)
 
 # Dynamically extract unique values for symbol and option_type from calculated spreads_df
+if spreads_df.empty:
+    st.warning("No spreads found for the selected criteria.")
+    st.stop()
+
 unique_symbols = sorted(spreads_df['symbol'].unique())
 unique_option_types = sorted(spreads_df['option_type'].unique())
 
