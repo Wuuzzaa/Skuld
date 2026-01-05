@@ -715,5 +715,3 @@ ON a.symbol = c.symbol
 LEFT OUTER JOIN 
     TechnicalIndicators as d
 ON a.symbol = d.symbol;
-
-SELECT volume FROM OptionDataMerged LIMIT 10;
