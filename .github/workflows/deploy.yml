@@ -47,6 +47,8 @@ jobs:
             echo "=== Creating .env file ==="
             echo "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" > .env
             echo "TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}" >> .env
+            echo "MASSIVE_API_KEY=${{ secrets.MASSIVE_API_KEY }}" >> .env
+            echo "MASSIVE_API_KEY_FLAT_FILES=${{ secrets.MASSIVE_API_KEY_FLAT_FILES }}" >> .env
             
             set -x # Enable xtrace for the rest of the script
             
