@@ -3,8 +3,8 @@
     CREATE TABLE IF NOT EXISTS "StockPriceMasterData" (
         "symbol" TEXT,
         "live_stock_price" FLOAT,
-			"price_source" TEXT,
-			"live_price_timestamp" DATETIME,
+		"price_source" TEXT,
+		"live_price_timestamp" DATETIME,
         PRIMARY KEY("symbol")
     );
     
