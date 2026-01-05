@@ -60,10 +60,6 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - TZ=Europe/Berlin
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
-      - MASSIVE_API_KEY=${MASSIVE_API_KEY}
-      - MASSIVE_API_KEY_FLAT_FILES=${MASSIVE_API_KEY_FLAT_FILES}
     restart: unless-stopped
     networks:
       - web
