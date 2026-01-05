@@ -23,8 +23,13 @@ def send_telegram_message(title, message):
         logging.error("Telegram configuration missing. Please set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID environment variables.")
         return
 
+    # Determine emoji based on title
+    emoji = "🔴"  # Default to Red (Alert/Failure)
+    if "success" in title.lower() or "info" in title.lower():
+        emoji = "🟢"
+
     # Format the message
-    full_message = f"🟢 *{title}*\n\n{message}"
+    full_message = f"{emoji} *{title}*\n\n{message}"
     
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     payload = {
