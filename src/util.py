@@ -31,7 +31,6 @@ def log_memory_usage(prefix=""):
         # We assume Linux for Docker
         memory_mb = usage.ru_maxrss / 1024
         logger.info(f"{prefix} Max RSS Memory: {memory_mb:.2f} MB")
-        return memory_mb
 
         # Try to get current RSS from /proc/self/status if available
         if os.path.exists('/proc/self/status'):
@@ -39,8 +38,11 @@ def log_memory_usage(prefix=""):
                 for line in f:
                     if line.startswith('VmRSS:'):
                         rss_kb = int(line.split()[1])
-                        logger.info(f"{prefix} Current RSS Memory: {rss_kb/1024:.2f} MB")
-                        break
+                        current_mb = rss_kb/1024
+                        logger.info(f"{prefix} Current RSS Memory: {current_mb:.2f} MB")
+                        return current_mb
+        
+        return memory_mb
     except ImportError:
         # resource module is not available on Windows
         logger.warning(f"{prefix} Memory logging not available (resource module missing and psutil not installed)")
