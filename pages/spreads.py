@@ -1,5 +1,6 @@
 import logging
 import streamlit as st
+import pandas as pd
 from config import PATH_DATABASE_QUERY_FOLDER
 from src.database import select_into_dataframe
 from src.logger_config import setup_logging
@@ -23,9 +24,13 @@ with col_epiration_date:
     sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'expiration_dte_asc.sql'
     dates_df = select_into_dataframe(sql_file_path=sql_file_path)
 
-    # dte labels  ("5 DTE - 2025-01-15")
+    # dte labels ("5 DTE - Thursday 2025-01-15")
     dte_labels = dates_df.apply(
-        lambda row: f"{int(row['days_to_expiration'])} DTE  {row['expiration_date']}",
+        lambda row: (
+            f"{int(row['days_to_expiration'])} DTE - "
+            f"{pd.to_datetime(row['expiration_date']).strftime('%A')}  "
+            f"{row['expiration_date']}"
+        ),
         axis=1
     ).tolist()
 
