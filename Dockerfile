@@ -41,7 +41,7 @@ set -e\n\
 echo "Starting SKULD Backend..."\n\
 \n\
 # Export environment variables for Cron\n\
-printenv | grep -E "TELEGRAM|PYTHON|MASSIVE" > /app/env.sh\n\
+printenv | grep -E "TELEGRAM|PYTHON|MASSIVE|POSTGRES" > /app/env.sh\n\
 chmod 0644 /app/env.sh\n\
 \n\
 # Start Cron Service\n\
