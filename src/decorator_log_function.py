@@ -93,9 +93,9 @@ def log_function(func):
             # Format result
             result_str = _format_result(result)
 
-            logger.info(
+            logger.debug(
                 f"[END] {func_name} | Execution time: {elapsed_time:.3f}s | "
-                f"Result: {result_str}"
+                f"Result: {result_str.substring(0, 10)}..."  # Limit result log length
             )
 
             return result
