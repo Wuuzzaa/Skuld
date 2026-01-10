@@ -1,8 +1,16 @@
+import logging
 import streamlit as st
+from config import PATH_DATABASE_QUERY_FOLDER
 from src.database import select_into_dataframe
+from src.logger_config import setup_logging
 from src.page_display_dataframe import page_display_dataframe
 from src.spreads_calculation import calc_spreads
-from config import *
+
+
+# enable logging
+setup_logging(component="streamlit", log_level=logging.DEBUG, console_output=True)
+logger = logging.getLogger(__name__)
+logger.debug(f"Start Page: {__name__}")
 
 # Page header
 st.title("Spreads")
@@ -188,8 +196,6 @@ column_config = {
         display_text="🎯",
     )
 }
-
-
 
 # show final dataframe
 page_display_dataframe(filtered_df, page='spreads', symbol_column='symbol', column_config=column_config)
