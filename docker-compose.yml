@@ -17,6 +17,7 @@ services:
     restart: unless-stopped
     networks:
       - web
+      - postgres_setup_default
     
     logging:
       driver: "json-file"
@@ -63,6 +64,7 @@ services:
     restart: unless-stopped
     networks:
       - web
+      - postgres_setup_default
     
     logging:
       driver: "json-file"
@@ -81,6 +83,8 @@ services:
 
 networks:
   web:
+    external: true
+  postgres_setup_default:
     external: true
 
 
