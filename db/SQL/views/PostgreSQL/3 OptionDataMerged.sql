@@ -1,4 +1,4 @@
-DROP VIEW IF EXISTS "OptionDataMerged";
+DROP VIEW IF EXISTS "OptionDataMerged" CASCADE;
 CREATE VIEW "OptionDataMerged" AS
 SELECT 
 	-- Option Data
@@ -590,6 +590,7 @@ SELECT
 
 	-- Stock Data Barchart
 	c.implied_volatility as implied_volatility_barchart, 
+	c.historical_volatility, 
 	c.iv_percentile, 
 	c.iv_rank, 
 	c.iv_high, 
@@ -700,9 +701,9 @@ SELECT
 	d.recommendation_sell_amount,
 
 	-- Additional calculated fields
-	ROUND(c.analyst_mean_target - d.close,2) as "target-close$",
-	ROUND(ROUND(c.analyst_mean_target - d.close,2) / d.close * 100.0, 2) as "target-close%",
-    ROUND(d.close * a.iv * sqrt(a.days_to_expiration / 365.0), 2) as expected_move
+	ROUND((c.analyst_mean_target - d.close)::numeric,2) as "target-close$",
+	ROUND((ROUND((c.analyst_mean_target - d.close)::numeric,2) / d.close * 100.0)::numeric, 2) as "target-close%",
+    ROUND((d.close * a.iv * sqrt(a.days_to_expiration / 365.0))::numeric, 2) as expected_move
 FROM 
    "OptionData" AS a
 JOIN 

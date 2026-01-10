@@ -1,6 +1,6 @@
-DROP VIEW IF EXISTS OptionDataHistory;
+DROP VIEW IF EXISTS "OptionDataHistory";
 CREATE VIEW
-	OptionDataHistory AS
+	"OptionDataHistory" AS
 SELECT
 	a.date, 
 	-- OptionDataYahooHistory

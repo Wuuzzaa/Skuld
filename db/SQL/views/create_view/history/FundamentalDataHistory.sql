@@ -1,6 +1,6 @@
-DROP VIEW IF EXISTS FundamentalDataHistory;
+DROP VIEW IF EXISTS "FundamentalDataHistory";
 CREATE VIEW
-	FundamentalDataHistory AS
+	"FundamentalDataHistory" AS
 SELECT
 	a.date, 
 	-- FundamentalDataYahooHistory

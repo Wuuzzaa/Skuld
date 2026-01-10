@@ -1,3 +1,3 @@
 # Skuld
 
-https://skuld-option.streamlit.app/
+https://app.skuld-options.com/

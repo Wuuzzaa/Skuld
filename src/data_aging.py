@@ -444,7 +444,7 @@ def is_classified_for_master_data(source_table: str, column_name: str) -> bool:
     if _MASTER_DATA_CLASSIFICATION_CACHE is None:
         classification_check_sql = select_into_dataframe(f"""
             SELECT table_name, field_name
-            FROM DataAgingFieldClassification
+            FROM "DataAgingFieldClassification"
             WHERE tier = 'Master'
         """)
         

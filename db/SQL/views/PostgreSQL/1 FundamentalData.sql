@@ -1,4 +1,4 @@
-DROP VIEW IF EXISTS "FundamentalData";
+DROP VIEW IF EXISTS "FundamentalData" CASCADE;
 
 CREATE VIEW "FundamentalData" AS
 SELECT 

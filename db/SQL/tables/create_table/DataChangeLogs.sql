@@ -1,5 +1,4 @@
-CREATE TABLE IF NOT EXISTS DataChangeLogs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+CREATE TABLE IF NOT EXISTS "DataChangeLogs" (
     timestamp DATETIME NOT NULL,
     operation_type TEXT NOT NULL,
     table_name TEXT NOT NULL,

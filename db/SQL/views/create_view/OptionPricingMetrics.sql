@@ -1,6 +1,6 @@
-DROP VIEW IF EXISTS OptionPricingMetrics;
+DROP VIEW IF EXISTS "OptionPricingMetrics";
 CREATE VIEW
-    OptionPricingMetrics AS
+    "OptionPricingMetrics" AS
 Select
     symbol,
     option_osi,
@@ -36,7 +36,7 @@ FROM
             b.ask - b.bid as spread,
             ROUND((b.ask - b.bid) / b.bid * 100, 2) as spread_ptc
         from
-            OptionDataMassive as a
-            JOIN OptionDataYahoo as b ON a.option_osi = b."contractSymbol"
-            JOIN StockPrice as c ON a.symbol = c.symbol
+            "OptionDataMassive" as a
+            JOIN "OptionDataYahoo" as b ON a.option_osi = b."contractSymbol"
+            JOIN "StockPrice" as c ON a.symbol = c.symbol
     );

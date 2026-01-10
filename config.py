@@ -10,6 +10,18 @@ MASSIVE_API_KEY = os.getenv('MASSIVE_API_KEY')
 MASSIVE_API_KEY_FLAT_FILES = os.getenv('MASSIVE_API_KEY_FLAT_FILES')
 TEST_KEY= os.getenv('TEST_KEY') # DEBUG
 
+# PostgreSQL
+POSTGRES_HOST = os.getenv('POSTGRES_HOST')
+POSTGRES_PORT = os.getenv('POSTGRES_PORT')
+POSTGRES_USER = os.getenv('POSTGRES_USER')
+POSTGRES_PASSWORD = os.getenv('POSTGRES_PASSWORD')
+POSTGRES_DB = os.getenv('POSTGRES_DB')
+
+# SSH
+SSH_HOST = os.getenv('SSH_HOST')
+SSH_USER = os.getenv('SSH_USER')
+SSH_PKEY_PATH = os.getenv('SSH_PKEY_PATH')
+
 # Base path relative to base folder
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -76,11 +88,6 @@ PATH_APP_LOGFILE = BASE_DIR / 'app.log'
 
 # Symbols excel file
 PATH_SYMBOLS_EXCHANGE_FILE = BASE_DIR / 'symbols_exchange.xlsx'
-
-#Google Upload Config
-PATH_ON_GOOGLE_DRIVE = "1ahLHST1IEUDf03TT3hEdbVm1r7rcxJcu"
-FILENAME_GOOGLE_DRIVE = FILENAME_MERGED_DATAFRAME
-PATH_FOR_SERVICE_ACCOUNT_FILE = "service_account.json"
 
 # Symbols and exchange
 df =pd.read_excel(PATH_SYMBOLS_EXCHANGE_FILE)

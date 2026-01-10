@@ -1,6 +1,6 @@
-DROP VIEW IF EXISTS OptionPricingMetricsHistory;
+DROP VIEW IF EXISTS "OptionPricingMetricsHistory";
 CREATE VIEW
-    OptionPricingMetricsHistory AS
+    "OptionPricingMetricsHistory" AS
 Select
     date,
     symbol,

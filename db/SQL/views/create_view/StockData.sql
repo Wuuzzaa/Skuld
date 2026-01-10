@@ -1,7 +1,7 @@
-DROP VIEW IF EXISTS StockData;
+DROP VIEW IF EXISTS "StockData";
 
 CREATE VIEW
-    StockData AS
+    "StockData" AS
 SELECT
     a.symbol,
     a.live_stock_price,
@@ -35,7 +35,7 @@ SELECT
 	d.todays_open_interest, 
 	d.open_int_30d
 FROM
-    StockPrice AS a
+    "StockPrice" AS a
     LEFT OUTER JOIN (
         SELECT
             symbol,
@@ -44,7 +44,7 @@ FROM
             else NULL
             end as earnings_date
         FROM
-            EarningDates
+            "EarningDates"
     ) AS b ON a.symbol = b.symbol
-    LEFT OUTER JOIN AnalystPriceTargets AS c ON a.symbol = c.symbol
-    LEFT OUTER JOIN StockDataBarchart AS d ON a.symbol = d.symbol;
+    LEFT OUTER JOIN "AnalystPriceTargets" AS c ON a.symbol = c.symbol
+    LEFT OUTER JOIN "StockDataBarchart" AS d ON a.symbol = d.symbol;

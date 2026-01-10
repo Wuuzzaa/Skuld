@@ -6,11 +6,14 @@ import pandas as pd
 import logging
 from typing import Literal
 from sqlalchemy import create_engine, text, inspect
-from config import PATH_DATABASE_FILE
-from src.decorator_log_function import log_function
+from config import PATH_DATABASE_FILE, SSH_PKEY_PATH, SSH_HOST, SSH_USER, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_PORT, POSTGRES_HOST
+import numpy as np
 
 # logging
 logger = logging.getLogger(__name__)
+
+_SSH_TUNNEL = None
+_POSTGRES_ENGINE = None
 
 
 def get_database_engine():
@@ -19,6 +22,55 @@ def get_database_engine():
     """
     # return create_engine(f'sqlite:///{PATH_DATABASE_FILE}')
     return create_engine(f'sqlite:///{str(PATH_DATABASE_FILE.absolute())}')
+
+
+def get_postgres_engine():
+    """
+    Creates and returns a SQLAlchemy engine for the PostgreSQL database via SSH tunnel.
+    Singleton pattern to avoid recreating tunnel/engine.
+    """
+    global _SSH_TUNNEL, _POSTGRES_ENGINE
+    
+    if not POSTGRES_DB:
+        logger.info(f"PostgreSQL not configured")
+        return None
+
+    if _POSTGRES_ENGINE:
+        # We could add a check here if the tunnel is still active
+        return _POSTGRES_ENGINE
+
+    try:
+        db_host = POSTGRES_HOST
+        db_port = POSTGRES_PORT
+
+        if SSH_PKEY_PATH:
+            from sshtunnel import SSHTunnelForwarder
+            if not _SSH_TUNNEL:
+                logger.info(f"Establishing SSH Tunnel to {SSH_HOST}...")
+                # On macOS/Linux, the default key path is usually ~/.ssh/id_rsa
+                # Using expanduser to handle the home directory (~) correctly
+                SSH_PKEY = os.path.expanduser(SSH_PKEY_PATH) 
+                _SSH_TUNNEL = SSHTunnelForwarder(
+                    (SSH_HOST, 22),
+                    ssh_username=SSH_USER,
+                    ssh_pkey=SSH_PKEY,
+                    remote_bind_address=('localhost', int(POSTGRES_PORT)) 
+                )
+                _SSH_TUNNEL.start()
+                logger.info(f"SSH Tunnel established. Local bind port: {_SSH_TUNNEL.local_bind_port}")
+            
+            db_host = "127.0.0.1"
+            db_port = _SSH_TUNNEL.local_bind_port
+
+        # Create Engine
+        db_url = f"postgresql+psycopg2://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{db_host}:{db_port}/{POSTGRES_DB}"
+        _POSTGRES_ENGINE = create_engine(db_url)
+        logger.info("Successfully created PostgreSQL engine.")
+        return _POSTGRES_ENGINE
+
+    except Exception as e:
+        logger.error(f"Failed to connect to PostgreSQL: {e}")
+        return None
 
 
 def truncate_table(table_name):
@@ -34,9 +86,14 @@ def truncate_table(table_name):
       for database connection.
     - table_name (str): The name of the table to truncate.
     """
-    engine = get_database_engine()
-    with engine.begin() as connection:
-        execute_sql(connection, f"DELETE FROM {table_name}", table_name, "TRUNCATE")
+    sqlite_engine = get_database_engine()
+    with sqlite_engine.begin() as connection:
+        execute_sql(connection, f'DELETE FROM "{table_name}"', table_name, "TRUNCATE")
+    
+    pg_engine = get_postgres_engine()
+    if pg_engine:
+        with pg_engine.begin() as conn:
+            execute_sql(conn, f'DELETE FROM "{table_name}"', table_name, "TRUNCATE")
 
 def log_data_change(connection, operation_type, table_name, affected_rows=None, additional_data=None):
     """
@@ -45,7 +102,7 @@ def log_data_change(connection, operation_type, table_name, affected_rows=None, 
     try:
         timestamp = datetime.datetime.now().isoformat()
         query = text("""
-            INSERT INTO DataChangeLogs (timestamp, operation_type, table_name, affected_rows, additional_data)
+            INSERT INTO "DataChangeLogs" (timestamp, operation_type, table_name, affected_rows, additional_data)
             VALUES (:timestamp, :operation_type, :table_name, :affected_rows, :additional_data)
         """)
         connection.execute(query, {
@@ -65,17 +122,35 @@ def insert_into_table(
     ) -> int:
     affected_rows = 0
     start = time.time() 
+    
+    # 1. Execute on SQLite
     try:
         engine = get_database_engine()
         affected_rows = dataframe.to_sql(table_name, engine, if_exists=if_exists, index=False)
-        logger.info(f"Successfully saved {affected_rows} rows to the database table {table_name} in {round(time.time() - start,2)}s.")
+        logger.info(f"[SQLite]     Successfully saved {affected_rows} rows to the database table {table_name} in {round(time.time() - start,2)}s.")
         
         # Log the operation
         with engine.begin() as connection:
             log_data_change(connection, "INSERT", table_name, affected_rows=affected_rows)
             
     except Exception as e:
-        logger.error(f"Error saving to the database table {table_name}: {e}")
+        logger.error(f"[SQLite]     Error saving to the database table {table_name}: {e}")
+
+    # 2. Execute on PostgreSQL (Side-by-side test)
+    try:
+        pg_engine = get_postgres_engine()
+        if pg_engine:
+            start_pg = time.time()
+            # Postgres tends to be stricter, so we catch errors but don't stop the flow
+            dataframe = dataframe.replace("None", np.nan)
+            pg_affected = dataframe.to_sql(table_name, pg_engine, if_exists=if_exists, index=False)
+            rows_saved = len(dataframe)
+            logger.info(f"[PostgreSQL] Successfully saved {rows_saved} rows to {table_name} in {round(time.time() - start_pg, 2)}s.")
+            
+            with pg_engine.begin() as pg_conn:
+                log_data_change(pg_conn, "INSERT", table_name, affected_rows=rows_saved)
+    except Exception as e:
+        logger.error(f"[PostgreSQL] Error saving to table {table_name}: {e}")
 
     return affected_rows
 
@@ -89,20 +164,35 @@ def execute_sql(connection, sql: str, table_name: str, operation_type: str = "IN
     - table_name (str): The name of the table being modified.
     - operation_type (str): The type of operation (INSERT, UPDATE, DELETE).
     """
-    try:
-        start = time.time()
-        result = connection.execute(text(sql))
-        affected_rows = result.rowcount
+    
+    # if connection is SQLite, we execute directly
+    if 'sqlite' in str(connection.engine.url):
+        try:
+            start = time.time()
+            result = connection.execute(text(sql))
+            affected_rows = result.rowcount
+            
+            logger.info(f"[SQLite]     Successfully executed {operation_type} SQL on {table_name} in {round(time.time() - start, 2)}s. Rows affected: {affected_rows}")
+            
+            # Log the operation
+            log_data_change(connection, operation_type, table_name, affected_rows=affected_rows, additional_data=additional_data)
+            return affected_rows
+        except Exception as e:
+            logger.error(f"[SQLite]     Error executing SQL on {table_name}: {e}")
+            raise e
         
-        logger.info(f"Successfully executed {operation_type} SQL on {table_name} in {round(time.time() - start, 2)}s. Rows affected: {affected_rows}")
-        
-        # Log the operation
-        log_data_change(connection, operation_type, table_name, affected_rows=affected_rows, additional_data=additional_data)
-        
-        return affected_rows
-    except Exception as e:
-        logger.error(f"Error executing SQL on {table_name}: {e}")
-        raise e
+    if 'postgresql' in str(connection.engine.url):
+        # Execute on PostgreSQL (Side-by-side test)
+        try:
+            start_pg = time.time()
+            pg_result = connection.execute(text(sql))
+            pg_affected = pg_result.rowcount
+            
+            logger.info(f"[PostgreSQL] Successfully executed {operation_type} SQL on {table_name} in {round(time.time() - start_pg, 2)}s. Rows affected: {pg_affected}")
+            log_data_change(connection, operation_type, table_name, affected_rows=pg_affected, additional_data=additional_data)
+            return pg_affected
+        except Exception as e:
+            logger.error(f"[PostgreSQL] Error executing SQL on {table_name}: {e}")
 
 def select_into_dataframe(query: str = None, sql_file_path: str = None, params: dict = None):
     """
@@ -140,7 +230,21 @@ def select_into_dataframe(query: str = None, sql_file_path: str = None, params: 
         else:
             df = pd.read_sql(sql, engine)
 
-        logger.debug(f"Query executed successfully in {round(time.time() - start, 2)}s.")
+        logger.debug(f"[SQLite]     Rows: {len(df)} - Runtime: {round(time.time() - start, 2)}s.")
+        
+        # Execute on PostgreSQL (Side-by-side test)
+        try:
+            pg_engine = get_postgres_engine()
+            if pg_engine:
+                start_pg = time.time()
+                if params:
+                    pg_df = pd.read_sql(text(str(sql)), pg_engine, params=params)
+                else:
+                    pg_df = pd.read_sql(sql, pg_engine)
+                logger.info(f"[PostgreSQL] Rows: {len(pg_df)} - Runtime: {round(time.time() - start_pg, 2)}s.")
+        except Exception as e:
+             logger.error(f"[PostgreSQL] Error executing query: {e}")
+             
     except Exception as e:
         logger.error(f"Error executing query {query}: {e}")
 
@@ -178,33 +282,43 @@ def get_table_key_and_data_columns(table_name):
     
     return key_columns, data_columns
 
-def run_migrations():
+def _run_migrations_for_engine(engine):
     """
-    Runs the database migration system.
+    Internal helper to run migrations on a specific engine.
     """
-    logger.info("Starting database migration...")
-    start = time.time() 
-    engine = get_database_engine()
+    if 'postgresql' in str(engine.url):
+        label = "PostgreSQL"
+    if 'sqlite' in str(engine.url):
+        label = "SQLite"
+
+    logger.info(f"Starting {label} migration...")
+    start = time.time()
+
     inspector = inspect(engine)
 
     with engine.connect() as connection:
-        if not inspector.has_table("DbVersion"):
+        if not inspector.has_table('DbVersion'):
             with connection.begin():
-                logger.info("DbVersion table not found. Creating it...")
-                with open("db/SQL/tables/create_table/DbVersion.sql", "r") as f:
-                    connection.execute(text(f.read()))
-                connection.execute(text("INSERT INTO DbVersion (version) VALUES (0)"))
-                logger.info("DbVersion table created and initialized with version 0.")
+                logger.info(f"[{label}] DbVersion table not found. Creating it...")
+                try:
+                    with open("db/SQL/tables/create_table/DbVersion.sql", "r") as f:
+                        connection.execute(text(f.read()))
+                    connection.execute(text('INSERT INTO "DbVersion" (version) VALUES (0)'))
+                    logger.info(f"[{label}] DbVersion table created and initialized with version 0.")
+                except Exception as e:
+                    logger.error(f"[{label}] Error initializing DbVersion: {e}")
+                    # If this fails (e.g. invalid SQL for Postgres), we might stop here for this engine
+                    return
 
         with connection.begin():
-            result = connection.execute(text("SELECT version FROM DbVersion")).fetchone()
+            result = connection.execute(text('SELECT version FROM "DbVersion"')).fetchone()
             current_version = result[0]
-        logger.info(f"Current database version: {current_version}")
+        logger.info(f"[{label}] Current database version: {current_version}")
 
         migrations_path = "db/SQL/migrations/"
         if not os.path.exists(migrations_path):
-            logger.info(f"Migrations directory not found at {migrations_path}. Skipping migrations.")
-            recreate_views()
+            logger.info(f"[{label}] Migrations directory not found at {migrations_path}. Skipping migrations.")
+            _recreate_views_for_engine(engine)
             return
             
         migration_files = [f for f in os.listdir(migrations_path) if re.match(r"\d+\.sql", f)]
@@ -213,13 +327,12 @@ def run_migrations():
         pending_migrations = [f for f in migration_files if int(f.split(".")[0]) > current_version]
 
         if not pending_migrations:
-            logger.info("Database is up to date.")
-            recreate_views()
+            logger.info(f"[{label}] Database is up to date.")
+            _recreate_views_for_engine(engine)
             return
 
         for migration_file in pending_migrations:
-            version = int(migration_file.split(".")[0])
-            logger.info(f"Applying migration {migration_file}...")
+            logger.info(f"[{label}] Applying migration {migration_file}...")
             try:
                 with open(os.path.join(migrations_path, migration_file), "r") as f:
                     sql_script = f.read()
@@ -228,40 +341,68 @@ def run_migrations():
 
                 with connection.begin():
                     for statement in statements:
+                        if label == "PostgreSQL":
+                            statement = mapping_sqlite_to_postgres(statement)
                         connection.execute(text(statement))
                         
-                logger.info(f"Migration {migration_file} applied successfully.")
+                logger.info(f"[{label}] Migration {migration_file} applied successfully.")
             except Exception as e:
-                logger.error(f"Error applying migration {migration_file}: {e}")
-                raise
+                logger.error(f"[{label}] Error applying migration {migration_file}: {e}")
+                # For PostgreSQL side-by-side, we continue usage, but for the main DB we might raise
+                if label == "SQLite":
+                    raise e
+                # For Postgres, just log and break/continue? 
+                # If migration fails, subsequent interactions might fail.
+                # We'll re-raise if it's the main db, otherwise swallow.
 
         with connection.begin():
-            last_migration_version = int(pending_migrations[-1].split(".")[0])
-            connection.execute(text(f"UPDATE DbVersion SET version = {last_migration_version}"))
-            logger.info(f"Database version updated to {last_migration_version}.")
+            if pending_migrations:
+                last_migration_version = int(pending_migrations[-1].split(".")[0])
+                connection.execute(text(f'UPDATE "DbVersion" SET version = {last_migration_version}'))
+                logger.info(f"[{label}] Database version updated to {last_migration_version}.")
     
     # Recreate views after migrations
-    recreate_views()
+    _recreate_views_for_engine(engine, label)
+    logger.info(f"[{label}] Migration completed in {round(time.time() - start,2)}s")
 
-    logger.info(f"Database migration completed in {round(time.time() - start,2)}s")
 
-
-def recreate_views():
+def run_migrations():
     """
-    Recreates all views in the database.
-    Handles dependencies by retrying failed view creations until all succeed or no progress is made.
+    Runs the database migration system on both SQLite and PostgreSQL.
     """
-    logger.info("Recreating views...")
-    start = time.time()
-    engine = get_database_engine()
+    # SQLite
+    _run_migrations_for_engine(get_database_engine())
     
-    view_paths = ["db/SQL/views/create_view/history/", "db/SQL/views/create_view/"]
+    # PostgreSQL
+    pg_engine = get_postgres_engine()
+    if pg_engine:
+        _run_migrations_for_engine(pg_engine)
+        pg_migrations()
+
+
+def _recreate_views_for_engine(engine):
+    """
+    Internal helper to recreate views on a specific engine.
+    """
+    if 'postgresql' in str(engine.url):
+        label = "PostgreSQL"
+    if 'sqlite' in str(engine.url):
+        label = "SQLite"
+    logger.info(f"[{label}] Recreating views...")
+    start = time.time()
+
+    
+    if label == "PostgreSQL":
+        view_paths = ["db/SQL/views/PostgreSQL/"]
+    else:
+        view_paths = ["db/SQL/views/create_view/"]
     for views_path in view_paths:
         if not os.path.exists(views_path):
-            logger.info(f"Views directory not found at {views_path}. Skipping view recreation.")
+            logger.info(f"[{label}] Views directory not found at {views_path}. Skipping view recreation.")
             return
 
         view_files = [f for f in os.listdir(views_path) if f.endswith(".sql")]
+        view_files.sort()
     
         pending_views = view_files.copy()
         
@@ -275,46 +416,128 @@ def recreate_views():
                         with open(os.path.join(views_path, view_file), "r") as f:
                             sql_script = f.read()
                         
-                        # Execute the view creation script
-                        # We assume the script contains DROP VIEW IF EXISTS and CREATE VIEW
                         statements = [s.strip() for s in sql_script.split(';') if s.strip()]
                         
                         with connection.begin():
                             for statement in statements:
                                 connection.execute(text(statement))
                         
-                        # print(f"Successfully created view from {view_file}")
                         progress_made = True
                     except Exception as e:
-                        # If it fails, it might be due to missing dependency, so we try again later
-                        logger.error(f"Failed to create view {view_file}: {e}")
+                        logger.error(f"[{label}] Failed to create view {view_file}: {e}")
                         failed_views.append(view_file)
                 
                 if not progress_made and failed_views:
-                    logger.error(f"Error: Could not create the following views due to potential circular dependencies or errors: {failed_views}")
-                    # We stop here to avoid infinite loop
-                    # Optionally raise an error, but for now just printing
+                    logger.error(f"[{label}] Error: Could not create the following views due to potential circular dependencies or errors: {failed_views}")
                     break
                 
                 pending_views = failed_views
 
         if not pending_views:
-            logger.info(f"All views recreated successfully in {round(time.time() - start, 2)}s.")
+            logger.info(f"[{label}] All views recreated successfully in {round(time.time() - start, 2)}s.")
         else:
-            logger.info(f"View recreation finished with errors in {round(time.time() - start, 2)}s.")
+            logger.info(f"[{label}] View recreation finished with errors in {round(time.time() - start, 2)}s.")
+
+
+def recreate_views():
+    """
+    Recreates all views in both databases.
+    """
+    # SQLite
+    _recreate_views_for_engine(get_database_engine())
+    
+    # PostgreSQL
+    pg_engine = get_postgres_engine()
+    if pg_engine:
+        _recreate_views_for_engine(pg_engine)
 
 def table_exists(table_name: str) -> bool:
     """
     Checks if a table exists in the database.
+    Returns True only if it exists in ALL active databases (SQLite and Postgres).
     """
+    # Check SQLite
     engine = get_database_engine()
     inspector = inspect(engine)
-    return inspector.has_table(table_name)
+    exists_sqlite = inspector.has_table(table_name)
+    
+    # Check Postgres
+    exists_pg = True
+    try:
+        pg_engine = get_postgres_engine()
+        if pg_engine:
+            insp_pg = inspect(pg_engine)
+            exists_pg = insp_pg.has_table(table_name)
+    except Exception as e:
+        logger.error(f"[PostgreSQL] Error checking table existence {table_name}: {e}")
+        # If we can't check, we assume match sqlite or return False?
+        # If we return False, we might trigger creation which might fail if DB is down.
+        # But for 'side by side' test, we want to try to create if missing.
+        exists_pg = False
+
+    return exists_sqlite and exists_pg
 
 def view_exists(view_name: str) -> bool:
     """
     Checks if a view exists in the database.
+    Returns True only if it exists in ALL active databases.
     """
+    # Check SQLite
     engine = get_database_engine()
     inspector = inspect(engine)
-    return view_name in inspector.get_view_names()
+    exists_sqlite = view_name in inspector.get_view_names()
+
+    # Check Postgres
+    exists_pg = True
+    try:
+        pg_engine = get_postgres_engine()
+        if pg_engine:
+            insp_pg = inspect(pg_engine)
+            exists_pg = view_name in insp_pg.get_view_names()
+    except Exception as e:
+        logger.error(f"[PostgreSQL] Error checking view existence {view_name}: {e}")
+        exists_pg = False
+
+    return exists_sqlite and exists_pg
+
+def pg_migrations():
+    sql_script = """
+    ALTER TABLE "DataChangeLogs" DROP Column id; 
+    ALTER TABLE "OptionDataMassive" ALTER COLUMN expiration_date TYPE date USING expiration_date::date;
+    """
+        # ALTER TABLE "OptionDataYahoo" RENAME COLUMN contractSymbol TO "contractSymbol";
+    error = None;
+    try:
+        pg_engine = get_postgres_engine()
+        if pg_engine:
+            start_pg = time.time()
+            statements = [s.strip() for s in sql_script.split(';') if s.strip()]
+            for statement in statements:
+                with pg_engine.begin() as connection:
+                    try:
+                        connection.execute(text(statement))
+                    except Exception as e:
+                        error = True
+                        logger.error(f"[PostgreSQL] Error in statement '{statement}': {e}")
+            if not error:
+                logger.info(f"[PostgreSQL] Successfully in {round(time.time() - start_pg, 2)}s.")
+            else:
+                logger.info(f"[PostgreSQL] Completed with some errors in {round(time.time() - start_pg, 2)}s.")
+    except Exception as e:
+        logger.error(f"[PostgreSQL] Error: {e}")
+
+def mapping_sqlite_to_postgres(sql: str) -> str:
+    """
+    Maps SQLite-specific SQL syntax to PostgreSQL-compatible syntax.
+    This is a basic implementation and may need to be extended for complex queries.
+    """
+    # Example mappings
+    mappings = {
+        'DATETIME': 'TIMESTAMP'
+    }
+    print(sql)
+    for sqlite_syntax, pg_syntax in mappings.items():
+        sql = re.sub(r'\b' + re.escape(sqlite_syntax) + r'\b', pg_syntax, sql, flags=re.IGNORECASE)
+        sql = sql.replace(f'"{sqlite_syntax}"', f'"{pg_syntax}"')
+    print(sql)
+    return sql

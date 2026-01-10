@@ -1,6 +1,6 @@
-DROP VIEW IF EXISTS OptionDataMergedHistory;
+DROP VIEW IF EXISTS "OptionDataMergedHistory";
 CREATE VIEW
-	OptionDataMergedHistory AS
+	"OptionDataMergedHistory" AS
 SELECT
 	a.date,
 	-- Option Data

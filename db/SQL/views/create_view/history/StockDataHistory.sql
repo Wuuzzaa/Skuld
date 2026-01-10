@@ -1,6 +1,6 @@
-DROP VIEW IF EXISTS StockDataHistory;
+DROP VIEW IF EXISTS "StockDataHistory";
 CREATE VIEW
-    StockDataHistory AS
+    "StockDataHistory" AS
 SELECT
     a.date,
     a.symbol,

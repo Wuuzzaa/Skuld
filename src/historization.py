@@ -4,7 +4,7 @@ import pathlib
 import time
 from sqlalchemy import text
 from config import HISTORY_ENABLED_TABLES, HISTORY_ENABLED_VIEWS
-from src.database import get_database_engine, execute_sql, get_table_key_and_data_columns, recreate_views, select_into_dataframe, table_exists, view_exists
+from src.database import get_database_engine, execute_sql, get_postgres_engine, get_table_key_and_data_columns, recreate_views, select_into_dataframe, table_exists, view_exists
 from src.decorator_log_function import log_function
 from src.data_aging import DataAgingService, get_history_select_statement, is_classified_for_master_data
 from src.util import executed_as_github_action
@@ -59,7 +59,7 @@ class HistorizationService:
             # 2. Build the SQL statement
             # Target columns: snapshot_date + original columns
             target_cols_str = "snapshot_date, " + ", ".join([f'"{c}"' for c in column_names])
-            select_cols_str = f"date('now'), " + ", ".join([f'"{c}"' for c in column_names])
+            select_cols_str = ", ".join([f'"{c}"' for c in column_names])
             
             # Update clause for UPSERT
             # Exclude conflict keys from the update set
@@ -71,9 +71,18 @@ class HistorizationService:
             update_clause = ", ".join(update_set)
             conflict_target = ", ".join([f'"{k}"' for k in key_column_names])
             
-            sql = f"""
+            sqllite_sql = f"""
                 INSERT INTO "{history_table}" ({target_cols_str})
-                SELECT {select_cols_str}
+                SELECT date('now'), {select_cols_str}
+                FROM "{source_table}"
+                WHERE 1=1 -- needed because of Parsing Ambiguity. Check SQLite documentation
+                ON CONFLICT(snapshot_date, {conflict_target}) DO UPDATE SET
+                {update_clause}
+            """
+
+            pg_sql = f"""
+                INSERT INTO "{history_table}" ({target_cols_str})
+                SELECT CURRENT_DATE, {select_cols_str}
                 FROM "{source_table}"
                 WHERE 1=1 -- needed because of Parsing Ambiguity. Check SQLite documentation
                 ON CONFLICT(snapshot_date, {conflict_target}) DO UPDATE SET
@@ -83,10 +92,20 @@ class HistorizationService:
             # 3. Execute
             try:
                 # Use the new helper function to execute and log
-                execute_sql(connection, sql, history_table, "UPSERT", f"Historize data from {source_table} to {history_table}")
+                execute_sql(connection, sqllite_sql, history_table, "UPSERT", f"Historize data from {source_table} to {history_table}")
             except Exception as e:
-                logger.error(f"Error during historization execution: {e}")
+                logger.error(f"Error during historization execution on SQLite: {e}")
                 raise e
+
+        pg_engine = get_postgres_engine()
+        if pg_engine:
+            with pg_engine.begin() as connection:
+                try:
+                    # Use the new helper function to execute and log
+                    execute_sql(connection, pg_sql, history_table, "UPSERT", f"Historize data from {source_table} to {history_table}")
+                except Exception as e:
+                    logger.error(f"Error during historization execution on Postgres: {e}")
+                    raise e
 
         DataAgingService.run(source_table=source_table)
         duration = time.time() - start_time
@@ -124,6 +143,7 @@ def _create_history_tables_and_view_if_not_exist(source_table: str):
     path_sql_create_table_statements = pathlib.Path("db/SQL/tables/create_table/history")
     path_sql_create_table_statements.mkdir(parents=True, exist_ok=True)
     engine = get_database_engine()
+    pg_engine = get_postgres_engine()
     table = source_table
   
     daily_history_table_name, create_daily_table_sql = _get_daily_history_table_name_create_statement(table)
@@ -166,8 +186,12 @@ def _create_history_tables_and_view_if_not_exist(source_table: str):
         with open(f"{path_sql_create_view_statements}/{history_view_name}.sql", "w") as f:
             f.write(create_view_sql)
         with engine.begin() as connection:
-            execute_sql(connection, f'DROP VIEW IF EXISTS {history_view_name};', history_view_name, "DROP VIEW")
+            execute_sql(connection, f'DROP VIEW IF EXISTS "{history_view_name}";', history_view_name, "DROP VIEW")
             execute_sql(connection, create_view_sql, history_view_name, "CREATE VIEW")
+        if pg_engine:
+            with pg_engine.begin() as connection:
+                execute_sql(connection, f'DROP VIEW IF EXISTS "{history_view_name}" CASCADE;', history_view_name, "DROP VIEW")
+                execute_sql(connection, create_view_sql, history_view_name, "CREATE VIEW")
     logger.info(f"Ensured that {daily_history_table_name}, {weekly_history_table_name}, {monthly_history_table_name}, {master_data_table_name} tables exist.")
             
 
@@ -301,7 +325,7 @@ def _insert_date():
         with engine.begin() as conn:
  
             insert_sql = f"""
-                INSERT INTO DatesHistory (
+                INSERT INTO "DatesHistory" (
                     date,
                     year,
                     month,
@@ -318,30 +342,30 @@ def _insert_date():
                 affected = execute_sql(conn, insert_sql, 'DatesHistory', 'UPSERT', f"Insert date to DatesHistory")
             except Exception as e:
                 conn.rollback()
-                logger.error(f"Error inserting keys to Master Data: {e}")
-            
-            # temprary insert for all dates in OptionDataYahooHistoryDaily
-            insert_sql = f"""
-                INSERT INTO DatesHistory (
-                    date,
-                    year,
-                    month,
-                    week
-                )
-                SELECT DISTINCT
-                    DATE(snapshot_date) as date,
-                    STRFTIME('%Y', snapshot_date) as year,
-                    STRFTIME('%m', snapshot_date) as month,
-                    STRFTIME('%W', snapshot_date) as week
-                FROM OptionDataYahooHistoryDaily
-                WHERE 1=1
-                ON CONFLICT(date) DO NOTHING
-            """
-            
-            try:
-                affected = execute_sql(conn, insert_sql, 'DatesHistory', 'UPSERT', f"Insert date to DatesHistory")
-            except Exception as e:
-                conn.rollback()
-                logger.error(f"Error inserting keys to Master Data: {e}")
-            
+                logger.error(f"Error inserting new date: {e}")
+
+        pg_engine = get_postgres_engine()
+        if pg_engine:
+            with pg_engine.begin() as conn:
+    
+                insert_sql = f"""
+                    INSERT INTO "DatesHistory" (
+                        date,
+                        year,
+                        month,
+                        week
+                    )
+                    SELECT
+                        CURRENT_DATE                          AS date,
+                        EXTRACT(YEAR  FROM CURRENT_DATE)::int AS year,
+                        EXTRACT(MONTH FROM CURRENT_DATE)::int AS month,
+                        EXTRACT(WEEK  FROM CURRENT_DATE)::int AS week
+                    ON CONFLICT(date) DO NOTHING
+                """
+                try:
+                    affected = execute_sql(conn, insert_sql, 'DatesHistory', 'UPSERT', f"Insert date to DatesHistory")
+                except Exception as e:
+                    conn.rollback()
+                    logger.error(f"Error inserting new date: {e}")
+
         logger.info(f"Inserted date to Dates History in {round(time.time() - start_time, 2)}s.")
