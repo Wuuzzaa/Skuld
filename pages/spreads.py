@@ -24,6 +24,15 @@ with col_epiration_date:
     sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'expiration_dte_asc.sql'
     dates_df = select_into_dataframe(sql_file_path=sql_file_path)
 
+    # Checkbox only friday expiration dates
+    show_only_fridays = st.checkbox("Only expiration on friday", value=False)
+
+    # Filter dates_df only friday
+    if show_only_fridays:
+        dates_df = dates_df[
+            pd.to_datetime(dates_df['expiration_date']).dt.dayofweek == 4  # 4 = Freitag
+        ]
+
     # dte labels ("5 DTE - Thursday 2025-01-15")
     dte_labels = dates_df.apply(
         lambda row: (
