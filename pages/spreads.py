@@ -24,16 +24,17 @@ with col_epiration_date:
     sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'expiration_dte_asc.sql'
     dates_df = select_into_dataframe(sql_file_path=sql_file_path)
 
-    # Checkbox only friday expiration dates
-    show_only_fridays = st.checkbox("Only expiration on friday", value=False)
+    # Initialize session state for checkbox and selected label
+    if 'show_only_fridays' not in st.session_state:
+        st.session_state.show_only_fridays = True
 
-    # Filter dates_df only friday
-    if show_only_fridays:
+    # Filter dates_df based on checkbox state
+    if st.session_state.show_only_fridays:
         dates_df = dates_df[
-            pd.to_datetime(dates_df['expiration_date']).dt.dayofweek == 4  # 4 = Freitag
+            pd.to_datetime(dates_df['expiration_date']).dt.dayofweek == 4  # 4 = Friday
         ]
 
-    # dte labels ("5 DTE - Thursday 2025-01-15")
+    # dte labels ("5 DTE - Friday 2026-01-16")
     dte_labels = dates_df.apply(
         lambda row: (
             f"{int(row['days_to_expiration'])} DTE - "
@@ -45,6 +46,13 @@ with col_epiration_date:
 
     # selectbox with dte labels
     selected_label = st.selectbox("Expiration Date", dte_labels)
+
+    # Checkbox under the selectbox
+    show_only_fridays = st.checkbox(
+        "Only expiration on Friday",
+        value=st.session_state.show_only_fridays,
+        key="show_only_fridays"
+    )
 
     # extract selected expiration date from dte label
     selected_index = dte_labels.index(selected_label)
