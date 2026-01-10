@@ -27,6 +27,8 @@ def send_telegram_message(title, message):
     emoji = "🔴"  # Default to Red (Alert/Failure)
     if "success" in title.lower() or "info" in title.lower():
         emoji = "🟢"
+    elif "warning" in title.lower():
+        emoji = "🟡"
 
     # Format the message
     full_message = f"{emoji} *{title}*\n\n{message}"

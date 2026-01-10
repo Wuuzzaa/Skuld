@@ -56,8 +56,7 @@ if [ $EXIT_CODE -eq 124 ]; then
     /usr/local/bin/python src/send_alert.py "SKULD Alert: Timeout" "Data collection timed out after 2 hours." >> "$LOGFILE" 2>&1
 elif [ $EXIT_CODE -eq 0 ]; then
     echo "$(date): Data collection completed successfully" >> "$LOGFILE"
-    # Send Success Telegram alert
-    /usr/local/bin/python src/send_alert.py "SKULD Info: Success" "Data collection completed successfully." >> "$LOGFILE" 2>&1
+    # Success alert handled by main.py
 elif [ $EXIT_CODE -eq 137 ]; then
     echo "$(date): Data collection failed with OUT OF MEMORY (Exit Code 137)" >> "$LOGFILE"
     # Send Telegram alert

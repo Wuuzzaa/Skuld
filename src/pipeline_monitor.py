@@ -106,7 +106,7 @@ class PipelineMonitor:
             # Check for partial failures
             failed_tasks = [name for name, (_, error) in self.results.items() if error is not None]
             if failed_tasks:
-                 title = "SKULD Pipeline: Completed with Failures"
+                 title = "SKULD Pipeline: Warning (Completed with Failures)"
             else:
                  title = "SKULD Pipeline: Success"
         else:
