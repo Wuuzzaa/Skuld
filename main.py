@@ -19,53 +19,19 @@ from src.dividend_radar import process_dividend_data
 from config_utils import get_filtered_symbols_and_dates_with_logging, get_filtered_symbols_with_logging
 from config_utils import generate_expiry_dates_from_rules
 from src.historization import run_historization_pipeline
-from src.util import log_memory_usage, MemoryMonitor, executed_as_github_action
+from src.util import executed_as_github_action
+from src.pipeline_monitor import PipelineMonitor
 
 setup_logging(component="data_collector", log_level=logging.INFO, console_output=True)
 logger = logging.getLogger(__name__)
 logger.info("Start SKULD")
 
 
-def run_task_with_timing(task_name, func, *args, **kwargs):
-    """Helper function to run a task with timing and error handling"""
-    start = time.time()
-    logger.info("#" * 80)
-    logger.info(f"Starting: {task_name}")
-    start_mem = log_memory_usage(f"[MEM] Start {task_name}: ")
-    logger.info("#" * 80)
-
-    try:
-        result = func(*args, **kwargs)
-        duration = int(time.time() - start)
-        end_mem = log_memory_usage(f"[MEM] End {task_name}: ")
-
-        mem_diff = 0
-        peak_mem = 0
-        if start_mem is not None and end_mem is not None:
-            mem_diff = end_mem - start_mem
-            peak_mem = end_mem
-            logger.info(f"[MEM] {task_name} consumed: {mem_diff:+.2f} MB")
-
-        logger.info(f"✓ {task_name} - Done - Runtime: {duration}s")
-        return result, None, mem_diff, peak_mem
-    except Exception as e:
-        duration = int(time.time() - start)
-        log_memory_usage(f"[MEM] Fail {task_name}: ")
-        logger.error(f"✗ {task_name} - Failed after {duration}s: {e}")
-        return None, e, 0, 0
-
-
 def main(upload_google_drive=True):
-    # Start background memory monitor
-    monitor = MemoryMonitor(interval=5.0)
-    monitor.start()
-
-    start_main = time.time()
+    # Initialize Pipeline Monitor
+    pipeline = PipelineMonitor()
+    pipeline.start()
     
-    # Initialize variables that are used in finally block
-    results = {}
-    memory_stats = {}
-    parallel_duration = 0
     run_successful = False
 
     try:
@@ -124,7 +90,7 @@ def main(upload_google_drive=True):
         # Set max_workers to number of tasks (they're all I/O bound)
         with ThreadPoolExecutor(max_workers=len(parallel_tasks)) as executor:
             future_to_task = {
-                executor.submit(run_task_with_timing, name, func, *args): name
+                executor.submit(pipeline.run_task, name, func, *args): name
                 for name, func, args in parallel_tasks
             }
 
@@ -132,21 +98,23 @@ def main(upload_google_drive=True):
                 for future in as_completed(future_to_task):
                     task_name = future_to_task[future]
                     try:
-                        result, error, mem_diff, peak_mem = future.result()
-                        results[task_name] = (result, error)
-                        memory_stats[task_name] = {"diff": mem_diff, "peak": peak_mem}
+                        # run_task returns: task_name, result, error, mem_diff, peak_mem, duration
+                        ret_name, result, error, mem_diff, peak_mem, duration = future.result()
+                        pipeline.record_result(ret_name, result, error, mem_diff, peak_mem)
+                        
                     except Exception as e:
                         logger.error(f"Critical error in {task_name}: {e}")
-                        results[task_name] = (None, e)
-                        memory_stats[task_name] = {"diff": 0, "peak": 0}
+                        # In case future.result() itself raises
+                        pipeline.record_result(task_name, None, e, 0, 0)
             except KeyboardInterrupt:
                 logger.warning("KeyboardInterrupt received! Shutting down executor...")
                 executor.shutdown(wait=False, cancel_futures=True)
                 raise
 
         parallel_duration = int(time.time() - parallel_start)
+        pipeline.set_parallel_duration(parallel_duration)
+        
         logger.info(f"\n{'=' * 80}")
-        logger.info(f"All parallel tasks completed in {parallel_duration}s")
         logger.info(f"All parallel tasks completed in {parallel_duration}s")
         logger.info(f"{'=' * 80}\n")
 
@@ -158,10 +126,13 @@ def main(upload_google_drive=True):
             logger.info(f"\n{'=' * 80}")
             logger.info(f"Uploading to Google Drive")
             logger.info(f"{'=' * 80}\n")
-            run_task_with_timing(
+            
+            # Using pipeline.run_task directly for single task
+            ret_name, result, error, mem_diff, peak_mem, duration = pipeline.run_task(
                 "Upload Database to Google Drive",
                 upload_database
             )
+            pipeline.record_result(ret_name, result, error, mem_diff, peak_mem)
         
         run_successful = True
 
@@ -172,56 +143,22 @@ def main(upload_google_drive=True):
         raise
 
     finally:
-        # Summary
-        end_main = time.time()
-        total_duration = int(end_main - start_main)
-
+        pipeline.stop()
+        
+        # Generator and log report
+        report, _ = pipeline.generate_report(run_successful)
+        
         logger.info("\n" + "#" * 80)
         logger.info("DATA COLLECTION PIPELINE SUMMARY")
         logger.info("#" * 80)
-        logger.info(f"Total Runtime: {total_duration}s ({total_duration / 60:.1f} minutes)")
-        if parallel_duration > 0:
-            logger.info(f"Parallel Execution: {parallel_duration}s")
-            # We need to access parallel_tasks carefully as it might not be defined if crash happened before
-            if 'parallel_tasks' in locals():
-                logger.info(f"Time Saved: ~{(len(parallel_tasks) * 60 - parallel_duration)}s (estimated)")
-
-        # Memory Summary
-        logger.info("-" * 80)
-        logger.info("MEMORY USAGE SUMMARY")
-        logger.info("-" * 80)
-        if memory_stats:
-            # Sort by peak memory
-            sorted_mem = sorted(memory_stats.items(), key=lambda x: x[1]['peak'], reverse=True)
-            for task, stats in sorted_mem:
-                logger.info(f"{task:<40} | Peak: {stats['peak']:6.2f} MB | Diff: {stats['diff']:+6.2f} MB")
-
-            max_peak_task = sorted_mem[0]
-            logger.info("-" * 80)
-            logger.info(f"Highest Peak Memory: {max_peak_task[1]['peak']:.2f} MB ({max_peak_task[0]})")
-        else:
-            logger.info("No memory stats available.")
-
-        # Check for failures
-        failed_tasks = [name for name, (_, error) in results.items() if error is not None]
-        
-        if not run_successful:
-            logger.warning(f"\n✗ Pipeline ABORTED/FAILED after {total_duration}s ({total_duration / 60:.1f} minutes)")
-            if failed_tasks:
-                 logger.warning(f"  Partial results with {len(failed_tasks)} failed tasks:")
-                 for task in failed_tasks:
-                    logger.warning(f"  - {task}")
-        elif failed_tasks:
-            logger.warning(f"\n⚠ Pipeline finished with {len(failed_tasks)} failures in {total_duration}s ({total_duration / 60:.1f} minutes):")
-            for task in failed_tasks:
-                logger.warning(f"  - {task}")
-        else:
-            logger.info(f"\n✓ All tasks completed successfully in {total_duration}s ({total_duration / 60:.1f} minutes)!")
-
-        # Stop memory monitor
-        monitor.stop()
-
+        logger.info(report)
         logger.info("#" * 80 + "\n")
+        
+        # Send Telegram message
+        try:
+             pipeline.send_telegram_summary(run_successful)
+        except Exception as e:
+             logger.error(f"Failed to send Telegram summary: {e}")
 
 
 if __name__ == "__main__":
