@@ -25,7 +25,6 @@ def get_expiration_type(expiration_date):
     else:
         return "Daily"
 
-
 # enable logging
 setup_logging(component="streamlit", log_level=logging.DEBUG, console_output=True)
 logger = logging.getLogger(__name__)
@@ -37,16 +36,16 @@ st.title("Spreads")
 # Main configuration section
 col_epiration_date, col_delta_target, col_spread_width = st.columns(3)
 
-# Initialize session state for checkboxes (nur beim ersten Aufruf)
-if 'show_monthly' not in st.session_state:
-    st.session_state.show_monthly = True  # Default: nur Monthly
-if 'show_weekly' not in st.session_state:
-    st.session_state.show_weekly = False
-if 'show_daily' not in st.session_state:
-    st.session_state.show_daily = False
-
 # expiration date
 with col_epiration_date:
+    # Initialize the session state for checkboxes. Default only monthly options
+    if 'show_monthly' not in st.session_state:
+        st.session_state.show_monthly = True
+    if 'show_weekly' not in st.session_state:
+        st.session_state.show_weekly = False
+    if 'show_daily' not in st.session_state:
+        st.session_state.show_daily = False
+
     sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'expiration_dte_asc.sql'
     dates_df = select_into_dataframe(sql_file_path=sql_file_path)
 
@@ -71,11 +70,11 @@ with col_epiration_date:
     # selectbox with dte labels
     selected_label = st.selectbox("Expiration Date", dte_labels)
 
-    # Checkboxes for filtering (ohne direkte Zuweisung an st.session_state)
+    # Checkboxes for filtering
     st.checkbox(
         "Show Monthly",
         value=st.session_state.show_monthly,
-        key="show_monthly"  # Streamlit verwaltet den Zustand automatisch
+        key="show_monthly"
     )
     st.checkbox(
         "Show Weekly",
