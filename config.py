@@ -115,6 +115,8 @@ SYMBOL_SELECTION = {
     "use_max_limit": True            # If True, applies max_symbols limit to any mode
 }
 
+MAX_WORKERS = 1  # Max number of parallel workers for data collection
+
 # =============================================================================
 # OPTIONS COLLECTION RULES (processed in order)
 # =============================================================================
