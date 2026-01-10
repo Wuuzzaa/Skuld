@@ -7,6 +7,24 @@ from src.logger_config import setup_logging
 from src.page_display_dataframe import page_display_dataframe
 from src.spreads_calculation import calc_spreads
 
+def get_expiration_type(expiration_date):
+    date = pd.to_datetime(expiration_date)
+    day_of_week = date.dayofweek  # 4 = Freitag
+
+    if day_of_week == 4:  # Freitag
+        # Prüfe, ob es der dritte Freitag im Monat ist
+        first_day_of_month = date.replace(day=1)
+        # Finde alle Freitage im Monat
+        offset = (4 - first_day_of_month.dayofweek) % 7
+        third_friday = first_day_of_month + pd.Timedelta(days=offset + 14)
+
+        if date.day == third_friday.day:
+            return "Monthly"
+        else:
+            return "Weekly"
+    else:
+        return "Daily"
+
 
 # enable logging
 setup_logging(component="streamlit", log_level=logging.DEBUG, console_output=True)
@@ -19,27 +37,33 @@ st.title("Spreads")
 # Main configuration section
 col_epiration_date, col_delta_target, col_spread_width = st.columns(3)
 
+# Initialize session state for checkboxes (nur beim ersten Aufruf)
+if 'show_monthly' not in st.session_state:
+    st.session_state.show_monthly = True  # Default: nur Monthly
+if 'show_weekly' not in st.session_state:
+    st.session_state.show_weekly = False
+if 'show_daily' not in st.session_state:
+    st.session_state.show_daily = False
+
 # expiration date
 with col_epiration_date:
     sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'expiration_dte_asc.sql'
     dates_df = select_into_dataframe(sql_file_path=sql_file_path)
 
-    # Initialize session state for checkbox and selected label
-    if 'show_only_fridays' not in st.session_state:
-        st.session_state.show_only_fridays = True
+    # Filter dates_df based on checkbox states
+    filtered_dates_df = dates_df[
+        (dates_df.apply(lambda row: get_expiration_type(row['expiration_date']) == "Monthly", axis=1) & st.session_state.show_monthly) |
+        (dates_df.apply(lambda row: get_expiration_type(row['expiration_date']) == "Weekly", axis=1) & st.session_state.show_weekly) |
+        (dates_df.apply(lambda row: get_expiration_type(row['expiration_date']) == "Daily", axis=1) & st.session_state.show_daily)
+    ]
 
-    # Filter dates_df based on checkbox state
-    if st.session_state.show_only_fridays:
-        dates_df = dates_df[
-            pd.to_datetime(dates_df['expiration_date']).dt.dayofweek == 4  # 4 = Friday
-        ]
-
-    # dte labels ("5 DTE - Friday 2026-01-16")
-    dte_labels = dates_df.apply(
+    # dte labels ("5 DTE - Friday 2026-01-16 - Monthly/Weekly/Daily")
+    dte_labels = filtered_dates_df.apply(
         lambda row: (
             f"{int(row['days_to_expiration'])} DTE - "
             f"{pd.to_datetime(row['expiration_date']).strftime('%A')}  "
-            f"{row['expiration_date']}"
+            f"{row['expiration_date']} - "
+            f"{get_expiration_type(row['expiration_date'])}"
         ),
         axis=1
     ).tolist()
@@ -47,16 +71,26 @@ with col_epiration_date:
     # selectbox with dte labels
     selected_label = st.selectbox("Expiration Date", dte_labels)
 
-    # Checkbox under the selectbox
-    show_only_fridays = st.checkbox(
-        "Only expiration on Friday",
-        value=st.session_state.show_only_fridays,
-        key="show_only_fridays"
+    # Checkboxes for filtering (ohne direkte Zuweisung an st.session_state)
+    st.checkbox(
+        "Show Monthly",
+        value=st.session_state.show_monthly,
+        key="show_monthly"  # Streamlit verwaltet den Zustand automatisch
+    )
+    st.checkbox(
+        "Show Weekly",
+        value=st.session_state.show_weekly,
+        key="show_weekly"
+    )
+    st.checkbox(
+        "Show Daily",
+        value=st.session_state.show_daily,
+        key="show_daily"
     )
 
     # extract selected expiration date from dte label
     selected_index = dte_labels.index(selected_label)
-    expiration_date = dates_df.iloc[selected_index]['expiration_date']
+    expiration_date = filtered_dates_df.iloc[selected_index]['expiration_date']
 
 # delta target
 with col_delta_target:
