@@ -49,6 +49,11 @@ jobs:
             echo "TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}" >> .env
             echo "MASSIVE_API_KEY=${{ secrets.MASSIVE_API_KEY }}" >> .env
             echo "MASSIVE_API_KEY_FLAT_FILES=${{ secrets.MASSIVE_API_KEY_FLAT_FILES }}" >> .env
+            echo "POSTGRES_HOST=91.98.156.116" >> .env
+            echo "POSTGRES_DB=Skuld" >> .env
+            echo "POSTGRES_USER=admin" >> .env
+            echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env
+            echo "POSTGRES_PORT=5432" >> .env
             
             set -x # Enable xtrace for the rest of the script
             
