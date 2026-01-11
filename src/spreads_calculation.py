@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 from datetime import datetime
 from typing import Tuple, Dict, Any
 from config import NUM_SIMULATIONS, RANDOM_SEED, RISK_FREE_RATE
@@ -457,6 +458,7 @@ if __name__ == "__main__":
     import logging
     from src.logger_config import setup_logging
     from src.database import select_into_dataframe
+    from util import get_dataframe_memory_usage # keep for debugging
 
     # enable logging
     setup_logging(component="script_spreads_calculation", log_level=logging.DEBUG, console_output=True)
