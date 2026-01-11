@@ -463,14 +463,18 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     logger.info(f"Start {__name__} ({__file__})")
 
-    expiration_date = "2026-01-16"
-    option_type = "put"
-    delta_target = 0.2
-    spread_width = 5
+    params = {
+        "expiration_date": "2026-01-16",
+        "option_type": "put",
+        "delta_target": 0.2,
+        "spread_width": 5,
+        "min_open_interest": 100
+    }
+
 
     # test query. ensure to use the running query in the production code as well :D
     sql_query = """
-    SELECT
+     SELECT
         symbol,
         expiration_date,
         contract_type as "option-type",
@@ -479,7 +483,7 @@ if __name__ == "__main__":
         --bid,
         --(ask + bid) / 2 as mid,
         day_close as mid, -- todo nicht mid sondern last price
-        greeks_delta as delta,
+        abs(greeks_delta) as delta,
         implied_volatility as iv,
         greeks_theta as theta,
         close, -- todo datenquelle korrekt für AKTIEN-Schlusskurs?
@@ -496,20 +500,19 @@ if __name__ == "__main__":
         OptionDataMerged
     WHERE
         expiration_date =:expiration_date
-        AND contract_type =:option_type;
-
+        --AND symbol = "MSFT" -- DEBUG
+        AND contract_type =:option_type
+        AND abs(delta) <=:delta_target
+        AND open_interest >=:min_open_interest;
     """
 
     start = time.time()
-    df = select_into_dataframe(query=sql_query, params={
-        "expiration_date": expiration_date,
-        "option_type": option_type
-    })
+    df = select_into_dataframe(query=sql_query, params=params)
 
     if df.empty:
         raise ValueError("Input DataFrame ist leer - keine Optionsdaten vorhanden")
 
-    spreads_df = calc_spreads(df, delta_target, spread_width)
+    spreads_df = calc_spreads(df, params["delta_target"], params["spread_width"])
     ende = time.time()
 
     print(spreads_df.head())
