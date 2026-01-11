@@ -34,7 +34,7 @@ logger.debug(f"Start Page: {__name__}")
 st.title("Spreads")
 
 # Main configuration section
-col_epiration_date, col_delta_target, col_spread_width = st.columns(3)
+col_epiration_date, col_delta_target, col_spread_width, col_option_type = st.columns(4)
 
 # expiration date
 with col_epiration_date:
@@ -90,6 +90,7 @@ with col_epiration_date:
     # extract selected expiration date from dte label
     selected_index = dte_labels.index(selected_label)
     expiration_date = filtered_dates_df.iloc[selected_index]['expiration_date']
+    logging.debug(f"extract selected expiration date from dte label expiration_date: {expiration_date}")
 
 # delta target
 with col_delta_target:
@@ -99,11 +100,20 @@ with col_delta_target:
 with col_spread_width:
     spread_width = st.number_input("Spread Width", min_value=1, max_value=20, value=5, step=1)
 
+with col_option_type:
+    option_type = st.selectbox("Option Type", ["put", "call"])
+
 # calculate the spread values with a loading indicator
 with st.spinner("Calculating spreads..."):
+    logging.debug(f"expiration_date: {expiration_date}")
+    logging.debug(f"option_type: {option_type}")
     sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'spreads_input.sql'
     df = select_into_dataframe(sql_file_path=sql_file_path, params={
-        "expiration_date": expiration_date})
+        "expiration_date": expiration_date,
+        "option_type": option_type
+    })
+    logging.debug(f"df: {df.head()}")
+
     spreads_df = calc_spreads(df, delta_target, spread_width)
 
 # Dynamically extract unique values for symbol and option_type from calculated spreads_df
@@ -115,15 +125,6 @@ unique_symbols = sorted(spreads_df['symbol'].unique())
 unique_option_types = sorted(spreads_df['option_type'].unique())
 
 st.divider()
-
-# Basic filters
-col_symbol, col_option_type = st.columns(2)
-
-with col_symbol:
-    symbol = st.selectbox("Symbol", ["All Symbols"] + unique_symbols)
-
-with col_option_type:
-    option_type = st.selectbox("Option Type", unique_option_types)
 
 # Advanced filters
 st.markdown("##### Advanced Filters")
