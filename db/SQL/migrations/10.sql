@@ -1086,7 +1086,7 @@ SELECT
     c.price_source,
     c.live_price_timestamp,
     c.earnings_date,
-	c.days_to_ernings,
+	c.days_to_earnings,
     c.analyst_mean_target,
 
     -- Technical Indicators

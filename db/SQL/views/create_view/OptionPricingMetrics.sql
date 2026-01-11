@@ -37,6 +37,6 @@ FROM
             ROUND((b.ask - b.bid) / b.bid * 100, 2) as spread_ptc
         from
             "OptionDataMassive" as a
-            JOIN "OptionDataYahoo" as b ON a.option_osi = b."contractSymbol"
-            JOIN "StockPrice" as c ON a.symbol = c.symbol
+            LEFT OUTER JOIN "OptionDataYahoo" as b ON a.option_osi = b."contractSymbol"
+            LEFT OUTER JOIN "StockPrice" as c ON a.symbol = c.symbol
     );

@@ -73,7 +73,7 @@ FROM
                                                     analyst_mean_target as analyst_mean_target_price_year,
                                                     "Fair-Value",
                                                     earnings_date,
-                                                    days_to_ernings,
+                                                    days_to_earnings,
                                                     "No-Years",
                                                     classification,
                                                     "Payouts/-Year",
