@@ -73,17 +73,14 @@ with col_epiration_date:
     # Checkboxes for filtering
     st.checkbox(
         "Show Monthly",
-        value=st.session_state.show_monthly,
         key="show_monthly"
     )
     st.checkbox(
         "Show Weekly",
-        value=st.session_state.show_weekly,
         key="show_weekly"
     )
     st.checkbox(
         "Show Daily",
-        value=st.session_state.show_daily,
         key="show_daily"
     )
 
