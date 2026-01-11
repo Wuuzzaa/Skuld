@@ -160,8 +160,8 @@ def _calculate_spread_metrics(spreads: pd.DataFrame) -> pd.DataFrame:
     """
     # Copy sell columns to standardized names
     spreads["expected_move"] = spreads["expected_move_sell"]
-    spreads["ivr"] = spreads["iv_rank_sell"]
-    spreads["ivp"] = spreads["iv_percentile_sell"]
+    #spreads["ivr"] = spreads["iv_rank_sell"]
+    #spreads["ivp"] = spreads["iv_percentile_sell"]
     spreads["open_intrest"] = spreads["option_open_interest_sell"]
     spreads["earnings_date"] = spreads['earnings_date_sell']
     spreads['option_type'] = spreads['option-type_sell']
@@ -318,8 +318,8 @@ def calc_spreads(
         'expiration_date',
         'earnings_date',
         'earnings_warning',
-        'ivr',
-        'ivp',
+        #'ivr',
+        #'ivp',
         'open_intrest',
         'close',
         'option_type',
@@ -501,7 +501,10 @@ if __name__ == "__main__":
     """
 
     start = time.time()
-    df = select_into_dataframe(query=sql_query, params={"expiration_date": expiration_date})
+    df = select_into_dataframe(query=sql_query, params={
+        "expiration_date": expiration_date,
+        "option_type": option_type
+    })
 
     if df.empty:
         raise ValueError("Input DataFrame ist leer - keine Optionsdaten vorhanden")
