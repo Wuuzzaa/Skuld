@@ -1,4 +1,6 @@
 import logging
+import os
+
 import streamlit as st
 import pandas as pd
 from config import PATH_DATABASE_QUERY_FOLDER
@@ -27,14 +29,14 @@ def get_expiration_type(expiration_date):
 
 # enable logging
 setup_logging(component="streamlit", log_level=logging.DEBUG, console_output=True)
-logger = logging.getLogger(__name__)
-logger.debug(f"Start Page: {__name__}")
+logger = logging.getLogger(os.path.basename(__file__))
+logger.debug(f"Start Page: {os.path.basename(__file__)}")
 
 # Page header
 st.title("Spreads")
 
 # Main configuration section
-col_epiration_date, col_delta_target, col_spread_width, col_option_type = st.columns(4)
+col_epiration_date, col_delta_target, col_spread_width, col_option_type, col_open_interest = st.columns(5)
 
 # expiration date
 with col_epiration_date:
@@ -100,15 +102,66 @@ with col_spread_width:
 with col_option_type:
     option_type = st.selectbox("Option Type", ["put", "call"])
 
+# # IVR Filter
+# # todo activate when history is ready to use. adjust the filters and sql query. filter in the query
+# with col_ivr:
+#     ivr_min = float(spreads_df['ivr'].min())
+#     ivr_max = float(spreads_df['ivr'].max())
+#     if ivr_min == ivr_max:
+#         st.text_input("IVR", value=f"{ivr_min:.2f}", disabled=True)
+#         ivr_range = (ivr_min, ivr_max)
+#     else:
+#         # Default minimum value of 0.3
+#         default_min = max(ivr_min, 0.3)
+#         ivr_range = st.slider(
+#             "IVR Range",
+#             min_value=ivr_min,
+#             max_value=ivr_max,
+#             value=(default_min, ivr_max),
+#             step=0.01
+#         )
+#
+# # IVP Filter
+# # todo activate when history is ready to use. adjust the filters and sql query. filter in the query
+# with col_ivp:
+#     ivp_min = float(spreads_df['ivp'].min())
+#     ivp_max = float(spreads_df['ivp'].max())
+#     if ivp_min == ivp_max:
+#         st.text_input("IVP", value=f"{ivp_min:.2f}", disabled=True)
+#         ivp_range = (ivp_min, ivp_max)
+#     else:
+#         # Default minimum value of 0.3
+#         default_min = max(ivp_min, 0.3)
+#         ivp_range = st.slider(
+#             "IVP Range",
+#             min_value=ivp_min,
+#             max_value=ivp_max,
+#             value=(default_min, ivp_max),
+#             step=0.01
+#         )
+
+# Open Interest Filter
+with col_open_interest:
+    min_open_interest = st.number_input(
+            "Min Open Interest",
+            min_value=0,
+            value=100,
+            step=100
+        )
+
 # calculate the spread values with a loading indicator
 with st.spinner("Calculating spreads..."):
-    logging.debug(f"expiration_date: {expiration_date}")
-    logging.debug(f"option_type: {option_type}")
-    sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'spreads_input.sql'
-    df = select_into_dataframe(sql_file_path=sql_file_path, params={
+    params = {
         "expiration_date": expiration_date,
-        "option_type": option_type
-    })
+        "option_type": option_type,
+        "delta_target": delta_target,
+        "min_open_interest": min_open_interest
+    }
+
+    logging.debug(f"params: {params}")
+
+    sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'spreads_input.sql'
+    df = select_into_dataframe(sql_file_path=sql_file_path, params=params)
     logging.debug(f"df: {df.head()}")
 
     spreads_df = calc_spreads(df, delta_target, spread_width)
@@ -123,63 +176,9 @@ unique_option_types = sorted(spreads_df['option_type'].unique())
 
 st.divider()
 
-# Advanced filters
-st.markdown("##### Advanced Filters")
-col_ivr, col_ivp, col_open_interest, col_profit_bpr = st.columns(4)
-
-# IVR Filter
-with col_ivr:
-    ivr_min = float(spreads_df['ivr'].min())
-    ivr_max = float(spreads_df['ivr'].max())
-    if ivr_min == ivr_max:
-        st.text_input("IVR", value=f"{ivr_min:.2f}", disabled=True)
-        ivr_range = (ivr_min, ivr_max)
-    else:
-        # Default minimum value of 0.3
-        default_min = max(ivr_min, 0.3)
-        ivr_range = st.slider(
-            "IVR Range",
-            min_value=ivr_min,
-            max_value=ivr_max,
-            value=(default_min, ivr_max),
-            step=0.01
-        )
-
-# IVP Filter
-with col_ivp:
-    ivp_min = float(spreads_df['ivp'].min())
-    ivp_max = float(spreads_df['ivp'].max())
-    if ivp_min == ivp_max:
-        st.text_input("IVP", value=f"{ivp_min:.2f}", disabled=True)
-        ivp_range = (ivp_min, ivp_max)
-    else:
-        # Default minimum value of 0.3
-        default_min = max(ivp_min, 0.3)
-        ivp_range = st.slider(
-            "IVP Range",
-            min_value=ivp_min,
-            max_value=ivp_max,
-            value=(default_min, ivp_max),
-            step=0.01
-        )
-
-# Open Interest Filter
-with col_open_interest:
-    oi_min = int(spreads_df['open_intrest'].min())
-    oi_max = int(spreads_df['open_intrest'].max())
-    if oi_min == oi_max:
-        st.text_input("Open Interest", value=f"{oi_min}", disabled=True)
-        oi_threshold = oi_min
-    else:
-        # Default minimum value of 100
-        default_oi = max(oi_min, 100)
-        oi_threshold = st.number_input(
-            "Min Open Interest",
-            min_value=oi_min,
-            max_value=oi_max,
-            value=default_oi,
-            step=100
-        )
+# Spreadfilter. Filters after the spread is calculated. All filters that are not doable in the database query
+st.markdown("#### Spreadfilter")
+col_profit_bpr = st.columns(1)
 
 # Profit to BPR Filter
 with col_profit_bpr:
@@ -202,42 +201,11 @@ with col_profit_bpr:
 
 st.divider()
 
-# Apply filters
+# Apply spreadfilter
 filtered_df = spreads_df.copy()
-
-# Apply symbol filter
-if symbol != "All Symbols":
-    filtered_df = filtered_df[filtered_df['symbol'] == symbol]
-
-# Apply option type filter
-filtered_df = filtered_df[filtered_df['option_type'] == option_type]
-
-# Apply IVR filter
-filtered_df = filtered_df[
-    (filtered_df['ivr'] >= ivr_range[0]) &
-    (filtered_df['ivr'] <= ivr_range[1])
-    ]
-
-# Apply IVP filter
-filtered_df = filtered_df[
-    (filtered_df['ivp'] >= ivp_range[0]) &
-    (filtered_df['ivp'] <= ivp_range[1])
-    ]
-
-# Apply Open Interest filter
-filtered_df = filtered_df[filtered_df['open_intrest'] >= oi_threshold]
 
 # Apply Profit to BPR filter
 filtered_df = filtered_df[filtered_df['profit_to_bpr'] >= profit_bpr_threshold]
-
-# Results summary
-col_results, col_spacer = st.columns([1, 3])
-with col_results:
-    st.metric(
-        label="Results",
-        value=f"{len(filtered_df)}",
-        delta=f"{len(filtered_df) - len(spreads_df)} from total"
-    )
 
 st.markdown("### Results")
 

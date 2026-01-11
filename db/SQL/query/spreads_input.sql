@@ -7,7 +7,7 @@ SELECT
     --bid,
     --(ask + bid) / 2 as mid,
     day_close as mid, -- todo nicht mid sondern last price
-    greeks_delta as delta,
+    abs(greeks_delta) as delta,
     implied_volatility as iv,
     greeks_theta as theta,
     close, -- todo datenquelle korrekt für AKTIEN-Schlusskurs?
@@ -24,4 +24,10 @@ FROM
     OptionDataMerged
 WHERE
     expiration_date =:expiration_date
-    AND contract_type =:option_type;
+    --AND symbol = "MSFT" -- DEBUG
+    AND contract_type =:option_type
+    AND abs(delta) <=:delta_target
+    AND open_interest >=:min_open_interest;
+
+
+
