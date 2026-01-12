@@ -42,7 +42,7 @@ MONITOR_PID=$!
 # Run data collection with timeout
 cd /app/Skuld
 echo "$(date): Starting data collection..." >> "$LOGFILE"
-timeout 7200 /usr/local/bin/python main.py --no-upload >> "$LOGFILE" 2>&1
+timeout 18000 /usr/local/bin/python main.py --no-upload >> "$LOGFILE" 2>&1
 EXIT_CODE=$?
 
 # Stop Memory Monitor
