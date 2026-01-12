@@ -95,7 +95,7 @@ def log_function(func):
 
             logger.debug(
                 f"[END] {func_name} | Execution time: {elapsed_time:.3f}s | "
-                f"Result: {result_str.substring(0, 10)}..."  # Limit result log length
+                f"Result: {result_str[:10]}{'...' if len(result_str) > 10 else ''}"  # Limit result log length
             )
 
             return result

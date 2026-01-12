@@ -482,7 +482,7 @@ if __name__ == "__main__":
         close,
         earnings_date,
         days_to_expiration,
-        days_to_ernings,
+        days_to_earnings,
         spread,
         spread_ptc,
         iv_rank,

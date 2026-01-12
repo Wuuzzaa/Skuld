@@ -55,10 +55,9 @@ def main():
             expiry_date_strings, "Option Data Collection"
         )
         
-        load_option_chains()
-
         # All data collection tasks - run in parallel!
         parallel_tasks = [
+            ("Massive Option Chains", load_option_chains, ()),
             ("Yahoo Finance Analyst Price Targets", scrape_yahoo_finance_analyst_price_targets, ()),
             ("TradingView Option Data", scrape_option_data_trading_view, ()),
             ("Price & Technical Indicators", scrape_and_save_price_and_technical_indicators, ()),
@@ -76,9 +75,11 @@ def main():
 
         parallel_start = time.time()
 
+        max_workers = MAX_WORKERS if MAX_WORKERS > 0 else len(parallel_tasks)
+
         # Use ThreadPoolExecutor for I/O-bound tasks (web scraping)
         # Set max_workers to number of tasks (they're all I/O bound)
-        with ThreadPoolExecutor(max_workers=len(parallel_tasks)) as executor:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_task = {
                 executor.submit(pipeline.run_task, name, func, *args): name
                 for name, func, args in parallel_tasks

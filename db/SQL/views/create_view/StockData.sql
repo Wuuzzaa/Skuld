@@ -14,7 +14,7 @@ SELECT
     b.earnings_date,
     CAST(
         julianday (b.earnings_date) - julianday ('now') AS INTEGER
-    ) AS days_to_ernings,
+    ) AS days_to_earnings,
     CASE
         WHEN c.symbol IS NOT NULL THEN TRUE
         ELSE FALSE
