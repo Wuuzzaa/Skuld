@@ -65,16 +65,14 @@ jobs:
             echo "${{ secrets.AUTHELIA_JWT_SECRET }}" > authelia/jwt_secret
             echo "${{ secrets.AUTHELIA_SESSION_SECRET }}" > authelia/session_secret
             
-            cat > authelia/users_database.yml << 'AUTHELIA_EOF'
-users:
-  admin:
-    displayname: "Admin"
-    password: "${{ secrets.AUTHELIA_PASSWORD_HASH }}"
-    email: admin@skuld.com
-    groups:
-      - admins
-      - dev
-AUTHELIA_EOF
+            echo "users:" > authelia/users_database.yml
+            echo "  admin:" >> authelia/users_database.yml
+            echo "    displayname: \"Admin\"" >> authelia/users_database.yml
+            echo "    password: \"${{ secrets.AUTHELIA_PASSWORD_HASH }}\"" >> authelia/users_database.yml
+            echo "    email: admin@skuld.com" >> authelia/users_database.yml
+            echo "    groups:" >> authelia/users_database.yml
+            echo "      - admins" >> authelia/users_database.yml
+            echo "      - dev" >> authelia/users_database.yml
             
             set -x # Enable xtrace for the rest of the script
             
