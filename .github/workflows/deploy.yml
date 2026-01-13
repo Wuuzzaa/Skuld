@@ -68,17 +68,15 @@ jobs:
             # Store password hash in variable with single quotes to prevent expansion
             AUTHELIA_HASH='${{ secrets.AUTHELIA_PASSWORD_HASH }}'
             
-            # Create users_database.yml
-            cat > authelia/users_database.yml <<EOF
-users:
-  admin:
-    displayname: "Admin"
-    password: "${AUTHELIA_HASH}"
-    email: admin@skuld.com
-    groups:
-      - admins
-      - dev
-EOF
+            # Create users_database.yml using echo to avoid YAML syntax issues with heredocs
+            echo "users:" > authelia/users_database.yml
+            echo "  admin:" >> authelia/users_database.yml
+            echo "    displayname: \"Admin\"" >> authelia/users_database.yml
+            echo "    password: \"$AUTHELIA_HASH\"" >> authelia/users_database.yml
+            echo "    email: admin@skuld.com" >> authelia/users_database.yml
+            echo "    groups:" >> authelia/users_database.yml
+            echo "      - admins" >> authelia/users_database.yml
+            echo "      - dev" >> authelia/users_database.yml
             
             set -x # Enable xtrace for the rest of the script
             
