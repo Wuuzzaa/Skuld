@@ -155,7 +155,8 @@ with st.spinner("Calculating spreads..."):
         "expiration_date": expiration_date,
         "option_type": option_type,
         "delta_target": delta_target,
-        "min_open_interest": min_open_interest
+        "min_open_interest": min_open_interest,
+        "spread_width": spread_width
     }
 
     logging.debug(f"params: {params}")
