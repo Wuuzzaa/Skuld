@@ -1,6 +1,40 @@
 version: '3.8'
 
 services:
+  # --- AUTHELIA AUTHENTICATION SERVICE ---
+  authelia:
+    image: authelia/authelia:latest
+    container_name: authelia
+    volumes:
+      - ./authelia:/config
+    networks:
+      - web
+    environment:
+      - AUTHELIA_JWT_SECRET_FILE=/config/jwt_secret
+      - AUTHELIA_SESSION_SECRET_FILE=/config/session_secret
+      - TZ=Europe/Berlin
+    restart: unless-stopped
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.authelia.rule=Host(`auth.skuld-options.com`)"
+      - "traefik.http.routers.authelia.entrypoints=websecure"
+      - "traefik.http.routers.authelia.tls.certresolver=letsencrypt"
+      - "traefik.http.services.authelia.loadbalancer.server.port=9091"
+    
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9091/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
   # --- FRONTEND SERVICE (Streamlit) ---
   skuld-frontend:
     image: skuld-app-image
@@ -40,6 +74,14 @@ services:
       - "traefik.http.routers.skuld.entrypoints=websecure"
       - "traefik.http.routers.skuld.tls.certresolver=letsencrypt"
       - "traefik.http.services.skuld.loadbalancer.server.port=8501"
+      
+      # Authelia ForwardAuth Middleware
+      - "traefik.http.middlewares.authelia.forwardauth.address=http://authelia:9091/api/verify?rd=https://auth.skuld-options.com/"
+      - "traefik.http.middlewares.authelia.forwardauth.trustForwardHeader=true"
+      - "traefik.http.middlewares.authelia.forwardauth.authResponseHeaders=Remote-User,Remote-Groups,Remote-Name,Remote-Email"
+      
+      # Apply Authelia Middleware
+      - "traefik.http.routers.skuld.middlewares=authelia"
     
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]

@@ -34,6 +34,9 @@ jobs:
             --exclude '.github/' \
             --exclude '__pycache__/' \
             --exclude '*.pyc' \
+            --exclude 'authelia/users_database.yml' \
+            --exclude 'authelia/db.sqlite3' \
+            --exclude 'authelia/notification.txt' \
             ./ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/skuld/
 
       - name: Build and deploy Docker container (Production)
@@ -54,6 +57,24 @@ jobs:
             echo "POSTGRES_USER=admin" >> .env
             echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env
             echo "POSTGRES_PORT=5432" >> .env
+            
+            # Create Authelia secrets and configuration
+            echo "=== Creating Authelia configuration ==="
+            mkdir -p authelia
+            
+            echo "${{ secrets.AUTHELIA_JWT_SECRET }}" > authelia/jwt_secret
+            echo "${{ secrets.AUTHELIA_SESSION_SECRET }}" > authelia/session_secret
+            
+            cat > authelia/users_database.yml << 'EOF'
+users:
+  admin:
+    displayname: "Admin"
+    password: "${{ secrets.AUTHELIA_PASSWORD_HASH }}"
+    email: admin@skuld.com
+    groups:
+      - admins
+      - dev
+EOF
             
             set -x # Enable xtrace for the rest of the script
             

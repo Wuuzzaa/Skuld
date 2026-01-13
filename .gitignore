@@ -192,3 +192,11 @@ service_account.json
 Hetzner DB Download.txt
 db/financial_data.db-journal
 *.db
+
+# Authelia Secrets - NEVER commit these!
+authelia/users_database.yml
+authelia/jwt_secret
+authelia/session_secret
+authelia/db.sqlite3
+authelia/notification.txt
+authelia/emails.txt
