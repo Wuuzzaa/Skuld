@@ -107,7 +107,7 @@ class HistorizationService:
                     logger.error(f"Error during historization execution on Postgres: {e}")
                     raise e
 
-        DataAgingService.run(source_table=source_table)
+        # DataAgingService.run(source_table=source_table)
         duration = time.time() - start_time
         logger.info(f"Historization for {source_table} finished in {duration:.2f}s")
 
