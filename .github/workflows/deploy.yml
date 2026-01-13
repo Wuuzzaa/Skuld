@@ -65,17 +65,20 @@ jobs:
             echo "${{ secrets.AUTHELIA_JWT_SECRET }}" > authelia/jwt_secret
             echo "${{ secrets.AUTHELIA_SESSION_SECRET }}" > authelia/session_secret
             
-            # Create users_database.yml with password hash (use printf to avoid $ expansion issues)
-            printf '%s\n' \
-              "users:" \
-              "  admin:" \
-              "    displayname: \"Admin\"" \
-              "    password: \"${{ secrets.AUTHELIA_PASSWORD_HASH }}\"" \
-              "    email: admin@skuld.com" \
-              "    groups:" \
-              "      - admins" \
-              "      - dev" \
-              > authelia/users_database.yml
+            # Store password hash in variable with single quotes to prevent expansion
+            AUTHELIA_HASH='${{ secrets.AUTHELIA_PASSWORD_HASH }}'
+            
+            # Create users_database.yml
+            cat > authelia/users_database.yml <<EOF
+users:
+  admin:
+    displayname: "Admin"
+    password: "${AUTHELIA_HASH}"
+    email: admin@skuld.com
+    groups:
+      - admins
+      - dev
+EOF
             
             set -x # Enable xtrace for the rest of the script
             
