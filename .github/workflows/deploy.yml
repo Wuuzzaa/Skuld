@@ -65,7 +65,7 @@ jobs:
             echo "${{ secrets.AUTHELIA_JWT_SECRET }}" > authelia/jwt_secret
             echo "${{ secrets.AUTHELIA_SESSION_SECRET }}" > authelia/session_secret
             
-            cat > authelia/users_database.yml << 'EOF'
+            cat > authelia/users_database.yml << 'AUTHELIA_EOF'
 users:
   admin:
     displayname: "Admin"
@@ -74,7 +74,7 @@ users:
     groups:
       - admins
       - dev
-EOF
+AUTHELIA_EOF
             
             set -x # Enable xtrace for the rest of the script
             
