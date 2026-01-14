@@ -4,7 +4,7 @@ WITH FilteredOptions AS (
         expiration_date,
         contract_type AS option_type,
         strike_price AS strike,
-        day_close AS mid,
+        day_close AS last_option_price,
         abs(greeks_delta) AS delta,
         implied_volatility AS iv,
         greeks_theta AS theta,
@@ -30,7 +30,7 @@ SelectedSellOptions AS (
         strike AS sell_strike,
         expiration_date,
         option_type,
-        mid AS sell_mid,
+        last_option_price AS sell_last_option_price,
         delta AS sell_delta,
         iv AS sell_iv,
         theta AS sell_theta,
@@ -46,7 +46,9 @@ SelectedSellOptions AS (
         row_num = 1
 )
 
+--spread data
 SELECT
+    -- sell option
     sell.symbol,
     sell.expiration_date,
     sell.option_type,
@@ -55,19 +57,20 @@ SELECT
     sell.days_to_expiration,
     sell.days_to_ernings,
     sell.sell_strike,
-    sell.sell_mid,
+    sell.sell_last_option_price,
     sell.sell_delta,
     sell.sell_iv,
     sell.sell_theta,
     sell.sell_open_interest,
     sell.sell_expected_move,
-    buy.strike AS buy_strike,  -- Hier wurde `strike_price` durch `strike` ersetzt
-    buy.mid AS buy_mid,
-    buy.delta AS buy_delta,
-    buy.iv AS buy_iv,
-    buy.theta AS buy_theta,
+    -- buy option
+    buy.strike               AS buy_strike,
+    buy.last_option_price    AS buy_last_option_price,
+    buy.delta                AS buy_delta,
+    buy.iv                   AS buy_iv,
+    buy.theta                AS buy_theta,
     buy.option_open_interest AS buy_open_interest,
-    buy.expected_move AS buy_expected_move
+    buy.expected_move        AS buy_expected_move
 FROM
     SelectedSellOptions sell
 INNER JOIN
