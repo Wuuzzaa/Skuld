@@ -192,3 +192,4 @@ service_account.json
 Hetzner DB Download.txt
 db/financial_data.db-journal
 *.db
+/identifier.sqlite
