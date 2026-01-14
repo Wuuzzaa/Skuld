@@ -22,7 +22,7 @@ jobs:
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
-            "sudo docker system prune -af --volumes || true"
+            "echo '${{ secrets.DEPLOY_PASSWORD }}' | sudo -S docker system prune -af --volumes || true && echo '${{ secrets.DEPLOY_PASSWORD }}' | sudo -S chown -R ${{ secrets.DEPLOY_USER }} /opt/skuld"
 
       - name: Sync files to server (Production deployment)
         run: |
@@ -37,6 +37,9 @@ jobs:
             --exclude 'authelia/users_database.yml' \
             --exclude 'authelia/db.sqlite3' \
             --exclude 'authelia/notification.txt' \
+            --exclude 'authelia/session_secret' \
+            --exclude 'authelia/jwt_secret' \
+            --exclude 'authelia/storage_encryption_key' \
             ./ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/skuld/
 
       - name: Build and deploy Docker container (Production)
@@ -44,6 +47,13 @@ jobs:
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'ENDSSH'
             set -euo pipefail
+            
+            # Define sudo helper with password
+            DEPLOY_PASS="${{ secrets.DEPLOY_PASSWORD }}"
+            function mysudo() {
+                echo "$DEPLOY_PASS" | sudo -S "$@"
+            }
+
             cd /opt/skuld
             
             # Create .env file with secrets (disable xtrace to avoid logging secrets)
@@ -82,22 +92,22 @@ jobs:
             set -x # Enable xtrace for the rest of the script
             
             echo "=== Current container status ==="
-            sudo docker compose ps
+            mysudo docker compose ps
             
             echo "=== Current images ==="
-            sudo docker images | grep skuld || echo "No skuld images"
+            mysudo docker images | grep skuld || echo "No skuld images"
             
             echo "=== Stopping old container ==="
             # Explicitly stop old container name if it exists (migration to split services)
-            sudo docker stop skuld-streamlit || true
-            sudo docker rm skuld-streamlit || true
-            sudo docker compose down
+            mysudo docker stop skuld-streamlit || true
+            mysudo docker rm skuld-streamlit || true
+            mysudo docker compose down
             
             echo "=== Ensuring financial_data.db is a file ==="
             if [ -d "financial_data.db" ]; then
               echo "⚠️  financial_data.db is a directory, converting to file using Docker..."
               # Use docker to remove the directory since it was created by docker (root)
-              sudo docker run --rm -v $(pwd):/work -w /work alpine rm -rf financial_data.db
+              mysudo docker run --rm -v $(pwd):/work -w /work alpine rm -rf financial_data.db
               touch financial_data.db
             elif [ ! -f "financial_data.db" ]; then
               echo "📝 Creating empty financial_data.db..."
@@ -108,18 +118,18 @@ jobs:
             mkdir -p logs
             
             echo "=== Building new image ==="
-            sudo docker compose build --pull --no-cache
+            mysudo docker compose build --pull --no-cache
             
             echo "=== Starting new container ==="
-            sudo docker compose up -d --remove-orphans
+            mysudo docker compose up -d --remove-orphans
             
             echo "=== Cleaning up old images ==="
-            sudo docker image prune -f
+            mysudo docker image prune -f
             
             echo "=== New container status ==="
-            sudo docker compose ps
+            mysudo docker compose ps
             
             echo "=== Container logs ==="
-            sudo docker compose logs --tail=30
+            mysudo docker compose logs --tail=30
           ENDSSH
 
