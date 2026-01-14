@@ -141,10 +141,6 @@ def _add_buy_options(
 
 
 def _calculate_spread_metrics(spreads: pd.DataFrame) -> pd.DataFrame:
-    # Copy sell columns to standardized names
-    spreads["expected_move"] = spreads["sell_expected_move"]
-    spreads["open_interest"] = spreads["sell_last_option_price"]
-
     # Calculate spread width
     spreads["spread_width"] = abs(spreads['sell_strike'] - spreads['buy_strike'])
 
