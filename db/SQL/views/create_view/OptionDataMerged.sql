@@ -702,7 +702,7 @@ SELECT
 	-- Additional calculated fields
 	ROUND(c.analyst_mean_target - d.close,2) as "target-close$",
 	ROUND(ROUND(c.analyst_mean_target - d.close,2) / d.close * 100.0, 2) as "target-close%",
-    ROUND(d.close * a.iv * sqrt(a.days_to_expiration / 365.0), 2) as expected_move
+    ROUND(d.close * a.implied_volatility * sqrt(a.days_to_expiration / 365.0), 2) as expected_move
 FROM 
    "OptionData" AS a
 JOIN 
