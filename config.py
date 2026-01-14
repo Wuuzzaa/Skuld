@@ -4,8 +4,10 @@ import os
 from pathlib import Path
 from src.get_version import get_version
 
-# Massiv API
+# first load the .env file - before usage of os.getenv()
 load_dotenv()
+
+# Massiv API
 MASSIVE_API_KEY = os.getenv('MASSIVE_API_KEY')
 MASSIVE_API_KEY_FLAT_FILES = os.getenv('MASSIVE_API_KEY_FLAT_FILES')
 TEST_KEY= os.getenv('TEST_KEY') # DEBUG

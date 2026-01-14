@@ -200,3 +200,4 @@ authelia/session_secret
 authelia/db.sqlite3
 authelia/notification.txt
 authelia/emails.txt
+/identifier.sqlite

@@ -224,3 +224,38 @@ class Singleton:
     def __instancecheck__(self, inst):
         return isinstance(inst, self._decorated)
     
+
+def get_dataframe_memory_usage(df:pd.DataFrame):
+    """Return a DataFrame with memory usage per column and total usage."""
+    # Calculate memory usage per column (in bytes)
+    memory_per_column = df.memory_usage(deep=True)
+
+    # Total memory usage (including DataFrame overhead)
+    total_bytes = memory_per_column.sum()
+    total_mb = total_bytes / (1024 ** 2)
+    total_gb = total_bytes / (1024 ** 3)
+
+    # Get dtypes for each column (Index has no dtype)
+    dtypes = [''] + [str(dtype) for dtype in df.dtypes]
+
+    # Create a DataFrame for memory usage per column
+    memory_df = pd.DataFrame({
+        "Column": memory_per_column.index,
+        "Dtype": dtypes,
+        "Bytes": memory_per_column.values,
+        "MB": (memory_per_column.values / (1024 ** 2)).round(4),
+        "GB": (memory_per_column.values / (1024 ** 3)).round(6),
+    })
+
+    # Add total row
+    total_row = pd.DataFrame({
+        "Column": ["**Total**"],
+        "Dtype": [""],
+        "Bytes": [total_bytes],
+        "MB": [round(total_mb, 4)],
+        "GB": [round(total_gb, 6)],
+    })
+
+    memory_df = pd.concat([memory_df, total_row], ignore_index=True)
+
+    return memory_df
