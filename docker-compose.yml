@@ -12,6 +12,7 @@ services:
     environment:
       - AUTHELIA_JWT_SECRET_FILE=/config/jwt_secret
       - AUTHELIA_SESSION_SECRET_FILE=/config/session_secret
+      - AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE=/config/storage_encryption_key
       - TZ=Europe/Berlin
     restart: unless-stopped
     

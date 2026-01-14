@@ -64,6 +64,7 @@ jobs:
             
             echo "${{ secrets.AUTHELIA_JWT_SECRET }}" > authelia/jwt_secret
             echo "${{ secrets.AUTHELIA_SESSION_SECRET }}" > authelia/session_secret
+            echo "${{ secrets.AUTHELIA_STORAGE_ENCRYPTION_KEY }}" > authelia/storage_encryption_key
             
             # Store password hash in variable with single quotes to prevent expansion
             AUTHELIA_HASH='${{ secrets.AUTHELIA_PASSWORD_HASH }}'
