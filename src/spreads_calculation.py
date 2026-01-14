@@ -17,26 +17,17 @@ COL_CLOSE = 'close'
 COL_STRIKE = 'strike'
 COL_OPTION_TYPE = 'option-type'
 COL_DELTA = 'delta'
-COL_PUTS = 'puts'
-COL_CALLS = 'calls'
+COL_PUTS = 'put'
+COL_CALLS = 'call'
 
 
 def _calculate_expected_value_for_symbol(row: pd.Series) -> float:
-    """
-    Calculate the expected value for an options spread using Monte Carlo simulation.
-
-    Args:
-        row: DataFrame row containing options spread data
-
-    Returns:
-        Expected value of the spread
-    """
     monte_carlo_simulator = UniversalOptionsMonteCarloSimulator(
         num_simulations=NUM_SIMULATIONS,
         random_seed=RANDOM_SEED,
         current_price=row['close'],
-        dte=row['days_to_expiration_sell'],
-        volatility=row['iv_sell'],
+        dte=row['days_to_expiration'],
+        volatility=row['sell_iv'],
         risk_free_rate=RISK_FREE_RATE,
         dividend_yield=DIVIDEND_YIELD,
     )
@@ -60,10 +51,10 @@ def _create_option_config(row: pd.Series, is_sell: bool) -> Dict[str, Any]:
     Returns:
         Dictionary with option configuration
     """
-    suffix = '_sell' if is_sell else '_buy'
+    prefix = 'sell_' if is_sell else 'buy_'
     return {
-        'strike': row[f'strike{suffix}'],
-        'premium': row[f'mid{suffix}'],
+        'strike': row[f'{prefix}strike'],
+        'premium': row[f'{prefix}last_option_price'],
         'is_call': row['option_type'] == COL_CALLS,
         'is_long': not is_sell
     }
@@ -150,30 +141,15 @@ def _add_buy_options(
 
 
 def _calculate_spread_metrics(spreads: pd.DataFrame) -> pd.DataFrame:
-    """
-    Calculate all spread metrics and add derived columns.
-
-    Args:
-        spreads: DataFrame containing merged put and call spreads
-
-    Returns:
-        DataFrame with calculated metrics
-    """
     # Copy sell columns to standardized names
-    spreads["expected_move"] = spreads["expected_move_sell"]
-    #spreads["ivr"] = spreads["iv_rank_sell"]
-    #spreads["ivp"] = spreads["iv_percentile_sell"]
-    spreads["open_intrest"] = spreads["option_open_interest_sell"]
-    spreads["earnings_date"] = spreads['earnings_date_sell']
-    spreads['option_type'] = spreads['option-type_sell']
-    spreads["days_to_expiration"] = spreads["days_to_expiration_sell"]
-    spreads["expiration_date"] = spreads["expiration_date_sell"]
+    spreads["expected_move"] = spreads["sell_expected_move"]
+    spreads["open_interest"] = spreads["sell_last_option_price"]
 
     # Calculate spread width
-    spreads["spread_width"] = abs(spreads['strike_sell'] - spreads['strike_buy'])
+    spreads["spread_width"] = abs(spreads['sell_strike'] - spreads['buy_strike'])
 
     # Calculate max profit
-    spreads["max_profit"] = MULTIPLIER * (spreads["mid_sell"] - spreads["mid_buy"])
+    spreads["max_profit"] = MULTIPLIER * (spreads["sell_last_option_price"] - spreads["buy_last_option_price"])
 
     # Remove spreads without profit potential
     spreads = spreads[spreads['max_profit'] > 0].reset_index(drop=True)
@@ -188,7 +164,7 @@ def _calculate_spread_metrics(spreads: pd.DataFrame) -> pd.DataFrame:
     spreads["profit_to_bpr"] = spreads["max_profit"] / spreads["bpr"]
 
     # Calculate spread theta
-    spreads["spread_theta"] = spreads["theta_sell"] - spreads["theta_buy"]
+    spreads["spread_theta"] = spreads["sell_theta"] - spreads["buy_theta"]
 
     # Calculate expected value (computationally expensive)
     spreads["expected_value"] = spreads.apply(
@@ -206,22 +182,13 @@ def _calculate_spread_metrics(spreads: pd.DataFrame) -> pd.DataFrame:
 
 
 def _add_earnings_and_urls(spreads: pd.DataFrame) -> pd.DataFrame:
-    """
-    Add earnings warnings and OptionStrat URLs to the spreads DataFrame.
-
-    Args:
-        spreads: DataFrame containing spread data
-
-    Returns:
-        DataFrame with earnings warnings and URLs added
-    """
     # Convert date fields to datetime
-    spreads['earnings_date_sell'] = pd.to_datetime(
-        spreads['earnings_date_sell'],
+    spreads['earnings_date'] = pd.to_datetime(
+        spreads['earnings_date'],
         errors='coerce'
     )
-    spreads['expiration_date_sell'] = pd.to_datetime(
-        spreads['expiration_date_sell'],
+    spreads['expiration_date'] = pd.to_datetime(
+        spreads['expiration_date'],
         errors='coerce'
     )
 
@@ -248,12 +215,12 @@ def _create_earnings_warning(row: pd.Series) -> str:
     Returns:
         Warning string or empty string
     """
-    if (pd.notna(row['earnings_date_sell']) and
-            pd.notna(row['expiration_date_sell']) and
-            row['earnings_date_sell'] > pd.Timestamp.now()):
+    if (pd.notna(row['earnings_date']) and
+            pd.notna(row['expiration_date']) and
+            row['earnings_date'] > pd.Timestamp.now()):
 
         days_before_expiration = (
-                row['expiration_date_sell'] - row['earnings_date_sell']
+                row['expiration_date'] - row['earnings_date']
         ).days
 
         # Warning only if earnings are before expiration and within warning period
@@ -266,81 +233,17 @@ def _create_earnings_warning(row: pd.Series) -> str:
 @log_function
 def calc_spreads(
         df: pd.DataFrame,
-        delta_target: float,
-        spread_width: float
 ) -> pd.DataFrame:
-    """
-    Calculate option spreads based on delta target and spread width.
-
-    Workflow:
-    1. Select sell options via delta target
-    2. Select buy options via spread width
-    3. Calculate spread metrics and expected values
-    4. Add earnings warnings and URLs
-
-    Args:
-        df: DataFrame containing options data
-        delta_target: Target delta for sell options (e.g., 0.30)
-        spread_width: Width of the spread in dollars (e.g., 5.0)
-
-    Returns:
-        DataFrame containing calculated spreads with relevant columns
-    """
     if df.empty:
         raise ValueError("Input DataFrame is empty no data")
 
-    # Step 1: Select sell options by delta
-    sell_puts, sell_calls = _get_sell_options_by_delta_target(df, delta_target)
+    # Calculate spread metrics
+    df = _calculate_spread_metrics(df)
 
-    # Step 2: Add buy options based on spread width
-    puts, calls = _add_buy_options(df, sell_puts, sell_calls, spread_width)
+    # Add earnings warnings and URLs
+    df = _add_earnings_and_urls(df)
 
-    # Step 3: Merge puts and calls
-    assert list(puts.columns) == list(calls.columns), \
-        "Columns of puts and calls do not match!"
-
-    spreads = pd.concat([puts, calls], ignore_index=True)
-
-    # Clear memory
-    del puts, calls, sell_puts, sell_calls
-
-    # Remove symbols without matching buy strike
-    spreads = spreads.dropna(subset=['strike_buy'])
-
-    # Step 4: Calculate spread metrics
-    spreads = _calculate_spread_metrics(spreads)
-
-    # Step 5: Add earnings warnings and URLs
-    spreads = _add_earnings_and_urls(spreads)
-
-    # Step 6: Select relevant columns for output
-    output_columns = [
-        'symbol',
-        'expiration_date',
-        'earnings_date',
-        'earnings_warning',
-        #'ivr',
-        #'ivp',
-        'open_intrest',
-        'close',
-        'option_type',
-        'strike_sell',
-        'mid_sell',
-        'delta_sell',
-        'iv_sell',
-        'strike_buy',
-        'mid_buy',
-        'max_profit',
-        'bpr',
-        'profit_to_bpr',
-        'expected_move',
-        'expected_value',
-        "APDI",
-        "APDI_EV",
-        'optionstrat_url',
-    ]
-
-    return spreads[output_columns]
+    return df
 
 
 def _build_optionstrat_url(row: pd.Series) -> str:
@@ -362,8 +265,8 @@ def _build_optionstrat_url(row: pd.Series) -> str:
     base_url = "https://optionstrat.com/build"
 
     symbol = row['symbol'].upper()
-    date_str = _format_expiration_date(row['expiration_date_sell'])
-    opt_type_str = row['option-type_sell'].lower()
+    date_str = _format_expiration_date(row['expiration_date'])
+    opt_type_str = row['option_type'].lower()
 
     if opt_type_str == COL_PUTS:
         strategy = 'bull-put-spread'
@@ -418,8 +321,8 @@ def _build_put_spread_options(row: pd.Series, symbol: str, date_str: str) -> str
     Returns:
         Options string for URL
     """
-    lower_strike = min(row['strike_sell'], row['strike_buy'])
-    higher_strike = max(row['strike_sell'], row['strike_buy'])
+    lower_strike = min(row['sell_strike'], row['buy_strike'])
+    higher_strike = max(row['sell_strike'], row['buy_strike'])
 
     first_option = f".{symbol}{date_str}P{_format_strike(lower_strike)}"
     second_option = f"-.{symbol}{date_str}P{_format_strike(higher_strike)}"
@@ -441,8 +344,8 @@ def _build_call_spread_options(row: pd.Series, symbol: str, date_str: str) -> st
     Returns:
         Options string for URL
     """
-    lower_strike = min(row['strike_sell'], row['strike_buy'])
-    higher_strike = max(row['strike_sell'], row['strike_buy'])
+    lower_strike = min(row['sell_strike'], row['buy_strike'])
+    higher_strike = max(row['sell_strike'], row['buy_strike'])
 
     first_option = f"-.{symbol}{date_str}C{_format_strike(lower_strike)}"
     second_option = f".{symbol}{date_str}C{_format_strike(higher_strike)}"
@@ -482,7 +385,7 @@ if __name__ == "__main__":
             expiration_date,
             contract_type AS option_type,
             strike_price AS strike,
-            day_close AS mid,
+            day_close AS last_option_price,
             abs(greeks_delta) AS delta,
             implied_volatility AS iv,
             greeks_theta AS theta,
@@ -508,7 +411,7 @@ if __name__ == "__main__":
             strike AS sell_strike,
             expiration_date,
             option_type,
-            mid AS sell_mid,
+            last_option_price AS sell_last_option_price,
             delta AS sell_delta,
             iv AS sell_iv,
             theta AS sell_theta,
@@ -524,7 +427,9 @@ if __name__ == "__main__":
             row_num = 1
     )
     
+    --spread data 
     SELECT
+        -- sell option
         sell.symbol,
         sell.expiration_date,
         sell.option_type,
@@ -533,19 +438,20 @@ if __name__ == "__main__":
         sell.days_to_expiration,
         sell.days_to_ernings,
         sell.sell_strike,
-        sell.sell_mid,
+        sell.sell_last_option_price,
         sell.sell_delta,
         sell.sell_iv,
         sell.sell_theta,
         sell.sell_open_interest,
         sell.sell_expected_move,
-        buy.strike AS buy_strike,  -- Hier wurde `strike_price` durch `strike` ersetzt
-        buy.mid AS buy_mid,
-        buy.delta AS buy_delta,
-        buy.iv AS buy_iv,
-        buy.theta AS buy_theta,
+        -- buy option
+        buy.strike               AS buy_strike,
+        buy.last_option_price    AS buy_last_option_price,
+        buy.delta                AS buy_delta,
+        buy.iv                   AS buy_iv,
+        buy.theta                AS buy_theta,
         buy.option_open_interest AS buy_open_interest,
-        buy.expected_move AS buy_expected_move
+        buy.expected_move        AS buy_expected_move
     FROM
         SelectedSellOptions sell
     INNER JOIN
@@ -556,7 +462,7 @@ if __name__ == "__main__":
                 WHEN sell.option_type = 'put' THEN sell.sell_strike - :spread_width
                 WHEN sell.option_type = 'call' THEN sell.sell_strike + :spread_width
             END
-        );  
+        );
     """
 
     start = time.time()
@@ -565,9 +471,10 @@ if __name__ == "__main__":
     if df.empty:
         raise ValueError("Input DataFrame ist leer - keine Optionsdaten vorhanden")
 
-    spreads_df = calc_spreads(df, params["delta_target"], params["spread_width"])
+    df = calc_spreads(df)
     ende = time.time()
 
-    print(spreads_df.head())
-    print(spreads_df.shape)
+    print(df.head())
+    print(df.shape)
     print(f"Runtime: {ende - start:.6f} seconds")
+    pass

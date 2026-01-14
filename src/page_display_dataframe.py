@@ -45,9 +45,9 @@ Gehe besonders auf die Gewinnwahrscheinlichkeit ein. Kombiniere hier fundamental
 maximalem Expertenwissen und gebe eine klare Empfehlung Strategie umsetzen oder nicht ab. 
 Begründe deine Entscheidung nachvollziehbar mit KPIs.
 
-Verkaufe einen {row['option_type']} Strike {row['strike_sell']} für eine Prämie von {row['mid_sell']} bei einem Delta 
-von {row['delta_sell']} bei einer IVP von {row['ivp']}. Kaufe einen {row['option_type']} mit Strike {row['strike_buy']}
-für eine Prämie von {row['mid_buy']}. Expirationdate ist jeweils {row['expiration_date']}
+Verkaufe einen {row['option_type']} Strike {row['sell_strike']} für eine Prämie von {row['sell_last_option_price']} bei einem Delta 
+von {row['sell_delta']}. Kaufe einen {row['option_type']} mit Strike {row['buy_strike']}
+für eine Prämie von {row['buy_last_option_price']}. Expirationdate ist jeweils {row['expiration_date']}
 
 Format: Prägnant, faktenbasiert, keine Füllwörter, max. eine Seite.
 Rolle: Aktien und Finanzexperte.

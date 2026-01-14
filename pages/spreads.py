@@ -165,48 +165,46 @@ with st.spinner("Calculating spreads..."):
     df = select_into_dataframe(sql_file_path=sql_file_path, params=params)
     logging.debug(f"df: {df.head()}")
 
-    spreads_df = calc_spreads(df, delta_target, spread_width)
+    spreads_df = calc_spreads(df)
 
 # Dynamically extract unique values for symbol and option_type from calculated spreads_df
 if spreads_df.empty:
     st.warning("No spreads found for the selected criteria.")
     st.stop()
 
-unique_symbols = sorted(spreads_df['symbol'].unique())
-unique_option_types = sorted(spreads_df['option_type'].unique())
 
-st.divider()
-
-# Spreadfilter. Filters after the spread is calculated. All filters that are not doable in the database query
-st.markdown("#### Spreadfilter")
-col_profit_bpr = st.columns(1)
-
-# Profit to BPR Filter
-with col_profit_bpr:
-    profit_bpr_min = float(spreads_df['profit_to_bpr'].min())
-    profit_bpr_max = float(spreads_df['profit_to_bpr'].max())
-    if profit_bpr_min == profit_bpr_max:
-        st.text_input("Profit/BPR", value=f"{profit_bpr_min:.3f}", disabled=True)
-        profit_bpr_threshold = profit_bpr_min
-    else:
-        # Default minimum value of 0.1, but not exceeding max
-        default_profit = min(max(profit_bpr_min, 0.1), profit_bpr_max)
-        profit_bpr_threshold = st.number_input(
-            "Min Profit/BPR",
-            min_value=profit_bpr_min,
-            max_value=profit_bpr_max,
-            value=default_profit,
-            step=0.01,
-            format="%.3f"
-        )
-
-st.divider()
+# st.divider()
+#
+# # Spreadfilter. Filters after the spread is calculated. All filters that are not doable in the database query
+# st.markdown("#### Spreadfilter")
+# col_profit_bpr = st.columns(1)
+#
+# # Profit to BPR Filter
+# with col_profit_bpr:
+#     profit_bpr_min = float(spreads_df['profit_to_bpr'].min())
+#     profit_bpr_max = float(spreads_df['profit_to_bpr'].max())
+#     if profit_bpr_min == profit_bpr_max:
+#         st.text_input("Profit/BPR", value=f"{profit_bpr_min:.3f}", disabled=True)
+#         profit_bpr_threshold = profit_bpr_min
+#     else:
+#         # Default minimum value of 0.1, but not exceeding max
+#         default_profit = min(max(profit_bpr_min, 0.1), profit_bpr_max)
+#         profit_bpr_threshold = st.number_input(
+#             "Min Profit/BPR",
+#             min_value=profit_bpr_min,
+#             max_value=profit_bpr_max,
+#             value=default_profit,
+#             step=0.01,
+#             format="%.3f"
+#         )
+#
+# st.divider()
 
 # Apply spreadfilter
 filtered_df = spreads_df.copy()
 
-# Apply Profit to BPR filter
-filtered_df = filtered_df[filtered_df['profit_to_bpr'] >= profit_bpr_threshold]
+# # Apply Profit to BPR filter
+# filtered_df = filtered_df[filtered_df['profit_to_bpr'] >= profit_bpr_threshold]
 
 st.markdown("### Results")
 
