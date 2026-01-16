@@ -11,11 +11,11 @@ MASSIVE_API_KEY_FLAT_FILES = os.getenv('MASSIVE_API_KEY_FLAT_FILES')
 TEST_KEY= os.getenv('TEST_KEY') # DEBUG
 
 # PostgreSQL
-POSTGRES_HOST = os.getenv('POSTGRES_HOST')
-POSTGRES_PORT = os.getenv('POSTGRES_PORT')
-POSTGRES_USER = os.getenv('POSTGRES_USER')
-POSTGRES_PASSWORD = os.getenv('POSTGRES_PASSWORD')
-POSTGRES_DB = os.getenv('POSTGRES_DB')
+POSTGRES_HOST = os.getenv('POSTGRES_HOST') or os.getenv('DB_HOST')
+POSTGRES_PORT = os.getenv('POSTGRES_PORT') or os.getenv('DB_PORT')
+POSTGRES_USER = os.getenv('POSTGRES_USER') or os.getenv('DB_USER')
+POSTGRES_PASSWORD = os.getenv('POSTGRES_PASSWORD') or os.getenv('DB_PASS')
+POSTGRES_DB = os.getenv('POSTGRES_DB') or os.getenv('DB_NAME')
 
 # SSH
 SSH_HOST = os.getenv('SSH_HOST')

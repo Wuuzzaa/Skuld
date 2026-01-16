@@ -248,7 +248,7 @@ def select_into_dataframe(query: str = None, sql_file_path: str = None, params: 
     except Exception as e:
         logger.error(f"Error executing query {query}: {e}")
 
-    return df
+    return pg_df
 
 def get_table_key_and_data_columns(table_name):
     """

@@ -1,0 +1,14 @@
+{
+    "Servers":  {
+                    "1":  {
+                              "Username":  "dev",
+                              "MaintenanceDB":  "skuld_dev",
+                              "Group":  "Servers",
+                              "SSLMode":  "prefer",
+                              "Name":  "Skuld Local (skuld_dev)",
+                              "Host":  "skuld-local-db",
+                              "Port":  5432,
+                              "PassFile":  "/tmp/pgpass"
+                          }
+                }
+}
