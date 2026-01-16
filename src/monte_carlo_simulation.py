@@ -2,6 +2,8 @@ import numpy as np
 import pandas as pd
 from typing import List, Dict, Tuple, Union
 
+from config import TRANSACTION_COST_PER_CONTRACT, RANDOM_SEED, NUM_SIMULATIONS, RISK_FREE_RATE, IV_CORECTION_MODE
+
 
 class UniversalOptionsMonteCarloSimulator:
     """
@@ -21,12 +23,12 @@ class UniversalOptionsMonteCarloSimulator:
                  current_price: float,
                  volatility: float,
                  dte: int,
-                 risk_free_rate: float = 0.03,
+                 risk_free_rate: float = RISK_FREE_RATE,
                  dividend_yield: float = 0.00,
-                 num_simulations: int = 100000,
-                 random_seed: int = None,
-                 transaction_cost_per_contract: float = 3.5,
-                 iv_correction: Union[str, float] = "auto"):
+                 num_simulations: int = NUM_SIMULATIONS,
+                 random_seed: int = RANDOM_SEED,
+                 transaction_cost_per_contract: float = TRANSACTION_COST_PER_CONTRACT,
+                 iv_correction: Union[str, float] = IV_CORECTION_MODE):
         """
         Initialize the universal Monte-Carlo simulator
 
@@ -69,6 +71,13 @@ class UniversalOptionsMonteCarloSimulator:
         # Set random seed
         if random_seed is not None:
             np.random.seed(random_seed)
+
+        self.expected_value = None # calculated not on init
+
+    def __str__(self):
+        attrs = vars(self)
+        return "\n".join(f"{key}: {value}" for key, value in attrs.items())
+
 
     def _calculate_iv_correction_factor(self, dte: int) -> float:
         """
@@ -284,9 +293,9 @@ class UniversalOptionsMonteCarloSimulator:
 
         # Discount to present value
         discount_factor = np.exp(-self.risk_free_rate * self.time_to_expiration)
-        expected_value = expected_value_raw * discount_factor
+        self.expected_value = expected_value_raw * discount_factor
 
-        return expected_value
+        return self.expected_value
 
     def find_breakeven_from_simulations(self,
                                         simulated_prices: np.ndarray,
@@ -580,93 +589,104 @@ def print_strategy_analysis(simulator: UniversalOptionsMonteCarloSimulator,
 
 
 if __name__ == "__main__":
-    print("🧪 UNIVERSAL MONTE-CARLO OPTIONS SIMULATION")
-    print("=" * 80)
+    from config import *
 
-    num_simulations = 100000
-
-    # Initialize simulator with IV correction
-    simulator = UniversalOptionsMonteCarloSimulator(
-        current_price=227.00,
-        volatility=0.35,  # Market IV
-        dte=54,
-        risk_free_rate=0.03,
-        dividend_yield=0.00,
-        num_simulations=num_simulations,
-        random_seed=42,
-        transaction_cost_per_contract=3.5,
-        iv_correction="auto"
+    # von spreads_calculation übernommen
+    monte_carlo_simulator = UniversalOptionsMonteCarloSimulator(
+        num_simulations= NUM_SIMULATIONS, #NUM_SIMULATIONS,
+        random_seed=RANDOM_SEED,
+        current_price=170.94,
+        dte=63,
+        volatility=0.42,
+        risk_free_rate=RISK_FREE_RATE,
+        dividend_yield=0,
+        iv_correction='auto' # 'auto'
     )
 
-    # Iron Condor - each entry = 1 contract
-    iron_condor_options = [
-        # Long Put
+    options = [
+        # sell option
         {
-            'strike': 200,
-            'premium': 2.50,  # per share
-            'is_call': False,
-            'is_long': True
-        },
-        # Short Put
-        {
-            'strike': 210,
-            'premium': 4.85,  # per share
+            'strike': 150,
+            'premium': 3.47,
             'is_call': False,
             'is_long': False
         },
-        # Short Call
+
+        # buy option
         {
-            'strike': 250,
-            'premium': 4.69,  # per share
-            'is_call': True,
-            'is_long': False
-        },
-        # Long Call
-        {
-            'strike': 260,
-            'premium': 2.85,  # per share
-            'is_call': True,
+            'strike': 145,
+            'premium': 1.72,
+            'is_call': False,
             'is_long': True
         }
     ]
 
-    # Demo: Compare different IV correction modes
-    print("🔧 IV CORRECTION COMPARISON:")
+    expected_value = monte_carlo_simulator.calculate_expected_value(options=options)
+    print(f"monte_carlo_simulator.volatility: {monte_carlo_simulator.volatility}")
+    print(f"expected_value: {expected_value}")
 
-    # No correction
-    simulator_no_corr = UniversalOptionsMonteCarloSimulator(
-        current_price=227.00,
-        volatility=0.35,
-        dte=54,
-        random_seed=42,
-        iv_correction=0.0,
-        num_simulations=num_simulations
-    )
-    ev_no_corr = simulator_no_corr.calculate_expected_value(iron_condor_options)
-    print(f"No IV correction:     ${ev_no_corr:.2f}")
+    print(monte_carlo_simulator)
 
-    # Auto correction
-    ev_auto = simulator.calculate_expected_value(iron_condor_options)
-    print(f"Auto IV correction:   ${ev_auto:.2f}")
 
-    # Manual 15% correction
-    simulator_manual = UniversalOptionsMonteCarloSimulator(
-        current_price=227.00,
-        volatility=0.35,
-        dte=54,
-        random_seed=42,
-        iv_correction=0.15,
-        num_simulations=num_simulations
-    )
-    ev_manual = simulator_manual.calculate_expected_value(iron_condor_options)
-    print(f"Manual 15% correction: ${ev_manual:.2f}")
-    print()
+    # import matplotlib.pyplot as plt
+    # import numpy as np
+    #
+    # # Annahme: UniversalOptionsMonteCarloSimulator ist bereits definiert
+    # # Hier wird nur der relevante Teil für die Simulationen und das Plotting ergänzt
+    #
+    # # Parameter für die Simulation
+    # current_price = 170.94
+    # dte = 63
+    # volatility = 0.42
+    # risk_free_rate = RISK_FREE_RATE  # Annahme: RISK_FREE_RATE ist definiert
+    # dividend_yield = 0
+    # random_seed = RANDOM_SEED  # Annahme: RISK_FREE_RATE und RANDOM_SEED sind definiert
+    #
+    # # Optionen
+    # options = [
+    #     # sell option
+    #     {
+    #         'strike': 150,
+    #         'premium': 3.47,
+    #         'is_call': False,
+    #         'is_long': False
+    #     },
+    #     # buy option
+    #     {
+    #         'strike': 145,
+    #         'premium': 1.72,
+    #         'is_call': False,
+    #         'is_long': True
+    #     }
+    # ]
+    #
+    # # Anzahl der Simulationen variieren
+    # num_simulations_list = np.logspace(1, 5, 50).astype(int)  # 10 bis 100.000 Simulationen, logarithmisch verteilt
+    # expected_values = []
+    #
+    # for num_simulations in num_simulations_list:
+    #     monte_carlo_simulator = UniversalOptionsMonteCarloSimulator(
+    #         num_simulations=num_simulations,
+    #         random_seed=random_seed,
+    #         current_price=current_price,
+    #         dte=dte,
+    #         volatility=volatility,
+    #         risk_free_rate=risk_free_rate,
+    #         dividend_yield=dividend_yield,
+    #         iv_correction='auto'
+    #     )
+    #
+    #     expected_value = monte_carlo_simulator.calculate_expected_value(options=options)
+    #     expected_values.append(expected_value)
+    #     print(f"Num Simulations: {num_simulations}, Expected Value: {expected_value}")
+    #
+    # # Plot der Ergebnisse
+    # plt.figure(figsize=(10, 6))
+    # plt.plot(num_simulations_list, expected_values, marker='o')
+    # plt.xscale('log')
+    # plt.xlabel('Anzahl der Simulationen (log Skala)')
+    # plt.ylabel('Erwartungswert')
+    # plt.title('Erwartungswert in Abhängigkeit der Anzahl der Simulationen')
+    # plt.grid(True, which="both", ls="--")
+    # plt.show()
 
-    # Full analysis with auto correction
-    expected_value = print_strategy_analysis(
-        simulator,
-        iron_condor_options,
-        "Iron Condor (IV Corrected)"
-    )
-
-    print(f"\n🔢 FINAL EXPECTED VALUE: ${expected_value:.2f}")

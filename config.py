@@ -99,10 +99,10 @@ SYMBOLS = list(SYMBOLS_EXCHANGE.keys())
 
 # monte_carlo_simulator
 RANDOM_SEED=42
-IV_CORECTION='auto'
+IV_CORECTION_MODE='auto'
 RISK_FREE_RATE = 0.03
 NUM_SIMULATIONS = 100000
-TRANSACTION_COST_PER_CONTRACT = 3.5 # in USD
+TRANSACTION_COST_PER_CONTRACT = 2.0 # in USD
 
 # =============================================================================
 # SIMPLIFIED DATA COLLECTION CONFIGURATION
