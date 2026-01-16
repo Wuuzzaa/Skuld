@@ -1,6 +1,5 @@
 import logging
 import os
-
 import streamlit as st
 import pandas as pd
 from config import PATH_DATABASE_QUERY_FOLDER
