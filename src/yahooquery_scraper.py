@@ -45,6 +45,7 @@ class YahooQueryScraper:
                 batch = 1
                 for ticker_batch in self.ticker_batches:
                     logger.info(f"({batch}/{len(self.ticker_batches)}) Batch")
+                    batch += 1
                     for attempt in range(self.retries):
                         try:
                             if len(self.symbols) > self.batch_size:

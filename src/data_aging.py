@@ -4,8 +4,9 @@ import pandas as pd
 from datetime import datetime, timedelta
 from sqlalchemy import text
 from config import HISTORY_ENABLED_TABLES
-from src.database import get_database_engine, execute_sql, get_table_key_and_data_columns, select_into_dataframe
+from src.database import get_database_engine, execute_sql, get_postgres_engine, get_table_key_and_data_columns, select_into_dataframe
 import pathlib
+from datetime import date, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ class DataAgingService:
         """
 
         # only run on mondays
-        if datetime.now().weekday() != 0:
+        if not is_monday():
             logger.info(f"Data aging skipped - runs only on Mondays.")
             return
 
@@ -29,8 +30,8 @@ class DataAgingService:
         start_time = time.time()
         
         DataAgingService._insert_key_master_data(source_table)
-        DataAgingService._promote_data_from_daily_to_weekly(source_table)
-        DataAgingService._promote_data_from_weekly_to_monthly(source_table)
+        # DataAgingService._promote_data_from_daily_to_weekly(source_table)
+        # DataAgingService._promote_data_from_weekly_to_monthly(source_table)
         DataAgingService._promote_data_to_master_data(source_table)
 
         DataAgingService._clean_up_history_tables(source_table)
@@ -42,7 +43,6 @@ class DataAgingService:
     def _insert_key_master_data(source_table: str):
         start_time = time.time()
         
-        engine = get_database_engine()
 
         daily_table = f"{source_table}HistoryDaily"    
         master_data_table = f"{source_table}MasterData" 
@@ -50,36 +50,36 @@ class DataAgingService:
         key_columns, _ = get_table_key_and_data_columns(master_data_table)
         key_columns_str = ", ".join([f'"{col["name"]}"' for col in key_columns])
 
-        # We process each data column
-
+        logger.info(f"Processing {source_table} key {key_columns_str}...")
+        # Insert key to master data table
+        
+        insert_sql = f"""
+            INSERT INTO "{master_data_table}" (
+                {key_columns_str}
+            )
+            SELECT DISTINCT
+                {key_columns_str}
+            FROM "{daily_table}"
+            WHERE 1=1 -- needed because of Parsing Ambiguity. Check SQLite documentation
+            ON CONFLICT({key_columns_str})
+            DO NOTHING
+        """
+            
+  
+        engine = get_database_engine()
         with engine.begin() as conn:
-            logger.info(f"Processing {source_table} key {key_columns_str}...")
-            # Insert key to master data table
-            
-            insert_sql = f"""
-                INSERT INTO {master_data_table} (
-                    {key_columns_str}
-                )
-                SELECT DISTINCT
-                    {key_columns_str}
-                FROM ({daily_table})
-                WHERE 1=1 -- needed because of Parsing Ambiguity. Check SQLite documentation
-                ON CONFLICT({key_columns_str})
-                DO NOTHING
-            """
-            
-            try:
-                affected = execute_sql(conn, insert_sql, master_data_table, 'UPSERT', f"Insert keys to Master Data")
-            except Exception as e:
-                conn.rollback()
-                logger.error(f"Error inserting keys to Master Data: {e}")
+            affected = execute_sql(conn, insert_sql, master_data_table, 'UPSERT', f"Insert keys to Master Data")
+
+        pg_engine = get_postgres_engine()
+        with pg_engine.begin() as conn:
+            affected = execute_sql(conn, insert_sql, master_data_table, 'UPSERT', f"Insert keys to Master Data")
             
         logger.info(f"Inserted keys to Master Data in {round(time.time() - start_time, 2)}s.")
 
     def _promote_data_from_daily_to_weekly(source_table: str):
         start_time = time.time()
 
-        engine = get_database_engine()
+        pg_engine = get_postgres_engine()
         table = source_table
 
         daily_table = f"{table}HistoryDaily"
@@ -93,82 +93,111 @@ class DataAgingService:
         # We process each data column
         for col in data_columns:
             col_name = col['name']
+            col_type = col['type']
+
             logger.info(f"Processing {source_table} column {col_name}...")
             if is_classified_for_master_data(source_table, col_name):
                 logger.info(f"Skipping column {col_name} as it is not classified for Weekly promotion.")
                 continue
 
-            with engine.begin() as conn:
+            with pg_engine.begin() as conn:
                 # 1. Promote to Weekly (Insert/Update)
                 # We insert the constant value. We primarily use min(val) since min=max.
                 
-                promote_sql = f"""
-                    INSERT INTO {weekly_table} (
-                        year, week, {key_columns_str}, "{col_name}"
+                pg_promote_sql = f"""
+                    INSERT INTO "{weekly_table}" (
+                        isoyear, week, {key_columns_str}, "{col_name}"
                     )
                     SELECT
-                        strftime('%Y', snapshot_date) as year,
-                        strftime('%W', snapshot_date) as week,
+                        EXTRACT(ISOYEAR FROM snapshot_date::date)::int as isoyear,
+                        EXTRACT(WEEK FROM snapshot_date::date)::int as week,
                         {key_columns_str},
-                        min("{col_name}") as val
-                    FROM {daily_table}
+                        MIN("{col_name}") as val
+                    FROM "{daily_table}"
                     WHERE "{col_name}" IS NOT NULL
-                        AND strftime('%Y-%W', snapshot_date) < strftime('%Y-%W', 'now') -- exclude current week
+                        AND date_trunc('week', snapshot_date::date) < date_trunc('week', CURRENT_DATE) -- exclude current week
                         AND ({key_columns_str}) NOT IN (
                             SELECT 
                                 {key_columns_str} 
-                            FROM {master_data_table} 
+                            FROM "{master_data_table}" 
                             WHERE "{col_name}" IS NOT NULL
                         )
-                    GROUP BY strftime('%W-%Y', snapshot_date), {key_columns_str}
+                    GROUP BY isoyear, week, {key_columns_str}
                     HAVING 
-                        (min("{col_name}") = max("{col_name}"))
-                    ON CONFLICT(year, week, {key_columns_str}) 
+                        (MIN("{col_name}") = MAX("{col_name}"))
+                    ON CONFLICT(isoyear, week, {key_columns_str}) 
                     DO UPDATE SET "{col_name}" = excluded."{col_name}"
                 """
+
+                if col_type.lower() == 'boolean':
+                    pg_promote_sql = pg_promote_sql.replace(f'MIN("{col_name}")', f'CAST(MIN(CASE WHEN "{col_name}" THEN 1 ELSE 0 END) AS BOOLEAN)')
                 
                 try:
-                    affected = execute_sql(conn, promote_sql, weekly_table, 'UPSERT', f"Promote column {col_name} from Daily to Weekly")
+                    affected = execute_sql(conn, pg_promote_sql, weekly_table, 'UPSERT', f"Promote column {col_name} from Daily to Weekly")
                     if affected > 0:
-                        logger.info(f"Promoted {affected} rows for column {col_name}.")
+                        logger.info(f"[PostgreSQL] Promoted {affected} rows for column {col_name}.")
                 except Exception as e:
                     conn.rollback()
-                    logger.error(f"Error promoting column {col_name} to Weekly: {e}")
+                    logger.error(f"[PostgreSQL] Error promoting column {col_name} to Weekly: {e}")
                     continue
                 
                 if affected > 0:
                     # 2. Null out in Daily
+                    logger.info(f"NULL out {source_table} column {col_name}...")
                     null_out_sql = f"""
-                        UPDATE {daily_table}
+                        UPDATE "{daily_table}" AS daily
                         SET "{col_name}" = NULL
+                        FROM "DatesHistory" AS dates
                         WHERE 
                         "{col_name}" IS NOT NULL
+                        AND daily.snapshot_date = dates.date
                         AND ( 
-                            CAST(strftime('%Y', snapshot_date) AS INT), 
-                            CAST(strftime('%W', snapshot_date) as INT),
+                            isoyear, 
+                            week,
                             {key_columns_str}
                         ) IN (
                             SELECT
-                                year,
+                                isoyear,
                                 week,
                                 {key_columns_str}
-                            FROM {weekly_table} 
+                            FROM "{weekly_table}" 
                             WHERE "{col_name}" IS NOT NULL
                         )          
                     """
+                    # null_out_sql = f"""
+                    #     UPDATE "{daily_table}"
+                    #     SET "{col_name}" = NULL
+                    #     WHERE 
+                    #     "{col_name}" IS NOT NULL
+                    #     AND ( 
+                    #         EXTRACT(ISOYEAR FROM snapshot_date::date)::int, 
+                    #         EXTRACT(WEEK FROM snapshot_date::date)::int,
+                    #         {key_columns_str}
+                    #     ) IN (
+                    #         SELECT
+                    #             isoyear,
+                    #             week,
+                    #             {key_columns_str}
+                    #         FROM "{weekly_table}" 
+                    #         WHERE "{col_name}" IS NOT NULL
+                    #     )          
+                    # """
                     try:
                         affected = execute_sql(conn, null_out_sql, daily_table, 'UPDATE', f"Null out column {col_name} in Daily after promotion to Weekly")
                         if affected > 0:
-                            logger.info(f"Nulled out {affected} rows for column {col_name} in Daily table.")
+                            logger.info(f"[PostgreSQL] Nulled out {affected} rows for column {col_name} in Daily table.")
                     except Exception as e:
                         conn.rollback()
-                        logger.error(f"Error nulling out column {col_name}: {e}")
+                        logger.error(f"[PostgreSQL] Error nulling out column {col_name}: {e}")
         logger.info(f"Data promoted from daily to weekly in {round(time.time() - start_time, 2)}s.")
 
     def _promote_data_from_weekly_to_monthly(source_table: str):
+        if not is_first_weekday_of_month():
+            logger.info(f"Data aging promotion to month skipped - runs only on first weekday of the month.")
+            return
         start_time = time.time()
         
-        engine = get_database_engine()
+        pg_engine = get_postgres_engine()
         table = source_table
  
         daily_table = f"{table}HistoryDaily"
@@ -176,50 +205,52 @@ class DataAgingService:
         monthly_table = f"{table}HistoryMonthly"     
         master_data_table = f"{table}MasterData" 
         history_view = f"{table}History" 
-        history_select = get_history_select_statement(source_table, optimized=False)
-        logger.info(f"Processing {monthly_table}...")     
-    
         key_columns, data_columns = get_table_key_and_data_columns(master_data_table)
         key_columns_str = ", ".join([f'"{col["name"]}"' for col in key_columns])
+
+        logger.info(f"Processing {monthly_table}...")     
+    
 
         # We process each data column
         for col in data_columns:
             col_name = col['name']
+            history_select = get_history_select_statement(source_table, optimized=False, needed_data_columns=[col_name])
             logger.info(f"Processing {source_table} column {col_name}...")
             if is_classified_for_master_data(source_table, col_name):
                 logger.info(f"Skipping column {col_name} as it is not classified for Monthly promotion.")
                 continue
-            with engine.begin() as conn:
+  
+            with pg_engine.begin() as conn:
                 # 1. Promote to Monthly (Insert/Update)
                 # We insert the constant value. We primarily use min(val) since min=max.
                 
                 promote_sql = f"""
-                    INSERT INTO {monthly_table} (
+                    INSERT INTO "{monthly_table}" (
                         year, month, {key_columns_str}, "{col_name}"
                     )
                     SELECT
-                        strftime('%Y', date) as year,
-                        strftime('%m', date) as month,
+                        EXTRACT(YEAR FROM date::date)::int as year,
+                        EXTRACT(MONTH FROM date::date)::int as week,
                         {key_columns_str},
                         min("{col_name}") as val
                     FROM ({history_select})
                     WHERE "{col_name}" IS NOT NULL
-                        AND strftime('%Y-%m', date) < strftime('%Y-%m', 'now') -- exclude current month
-                        AND (year, month, {key_columns_str}) NOT IN (
+                        AND date_trunc('month', date::date) < date_trunc('month', CURRENT_DATE) -- exclude current month
+                        AND (EXTRACT(YEAR FROM date::date)::int, EXTRACT(MONTH FROM date::date)::int, {key_columns_str}) NOT IN (
                             SELECT 
                                 year, 
                                 month, 
                                 {key_columns_str} 
-                            FROM {monthly_table} 
+                            FROM "{monthly_table}" 
                             WHERE "{col_name}" IS NOT NULL
                         )
                         AND ({key_columns_str}) NOT IN (
                             SELECT 
                                 {key_columns_str} 
-                            FROM {master_data_table} 
+                            FROM "{master_data_table}" 
                             WHERE "{col_name}" IS NOT NULL
                         )
-                    GROUP BY strftime('%Y-%m', date), {key_columns_str}
+                    GROUP BY EXTRACT(YEAR FROM date::date)::int, EXTRACT(MONTH FROM date::date)::int, {key_columns_str}
                     HAVING 
                         (min("{col_name}") = max("{col_name}"))
                     ON CONFLICT(year, month, {key_columns_str}) 
@@ -229,49 +260,50 @@ class DataAgingService:
                 try:
                     affected = execute_sql(conn, promote_sql, monthly_table, 'UPSERT', f"Promote column {col_name} from Weekly to Monthly")
                     if affected > 0:
-                        logger.info(f"Promoted {affected} rows to Monthly for column {col_name}.")
+                        logger.info(f"[PostgreSQL] Promoted {affected} rows to Monthly for column {col_name}.")
                 except Exception as e:
                     conn.rollback()
-                    logger.error(f"Error promoting column {col_name} to Monthly: {e}")
+                    logger.error(f"[PostgreSQL] Error promoting column {col_name} to Monthly: {e}")
                     continue
                 
                 if affected > 0:
                     # 2. Null out in Weekly
                     null_out_sql = f"""
-                        UPDATE {weekly_table}
+                        UPDATE "{weekly_table}"
                         SET "{col_name}" = NULL
                         WHERE 
                         "{col_name}" IS NOT NULL
                         AND ( 
-                            year, 
+                            isoyear, 
                             week,
                             {key_columns_str}
                         ) IN (
                             SELECT
-                                CAST(strftime('%Y', date) AS INT) AS ayear,
-                                CAST(strftime('%W', date) AS INT) AS aweek,
+                                isoyear AS ayear,
+                                week AS aweek,
                                 {", ".join([f'a."{key_col["name"]}"' for key_col in key_columns])}
                             FROM ({history_select}) AS a 
-                            LEFT OUTER JOIN {monthly_table} AS b
-                            ON ayear = b.year AND CAST(strftime('%m', date) AS INT) = b.month 
+                            LEFT OUTER JOIN "{monthly_table}" AS b
+                            ON a.year = b.year AND a.month = b.month -- TODO: Check correctness isoyear vs year
                                 AND {" AND ".join([f'a."{key_col["name"]}" = b."{key_col["name"]}"' for key_col in key_columns])}
-                            GROUP BY ayear, aweek, {", ".join([f'a."{key_col["name"]}"' for key_col in key_columns])}
-                            HAVING MIN(COALESCE(b."{col_name}",-99999)) = MAX(b."{col_name}")
+                            GROUP BY a.isoyear, a.week, {", ".join([f'a."{key_col["name"]}"' for key_col in key_columns])}
+                            HAVING MIN(b."{col_name}") = MAX(b."{col_name}")
                         )          
                     """
                     try:
                         affected = execute_sql(conn, null_out_sql, weekly_table, 'UPDATE', f"Null out column {col_name} in Weekly after promotion to Monthly")
                         if affected > 0:
-                            logger.info(f"Nulled out {affected} rows for column {col_name} in Weekly table.")
+                            logger.info(f"[PostgreSQL] Nulled out {affected} rows for column {col_name} in Weekly table.")
                     except Exception as e:
                         conn.rollback()
-                        logger.error(f"Error nulling out column {col_name}: {e}")
+                        logger.error(f"[PostgreSQL] Error nulling out column {col_name}: {e}")
+
         logger.info(f"Data promoted from weekly to monthly in {round(time.time() - start_time, 2)}s.")
 
     def _promote_data_to_master_data(source_table: str):
         start_time = time.time()
-        
-        engine = get_database_engine()
+
+        pg_engine = get_postgres_engine()
         table = source_table
 
         daily_table = f"{table}HistoryDaily"
@@ -279,7 +311,6 @@ class DataAgingService:
         monthly_table = f"{table}HistoryMonthly"     
         master_data_table = f"{table}MasterData" 
         history_view = f"{table}History" 
-        history_select = get_history_select_statement(source_table, optimized=False)
         logger.info(f"Processing {monthly_table}...")     
     
         key_columns, data_columns = get_table_key_and_data_columns(master_data_table)
@@ -287,38 +318,41 @@ class DataAgingService:
 
         # We process each data column
         for col in data_columns:
-            with engine.begin() as conn:
+
+            with pg_engine.begin() as conn:
                 col_name = col['name']
-                logger.info(f"Processing {source_table} column {col_name}...")
+                history_select = get_history_select_statement(source_table, optimized=False, needed_data_columns=[col_name])
+                logger.info(f"[PostgreSQL] Processing {source_table} column {col_name}...")
                 # 1. Promote to Master Data (Insert/Update)
                 # We insert the constant value. We primarily use min(val) since min=max.
                 
                 promote_sql = f"""
-                    INSERT INTO {master_data_table} (
+                    INSERT INTO "{master_data_table}" (
                         {key_columns_str}, "{col_name}"
                     )
                     SELECT
                         {key_columns_str},
-                        min("{col_name}") as val
+                        MIN("{col_name}") as val
                     FROM ({history_select})
                     WHERE "{col_name}" IS NOT NULL
                         AND ({key_columns_str}) NOT IN (
                             SELECT 
                                 {key_columns_str} 
-                            FROM {master_data_table} 
+                            FROM "{master_data_table}" 
                             WHERE "{col_name}" IS NOT NULL
                         )
                     GROUP BY {key_columns_str}
                     HAVING 
                         (min("{col_name}") = max("{col_name}"))
                         AND ( 
-                            min(date) < date('now', '-365 days')
+                            -- older than 1 year
+                            MIN(date::date) < CURRENT_DATE - INTERVAL '365 days'
                             OR EXISTS(
-                                SELECT * 
-                                FROM "DataAgingFieldClassification" 
-                                WHERE table_name = '{source_table}' 
-                                  AND field_name = '{col_name}' 
-                                  AND tier = 'Master'
+                                SELECT 1 
+                                FROM "DataAgingFieldClassification" AS dac
+                                WHERE dac.table_name = '{source_table}' 
+                                  AND dac.field_name = '{col_name}' 
+                                  AND dac.tier = 'Master'
                             )
                         )
                     ON CONFLICT({key_columns_str}) 
@@ -328,16 +362,16 @@ class DataAgingService:
                 try:
                     affected = execute_sql(conn, promote_sql, master_data_table, 'UPSERT', f"Promote column {col_name} to Master Data")
                     if affected > 0:
-                        logger.info(f"Promoted {affected} rows to Master Data for {source_table} column {col_name}.")
+                        logger.info(f"[PostgreSQL] Promoted {affected} rows to Master Data for {source_table} column {col_name}.")
                 except Exception as e:
                     conn.rollback()
-                    logger.error(f"Error promoting {source_table} column {col_name} to Master Data: {e}")
+                    logger.error(f"[PostgreSQL] Error promoting {source_table} column {col_name} to Master Data: {e}")
                     continue
                 
                 if affected > 0:
                     # 2. Null out in Monthly
                     null_out_sql = f"""
-                        UPDATE {monthly_table}
+                        UPDATE "{monthly_table}"
                         SET "{col_name}" = NULL
                         WHERE 
                         "{col_name}" IS NOT NULL
@@ -346,20 +380,20 @@ class DataAgingService:
                         ) IN (
                             SELECT
                                 {key_columns_str}
-                            FROM {master_data_table} 
+                            FROM "{master_data_table}" 
                             WHERE "{col_name}" IS NOT NULL
                         )          
                     """
                     try:
                         affected = execute_sql(conn, null_out_sql, monthly_table, 'UPDATE', f"Null out column {col_name} in Monthly after promotion to Master Data")
                         if affected > 0:
-                            logger.info(f"Nulled out {affected} rows for column {col_name} in {monthly_table}.")
+                            logger.info(f"[PostgreSQL] Nulled out {affected} rows for column {col_name} in {monthly_table}.")
                     except Exception as e:
                         conn.rollback()
-                        logger.error(f"Error nulling out {monthly_table} column {col_name}: {e}")
+                        logger.error(f"[PostgreSQL] Error nulling out {monthly_table} column {col_name}: {e}")
 
                     null_out_sql = f"""
-                        UPDATE {weekly_table}
+                        UPDATE "{weekly_table}"
                         SET "{col_name}" = NULL
                         WHERE 
                         "{col_name}" IS NOT NULL
@@ -368,20 +402,20 @@ class DataAgingService:
                         ) IN (
                             SELECT
                                 {key_columns_str}
-                            FROM {master_data_table} 
+                            FROM "{master_data_table}" 
                             WHERE "{col_name}" IS NOT NULL
                         )          
                     """
                     try:
                         affected = execute_sql(conn, null_out_sql, weekly_table, 'UPDATE', f"Null out column {col_name} in Weekly after promotion to Master Data")
                         if affected > 0:
-                            logger.info(f"Nulled out {affected} rows for column {col_name} in {weekly_table}.")
+                            logger.info(f"[PostgreSQL] Nulled out {affected} rows for column {col_name} in {weekly_table}.")
                     except Exception as e:
                         conn.rollback()
-                        logger.error(f"Error nulling out {monthly_table} column {col_name}: {e}")
+                        logger.error(f"[PostgreSQL] Error nulling out {monthly_table} column {col_name}: {e}")
 
                     null_out_sql = f"""
-                        UPDATE {daily_table}
+                        UPDATE "{daily_table}"
                         SET "{col_name}" = NULL
                         WHERE 
                         "{col_name}" IS NOT NULL
@@ -390,17 +424,17 @@ class DataAgingService:
                         ) IN (
                             SELECT
                                 {key_columns_str}
-                            FROM {master_data_table} 
+                            FROM "{master_data_table}" 
                             WHERE "{col_name}" IS NOT NULL
                         )          
                     """
                     try:
                         affected = execute_sql(conn, null_out_sql, daily_table, 'UPDATE', f"Null out column {col_name} in Daily after promotion to Master Data")
                         if affected > 0:
-                            logger.info(f"Nulled out {affected} rows for column {col_name} in {weekly_table}.")
+                            logger.info(f"[PostgreSQL] Nulled out {affected} rows for column {col_name} in {weekly_table}.")
                     except Exception as e:
                         conn.rollback()
-                        logger.error(f"Error nulling out {monthly_table} column {col_name}: {e}")
+                        logger.error(f"[PostgreSQL] Error nulling out {monthly_table} column {col_name}: {e}")
         logger.info(f"Data promoted to Master Data in {round(time.time() - start_time, 2)}s.")
 
     def _clean_up_history_tables(source_table: str):
@@ -408,7 +442,7 @@ class DataAgingService:
         Cleans up history tables by removing entries that are fully null across all data columns.
         This helps to reduce storage and improve performance.
         """
-        engine = get_database_engine()
+        pg_engine = get_postgres_engine()
 
         logger.info(f"Cleaning up history tables for {source_table}")
         # Determine the underlying history tables
@@ -424,18 +458,18 @@ class DataAgingService:
             # Build the SQL to delete rows where all data columns are NULL
             null_conditions = " AND ".join([f'"{col}" IS NULL' for col in data_column_names])
             delete_sql = f"""
-                DELETE FROM {table}
+                DELETE FROM "{table}"
                 WHERE {null_conditions}
             """
 
-            with engine.begin() as conn:
+            with pg_engine.begin() as conn:
                 try:
-                    affected = execute_sql(conn, delete_sql, table, 'DELETE', f"Clean up null rows in {table}")
+                    affected = execute_sql(conn, delete_sql, table, 'DELETE', f"Clean up NULL rows in {table}")
                     if affected > 0:
-                        logger.info(f"Deleted {affected} fully null rows from {table}.")
+                        logger.info(f"[PostgreSQL] Deleted {affected} fully NULL rows from {table}.")
                 except Exception as e:
                     conn.rollback()
-                    logger.error(f"Error cleaning up {table}: {e}")
+                    logger.error(f"[PostgreSQL] Error cleaning up {table}: {e}")
 
 _MASTER_DATA_CLASSIFICATION_CACHE = None
 
@@ -456,12 +490,14 @@ def is_classified_for_master_data(source_table: str, column_name: str) -> bool:
         
     return source_table in _MASTER_DATA_CLASSIFICATION_CACHE and column_name in _MASTER_DATA_CLASSIFICATION_CACHE[source_table]     
 
-def get_history_select_statement(table_name: str, optimized: bool = True):
+def get_history_select_statement(table_name: str, optimized: bool = True, needed_data_columns: list[str] | None = None) -> str:
     """
     Select statement for history view of the specified table.
     """
 
     key_columns, data_columns = get_table_key_and_data_columns(table_name)
+    if needed_data_columns is not None:
+        data_columns = [col for col in data_columns if col["name"] in needed_data_columns]
     key_column_definitions_str = ",\n\t\t".join([f'master_data."{col["name"]}"' for col in key_columns])
     data_column_definitions = []
     for col in data_columns:
@@ -493,6 +529,10 @@ def get_history_select_statement(table_name: str, optimized: bool = True):
     select_statement_sql =  f"""
     SELECT
         dates.date,
+        dates.year,
+        dates.month,
+        dates.isoyear,
+        dates.week,
         {column_definitions_str}
     FROM
         "DatesHistory" as dates
@@ -501,7 +541,7 @@ def get_history_select_statement(table_name: str, optimized: bool = True):
         ON dates.date = daily.snapshot_date
         AND {key_columns_on_condition_str_daily}
         LEFT JOIN "{table_name}HistoryWeekly" as weekly 
-        ON dates.year = weekly.year
+        ON dates.isoyear = weekly.isoyear
         AND dates.week = weekly.week
         AND {key_columns_on_condition_str_weekly}
         LEFT JOIN "{table_name}HistoryMonthly" as monthly 
@@ -522,3 +562,18 @@ def get_history_enabled_views():
     
     return history_enabled_views
 
+def is_first_weekday_of_month(today: date | None = None) -> bool:
+    if today is None:
+        today = date.today()
+
+    first_day = today.replace(day=1)
+
+    # Advance to the first weekday (Mon–Fri)
+    while first_day.weekday() >= 5:  # 5 = Sat, 6 = Sun
+        first_day += timedelta(days=1)
+
+    return today == first_day
+
+def is_monday():
+    today = date.today()
+    return today.weekday() == 0  # 0 = Monday

@@ -4,113 +4,13 @@ import pathlib
 import time
 from sqlalchemy import text
 from config import HISTORY_ENABLED_TABLES, HISTORY_ENABLED_VIEWS
-from src.database import get_database_engine, execute_sql, get_postgres_engine, get_table_key_and_data_columns, recreate_views, select_into_dataframe, table_exists, view_exists
+from src.database import column_exists, drop_all_views, get_database_engine, execute_sql, get_postgres_engine, get_table_key_and_data_columns, mapping_sqlite_to_postgres, pg_migrate_week_to_ISO_week, recreate_views, select_into_dataframe, table_exists, view_exists
 from src.decorator_log_function import log_function
-from src.data_aging import DataAgingService, get_history_select_statement, is_classified_for_master_data
+from src.data_aging import DataAgingService, get_history_select_statement
 from src.util import executed_as_github_action
 
 logger = logging.getLogger(__name__)
-
-class HistorizationService:
-    @staticmethod
-    def _get_columns(connection, table_name):
-        """
-        Retrieves the column details for a given table using pragma_table_info.
-        Returns a list of dicts: [{'name': 'col1', 'type': 'TEXT'}, ...]
-        """
-        logger.info(f"Fetching columns for {table_name}")
-        try:
-             # Using pragma_table_info directly
-            query = text(f"SELECT name, type FROM pragma_table_info('{table_name}')")
-            result = connection.execute(query).fetchall()
-            columns = [{"name": row[0], "type": row[1]} for row in result]
-            # logger.info(f"Found columns: {columns}")
-            return columns
-        except Exception as e:
-            logger.error(f"Error fetching columns for {table_name}: {e}")
-            return []
-
-    @staticmethod
-    @log_function
-    def run_daily_historization(source_table: str):
-        """
-        Copies data from source_table to history_table with an UPSERT strategy.
-        Adds a 'snapshot_date' column with the current date.
-        """
-        start_time = time.time()
-        
-        history_table = f"{source_table}HistoryDaily"
-        key_columns, _ = get_table_key_and_data_columns(source_table)
-        key_column_names = [col['name'] for col in key_columns]
-
-        logger.info(f"Starting historization from {source_table} to {history_table}")
-        _create_history_tables_and_view_if_not_exist(source_table)
-
-        engine = get_database_engine()
-        with engine.begin() as connection:
-            # 1. Get columns from source table
-            source_columns = HistorizationService._get_columns(connection, source_table)
-            if not source_columns:
-                logger.error(f"Source table {source_table} not found or has no columns.")
-                return
-
-            column_names = [col['name'] for col in source_columns]
-            
-            # 2. Build the SQL statement
-            # Target columns: snapshot_date + original columns
-            target_cols_str = "snapshot_date, " + ", ".join([f'"{c}"' for c in column_names])
-            select_cols_str = ", ".join([f'"{c}"' for c in column_names])
-            
-            # Update clause for UPSERT
-            # Exclude conflict keys from the update set
-            update_set = []
-            for col in column_names:
-                if col not in key_column_names:
-                    update_set.append(f'"{col}" = excluded."{col}"')
-            
-            update_clause = ", ".join(update_set)
-            conflict_target = ", ".join([f'"{k}"' for k in key_column_names])
-            
-            sqllite_sql = f"""
-                INSERT INTO "{history_table}" ({target_cols_str})
-                SELECT date('now'), {select_cols_str}
-                FROM "{source_table}"
-                WHERE 1=1 -- needed because of Parsing Ambiguity. Check SQLite documentation
-                ON CONFLICT(snapshot_date, {conflict_target}) DO UPDATE SET
-                {update_clause}
-            """
-
-            pg_sql = f"""
-                INSERT INTO "{history_table}" ({target_cols_str})
-                SELECT CURRENT_DATE, {select_cols_str}
-                FROM "{source_table}"
-                WHERE 1=1 -- needed because of Parsing Ambiguity. Check SQLite documentation
-                ON CONFLICT(snapshot_date, {conflict_target}) DO UPDATE SET
-                {update_clause}
-            """
-            
-            # 3. Execute
-            try:
-                # Use the new helper function to execute and log
-                execute_sql(connection, sqllite_sql, history_table, "UPSERT", f"Historize data from {source_table} to {history_table}")
-            except Exception as e:
-                logger.error(f"Error during historization execution on SQLite: {e}")
-                raise e
-
-        pg_engine = get_postgres_engine()
-        if pg_engine:
-            with pg_engine.begin() as connection:
-                try:
-                    # Use the new helper function to execute and log
-                    execute_sql(connection, pg_sql, history_table, "UPSERT", f"Historize data from {source_table} to {history_table}")
-                except Exception as e:
-                    logger.error(f"Error during historization execution on Postgres: {e}")
-                    raise e
-
-        # DataAgingService.run(source_table=source_table)
-        duration = time.time() - start_time
-        logger.info(f"Historization for {source_table} finished in {duration:.2f}s")
-
+   
 def run_historization_pipeline():
     """
     Orchestrates the historization process for all configured tables.
@@ -125,16 +25,114 @@ def run_historization_pipeline():
 
     try:
         for table in HISTORY_ENABLED_TABLES:
-            HistorizationService.run_daily_historization(
+            run_daily_historization(
                 source_table=table
             )
+
+        # for table in HISTORY_ENABLED_TABLES:
+        #     DataAgingService.run(source_table=table)
+
         logger.info("Historization Pipeline Completed Successfully.")
     except Exception as e:
         logger.error(f"Historization Pipeline Failed: {e}")
     
     # _create_history_merge_views()
-
     logger.info(f"Historization Pipeline Finished in {round(time.time() - start_time, 2)}s.")
+
+@log_function
+def run_daily_historization(source_table: str):
+    """
+    Copies data from source_table to history_table with an UPSERT strategy.
+    Adds a 'snapshot_date' column with the current date.
+    """
+    start_time = time.time()
+    
+    history_table = f"{source_table}HistoryDaily"
+    key_columns, data_columns = get_table_key_and_data_columns(source_table)
+    key_column_names = [col['name'] for col in key_columns]
+
+    logger.info(f"Starting historization from {source_table} to {history_table}")
+    _create_history_tables_and_view_if_not_exist(source_table)
+
+    engine = get_database_engine()
+    with engine.begin() as connection:
+        # 1. Get columns from source table
+        source_columns = _get_columns(connection, source_table)
+        if not source_columns:
+            logger.error(f"Source table {source_table} not found or has no columns.")
+            return
+
+        column_names = [col['name'] for col in source_columns]
+        data_column_names = [col['name'] for col in data_columns]
+        
+        # 2. Build the SQL statement
+        # Target columns: snapshot_date + original columns
+        target_cols_str = "snapshot_date, " + ", ".join([f'"{c}"' for c in column_names])
+        select_cols_str = ", ".join([f'"{c}"' for c in column_names])
+        
+        # Update clause for UPSERT
+        # Exclude conflict keys from the update set
+
+        conflict_target = ", ".join([f'"{key_col}"' for key_col in key_column_names])
+        update_clause = ", ".join([f'"{col}" = excluded."{col}"' for col in data_column_names])
+        where_clause = " OR ".join([f'hist."{col}" IS DISTINCT FROM excluded."{col}"' for col in data_column_names])
+        
+        sqllite_sql = f"""
+            INSERT INTO "{history_table}" ({target_cols_str})
+            SELECT date('now'), {select_cols_str}
+            FROM "{source_table}" 
+            WHERE 1=1 -- needed because of Parsing Ambiguity. Check SQLite documentation
+            ON CONFLICT(snapshot_date, {conflict_target}) DO UPDATE SET
+            {update_clause}
+        """
+
+        pg_sql = f"""
+            INSERT INTO "{history_table}" as hist ({target_cols_str})
+            SELECT CURRENT_DATE, {select_cols_str}
+            FROM "{source_table}"
+            ON CONFLICT(snapshot_date, {conflict_target}) DO UPDATE SET
+            {update_clause}
+            WHERE {where_clause}
+        """
+        
+        # 3. Execute
+        try:
+            # Use the new helper function to execute and log
+            execute_sql(connection, sqllite_sql, history_table, "UPSERT", f"Historize data from {source_table} to {history_table}")
+        except Exception as e:
+            logger.error(f"Error during historization execution on SQLite: {e}")
+            raise e
+
+    pg_engine = get_postgres_engine()
+    if pg_engine:
+        with pg_engine.begin() as connection:
+            try:
+                # Use the new helper function to execute and log
+                execute_sql(connection, pg_sql, history_table, "UPSERT", f"Historize data from {source_table} to {history_table}")
+            except Exception as e:
+                logger.error(f"Error during historization execution on Postgres: {e}")
+                raise e
+
+    duration = time.time() - start_time
+    logger.info(f"Historization for {source_table} finished in {duration:.2f}s")
+
+def _get_columns(connection, table_name):
+    """
+    Retrieves the column details for a given table using pragma_table_info.
+    Returns a list of dicts: [{'name': 'col1', 'type': 'TEXT'}, ...]
+    """
+    logger.info(f"Fetching columns for {table_name}")
+    try:
+            # Using pragma_table_info directly
+        query = text(f"SELECT name, type FROM pragma_table_info('{table_name}')")
+        result = connection.execute(query).fetchall()
+        columns = [{"name": row[0], "type": row[1]} for row in result]
+        # logger.info(f"Found columns: {columns}")
+        return columns
+    except Exception as e:
+        logger.error(f"Error fetching columns for {table_name}: {e}")
+        return []
+
 
 def _create_history_tables_and_view_if_not_exist(source_table: str):
     """
@@ -142,8 +140,12 @@ def _create_history_tables_and_view_if_not_exist(source_table: str):
     """
     path_sql_create_table_statements = pathlib.Path("db/SQL/tables/create_table/history")
     path_sql_create_table_statements.mkdir(parents=True, exist_ok=True)
-    engine = get_database_engine()
     pg_engine = get_postgres_engine()
+
+    if not pg_engine:
+        logger.warning("PostgreSQL engine not configured, skipping history table creation in Postgres.")
+        return
+    
     table = source_table
   
     daily_history_table_name, create_daily_table_sql = _get_daily_history_table_name_create_statement(table)
@@ -151,7 +153,7 @@ def _create_history_tables_and_view_if_not_exist(source_table: str):
         # write sql to file "{daily_history_table_name}.sql" to db/SQL/tables/create_table/history/
         with open(f"{path_sql_create_table_statements}/{daily_history_table_name}.sql", "w") as f:
             f.write(create_daily_table_sql)
-        with engine.begin() as connection:
+        with pg_engine.begin() as connection:
             execute_sql(connection, create_daily_table_sql, daily_history_table_name, "CREATE TABLE")
     
     weekly_history_table_name, create_weekly_table_sql = _get_weekly_history_table_name_create_statement(table)
@@ -159,7 +161,7 @@ def _create_history_tables_and_view_if_not_exist(source_table: str):
         # write sql to file "{weekly_history_table_name}.sql" to db/SQL/tables/create_table/history/
         with open(f"{path_sql_create_table_statements}/{weekly_history_table_name}.sql", "w") as f:
             f.write(create_weekly_table_sql)
-        with engine.begin() as connection:
+        with pg_engine.begin() as connection:
             execute_sql(connection, create_weekly_table_sql, weekly_history_table_name, "CREATE TABLE")
     
     monthly_history_table_name, create_monthly_table_sql = _get_monthly_history_table_name_create_statement(table)
@@ -167,7 +169,7 @@ def _create_history_tables_and_view_if_not_exist(source_table: str):
         # write sql to file "{monthly_history_table_name}.sql" to db/SQL/tables/create_table/history/
         with open(f"{path_sql_create_table_statements}/{monthly_history_table_name}.sql", "w") as f:
             f.write(create_monthly_table_sql)
-        with engine.begin() as connection:
+        with pg_engine.begin() as connection:
             execute_sql(connection, create_monthly_table_sql, monthly_history_table_name, "CREATE TABLE")
     
     master_data_table_name, create_master_data_table_sql = _get_master_data_table_name_create_statement(table)
@@ -175,7 +177,7 @@ def _create_history_tables_and_view_if_not_exist(source_table: str):
         # write sql to file "{master_data_table_name}.sql" to db/SQL/tables/create_table/history/
         with open(f"{path_sql_create_table_statements}/{master_data_table_name}.sql", "w") as f:
             f.write(create_master_data_table_sql)
-        with engine.begin() as connection:
+        with pg_engine.begin() as connection:
             execute_sql(connection, create_master_data_table_sql, master_data_table_name, "CREATE TABLE")
         
     history_view_name = f"{table}History"
@@ -185,13 +187,9 @@ def _create_history_tables_and_view_if_not_exist(source_table: str):
         create_view_sql = _get_history_view_create_statement(table)
         with open(f"{path_sql_create_view_statements}/{history_view_name}.sql", "w") as f:
             f.write(create_view_sql)
-        with engine.begin() as connection:
-            execute_sql(connection, f'DROP VIEW IF EXISTS "{history_view_name}";', history_view_name, "DROP VIEW")
+        with pg_engine.begin() as connection:
+            execute_sql(connection, f'DROP VIEW IF EXISTS "{history_view_name}" CASCADE;', history_view_name, "DROP VIEW")
             execute_sql(connection, create_view_sql, history_view_name, "CREATE VIEW")
-        if pg_engine:
-            with pg_engine.begin() as connection:
-                execute_sql(connection, f'DROP VIEW IF EXISTS "{history_view_name}" CASCADE;', history_view_name, "DROP VIEW")
-                execute_sql(connection, create_view_sql, history_view_name, "CREATE VIEW")
     logger.info(f"Ensured that {daily_history_table_name}, {weekly_history_table_name}, {monthly_history_table_name}, {master_data_table_name} tables exist.")
             
 
@@ -221,7 +219,7 @@ def _get_weekly_history_table_name_create_statement(table_name: str):
     create_statement_sql =  f"""
     -- generated by HistorizationService
     CREATE TABLE IF NOT EXISTS "{weekly_history_table_name}" (
-        year INT NOT NULL,
+        isoyear INT NOT NULL,
         week INT NOT NULL,
         {_get_column_definitions_str(table_name)},
         PRIMARY KEY(year, week, {_get_key_columns_str(table_name)})
@@ -284,6 +282,14 @@ def _get_key_columns_str(table_name: str):
     key_columns, _ = get_table_key_and_data_columns(table_name)
     key_columns_str = ", ".join([f'"{col["name"]}"' for col in key_columns])
     return key_columns_str
+
+def _get_data_columns_str(table_name: str):
+    """
+    Retrieves the key columns for the specified table.
+    """
+    _, data_columns = get_table_key_and_data_columns(table_name)
+    data_columns_str = ", ".join([f'"{col["name"]}"' for col in data_columns])
+    return data_columns_str
 
 def _get_history_view_create_statement(table_name: str):
     """
@@ -353,12 +359,14 @@ def _insert_date():
                         date,
                         year,
                         month,
+                        isoyear,
                         week
                     )
                     SELECT
                         CURRENT_DATE                          AS date,
                         EXTRACT(YEAR  FROM CURRENT_DATE)::int AS year,
                         EXTRACT(MONTH FROM CURRENT_DATE)::int AS month,
+                        EXTRACT(ISOYEAR  FROM CURRENT_DATE)::int AS year,
                         EXTRACT(WEEK  FROM CURRENT_DATE)::int AS week
                     ON CONFLICT(date) DO NOTHING
                 """
@@ -369,3 +377,57 @@ def _insert_date():
                     logger.error(f"Error inserting new date: {e}")
 
         logger.info(f"Inserted date to Dates History in {round(time.time() - start_time, 2)}s.")
+
+def migrate_weekly_history_tables():
+    """
+    Migrates weekly history tables to use ISO year and week.
+    """
+    pg_engine = get_postgres_engine()
+
+    if column_exists(pg_engine, "DatesHistory", "isoyear"):
+        logger.info("PostgreSQL Weekly History table already has isoyear column, skipping migration.")
+        return
+
+    drop_all_views(pg_engine)
+    
+    for table in HISTORY_ENABLED_TABLES:
+        weekly_history_table_name, create_weekly_table_sql = _get_weekly_history_table_name_create_statement(table)
+        if table_exists(weekly_history_table_name):
+            logger.info(f"Migrating {weekly_history_table_name} to ISO year and week...")
+            with pg_engine.begin() as connection:
+                rename_history_weekly = f'ALTER TABLE "{weekly_history_table_name}" RENAME TO "{weekly_history_table_name}Old";'
+                execute_sql(connection, rename_history_weekly, weekly_history_table_name, 'ALTER TABLE', f"RENAME to Old - Migrate {weekly_history_table_name} to ISO year and week")
+        
+                pg_create_weekly_table_sql = mapping_sqlite_to_postgres(create_weekly_table_sql)
+                execute_sql(connection, pg_create_weekly_table_sql, weekly_history_table_name, "CREATE TABLE", f"Migrate {weekly_history_table_name} to ISO year and week")
+                rename_weekly_table_column = f'ALTER TABLE "{weekly_history_table_name}" RENAME COLUMN year TO isoyear;'
+                execute_sql(connection, rename_weekly_table_column, weekly_history_table_name, 'ALTER TABLE', "RENAME COLUMN to isoyear - Migration to ISO week")
+             
+                _, data_columns = get_table_key_and_data_columns(table)
+                data_columns_str = ", ".join([f'MAX("{col["name"]}") AS "{col["name"]}"' for col in data_columns])  
+                insert_sql = f"""
+                    INSERT INTO "{weekly_history_table_name}" (
+                        isoyear,
+                        week,
+                        {_get_key_columns_str(table)},
+                        {_get_data_columns_str(table)}
+                    )
+                    SELECT
+                        EXTRACT(ISOYEAR FROM dh.date)::int AS isoyear,
+                        EXTRACT(WEEK FROM dh.date)::int AS week,
+                        { _get_key_columns_str(table) },
+                        { data_columns_str }
+                    FROM "{weekly_history_table_name}Old" AS old
+                    JOIN "DatesHistory" AS dh
+                    ON old.year = dh.year AND old.week = dh.week
+                    GROUP BY
+                        EXTRACT(ISOYEAR FROM dh.date)::int, 
+                        EXTRACT(WEEK FROM dh.date)::int,
+                        { _get_key_columns_str(table) }
+                """
+                execute_sql(connection, insert_sql, weekly_history_table_name, 'INSERT', "Migration to ISO week")
+                drop_weekly_history_old = f'DROP TABLE "{weekly_history_table_name}Old";'
+                execute_sql(connection, drop_weekly_history_old, f"{weekly_history_table_name}Old", 'DROP TABLE', "Migration to ISO week")
+
+    pg_migrate_week_to_ISO_week(pg_engine)
+            

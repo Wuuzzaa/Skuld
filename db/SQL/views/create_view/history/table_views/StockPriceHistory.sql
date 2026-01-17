@@ -31,7 +31,7 @@
         ON dates.date = daily.snapshot_date
         AND master_data."symbol" = daily."symbol"
         LEFT JOIN "StockPriceHistoryWeekly" as weekly 
-        ON dates.year = weekly.year
+        ON dates.isoyear = weekly.isoyear
         AND dates.week = weekly.week
         AND master_data."symbol" = weekly."symbol"
         LEFT JOIN "StockPriceHistoryMonthly" as monthly 

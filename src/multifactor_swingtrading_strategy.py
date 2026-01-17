@@ -3,8 +3,7 @@ from src.logger_config import setup_logging
 from config import *
 from src.decorator_log_function import log_function
 
-# enable logging
-setup_logging(component="script_multifactor_swingtrading", log_level=logging.DEBUG, console_output=True)
+# logging
 logger = logging.getLogger(__name__)
 logger.info(f"Start {__name__} ({__file__})")
 

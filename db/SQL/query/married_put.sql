@@ -50,9 +50,9 @@ FROM
                                                 SELECT
                                                     100 as number_of_stocks,
                                                     symbol,
-                                                    Company,
-                                                    sector,
-                                                    Industry,
+                                                    "Company",
+                                                    "Sector",
+                                                    "Industry",
                                                     expiration_date,
                                                     days_to_expiration,
                                                     option_open_interest,
@@ -66,7 +66,7 @@ FROM
                                                     iv,
                                                     round(impliedVolatility, 2) as impliedVolatility,
                                                     delta,
-                                                    SMA200,
+                                                    "SMA200",
                                                     live_stock_price,
                                                     strike_stock_price_difference,
                                                     strike_stock_price_difference_ptc,
@@ -82,7 +82,7 @@ FROM
                                                         ROUND(("Payouts/-Year" * (days_to_expiration / 365.0))) AS INTEGER
                                                     ) AS dividends_to_expiration
                                                 FROM
-                                                    OptionDataMerged
+                                                    "OptionDataMerged"
                                                 WHERE
                                                     has_fundamental_data_dividend_radar = true
                                                     and "option-type" = 'puts'

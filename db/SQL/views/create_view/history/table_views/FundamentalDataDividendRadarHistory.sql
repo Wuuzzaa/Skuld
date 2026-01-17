@@ -247,7 +247,7 @@
         ON dates.date = daily.snapshot_date
         AND master_data."Symbol" = daily."Symbol"
         LEFT JOIN "FundamentalDataDividendRadarHistoryWeekly" as weekly 
-        ON dates.year = weekly.year
+        ON dates.isoyear = weekly.isoyear
         AND dates.week = weekly.week
         AND master_data."Symbol" = weekly."Symbol"
         LEFT JOIN "FundamentalDataDividendRadarHistoryMonthly" as monthly 

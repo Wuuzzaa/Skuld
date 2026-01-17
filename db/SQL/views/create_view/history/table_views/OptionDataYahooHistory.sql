@@ -79,7 +79,7 @@
         ON dates.date = daily.snapshot_date
         AND master_data."contractSymbol" = daily."contractSymbol"
         LEFT JOIN "OptionDataYahooHistoryWeekly" as weekly 
-        ON dates.year = weekly.year
+        ON dates.isoyear = weekly.isoyear
         AND dates.week = weekly.week
         AND master_data."contractSymbol" = weekly."contractSymbol"
         LEFT JOIN "OptionDataYahooHistoryMonthly" as monthly 
