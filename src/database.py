@@ -285,7 +285,7 @@ def select_into_dataframe_pg(query: str = None, sql_file_path: str = None, param
             if params:
                 df = pd.read_sql(text(str(sql)), pg_engine, params=params)
             else:
-                df = pd.read_sql(sql, pg_engine)
+                df = pd.read_sql(text(str(sql)), pg_engine)
             logger.debug(f"[PostgreSQL] Rows: {len(df)} - Runtime: {round(time.time() - start_pg, 2)}s.")
     except Exception as e:
             logger.error(f"[PostgreSQL] Error executing query: \n{e}")
