@@ -703,7 +703,11 @@ SELECT
 	-- Additional calculated fields
 	ROUND((c.analyst_mean_target - d.close)::numeric,2) as "target-close$",
 	ROUND((ROUND((c.analyst_mean_target - d.close)::numeric,2) / d.close * 100.0)::numeric, 2) as "target-close%",
-    ROUND((d.close * a.iv * sqrt(a.days_to_expiration / 365.0))::numeric, 2) as expected_move
+    CASE
+		WHEN a.days_to_expiration >= 0 THEN
+			ROUND((d.close * a.implied_volatility * sqrt(a.days_to_expiration / 365.0))::numeric, 2)
+		ELSE NULL
+	END as expected_move
 FROM 
    "OptionData" AS a
 JOIN 

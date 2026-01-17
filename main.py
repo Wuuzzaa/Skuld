@@ -1,7 +1,6 @@
 import time
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from src.barchart_scrapper import scrape_barchart
 from src.live_stock_price_collector import fetch_current_prices
 from src.logger_config import setup_logging
 from src.database import run_migrations
@@ -14,10 +13,9 @@ from src.yahooquery_financials import generate_fundamental_data
 from src.yfinance_analyst_price_targets import scrape_yahoo_finance_analyst_price_targets
 from config import *
 from src.dividend_radar import process_dividend_data
-from config_utils import get_filtered_symbols_and_dates_with_logging, get_filtered_symbols_with_logging
+from config_utils import get_filtered_symbols_and_dates_with_logging
 from config_utils import generate_expiry_dates_from_rules
 from src.historization import run_historization_pipeline
-from src.util import executed_as_github_action
 from src.pipeline_monitor import PipelineMonitor
 
 setup_logging(component="data_collector", log_level=logging.INFO, console_output=True)
@@ -34,7 +32,7 @@ def main():
 
     try:
         run_migrations()
-
+    
         logger.info("#" * 80)
         logger.info(f"Starting Data Collection Pipeline (Full Parallel Mode)")
         logger.info(f"Symbol selection mode: {SYMBOL_SELECTION['mode']}")
@@ -68,14 +66,18 @@ def main():
             ("Fetch Current Stock Prices", fetch_current_prices, ()),
         ]
 
+        max_workers = MAX_WORKERS if MAX_WORKERS > 0 else len(parallel_tasks)
         logger.info(f"\n{'=' * 80}")
-        logger.info(f"Running ALL {len(parallel_tasks)} data collection tasks in parallel")
-        logger.info(f"Max workers: {len(parallel_tasks)}")
+        logger.info(f"Max workers: {max_workers}")
+        if max_workers < len(parallel_tasks):
+            logger.info(f"Running {len(parallel_tasks)} data collection tasks with max {max_workers} parallel workers")
+            logger.info(f"{'=' * 80}\n")
+        else:
+            logger.info(f"Running ALL {len(parallel_tasks)} data collection tasks in parallel")
         logger.info(f"{'=' * 80}\n")
 
         parallel_start = time.time()
 
-        max_workers = MAX_WORKERS if MAX_WORKERS > 0 else len(parallel_tasks)
 
         # Use ThreadPoolExecutor for I/O-bound tasks (web scraping)
         # Set max_workers to number of tasks (they're all I/O bound)

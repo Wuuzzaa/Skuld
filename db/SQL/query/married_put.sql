@@ -22,7 +22,7 @@ FROM
                             (total_investment + minimum_potential_profit) as total_return,
                             minimum_potential_profit / total_investment * 100 as roi_pct,
                             round(
-                                (minimum_potential_profit / days_to_expiration) * 365,
+                                CAST((minimum_potential_profit / days_to_expiration) * 365 AS NUMERIC ),
                                 2
                             ) as minimum_potential_profit_total_annualized
                         FROM
@@ -35,7 +35,7 @@ FROM
                                         ) + 3.5
                                     ) as total_investment,
                                     round(
-                                        dividend_sum_to_expiration - (extrinsic_value * number_of_stocks) -3.5,
+                                        CAST(dividend_sum_to_expiration - (extrinsic_value * number_of_stocks) -3.5 AS NUMERIC),
                                         2
                                     ) as minimum_potential_profit
                                 FROM
@@ -44,15 +44,15 @@ FROM
                                             *,
                                             ROUND(extrinsic_value * number_of_stocks + 3.5, 2) as max_loss_total,
                                             CAST(ceil(extrinsic_value / "Current-Div") as Integer) as dividends_to_break_even,
-                                            ROUND(dividends_to_expiration * "Current-Div", 2) * number_of_stocks AS dividend_sum_to_expiration
+                                            ROUND(CAST(dividends_to_expiration * "Current-Div" AS NUMERIC), 2) * number_of_stocks AS dividend_sum_to_expiration
                                         FROM
                                             (
                                                 SELECT
                                                     100 as number_of_stocks,
                                                     symbol,
-                                                    Company,
-                                                    sector,
-                                                    Industry,
+                                                    "Company",
+                                                    "Sector",
+                                                    "Industry",
                                                     expiration_date,
                                                     days_to_expiration,
                                                     option_open_interest,
@@ -64,9 +64,9 @@ FROM
                                                     extrinsic_value,
                                                     strike,
                                                     iv,
-                                                    round(impliedVolatility, 2) as impliedVolatility,
+                                                    round(CAST("impliedVolatility" AS NUMERIC),2) as "impliedVolatility",
                                                     delta,
-                                                    SMA200,
+                                                    "SMA200",
                                                     live_stock_price,
                                                     strike_stock_price_difference,
                                                     strike_stock_price_difference_ptc,
@@ -75,14 +75,14 @@ FROM
                                                     earnings_date,
                                                     days_to_earnings,
                                                     "No-Years",
-                                                    classification,
+                                                    "Classification",
                                                     "Payouts/-Year",
                                                     "Current-Div",
                                                     CAST(
                                                         ROUND(("Payouts/-Year" * (days_to_expiration / 365.0))) AS INTEGER
                                                     ) AS dividends_to_expiration
                                                 FROM
-                                                    OptionDataMerged
+                                                    "OptionDataMerged"
                                                 WHERE
                                                     has_fundamental_data_dividend_radar = true
                                                     and "option-type" = 'puts'
