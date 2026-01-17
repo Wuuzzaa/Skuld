@@ -133,7 +133,12 @@ set -a
 if [ -f "$ENV_FILE" ]; then
     # Use temp file to strip carriage returns (more portable than process substitution)
     ENV_TEMP=$(mktemp)
-    tr -d '\r' < "$ENV_FILE" > "$ENV_TEMP"
+    
+    # 1. Strip CR
+    # 2. Fix spaces around assignment (KEY = Val -> KEY=Val)
+    # 3. Filter only lines that look like assignments or comments (avoids 'variable: command not found')
+    tr -d '\r' < "$ENV_FILE" | sed 's/ *= */=/' | grep -E '^\s*#|^\s*[a-zA-Z_][a-zA-Z0-9_]*=' > "$ENV_TEMP"
+
     # source the temp file
     source "$ENV_TEMP"
     rm "$ENV_TEMP"
