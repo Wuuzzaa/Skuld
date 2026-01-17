@@ -191,6 +191,7 @@ DB_NAME=skuld_dev
 DB_PORT=5432
 PGADMIN_EMAIL=admin@admin.com
 PGADMIN_PASSWORD=admin
+PGADMIN_PORT=5051
 # Remote Backup Config
 REMOTE_DB_HOST=91.98.156.116
 REMOTE_DB_USER=deploy
@@ -219,6 +220,7 @@ $DB_PASS_VAL = if ($EnvVars.ContainsKey("DB_PASS")) { $EnvVars["DB_PASS"] } else
 $DB_NAME_VAL = if ($EnvVars.ContainsKey("DB_NAME")) { $EnvVars["DB_NAME"] } else { "skuld_dev" }
 $DB_PORT_VAL = if ($EnvVars.ContainsKey("DB_PORT")) { $EnvVars["DB_PORT"] } else { 5432 }
 $PG_EMAIL_VAL = if ($EnvVars.ContainsKey("PGADMIN_EMAIL")) { $EnvVars["PGADMIN_EMAIL"] } else { "admin@admin.com" }
+$PG_PORT_VAL = if ($EnvVars.ContainsKey("PGADMIN_PORT")) { $EnvVars["PGADMIN_PORT"] } else { 5051 }
 
 # Remote defaults
 $REMOTE_HOST_VAL = if ($EnvVars.ContainsKey("REMOTE_DB_HOST")) { $EnvVars["REMOTE_DB_HOST"] } else { "91.98.156.116" }
@@ -359,5 +361,5 @@ if (-not [string]::IsNullOrWhiteSpace($DumpFile)) {
 Write-Host "--------------------------------------------------------"
 Write-Host "Local Environment Ready (FRESH BUILD)" -ForegroundColor Green
 Write-Host "Postgres: localhost:$DB_PORT_VAL  (User: $DB_USER_VAL / Pass: $DB_PASS_VAL)" 
-Write-Host "PgAdmin:  http://localhost:5050   (User: $PG_EMAIL_VAL / Pass from .env)" 
+Write-Host "PgAdmin:  http://localhost:$PG_PORT_VAL   (User: $PG_EMAIL_VAL / Pass from .env)" 
 Write-Host "--------------------------------------------------------"

@@ -121,6 +121,7 @@ DB_NAME=skuld_dev
 DB_PORT=5432
 PGADMIN_EMAIL=admin@admin.com
 PGADMIN_PASSWORD=admin
+PGADMIN_PORT=5051
 # Remote Backup Config
 REMOTE_DB_HOST=91.98.156.116
 REMOTE_DB_USER=deploy
@@ -156,6 +157,7 @@ DB_NAME=${DB_NAME:-skuld_dev}
 DB_PORT=${DB_PORT:-5432}
 PGADMIN_EMAIL=${PGADMIN_EMAIL:-admin@admin.com}
 PGADMIN_PASSWORD=${PGADMIN_PASSWORD:-admin}
+PGADMIN_PORT=${PGADMIN_PORT:-5051}
 
 REMOTE_HOST_VAL=${REMOTE_DB_HOST:-"91.98.156.116"}
 REMOTE_USER_VAL=${REMOTE_DB_USER:-"deploy"}
@@ -305,5 +307,5 @@ fi
 echo -e "--------------------------------------------------------"
 echo -e "${GREEN}Local Environment Ready (FRESH BUILD)${NC}"
 echo -e "Postgres: localhost:$DB_PORT  (User: $DB_USER / Pass: $DB_PASS)" 
-echo -e "PgAdmin:  http://localhost:5050   (User: $PGADMIN_EMAIL / Pass from .env)" 
+echo -e "PgAdmin:  http://localhost:$PGADMIN_PORT   (User: $PGADMIN_EMAIL / Pass from .env)" 
 echo -e "--------------------------------------------------------"
