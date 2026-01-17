@@ -1,10 +1,10 @@
 #!/bin/bash
 #
-# Mac/Linux Script to Manage Local DB (Rebuild & Restore)
+# Mac/Linux Script to Manage Local DB (Clean Rebuild & Restore)
+# Matches functionality of manage_local_db.ps1
 #
-# Usage:
-#   ./manage_local_db.sh [path_to_dump_file]
-#
+
+set -e
 
 # --- Configuration ---
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -21,9 +21,87 @@ CYAN='\033[0;36m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-echo -e "${CYAN}Checking configuration...${NC}"
+# --- Helper Functions ---
+
+get_remote_dump_file() {
+    local default_host="$1"
+    local default_user="$2"
+    local default_path="$3"
+    local default_key="$4"
+
+    echo -e "\n${CYAN}--- Remote Download Configuration ---${NC}"
+    
+    read -p "Remote Host IP (Default: $default_host): " r_host
+    r_host=${r_host:-$default_host}
+
+    read -p "Remote User (Default: $default_user): " r_user
+    r_user=${r_user:-$default_user}
+
+    read -p "Remote Backup Folder (Default: $default_path): " r_path
+    r_path=${r_path:-$default_path}
+
+    read -p "Path to private SSH key (Leave empty for agent/default: $default_key): " r_key
+    r_key=${r_key:-$default_key}
+
+    SSH_CMD="ssh"
+    SCP_CMD="scp"
+
+    if [ -n "$r_key" ]; then
+        if [ ! -f "$r_key" ]; then
+            echo -e "${RED}SSH Key file not found: $r_key${NC}"
+            exit 1
+        fi
+        SSH_CMD="ssh -i \"$r_key\""
+        SCP_CMD="scp -i \"$r_key\""
+    fi
+
+    echo -e "${YELLOW}Verifying SSH connection to $r_user@$r_host...${NC}"
+    if ! eval $SSH_CMD -o BatchMode=yes -o StrictHostKeyChecking=no ${r_user}@${r_host} echo 'SSH_CONNECTION_OK' > /dev/null 2>&1; then
+         echo -e "${RED}SSH Connection FAILED!${NC}"
+         echo "Check VPN, IP, User, or Key Permissions."
+         exit 1
+    else
+         echo -e "${GREEN}SSH Connection established.${NC}"
+    fi
+
+    echo -e "${YELLOW}Checking $r_host for newest backup in $r_path...${NC}"
+    
+    # ls -1t sorts by modification time (newest first). head -n 1 takes the top one.
+    LATEST_FILE_REMOTE=$(eval $SSH_CMD -o StrictHostKeyChecking=no ${r_user}@${r_host} "ls -1t $r_path/*.sql* 2>/dev/null | head -n 1")
+
+    if [ -z "$LATEST_FILE_REMOTE" ]; then
+        echo -e "${RED}No .sql/.sql.gz files found in $r_path on $r_host${NC}"
+        exit 1
+    fi
+
+    FILENAME=$(basename "$LATEST_FILE_REMOTE")
+    echo -e "${GREEN}Found newest backup: $FILENAME${NC}"
+
+    DOWNLOAD_DIR="$HOME/Downloads"
+    LOCAL_FILE="$DOWNLOAD_DIR/$FILENAME"
+
+    if [ -f "$LOCAL_FILE" ]; then
+        read -p "File already exists locally ($LOCAL_FILE). Download again? [y/N]: " choice
+        case "$choice" in 
+          y|Y ) ;;
+          * ) echo "$LOCAL_FILE"; return ;;
+        esac
+    fi
+
+    echo -e "${CYAN}Downloading to $LOCAL_FILE ...${NC}"
+    eval $SCP_CMD -o StrictHostKeyChecking=no "${r_user}@${r_host}:\"$LATEST_FILE_REMOTE\"" "\"$LOCAL_FILE\""
+
+    if [ -f "$LOCAL_FILE" ]; then
+        echo -e "${GREEN}Download complete.${NC}"
+        echo "$LOCAL_FILE"
+    else
+        echo -e "${RED}Download failed.${NC}"
+        exit 1
+    fi
+}
 
 # --- 1. Load or Init .env ---
+echo -e "${CYAN}Checking configuration...${NC}"
 if [ ! -f "$ENV_FILE" ]; then
     echo -e "${YELLOW}.env file not found. Creating default.${NC}"
     cat <<EOT >> "$ENV_FILE"
@@ -33,40 +111,83 @@ DB_NAME=skuld_dev
 DB_PORT=5432
 PGADMIN_EMAIL=admin@admin.com
 PGADMIN_PASSWORD=admin
+# Remote Backup Config
+REMOTE_DB_HOST=91.98.156.116
+REMOTE_DB_USER=deploy
+REMOTE_DB_PATH=/home/deploy/backups/postgres
+SSH_KEY_PATH=
 EOT
+    echo -e "${GREEN}.env file created at $ENV_FILE${NC}"
 fi
 
-# Read .env variables (ignoring comments)
-export $(grep -v '^#' "$ENV_FILE" | xargs)
+# Read .env variables (handling potential quote issues simply)
+# We trust the .env is simple KEY=VALUE
+# Need to export them to use them
+set -a
+source "$ENV_FILE"
+set +a
 
-# Set defaults if missing
+# Defaults
 DB_USER=${DB_USER:-dev}
 DB_PASS=${DB_PASS:-dev}
 DB_NAME=${DB_NAME:-skuld_dev}
 DB_PORT=${DB_PORT:-5432}
 PGADMIN_EMAIL=${PGADMIN_EMAIL:-admin@admin.com}
+PGADMIN_PASSWORD=${PGADMIN_PASSWORD:-admin}
+
+REMOTE_HOST_VAL=${REMOTE_DB_HOST:-"91.98.156.116"}
+REMOTE_USER_VAL=${REMOTE_DB_USER:-"deploy"}
+REMOTE_PATH_VAL=${REMOTE_DB_PATH:-"/home/deploy/backups/postgres"}
+SSH_KEY_VAL=${SSH_KEY_PATH:-""}
+
 
 # --- 2. Check Docker ---
 if ! docker info > /dev/null 2>&1; then
-    echo -e "${RED}Docker is not running!${NC}"
-    echo "Please start Docker Desktop/Daemon and try again."
-    exit 1
+    echo -e "${YELLOW}Docker is not running or not accessible. Trying to start...${NC}"
+    open -a Docker || echo "Cannot start Docker automatically on this OS."
+    
+    echo "Waiting for Docker..."
+    for i in {1..60}; do
+        if docker info > /dev/null 2>&1; then
+            echo -e "${GREEN}Docker is running!${NC}"
+            break
+        fi
+        sleep 2
+        echo -n "."
+    done
+    
+    if ! docker info > /dev/null 2>&1; then
+        echo -e "${RED}Timeout waiting for Docker.${NC}"
+        exit 1
+    fi
 fi
 
 # --- 3. Determine Dump File ---
+METHOD=""
 if [ -z "$DUMP_FILE" ]; then
-    echo -e "${YELLOW}No args provided.${NC}"
-    echo "Please provide path to dump file as argument:"
-    echo "./manage_local_db.sh /path/to/dump.sql.gz"
-    echo ""
-    read -p "Or enter path now (Enter to skip restore, start empty): " INPUT_PATH
-    DUMP_FILE=$INPUT_PATH
+    echo "No dump file provided via arguments."
+    echo "1) Select local file path"
+    echo "2) Download latest from Remote Server ($REMOTE_HOST_VAL)"
+    echo "3) Start with EMPTY database (Cancel/Skip)"
+    
+    read -p "Choose option [1/2/3]: " METHOD
+    
+    if [ "$METHOD" == "2" ]; then
+        DUMP_FILE=$(get_remote_dump_file "$REMOTE_HOST_VAL" "$REMOTE_USER_VAL" "$REMOTE_PATH_VAL" "$SSH_KEY_VAL")
+    elif [ "$METHOD" == "3" ]; then
+        echo "Proceeding with empty DB."
+        DUMP_FILE=""
+    else
+        read -p "Enter full path to local .sql/.gz file: " DUMP_FILE
+        # Remove quotes if user added them
+        DUMP_FILE=$(echo "$DUMP_FILE" | tr -d '"' | tr -d "'")
+    fi
 fi
 
 # --- 4. Rebuild Environment ---
 echo -e "\n${CYAN}=== STARTING FRESH REBUILD ===${NC}"
 
-# Generate servers.json for pgAdmin
+# Update servers.json
 cat <<EOT > "$SERVERS_JSON"
 {
     "Servers": {
@@ -78,7 +199,7 @@ cat <<EOT > "$SERVERS_JSON"
             "MaintenanceDB": "$DB_NAME",
             "Username": "$DB_USER",
             "SSLMode": "prefer",
-            "PassFile": "/tmp/pgpass"
+            "PassFile": "/tmp/pgpass" 
         }
     }
 }
@@ -90,61 +211,71 @@ docker-compose -f "$COMPOSE_FILE" down -v
 echo -e "${CYAN}STARTING new containers...${NC}"
 docker-compose -f "$COMPOSE_FILE" up -d
 
-# Wait for DB
-echo -n "Waiting for Postgres..."
+echo -e "${CYAN}Waiting for connection to Postgres...${NC}"
 MAX_RETRIES=30
-COUNT=0
-CONNECTED=false
+RETRY_COUNT=0
+CAN_CONNECT=false
 
-while [ $COUNT -lt $MAX_RETRIES ]; do
-    if docker exec $CONTAINER_NAME bash -c "export PGPASSWORD=$DB_PASS; psql -U $DB_USER -d postgres -c '\q'" > /dev/null 2>&1; then
-        CONNECTED=true
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+    if docker exec $CONTAINER_NAME bash -c "export PGPASSWORD=$DB_PASS; psql -U $DB_USER -d postgres -c '\q'" >/dev/null 2>&1; then
+        CAN_CONNECT=true
         break
     fi
-    echo -n "."
     sleep 1
-    COUNT=$((COUNT+1))
+    echo -n "."
+    RETRY_COUNT=$((RETRY_COUNT+1))
 done
 echo ""
 
-if [ "$CONNECTED" = false ]; then
-    echo -e "${RED}Timeout waiting for DB container.${NC}"
+if [ "$CAN_CONNECT" = false ]; then
+    echo -e "${RED}Could not connect to database container after waiting.${NC}"
     exit 1
 fi
 
 # --- 5. Restoration Process ---
-if [ ! -z "$DUMP_FILE" ]; then
+if [ -n "$DUMP_FILE" ]; then
     if [ ! -f "$DUMP_FILE" ]; then
         echo -e "${RED}File not found: $DUMP_FILE${NC}"
     else
-        FULL_DUMP_PATH=$(realpath "$DUMP_FILE") # Ensure valid paths for docker cp
-        DUMP_FILENAME=$(basename "$FULL_DUMP_PATH")
+        DUMP_FILENAME=$(basename "$DUMP_FILE")
         CONTAINER_TMP_PATH="/tmp/$DUMP_FILENAME"
-
-        echo -e "${YELLOW}Restoring from $DUMP_FILENAME...${NC}"
-        docker cp "$FULL_DUMP_PATH" "$CONTAINER_NAME:$CONTAINER_TMP_PATH"
-
-        # Create Role Admin if needed
-        # docker exec $CONTAINER_NAME bash -c "export PGPASSWORD=$DB_PASS; psql -U $DB_USER -d postgres -c \"DO \$\$ BEGIN IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'admin') THEN CREATE ROLE admin; END IF; END \$\$;\""
-
-        echo -e "${CYAN}Importing data...${NC}"
         
+        echo -e "${YELLOW}Restoring from $DUMP_FILENAME...${NC}"
+        docker cp "$DUMP_FILE" "$CONTAINER_NAME:$CONTAINER_TMP_PATH"
+        
+        echo -e "${CYAN}Ensuring role 'admin' exists...${NC}"
+        ROLE_EXISTS=$(docker exec $CONTAINER_NAME bash -c "export PGPASSWORD=$DB_PASS; psql -U $DB_USER -d postgres -tAc \"SELECT 1 FROM pg_roles WHERE rolname='admin'\"")
+        
+        if [ "$ROLE_EXISTS" != "1" ]; then
+            docker exec $CONTAINER_NAME bash -c "export PGPASSWORD=$DB_PASS; psql -U $DB_USER -d postgres -c \"CREATE ROLE admin NOLOGIN;\""
+            echo "Role 'admin' created."
+        else
+            echo "Role 'admin' already exists."
+        fi
+
+        echo -e "${CYAN}Preparing target database '$DB_NAME'...${NC}"
+        
+        # Kill connections
+        docker exec $CONTAINER_NAME bash -c "export PGPASSWORD=$DB_PASS; psql -U $DB_USER -d postgres -c \"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$DB_NAME' AND pid <> pg_backend_pid();\"" > /dev/null
+        
+        # Drop and Create
+        docker exec $CONTAINER_NAME bash -c "export PGPASSWORD=$DB_PASS; psql -U $DB_USER -d postgres -c \"DROP DATABASE IF EXISTS \\\"$DB_NAME\\\";\""
+        docker exec $CONTAINER_NAME bash -c "export PGPASSWORD=$DB_PASS; psql -U $DB_USER -d postgres -c \"CREATE DATABASE \\\"$DB_NAME\\\";\""
+        
+        echo -e "${CYAN}Importing data...${NC}"
         if [[ "$DUMP_FILE" == *.gz ]]; then
             docker exec $CONTAINER_NAME bash -c "gunzip -c $CONTAINER_TMP_PATH | PGPASSWORD=$DB_PASS psql -U $DB_USER -d $DB_NAME"
         else
             docker exec $CONTAINER_NAME bash -c "PGPASSWORD=$DB_PASS psql -U $DB_USER -d $DB_NAME -f $CONTAINER_TMP_PATH"
         fi
-
-        # Cleanup
-        docker exec $CONTAINER_NAME rm $CONTAINER_TMP_PATH
+        
+        docker exec $CONTAINER_NAME rm "$CONTAINER_TMP_PATH"
         echo -e "${GREEN}Restore/Import finished.${NC}"
     fi
-else
-    echo -e "${YELLOW}Empty DB created (No dump file provided).${NC}"
 fi
 
 echo -e "--------------------------------------------------------"
 echo -e "${GREEN}Local Environment Ready (FRESH BUILD)${NC}"
-echo -e "Postgres: localhost:$DB_PORT (User: $DB_USER / Pass: $DB_PASS)"
-echo -e "PgAdmin:  http://localhost:5050   (User: $PGADMIN_EMAIL / Pass from .env)"
+echo -e "Postgres: localhost:$DB_PORT  (User: $DB_USER / Pass: $DB_PASS)" 
+echo -e "PgAdmin:  http://localhost:5050   (User: $PGADMIN_EMAIL / Pass from .env)" 
 echo -e "--------------------------------------------------------"
