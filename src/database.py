@@ -219,7 +219,11 @@ def select_into_dataframe(query: str = None, sql_file_path: str = None, params: 
     Returns:
     - pd.DataFrame: Result of the query.
     """
-    df = None
+    df = select_into_dataframe_pg(query=query, sql_file_path=sql_file_path, params=params)
+
+    if not df is None:
+        return df
+    
     if sql_file_path is not None and os.path.isfile(sql_file_path):
         with open(sql_file_path, 'r') as f:
             sql = f.read()
@@ -242,23 +246,9 @@ def select_into_dataframe(query: str = None, sql_file_path: str = None, params: 
             df = pd.read_sql(sql, engine)
 
         logger.debug(f"[SQLite]     Rows: {len(df)} - Runtime: {round(time.time() - start, 2)}s.")
-        
              
     except Exception as e:
         logger.error(f"[SQLite]     Error executing query {query}: \n{e}")
-
-    # Execute on PostgreSQL (Side-by-side test)
-    try:
-        pg_engine = get_postgres_engine()
-        if pg_engine:
-            start_pg = time.time()
-            if params:
-                pg_df = pd.read_sql(text(str(sql)), pg_engine, params=params)
-            else:
-                pg_df = pd.read_sql(sql, pg_engine)
-            logger.debug(f"[PostgreSQL] Rows: {len(pg_df)} - Runtime: {round(time.time() - start_pg, 2)}s.")
-    except Exception as e:
-            logger.error(f"[PostgreSQL] Error executing query: \n{e}")
 
     return df
 
@@ -299,7 +289,7 @@ def select_into_dataframe_pg(query: str = None, sql_file_path: str = None, param
             logger.debug(f"[PostgreSQL] Rows: {len(df)} - Runtime: {round(time.time() - start_pg, 2)}s.")
     except Exception as e:
             logger.error(f"[PostgreSQL] Error executing query: \n{e}")
-            
+            logger.error(f"\n{str(sql)}")
     return df
 
 def get_table_key_and_data_columns(table_name):

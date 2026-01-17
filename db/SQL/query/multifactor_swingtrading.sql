@@ -6,7 +6,7 @@ SELECT DISTINCT
     "EBITDA" / "EnterpriseValue"                                                AS ebitda_to_enterprise_value,
     "FinData_currentPrice" / ("FreeCashFlow" / "KeyStats_sharesOutstanding")    AS price_to_cashflow,
     "Summary_trailingAnnualDividendYield"                                       AS shareholder_yield,
-    "KeyStats_52WeekChange"                                                     AS 1_year_price_appreciation
+    "KeyStats_52WeekChange"                                                     AS "1_year_price_appreciation"
 FROM
     "FundamentalDataYahoo"
 WHERE

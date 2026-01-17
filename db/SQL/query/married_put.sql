@@ -51,7 +51,7 @@ FROM
                                                     100 as number_of_stocks,
                                                     symbol,
                                                     "Company",
-                                                    sector,
+                                                    "Sector",
                                                     "Industry",
                                                     expiration_date,
                                                     days_to_expiration,
