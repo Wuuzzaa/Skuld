@@ -45,6 +45,6 @@ FROM
 			) AS SPREAD_PTC
 		FROM
 			"OptionDataMassive" AS A
-			JOIN "OptionDataYahoo" AS B ON A.OPTION_OSI = B."contractSymbol"
-			JOIN "StockPrice" AS C ON A.SYMBOL = C.SYMBOL
+			LEFT OUTER JOIN "OptionDataYahoo" AS B ON A.OPTION_OSI = B."contractSymbol"
+			LEFT OUTER JOIN "StockPrice" AS C ON A.SYMBOL = C.SYMBOL
 	);
