@@ -224,10 +224,16 @@ cat <<EOT > "$SERVERS_JSON"
 EOT
 
 echo -e "${YELLOW}TEARING DOWN old containers and volumes...${NC}"
-docker-compose -f "$COMPOSE_FILE" down -v
+docker-compose -f "$COMPOSE_FILE" down -v || true
 
 echo -e "${CYAN}STARTING new containers...${NC}"
-docker-compose -f "$COMPOSE_FILE" up -d
+if ! docker-compose -f "$COMPOSE_FILE" up -d; then
+    echo -e "${RED}Failed to start containers!${NC}"
+    echo "Common reasons:"
+    echo "1. Ports 5432 or 5050 are already in use by another service."
+    echo "2. Docker is not running."
+    exit 1
+fi
 
 echo -e "${CYAN}Waiting for connection to Postgres...${NC}"
 MAX_RETRIES=30

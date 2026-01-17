@@ -8,8 +8,6 @@
 # It does NOT start the main application or other services, which are managed by the main docker-compose.yml.
 # This setup is purely for providing the backing services for local development.
 
-version: '3.8'
-
 services:
   # --- LOCAL POSTGRES DATABASE ---
   db:
