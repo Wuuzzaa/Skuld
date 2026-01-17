@@ -64,7 +64,7 @@ FROM
                                                     extrinsic_value,
                                                     strike,
                                                     iv,
-                                                    round(impliedVolatility, 2) as impliedVolatility,
+                                                    round("impliedVolatility", 2) as "impliedVolatility",
                                                     delta,
                                                     "SMA200",
                                                     live_stock_price,
