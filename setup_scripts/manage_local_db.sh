@@ -29,7 +29,7 @@ get_remote_dump_file() {
     local default_path="$3"
     local default_key="$4"
 
-    echo -e "\n${CYAN}--- Remote Download Configuration ---${NC}"
+    echo -e "\n${CYAN}--- Remote Download Configuration ---${NC}" >&2
     
     read -p "Remote Host IP (Default: $default_host): " r_host
     r_host=${r_host:-$default_host}
@@ -53,55 +53,59 @@ get_remote_dump_file() {
 
     if [ -n "$r_key" ]; then
         if [ ! -f "$r_key" ]; then
-            echo -e "${RED}SSH Key file not found: $r_key${NC}"
-            echo "Current User Home: $HOME"
+            echo -e "${RED}SSH Key file not found: $r_key${NC}" >&2
+            echo "Current User Home: $HOME" >&2
             exit 1
         fi
         SSH_CMD="ssh -i \"$r_key\""
         SCP_CMD="scp -i \"$r_key\""
     fi
 
-    echo -e "${YELLOW}Verifying SSH connection to $r_user@$r_host...${NC}"
+    echo -e "${YELLOW}Verifying SSH connection to $r_user@$r_host...${NC}" >&2
     if ! eval $SSH_CMD -o BatchMode=yes -o StrictHostKeyChecking=no ${r_user}@${r_host} echo 'SSH_CONNECTION_OK' > /dev/null 2>&1; then
-         echo -e "${RED}SSH Connection FAILED!${NC}"
-         echo "Check VPN, IP, User, or Key Permissions."
+         echo -e "${RED}SSH Connection FAILED!${NC}" >&2
+         echo "Check VPN, IP, User, or Key Permissions." >&2
          exit 1
     else
-         echo -e "${GREEN}SSH Connection established.${NC}"
+         echo -e "${GREEN}SSH Connection established.${NC}" >&2
     fi
 
-    echo -e "${YELLOW}Checking $r_host for newest backup in $r_path...${NC}"
+    echo -e "${YELLOW}Checking $r_host for newest backup in $r_path...${NC}" >&2
     
     # ls -1t sorts by modification time (newest first). head -n 1 takes the top one.
     LATEST_FILE_REMOTE=$(eval $SSH_CMD -o StrictHostKeyChecking=no ${r_user}@${r_host} "ls -1t $r_path/*.sql* 2>/dev/null | head -n 1")
 
     if [ -z "$LATEST_FILE_REMOTE" ]; then
-        echo -e "${RED}No .sql/.sql.gz files found in $r_path on $r_host${NC}"
+        echo -e "${RED}No .sql/.sql.gz files found in $r_path on $r_host${NC}" >&2
         exit 1
     fi
 
     FILENAME=$(basename "$LATEST_FILE_REMOTE")
-    echo -e "${GREEN}Found newest backup: $FILENAME${NC}"
+    echo -e "${GREEN}Found newest backup: $FILENAME${NC}" >&2
 
     DOWNLOAD_DIR="$HOME/Downloads"
     LOCAL_FILE="$DOWNLOAD_DIR/$FILENAME"
 
     if [ -f "$LOCAL_FILE" ]; then
-        read -p "File already exists locally ($LOCAL_FILE). Download again? [y/N]: " choice
-        case "$choice" in 
-          y|Y ) ;;
-          * ) echo "$LOCAL_FILE"; return ;;
-        esac
+        # Prompting inside a captured function is tricky because stdout is captured.
+        # We must read from /dev/tty explicitly if we are inside a capture block.
+        # But for simplicity, we'll just check if it exists and use it, or ask user via stderr prompt.
+        
+        # Better: Assume yes if it exists to avoid UI glitches in capture mode, 
+        # or print to stderr "Using existing file".
+        echo -e "${YELLOW}File already exists locally ($LOCAL_FILE). Using it.${NC}" >&2
+        echo "$LOCAL_FILE"
+        return
     fi
 
-    echo -e "${CYAN}Downloading to $LOCAL_FILE ...${NC}"
-    eval $SCP_CMD -o StrictHostKeyChecking=no "${r_user}@${r_host}:\"$LATEST_FILE_REMOTE\"" "\"$LOCAL_FILE\""
+    echo -e "${CYAN}Downloading to $LOCAL_FILE ...${NC}" >&2
+    eval $SCP_CMD -o StrictHostKeyChecking=no "${r_user}@${r_host}:\"$LATEST_FILE_REMOTE\"" "\"$LOCAL_FILE\"" >&2
 
     if [ -f "$LOCAL_FILE" ]; then
-        echo -e "${GREEN}Download complete.${NC}"
+        echo -e "${GREEN}Download complete.${NC}" >&2
         echo "$LOCAL_FILE"
     else
-        echo -e "${RED}Download failed.${NC}"
+        echo -e "${RED}Download failed.${NC}" >&2
         exit 1
     fi
 }
