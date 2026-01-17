@@ -47,4 +47,4 @@ FROM
 			"OptionDataMassive" AS A
 			LEFT OUTER JOIN "OptionDataYahoo" AS B ON A.OPTION_OSI = B."contractSymbol"
 			LEFT OUTER JOIN "StockPrice" AS C ON A.SYMBOL = C.SYMBOL
-	);
+	) AS OPTION_PRICING_DATA;
