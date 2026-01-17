@@ -32,8 +32,6 @@ def main():
 
     try:
         run_migrations()
-
-        return 
     
         logger.info("#" * 80)
         logger.info(f"Starting Data Collection Pipeline (Full Parallel Mode)")
