@@ -122,9 +122,12 @@ fi
 
 # Read .env variables (handling potential quote issues simply)
 # We trust the .env is simple KEY=VALUE
-# Need to export them to use them
+# We strip \r (CR) to handle files edited on Windows
 set -a
-source "$ENV_FILE"
+if [ -f "$ENV_FILE" ]; then
+    # Use process substitution or temp file to strip carriage returns
+    source <(tr -d '\r' < "$ENV_FILE")
+fi
 set +a
 
 # Defaults
