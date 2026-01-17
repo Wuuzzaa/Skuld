@@ -1,0 +1,53 @@
+# Local Environment Setup for Developer
+#
+# This docker-compose file is intended for local development.
+# It sets up:
+# 1. A PostgreSQL database instance.
+# 2. pgAdmin 4 for database management.
+#
+# It does NOT start the main application or other services, which are managed by the main docker-compose.yml.
+# This setup is purely for providing the backing services for local development.
+
+services:
+  # --- LOCAL POSTGRES DATABASE ---
+  db:
+    image: postgres:15
+    container_name: skuld-local-db
+    environment:
+      POSTGRES_USER: ${DB_USER:-dev}
+      POSTGRES_PASSWORD: ${DB_PASS:-dev}
+      POSTGRES_DB: ${DB_NAME:-skuld_dev} # Default DB to create on init
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data_local:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - skuld-local-net
+
+  # --- PGADMIN (Optional: for DB GUI) ---
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: skuld-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@admin.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+    ports:
+      - "${PGADMIN_PORT:-5051}:80"
+    volumes:
+      - pgadmin_data_local:/var/lib/pgadmin
+      - ./setup_scripts/servers.json:/pgadmin4/servers.json
+    restart: unless-stopped
+    networks:
+      - skuld-local-net
+
+volumes:
+  postgres_data_local:
+  pgadmin_data_local:
+
+networks:
+  skuld-local-net:
+    driver: bridge
+
+# Note: The .env file should be in the same directory as this docker-compose file 
+# to substitute the variables.
