@@ -393,7 +393,7 @@ if __name__ == "__main__":
             expected_move,
             ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY abs(greeks_delta) DESC) AS row_num
         FROM
-            OptionDataMerged
+            "OptionDataMerged"
         WHERE
             expiration_date = :expiration_date
             AND contract_type = :option_type

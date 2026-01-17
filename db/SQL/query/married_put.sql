@@ -82,7 +82,7 @@ FROM
                                                         ROUND(("Payouts/-Year" * (days_to_expiration / 365.0))) AS INTEGER
                                                     ) AS dividends_to_expiration
                                                 FROM
-                                                    OptionDataMerged
+                                                    "OptionDataMerged"
                                                 WHERE
                                                     has_fundamental_data_dividend_radar = true
                                                     and "option-type" = 'puts'

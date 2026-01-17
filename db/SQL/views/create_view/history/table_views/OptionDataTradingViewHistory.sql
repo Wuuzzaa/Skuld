@@ -79,7 +79,7 @@
         ON dates.date = daily.snapshot_date
         AND master_data."option_osi" = daily."option_osi"
         LEFT JOIN "OptionDataTradingViewHistoryWeekly" as weekly 
-        ON dates.year = weekly.year
+        ON dates.isoyear = weekly.isoyear
         AND dates.week = weekly.week
         AND master_data."option_osi" = weekly."option_osi"
         LEFT JOIN "OptionDataTradingViewHistoryMonthly" as monthly 

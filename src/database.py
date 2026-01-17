@@ -6,7 +6,7 @@ import pandas as pd
 import logging
 from typing import Literal
 from sqlalchemy import create_engine, text, inspect
-from config import PATH_DATABASE_FILE, SSH_PKEY_PATH, SSH_HOST, SSH_USER, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_PORT, POSTGRES_HOST
+from config import HISTORY_ENABLED_TABLES, PATH_DATABASE_FILE, SSH_PKEY_PATH, SSH_HOST, SSH_USER, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_PORT, POSTGRES_HOST
 import numpy as np
 
 # logging
@@ -69,7 +69,7 @@ def get_postgres_engine():
         return _POSTGRES_ENGINE
 
     except Exception as e:
-        logger.error(f"Failed to connect to PostgreSQL: {e}")
+        logger.error(f"Failed to connect to PostgreSQL: \n{e}")
         return None
 
 
@@ -93,7 +93,7 @@ def truncate_table(table_name):
     pg_engine = get_postgres_engine()
     if pg_engine:
         with pg_engine.begin() as conn:
-            execute_sql(conn, f'DELETE FROM "{table_name}"', table_name, "TRUNCATE")
+            execute_sql(conn, f'TRUNCATE "{table_name}"', table_name, "TRUNCATE")
 
 def log_data_change(connection, operation_type, table_name, affected_rows=None, additional_data=None):
     """
@@ -113,7 +113,7 @@ def log_data_change(connection, operation_type, table_name, affected_rows=None, 
             "additional_data": additional_data
         })
     except Exception as e:
-        logger.error(f"Error logging data change: {e}")
+        logger.error(f"Error logging data change: \n{e}")
 
 def insert_into_table(
         table_name: str,
@@ -126,7 +126,12 @@ def insert_into_table(
     # 1. Execute on SQLite
     try:
         engine = get_database_engine()
-        affected_rows = dataframe.to_sql(table_name, engine, if_exists=if_exists, index=False)
+        affected_rows = dataframe.to_sql(
+                            table_name, 
+                            engine, 
+                            if_exists=if_exists, 
+                            index=False
+                        )
         logger.info(f"[SQLite]     Successfully saved {affected_rows} rows to the database table {table_name} in {round(time.time() - start,2)}s.")
         
         # Log the operation
@@ -134,7 +139,7 @@ def insert_into_table(
             log_data_change(connection, "INSERT", table_name, affected_rows=affected_rows)
             
     except Exception as e:
-        logger.error(f"[SQLite]     Error saving to the database table {table_name}: {e}")
+        logger.error(f"[SQLite]     Error saving to the database table {table_name}: \n{e}")
 
     # 2. Execute on PostgreSQL (Side-by-side test)
     try:
@@ -143,14 +148,21 @@ def insert_into_table(
             start_pg = time.time()
             # Postgres tends to be stricter, so we catch errors but don't stop the flow
             dataframe = dataframe.replace("None", np.nan)
-            pg_affected = dataframe.to_sql(table_name, pg_engine, if_exists=if_exists, index=False)
+            pg_affected = dataframe.to_sql(
+                              table_name,
+                              pg_engine, 
+                              if_exists=if_exists, 
+                              index=False,
+                              method='multi',
+                              chunksize=1000
+                         )
             rows_saved = len(dataframe)
             logger.info(f"[PostgreSQL] Successfully saved {rows_saved} rows to {table_name} in {round(time.time() - start_pg, 2)}s.")
             
             with pg_engine.begin() as pg_conn:
                 log_data_change(pg_conn, "INSERT", table_name, affected_rows=rows_saved)
     except Exception as e:
-        logger.error(f"[PostgreSQL] Error saving to table {table_name}: {e}")
+        logger.error(f"[PostgreSQL] Error saving to table {table_name}: \n{e}")
 
     return affected_rows
 
@@ -178,7 +190,7 @@ def execute_sql(connection, sql: str, table_name: str, operation_type: str = "IN
             log_data_change(connection, operation_type, table_name, affected_rows=affected_rows, additional_data=additional_data)
             return affected_rows
         except Exception as e:
-            logger.error(f"[SQLite]     Error executing SQL on {table_name}: {e}")
+            logger.error(f"[SQLite]     Error executing SQL on {table_name}: \n{e}")
             raise e
         
     if 'postgresql' in str(connection.engine.url):
@@ -192,7 +204,7 @@ def execute_sql(connection, sql: str, table_name: str, operation_type: str = "IN
             log_data_change(connection, operation_type, table_name, affected_rows=pg_affected, additional_data=additional_data)
             return pg_affected
         except Exception as e:
-            logger.error(f"[PostgreSQL] Error executing SQL on {table_name}: {e}")
+            logger.error(f"[PostgreSQL] Error executing SQL on {table_name}: \n{e}")
 
 def select_into_dataframe(query: str = None, sql_file_path: str = None, params: dict = None):
     """
@@ -208,20 +220,19 @@ def select_into_dataframe(query: str = None, sql_file_path: str = None, params: 
     - pd.DataFrame: Result of the query.
     """
     df = None
+    if sql_file_path is not None and os.path.isfile(sql_file_path):
+        with open(sql_file_path, 'r') as f:
+            sql = f.read()
+    elif query is not None:
+        sql = query
+    else:
+        msg = "Either 'query' or 'sql_file_path' must be provided."
+        logger.error(msg)
+        raise ValueError(msg)
     try:
         #print(f"Executing query: {query} parameters: {params}")
         start = time.time()
         engine = get_database_engine()
-
-        if sql_file_path is not None and os.path.isfile(sql_file_path):
-            with open(sql_file_path, 'r') as f:
-                sql = f.read()
-        elif query is not None:
-            sql = query
-        else:
-            msg = "Either 'query' or 'sql_file_path' must be provided."
-            logger.error(msg)
-            raise ValueError(msg)
 
         # If parameters are provided, use text() with bound parameters
         if params:
@@ -232,22 +243,63 @@ def select_into_dataframe(query: str = None, sql_file_path: str = None, params: 
 
         logger.debug(f"[SQLite]     Rows: {len(df)} - Runtime: {round(time.time() - start, 2)}s.")
         
-        # Execute on PostgreSQL (Side-by-side test)
-        try:
-            pg_engine = get_postgres_engine()
-            if pg_engine:
-                start_pg = time.time()
-                if params:
-                    pg_df = pd.read_sql(text(str(sql)), pg_engine, params=params)
-                else:
-                    pg_df = pd.read_sql(sql, pg_engine)
-                logger.info(f"[PostgreSQL] Rows: {len(pg_df)} - Runtime: {round(time.time() - start_pg, 2)}s.")
-        except Exception as e:
-             logger.error(f"[PostgreSQL] Error executing query: {e}")
              
     except Exception as e:
-        logger.error(f"Error executing query {query}: {e}")
+        logger.error(f"[SQLite]     Error executing query {query}: \n{e}")
 
+    # Execute on PostgreSQL (Side-by-side test)
+    try:
+        pg_engine = get_postgres_engine()
+        if pg_engine:
+            start_pg = time.time()
+            if params:
+                pg_df = pd.read_sql(text(str(sql)), pg_engine, params=params)
+            else:
+                pg_df = pd.read_sql(sql, pg_engine)
+            logger.debug(f"[PostgreSQL] Rows: {len(pg_df)} - Runtime: {round(time.time() - start_pg, 2)}s.")
+    except Exception as e:
+            logger.error(f"[PostgreSQL] Error executing query: \n{e}")
+
+    return df
+
+def select_into_dataframe_pg(query: str = None, sql_file_path: str = None, params: dict = None):
+    """
+    Executes a SQL query and returns the result as a DataFrame.
+    You can provide either a SQL query string or a path to a .sql file.
+
+    Parameters:
+    - query (str, optional): SQL query string to execute.
+    - sql_file_path (str, optional): Path to a .sql file containing the query.
+    - params (dict, optional): Dictionary of parameters to bind to the query (e.g., {'expiration_date': '2026-08-21'})
+
+    Returns:
+    - pd.DataFrame: Result of the query.
+    """
+    df = None
+  
+    # Execute on PostgreSQL (Side-by-side test)
+    try:
+        if sql_file_path is not None and os.path.isfile(sql_file_path):
+            with open(sql_file_path, 'r') as f:
+                sql = f.read()
+        elif query is not None:
+            sql = query
+        else:
+            msg = "Either 'query' or 'sql_file_path' must be provided."
+            logger.error(msg)
+            raise ValueError(msg)
+
+        pg_engine = get_postgres_engine()
+        if pg_engine:
+            start_pg = time.time()
+            if params:
+                df = pd.read_sql(text(str(sql)), pg_engine, params=params)
+            else:
+                df = pd.read_sql(sql, pg_engine)
+            logger.debug(f"[PostgreSQL] Rows: {len(df)} - Runtime: {round(time.time() - start_pg, 2)}s.")
+    except Exception as e:
+            logger.error(f"[PostgreSQL] Error executing query: \n{e}")
+            
     return df
 
 def get_table_key_and_data_columns(table_name):
@@ -306,7 +358,7 @@ def _run_migrations_for_engine(engine):
                     connection.execute(text('INSERT INTO "DbVersion" (version) VALUES (0)'))
                     logger.info(f"[{label}] DbVersion table created and initialized with version 0.")
                 except Exception as e:
-                    logger.error(f"[{label}] Error initializing DbVersion: {e}")
+                    logger.error(f"[{label}] Error initializing DbVersion: \n{e}")
                     # If this fails (e.g. invalid SQL for Postgres), we might stop here for this engine
                     return
 
@@ -347,7 +399,7 @@ def _run_migrations_for_engine(engine):
                         
                 logger.info(f"[{label}] Migration {migration_file} applied successfully.")
             except Exception as e:
-                logger.error(f"[{label}] Error applying migration {migration_file}: {e}")
+                logger.error(f"[{label}] Error applying migration {migration_file}: \n{e}")
                 # For PostgreSQL side-by-side, we continue usage, but for the main DB we might raise
                 if label == "SQLite":
                     raise e
@@ -424,7 +476,7 @@ def _recreate_views_for_engine(engine):
                         
                         progress_made = True
                     except Exception as e:
-                        logger.error(f"[{label}] Failed to create view {view_file}: {e}")
+                        logger.error(f"[{label}] Failed to create view {view_file}: \n{e}")
                         failed_views.append(view_file)
                 
                 if not progress_made and failed_views:
@@ -469,7 +521,7 @@ def table_exists(table_name: str) -> bool:
             insp_pg = inspect(pg_engine)
             exists_pg = insp_pg.has_table(table_name)
     except Exception as e:
-        logger.error(f"[PostgreSQL] Error checking table existence {table_name}: {e}")
+        logger.error(f"[PostgreSQL] Error checking table existence {table_name}: \n{e}")
         # If we can't check, we assume match sqlite or return False?
         # If we return False, we might trigger creation which might fail if DB is down.
         # But for 'side by side' test, we want to try to create if missing.
@@ -495,7 +547,7 @@ def view_exists(view_name: str) -> bool:
             insp_pg = inspect(pg_engine)
             exists_pg = view_name in insp_pg.get_view_names()
     except Exception as e:
-        logger.error(f"[PostgreSQL] Error checking view existence {view_name}: {e}")
+        logger.error(f"[PostgreSQL] Error checking view existence {view_name}: \n{e}")
         exists_pg = False
 
     return exists_sqlite and exists_pg
@@ -518,13 +570,13 @@ def pg_migrations():
                         connection.execute(text(statement))
                     except Exception as e:
                         error = True
-                        logger.error(f"[PostgreSQL] Error in statement '{statement}': {e}")
+                        logger.warning(f"[PostgreSQL] statement '{statement}': \n{e}")
             if not error:
                 logger.info(f"[PostgreSQL] Successfully in {round(time.time() - start_pg, 2)}s.")
             else:
                 logger.info(f"[PostgreSQL] Completed with some errors in {round(time.time() - start_pg, 2)}s.")
     except Exception as e:
-        logger.error(f"[PostgreSQL] Error: {e}")
+        logger.error(f"[PostgreSQL] Error: \n{e}")
 
 def mapping_sqlite_to_postgres(sql: str) -> str:
     """
@@ -533,11 +585,114 @@ def mapping_sqlite_to_postgres(sql: str) -> str:
     """
     # Example mappings
     mappings = {
-        'DATETIME': 'TIMESTAMP'
+        'DATETIME': 'TIMESTAMP',
+        'REAL': 'DOUBLE PRECISION',
+        'FLOAT': 'DOUBLE PRECISION'
     }
-    print(sql)
+    # print(sql)
     for sqlite_syntax, pg_syntax in mappings.items():
         sql = re.sub(r'\b' + re.escape(sqlite_syntax) + r'\b', pg_syntax, sql, flags=re.IGNORECASE)
         sql = sql.replace(f'"{sqlite_syntax}"', f'"{pg_syntax}"')
-    print(sql)
+    # print(sql)
     return sql
+
+def data_validation():
+    tables = select_into_dataframe(query="""
+        SELECT
+            name
+        FROM
+            sqlite_schema
+        where
+            type = 'table'
+            and name <> 'sqlite_sequence'
+        order by name;
+    """)
+    for index, row in tables.iterrows():
+        table_name = row['name']
+        count_df = select_into_dataframe(query=f'SELECT COUNT(*) as cnt FROM "{table_name}"')
+        if not count_df.empty:
+            count = count_df.iloc[0]['cnt']
+            logger.info(f"[SQLite]     Table {table_name} has {count} rows.")
+        count_df = select_into_dataframe_pg(query=f'SELECT COUNT(*) as cnt FROM "{table_name}"')
+        if not count_df.empty:
+            count = count_df.iloc[0]['cnt']
+            logger.info(f"[PostgreSQL] Table {table_name} has {count} rows.")
+
+def pg_migrate_week_to_ISO_week(pg_engine):
+
+    if not pg_engine:
+        logger.info("PostgreSQL not configured, skipping week to ISO week migration.")
+        return
+    if column_exists(pg_engine, "DatesHistory", "isoyear"):
+        logger.info("PostgreSQL DatesHistory table already has isoyear column, skipping migration.")
+        return
+    
+    with pg_engine.begin() as connection:
+        # for table in HISTORY_ENABLED_TABLES:
+        #     rename_weekly_table_column = f'ALTER TABLE "{table}HistoryWeekly" RENAME COLUMN year TO isoyear;'
+        #     execute_sql(connection, rename_weekly_table_column, f"{table}HistoryWeekly", 'ALTER TABLE', "Migration to ISO week")
+
+        #     update_weekly_table_data = f'''
+        #         UPDATE "{table}HistoryWeekly" as weekly
+        #         SET isoyear = EXTRACT(ISOYEAR FROM dh.date),
+        #             week = EXTRACT(WEEK FROM dh.date)
+        #         FROM (SELECT * FROM "DatesHistory" ORDER BY date DESC) AS dh
+        #         WHERE weekly.isoyear = dh.year
+        #         AND weekly.week = dh.week;
+        #     '''
+        #     execute_sql(connection, update_weekly_table_data, f"{table}HistoryWeekly", 'INSERT', "Migration to ISO week")
+        
+        # migrate DatesHistory table
+        rename_dates_history = 'ALTER TABLE "DatesHistory" RENAME TO "DatesHistoryOld";'
+        execute_sql(connection, rename_dates_history, "DatesHistory", 'ALTER TABLE', "Migration to ISO week")
+        
+        create_dates_history = """
+            Create Table "DatesHistory"(
+            date DATE PRIMARY KEY,
+            year INT,
+            month INT,
+            isoyear INT,
+            week INT
+        );
+        """
+        execute_sql(connection, create_dates_history, "DatesHistory", 'CREATE TABLE', "Migration to ISO week")
+        copy_dates_history = """
+            INSERT INTO "DatesHistory" 
+            (date, year, month, isoyear, week)
+            SELECT
+                date,
+                EXTRACT(YEAR FROM date) AS year,
+                EXTRACT(MONTH FROM date) AS month,
+                EXTRACT(ISOYEAR FROM date) AS isoyear,
+                EXTRACT(WEEK FROM date) AS week
+            FROM "DatesHistoryOld";
+        """
+        execute_sql(connection, copy_dates_history, "DatesHistory", 'INSERT', "Migration to ISO week")
+
+        drop_dates_history_old = 'DROP TABLE "DatesHistoryOld";'
+        execute_sql(connection, drop_dates_history_old, "DatesHistory", 'DROP TABLE', "Migration to ISO week")
+
+def column_exists(engine, table_name, column_name, schema=None):
+    inspector = inspect(engine)
+    columns = inspector.get_columns(table_name, schema=schema)
+    return any(col["name"] == column_name for col in columns)
+
+def drop_all_views(engine):
+    """
+    Drops all views in database.
+    """
+    if 'postgresql' in str(engine.url):
+        label = "PostgreSQL"
+    if 'sqlite' in str(engine.url):
+        label = "SQLite    "
+
+    inspector = inspect(engine)
+    views = inspector.get_view_names()
+    with engine.begin() as connection:
+        for view in views:
+            try:
+                connection.execute(text(f'DROP VIEW IF EXISTS "{view}" CASCADE'))
+                logger.info(f"{label} Dropped view {view}.")
+            except Exception as e:
+                logger.error(f"{label} Error dropping view {view}: \n{e}")
+    

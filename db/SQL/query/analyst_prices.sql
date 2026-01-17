@@ -7,4 +7,4 @@ SELECT DISTINCT
     "target-close$",
     "target-close%"
 FROM
-    OptionDataMerged;
+    "OptionDataMerged";
