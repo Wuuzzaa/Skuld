@@ -3,6 +3,16 @@ PATH=/usr/local/bin:/usr/bin:/bin
 PYTHONPATH=/app/Skuld
 
 # Run data collection with timeout and lock protection
-# 10:00 CET = 09:00 UTC, 16:00 CET = 15:00 UTC (Mo-Fr)
-0 9 * * 1-5 /bin/bash /app/Skuld/run_data_collection.sh
-0 15 * * 1-5 /bin/bash /app/Skuld/run_data_collection.sh
+
+#############################################################################################
+# Option Data: Montag bis Freitag, alle 30 Minuten von 08:00 bis 21:00 UTC (09:00–22:00 MEZ)
+0,30 8-20 * * 1-5 /bin/bash /app/Skuld/run_data_collection.sh option_data
+
+# Saturday Night: Samstag, 21:00 UTC (22:00 MEZ)
+0 21 * * 6 /bin/bash /app/Skuld/run_data_collection.sh saturday_night
+
+# Marked Start/Mid/End: Montag bis Freitag, 09:00, 14:00, 19:00 UTC (10:00, 15:00, 20:00 MEZ)
+0 9,14,19 * * 1-5 /bin/bash /app/Skuld/run_data_collection.sh marked_start_mid_end
+
+# Stock Data Daily: Montag bis Freitag, 09:30 UTC (10:30 MEZ)
+30 9 * * 1-5 /bin/bash /app/Skuld/run_data_collection.sh stock_data_daily

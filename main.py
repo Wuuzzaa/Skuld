@@ -1,5 +1,6 @@
 import time
 import logging
+import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from src.live_stock_price_collector import fetch_current_prices
 from src.logger_config import setup_logging
@@ -23,7 +24,7 @@ logger = logging.getLogger(__name__)
 logger.info("Start SKULD")
 
 
-def main():
+def main(args):
     # Initialize Pipeline Monitor
     pipeline = PipelineMonitor()
     pipeline.start()
@@ -52,19 +53,44 @@ def main():
         symbols_to_use, filtered_expiry_dates = get_filtered_symbols_and_dates_with_logging(
             expiry_date_strings, "Option Data Collection"
         )
-        
-        # All data collection tasks - run in parallel!
-        parallel_tasks = [
-            ("Massive Option Chains", load_option_chains, ()),
-            ("Yahoo Finance Analyst Price Targets", scrape_yahoo_finance_analyst_price_targets, ()),
-            ("TradingView Option Data", scrape_option_data_trading_view, ()),
-            ("Price & Technical Indicators", scrape_and_save_price_and_technical_indicators, ()),
-            ("Dividend Radar", process_dividend_data, ()),
-            ("Earning Dates", scrape_earning_dates, ()),
-            ("Yahoo Query Option Chain", get_yahooquery_option_chain, ()),
-            ("Yahoo Query Fundamentals", generate_fundamental_data, ()),
-            ("Fetch Current Stock Prices", fetch_current_prices, ()),
-        ]
+
+        # select the data collection tasks to run
+        if args.mode == "all":
+            parallel_tasks = [
+                ("Massive Option Chains", load_option_chains, ()),
+                ("Yahoo Finance Analyst Price Targets", scrape_yahoo_finance_analyst_price_targets, ()),
+                ("Price & Technical Indicators", scrape_and_save_price_and_technical_indicators, ()),
+                ("Dividend Radar", process_dividend_data, ()),
+                ("Earning Dates", scrape_earning_dates, ()),
+                ("Yahoo Query Fundamentals", generate_fundamental_data, ()),
+                ("Fetch Current Stock Prices", fetch_current_prices, ()),
+            ]
+        elif args.mode == "saturday_night":
+            parallel_tasks = [
+                ("Yahoo Finance Analyst Price Targets", scrape_yahoo_finance_analyst_price_targets, ()),
+                ("Dividend Radar", process_dividend_data, ()),
+                ("Earning Dates", scrape_earning_dates, ()),
+                ("Yahoo Query Fundamentals", generate_fundamental_data, ()),
+            ]
+            pass
+        elif args.mode == "marked_start_mid_end":
+            parallel_tasks = [
+                ("Fetch Current Stock Prices", fetch_current_prices, ()),
+            ]
+        elif args.mode == "stock_data_daily":
+            parallel_tasks = [
+                ("Price & Technical Indicators", scrape_and_save_price_and_technical_indicators, ()),
+            ]
+        elif args.mode == "option_data":
+            parallel_tasks = [
+                ("Massive Option Chains", load_option_chains, ()),
+            ]
+        else:
+            raise ValueError(f"Unknown mode: {args.mode}")
+
+        # log mode and task names
+        task_names = [task[0] for task in parallel_tasks]
+        logging.info(f"Run mode: {args.mode} with tasks: {task_names}")
 
         max_workers = MAX_WORKERS if MAX_WORKERS > 0 else len(parallel_tasks)
         logger.info(f"\n{'=' * 80}")
@@ -141,4 +167,15 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Data Collection Script")
+    parser.add_argument("--mode", type=str, required=True,
+                        choices=[
+                            "all",
+                            "saturday_night",
+                            "marked_start_mid_end",
+                            "stock_data_daily"
+                            "option_data"
+                        ],
+                        help="Mode for data collection")
+    args = parser.parse_args()
+    main(args)
