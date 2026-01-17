@@ -32,7 +32,7 @@ def main():
 
     try:
         run_migrations()
-
+    
         logger.info("#" * 80)
         logger.info(f"Starting Data Collection Pipeline (Full Parallel Mode)")
         logger.info(f"Symbol selection mode: {SYMBOL_SELECTION['mode']}")
