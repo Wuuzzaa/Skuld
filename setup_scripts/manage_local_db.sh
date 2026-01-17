@@ -43,12 +43,18 @@ get_remote_dump_file() {
     read -p "Path to private SSH key (Leave empty for agent/default: $default_key): " r_key
     r_key=${r_key:-$default_key}
 
+    # Expand tilde (~) manually if present (shell read does not expand it)
+    case "$r_key" in 
+        "~"*) r_key="${HOME}${r_key#"~"}" ;;
+    esac
+
     SSH_CMD="ssh"
     SCP_CMD="scp"
 
     if [ -n "$r_key" ]; then
         if [ ! -f "$r_key" ]; then
             echo -e "${RED}SSH Key file not found: $r_key${NC}"
+            echo "Current User Home: $HOME"
             exit 1
         fi
         SSH_CMD="ssh -i \"$r_key\""
@@ -125,8 +131,12 @@ fi
 # We strip \r (CR) to handle files edited on Windows
 set -a
 if [ -f "$ENV_FILE" ]; then
-    # Use process substitution or temp file to strip carriage returns
-    source <(tr -d '\r' < "$ENV_FILE")
+    # Use temp file to strip carriage returns (more portable than process substitution)
+    ENV_TEMP=$(mktemp)
+    tr -d '\r' < "$ENV_FILE" > "$ENV_TEMP"
+    # source the temp file
+    source "$ENV_TEMP"
+    rm "$ENV_TEMP"
 fi
 set +a
 
