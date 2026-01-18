@@ -25,10 +25,29 @@ $ErrorActionPreference = "Stop"
 
 function Show-FileOpenDialog {
     Add-Type -AssemblyName System.Windows.Forms
+    Add-Type -AssemblyName System.Drawing
+
     $FileBrowser = New-Object System.Windows.Forms.OpenFileDialog
     $FileBrowser.Filter = "SQL Files (*.sql;*.gz)|*.sql;*.gz|All Files (*.*)|*.*"
     $FileBrowser.Title = "Select Database Dump File (Cancel for Empty DB)"
-    if ($FileBrowser.ShowDialog() -eq "OK") {
+
+    # Create dummy form to force dialog to foreground
+    $Form = New-Object System.Windows.Forms.Form
+    $Form.TopMost = $true
+    $Form.StartPosition = "Manual"
+    $Form.ShowInTaskbar = $false
+    $Form.Opacity = 0
+    $Form.Location = New-Object System.Drawing.Point(-20000, -20000)
+    
+    $Form.Show()
+    [void]$Form.Focus()
+
+    $result = $FileBrowser.ShowDialog($Form)
+    
+    $Form.Close()
+    $Form.Dispose()
+
+    if ($result -eq "OK") {
         return $FileBrowser.FileName
     }
     return $null
