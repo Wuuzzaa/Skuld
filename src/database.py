@@ -404,7 +404,7 @@ def _run_migrations_for_engine(engine):
                 logger.info(f"[{label}] Database version updated to {last_migration_version}.")
     
     # Recreate views after migrations
-    _recreate_views_for_engine(engine, label)
+    _recreate_views_for_engine(engine)
     logger.info(f"[{label}] Migration completed in {round(time.time() - start,2)}s")
 
 
