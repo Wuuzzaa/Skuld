@@ -5,6 +5,10 @@
     
     SELECT
         dates.date,
+        dates.year,
+        dates.month,
+        dates.isoyear,
+        dates.week,
         master_data."Symbol",
         coalesce(
                 daily."Company",
@@ -242,7 +246,8 @@
             ) as "Classification"
     FROM
         "DatesHistory" as dates
-        CROSS JOIN "FundamentalDataDividendRadarMasterData" as master_data 
+        INNER JOIN "FundamentalDataDividendRadarMasterData" as master_data 
+		ON dates.date BETWEEN master_data.from_date AND master_data.to_date
         LEFT JOIN "FundamentalDataDividendRadarHistoryDaily" as daily
         ON dates.date = daily.snapshot_date
         AND master_data."Symbol" = daily."Symbol"

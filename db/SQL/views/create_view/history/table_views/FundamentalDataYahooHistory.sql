@@ -5,6 +5,10 @@
     
     SELECT
         dates.date,
+        dates.year,
+        dates.month,
+        dates.isoyear,
+        dates.week,
         master_data."symbol",
         coalesce(
                 daily."asOfDate",
@@ -2828,7 +2832,8 @@
             ) as "Summary_navPrice"
     FROM
         "DatesHistory" as dates
-        CROSS JOIN "FundamentalDataYahooMasterData" as master_data 
+        INNER JOIN "FundamentalDataYahooMasterData" as master_data 
+		ON dates.date BETWEEN master_data.from_date AND master_data.to_date
         LEFT JOIN "FundamentalDataYahooHistoryDaily" as daily
         ON dates.date = daily.snapshot_date
         AND master_data."symbol" = daily."symbol"

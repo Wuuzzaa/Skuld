@@ -5,6 +5,10 @@
     
     SELECT
         dates.date,
+        dates.year,
+        dates.month,
+        dates.isoyear,
+        dates.week,
         master_data."symbol",
         coalesce(
                 daily."Recommend.Other",
@@ -578,7 +582,8 @@
             ) as "recommendation_sell_amount"
     FROM
         "DatesHistory" as dates
-        CROSS JOIN "TechnicalIndicatorsMasterData" as master_data 
+        INNER JOIN "TechnicalIndicatorsMasterData" as master_data 
+		ON dates.date BETWEEN master_data.from_date AND master_data.to_date
         LEFT JOIN "TechnicalIndicatorsHistoryDaily" as daily
         ON dates.date = daily.snapshot_date
         AND master_data."symbol" = daily."symbol"

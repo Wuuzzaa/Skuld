@@ -5,6 +5,10 @@
     
     SELECT
         dates.date,
+        dates.year,
+        dates.month,
+        dates.isoyear,
+        dates.week,
         master_data."option_osi",
         master_data."symbol" as "symbol",
 		master_data."option-type" as "option-type",
@@ -74,7 +78,8 @@
 		master_data."exchange" as "exchange"
     FROM
         "DatesHistory" as dates
-        CROSS JOIN "OptionDataTradingViewMasterData" as master_data 
+        INNER JOIN "OptionDataTradingViewMasterData" as master_data 
+		ON dates.date BETWEEN master_data.from_date AND master_data.to_date
         LEFT JOIN "OptionDataTradingViewHistoryDaily" as daily
         ON dates.date = daily.snapshot_date
         AND master_data."option_osi" = daily."option_osi"

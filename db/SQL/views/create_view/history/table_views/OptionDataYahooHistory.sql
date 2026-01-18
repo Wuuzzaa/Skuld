@@ -5,6 +5,10 @@
     
     SELECT
         dates.date,
+        dates.year,
+        dates.month,
+        dates.isoyear,
+        dates.week,
         master_data."contractSymbol",
         master_data."symbol" as "symbol",
 		master_data."option-type" as "option-type",
@@ -74,7 +78,8 @@
             ) as "option_volume"
     FROM
         "DatesHistory" as dates
-        CROSS JOIN "OptionDataYahooMasterData" as master_data 
+        INNER JOIN "OptionDataYahooMasterData" as master_data 
+		ON dates.date BETWEEN master_data.from_date AND master_data.to_date
         LEFT JOIN "OptionDataYahooHistoryDaily" as daily
         ON dates.date = daily.snapshot_date
         AND master_data."contractSymbol" = daily."contractSymbol"

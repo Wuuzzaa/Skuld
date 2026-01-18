@@ -5,6 +5,10 @@
     
     SELECT
         dates.date,
+        dates.year,
+        dates.month,
+        dates.isoyear,
+        dates.week,
         master_data."option_osi",
         coalesce(
                 daily."symbol",
@@ -140,7 +144,8 @@
             ) as "day_last_updated"
     FROM
         "DatesHistory" as dates
-        CROSS JOIN "OptionDataMassiveMasterData" as master_data 
+        INNER JOIN "OptionDataMassiveMasterData" as master_data 
+		ON dates.date BETWEEN master_data.from_date AND master_data.to_date
         LEFT JOIN "OptionDataMassiveHistoryDaily" as daily
         ON dates.date = daily.snapshot_date
         AND master_data."option_osi" = daily."option_osi"

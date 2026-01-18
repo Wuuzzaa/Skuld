@@ -5,6 +5,10 @@
     
     SELECT
         dates.date,
+        dates.year,
+        dates.month,
+        dates.isoyear,
+        dates.week,
         master_data."symbol",
         coalesce(
                 daily."live_stock_price",
@@ -26,7 +30,8 @@
             ) as "live_price_timestamp"
     FROM
         "DatesHistory" as dates
-        CROSS JOIN "StockPriceMasterData" as master_data 
+        INNER JOIN "StockPriceMasterData" as master_data 
+		ON dates.date BETWEEN master_data.from_date AND master_data.to_date
         LEFT JOIN "StockPriceHistoryDaily" as daily
         ON dates.date = daily.snapshot_date
         AND master_data."symbol" = daily."symbol"

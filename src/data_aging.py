@@ -34,15 +34,16 @@ class DataAgingService:
         # DataAgingService._promote_data_from_weekly_to_monthly(source_table)
         DataAgingService._promote_data_to_master_data(source_table)
 
-        DataAgingService._clean_up_history_tables(source_table)
+        # DataAgingService._clean_up_history_tables(source_table)
 
         end_time = time.time()
         total_duration = int(end_time - start_time)
         logger.info(f"Data aging completed for {source_table} in {total_duration}s ({total_duration / 60:.1f} minutes)")
-
+   
     def _insert_key_master_data(source_table: str):
         start_time = time.time()
         
+        _add_from_to_date_columns(source_table)
 
         daily_table = f"{source_table}HistoryDaily"    
         master_data_table = f"{source_table}MasterData" 
@@ -54,22 +55,40 @@ class DataAgingService:
         # Insert key to master data table
         
         insert_sql = f"""
-            INSERT INTO "{master_data_table}" (
+            INSERT INTO
+                "{master_data_table}" AS ORIGINAL (FROM_DATE, TO_DATE, {key_columns_str})
+            SELECT
+                MIN(SNAPSHOT_DATE) AS FROM_DATE,
+                MAX(SNAPSHOT_DATE) AS TO_DATE,
                 {key_columns_str}
-            )
-            SELECT DISTINCT
+            FROM
+                "{daily_table}"
+            GROUP BY
                 {key_columns_str}
-            FROM "{daily_table}"
-            WHERE 1=1 -- needed because of Parsing Ambiguity. Check SQLite documentation
-            ON CONFLICT({key_columns_str})
-            DO NOTHING
+            ON CONFLICT ({key_columns_str}) DO UPDATE
+            SET
+                FROM_DATE = CASE
+                    WHEN ORIGINAL.FROM_DATE IS NULL OR EXCLUDED.FROM_DATE < ORIGINAL.FROM_DATE THEN EXCLUDED.FROM_DATE
+                    ELSE ORIGINAL.FROM_DATE
+                END,
+                TO_DATE = CASE
+                    WHEN ORIGINAL.FROM_DATE IS NULL OR EXCLUDED.TO_DATE > ORIGINAL.TO_DATE THEN EXCLUDED.TO_DATE
+                    ELSE ORIGINAL.TO_DATE
+                END;
         """
+        
+        # insert_sql = f"""
+        #     INSERT INTO "{master_data_table}" (
+        #         {key_columns_str}
+        #     )
+        #     SELECT DISTINCT
+        #         {key_columns_str}
+        #     FROM "{daily_table}"
+        #     WHERE 1=1 -- needed because of Parsing Ambiguity. Check SQLite documentation
+        #     ON CONFLICT({key_columns_str})
+        #     DO NOTHING
+        # """
             
-  
-        engine = get_database_engine()
-        with engine.begin() as conn:
-            affected = execute_sql(conn, insert_sql, master_data_table, 'UPSERT', f"Insert keys to Master Data")
-
         pg_engine = get_postgres_engine()
         with pg_engine.begin() as conn:
             affected = execute_sql(conn, insert_sql, master_data_table, 'UPSERT', f"Insert keys to Master Data")
@@ -315,12 +334,14 @@ class DataAgingService:
     
         key_columns, data_columns = get_table_key_and_data_columns(master_data_table)
         key_columns_str = ", ".join([f'"{col["name"]}"' for col in key_columns])
+        key_columns_where_str = " AND ".join([f'md."{col["name"]}" = history_data."{col["name"]}"' for col in key_columns])
 
         # We process each data column
         for col in data_columns:
 
             with pg_engine.begin() as conn:
                 col_name = col['name']
+                col_type = col['type']
                 history_select = get_history_select_statement(source_table, optimized=False, needed_data_columns=[col_name])
                 logger.info(f"[PostgreSQL] Processing {source_table} column {col_name}...")
                 # 1. Promote to Master Data (Insert/Update)
@@ -333,32 +354,67 @@ class DataAgingService:
                     SELECT
                         {key_columns_str},
                         MIN("{col_name}") as val
-                    FROM ({history_select})
+                    FROM ({history_select}) AS history_data
                     WHERE "{col_name}" IS NOT NULL
-                        AND ({key_columns_str}) NOT IN (
+                        AND NOT EXISTS (
                             SELECT 
-                                {key_columns_str} 
-                            FROM "{master_data_table}" 
+                                1 
+                            FROM "{master_data_table}" AS md
                             WHERE "{col_name}" IS NOT NULL
+                                AND {key_columns_where_str}
+                                AND md."{col_name}" = history_data."{col_name}"
                         )
                     GROUP BY {key_columns_str}
                     HAVING 
-                        (min("{col_name}") = max("{col_name}"))
-                        AND ( 
-                            -- older than 1 year
-                            MIN(date::date) < CURRENT_DATE - INTERVAL '365 days'
-                            OR EXISTS(
-                                SELECT 1 
-                                FROM "DataAgingFieldClassification" AS dac
-                                WHERE dac.table_name = '{source_table}' 
-                                  AND dac.field_name = '{col_name}' 
-                                  AND dac.tier = 'Master'
-                            )
-                        )
+                        (MIN("{col_name}") = MAX("{col_name}"))
+                        OR EXISTS(
+                            SELECT 1 
+                            FROM "DataAgingFieldClassification" AS dac
+                            WHERE dac.table_name = '{source_table}' 
+                                AND dac.field_name = '{col_name}' 
+                                AND dac.tier = 'Master'
+                        )                    
                     ON CONFLICT({key_columns_str}) 
                     DO UPDATE SET "{col_name}" = excluded."{col_name}"
                 """
+
+                if col_type.lower() == 'boolean':
+                    promote_sql = promote_sql.replace(f'MIN("{col_name}")', f'CAST(MIN(CASE WHEN "{col_name}" THEN 1 ELSE 0 END) AS BOOLEAN)')
                 
+                
+                # promote_sql = f"""
+                #     INSERT INTO "{master_data_table}" (
+                #         {key_columns_str}, "{col_name}"
+                #     )
+                #     SELECT
+                #         {key_columns_str},
+                #         MIN("{col_name}") as val
+                #     FROM ({history_select}) AS history_data
+                #     WHERE "{col_name}" IS NOT NULL
+                #         AND ({key_columns_str}) NOT IN (
+                #             SELECT 
+                #                 {key_columns_str} 
+                #             FROM "{master_data_table}" 
+                #             WHERE "{col_name}" IS NOT NULL
+                #         )
+                #     GROUP BY {key_columns_str}
+                #     HAVING 
+                #         (min("{col_name}") = max("{col_name}"))
+                #         AND ( 
+                #             -- older than 1 year
+                #             MIN(date::date) < CURRENT_DATE - INTERVAL '365 days'
+                #             OR EXISTS(
+                #                 SELECT 1 
+                #                 FROM "DataAgingFieldClassification" AS dac
+                #                 WHERE dac.table_name = '{source_table}' 
+                #                   AND dac.field_name = '{col_name}' 
+                #                   AND dac.tier = 'Master'
+                #             )
+                #         )
+                #     ON CONFLICT({key_columns_str}) 
+                #     DO UPDATE SET "{col_name}" = excluded."{col_name}"
+                # """
+
                 try:
                     affected = execute_sql(conn, promote_sql, master_data_table, 'UPSERT', f"Promote column {col_name} to Master Data")
                     if affected > 0:
@@ -368,73 +424,73 @@ class DataAgingService:
                     logger.error(f"[PostgreSQL] Error promoting {source_table} column {col_name} to Master Data: {e}")
                     continue
                 
-                if affected > 0:
-                    # 2. Null out in Monthly
-                    null_out_sql = f"""
-                        UPDATE "{monthly_table}"
-                        SET "{col_name}" = NULL
-                        WHERE 
-                        "{col_name}" IS NOT NULL
-                        AND (
-                            {key_columns_str}
-                        ) IN (
-                            SELECT
-                                {key_columns_str}
-                            FROM "{master_data_table}" 
-                            WHERE "{col_name}" IS NOT NULL
-                        )          
-                    """
-                    try:
-                        affected = execute_sql(conn, null_out_sql, monthly_table, 'UPDATE', f"Null out column {col_name} in Monthly after promotion to Master Data")
-                        if affected > 0:
-                            logger.info(f"[PostgreSQL] Nulled out {affected} rows for column {col_name} in {monthly_table}.")
-                    except Exception as e:
-                        conn.rollback()
-                        logger.error(f"[PostgreSQL] Error nulling out {monthly_table} column {col_name}: {e}")
+                # if affected > 0:
+                #     # 2. Null out in Monthly
+                #     null_out_sql = f"""
+                #         UPDATE "{monthly_table}"
+                #         SET "{col_name}" = NULL
+                #         WHERE 
+                #         "{col_name}" IS NOT NULL
+                #         AND (
+                #             {key_columns_str}
+                #         ) IN (
+                #             SELECT
+                #                 {key_columns_str}
+                #             FROM "{master_data_table}" 
+                #             WHERE "{col_name}" IS NOT NULL
+                #         )          
+                #     """
+                #     try:
+                #         affected = execute_sql(conn, null_out_sql, monthly_table, 'UPDATE', f"Null out column {col_name} in Monthly after promotion to Master Data")
+                #         if affected > 0:
+                #             logger.info(f"[PostgreSQL] Nulled out {affected} rows for column {col_name} in {monthly_table}.")
+                #     except Exception as e:
+                #         conn.rollback()
+                #         logger.error(f"[PostgreSQL] Error nulling out {monthly_table} column {col_name}: {e}")
 
-                    null_out_sql = f"""
-                        UPDATE "{weekly_table}"
-                        SET "{col_name}" = NULL
-                        WHERE 
-                        "{col_name}" IS NOT NULL
-                        AND (
-                            {key_columns_str}
-                        ) IN (
-                            SELECT
-                                {key_columns_str}
-                            FROM "{master_data_table}" 
-                            WHERE "{col_name}" IS NOT NULL
-                        )          
-                    """
-                    try:
-                        affected = execute_sql(conn, null_out_sql, weekly_table, 'UPDATE', f"Null out column {col_name} in Weekly after promotion to Master Data")
-                        if affected > 0:
-                            logger.info(f"[PostgreSQL] Nulled out {affected} rows for column {col_name} in {weekly_table}.")
-                    except Exception as e:
-                        conn.rollback()
-                        logger.error(f"[PostgreSQL] Error nulling out {monthly_table} column {col_name}: {e}")
+                #     null_out_sql = f"""
+                #         UPDATE "{weekly_table}"
+                #         SET "{col_name}" = NULL
+                #         WHERE 
+                #         "{col_name}" IS NOT NULL
+                #         AND (
+                #             {key_columns_str}
+                #         ) IN (
+                #             SELECT
+                #                 {key_columns_str}
+                #             FROM "{master_data_table}" 
+                #             WHERE "{col_name}" IS NOT NULL
+                #         )          
+                #     """
+                #     try:
+                #         affected = execute_sql(conn, null_out_sql, weekly_table, 'UPDATE', f"Null out column {col_name} in Weekly after promotion to Master Data")
+                #         if affected > 0:
+                #             logger.info(f"[PostgreSQL] Nulled out {affected} rows for column {col_name} in {weekly_table}.")
+                #     except Exception as e:
+                #         conn.rollback()
+                #         logger.error(f"[PostgreSQL] Error nulling out {monthly_table} column {col_name}: {e}")
 
-                    null_out_sql = f"""
-                        UPDATE "{daily_table}"
-                        SET "{col_name}" = NULL
-                        WHERE 
-                        "{col_name}" IS NOT NULL
-                        AND (
-                            {key_columns_str}
-                        ) IN (
-                            SELECT
-                                {key_columns_str}
-                            FROM "{master_data_table}" 
-                            WHERE "{col_name}" IS NOT NULL
-                        )          
-                    """
-                    try:
-                        affected = execute_sql(conn, null_out_sql, daily_table, 'UPDATE', f"Null out column {col_name} in Daily after promotion to Master Data")
-                        if affected > 0:
-                            logger.info(f"[PostgreSQL] Nulled out {affected} rows for column {col_name} in {weekly_table}.")
-                    except Exception as e:
-                        conn.rollback()
-                        logger.error(f"[PostgreSQL] Error nulling out {monthly_table} column {col_name}: {e}")
+                #     null_out_sql = f"""
+                #         UPDATE "{daily_table}"
+                #         SET "{col_name}" = NULL
+                #         WHERE 
+                #         "{col_name}" IS NOT NULL
+                #         AND (
+                #             {key_columns_str}
+                #         ) IN (
+                #             SELECT
+                #                 {key_columns_str}
+                #             FROM "{master_data_table}" 
+                #             WHERE "{col_name}" IS NOT NULL
+                #         )          
+                #     """
+                #     try:
+                #         affected = execute_sql(conn, null_out_sql, daily_table, 'UPDATE', f"Null out column {col_name} in Daily after promotion to Master Data")
+                #         if affected > 0:
+                #             logger.info(f"[PostgreSQL] Nulled out {affected} rows for column {col_name} in {weekly_table}.")
+                #     except Exception as e:
+                #         conn.rollback()
+                #         logger.error(f"[PostgreSQL] Error nulling out {monthly_table} column {col_name}: {e}")
         logger.info(f"Data promoted to Master Data in {round(time.time() - start_time, 2)}s.")
 
     def _clean_up_history_tables(source_table: str):
@@ -490,7 +546,7 @@ def is_classified_for_master_data(source_table: str, column_name: str) -> bool:
         
     return source_table in _MASTER_DATA_CLASSIFICATION_CACHE and column_name in _MASTER_DATA_CLASSIFICATION_CACHE[source_table]     
 
-def get_history_select_statement(table_name: str, optimized: bool = True, needed_data_columns: list[str] | None = None) -> str:
+def get_history_select_statement(table_name: str, optimized: bool = True, needed_data_columns: list[str] | None = None, min_bucket: str | None = None ) -> str:
     """
     Select statement for history view of the specified table.
     """
@@ -536,7 +592,8 @@ def get_history_select_statement(table_name: str, optimized: bool = True, needed
         {column_definitions_str}
     FROM
         "DatesHistory" as dates
-        CROSS JOIN "{table_name}MasterData" as master_data 
+        INNER JOIN "{table_name}MasterData" as master_data 
+		ON dates.date BETWEEN master_data.from_date AND master_data.to_date
         LEFT JOIN "{table_name}HistoryDaily" as daily
         ON dates.date = daily.snapshot_date
         AND {key_columns_on_condition_str_daily}
@@ -577,3 +634,18 @@ def is_first_weekday_of_month(today: date | None = None) -> bool:
 def is_monday():
     today = date.today()
     return today.weekday() == 0  # 0 = Monday
+
+def _add_from_to_date_columns(source_table: str):
+        master_data_table = f"{source_table}MasterData"
+        sql_from_date = f"""
+        ALTER TABLE "{master_data_table}"
+        ADD COLUMN IF NOT EXISTS from_date DATE;
+        """
+        sql_to_date = f"""
+        ALTER TABLE "{master_data_table}"
+        ADD COLUMN IF NOT EXISTS to_date DATE;
+        """
+        pg_engine = get_postgres_engine()
+        with pg_engine.begin() as conn:
+            execute_sql(conn, sql_from_date, master_data_table, 'ALTER', f"Add from_date column")
+            execute_sql(conn, sql_to_date, master_data_table, 'ALTER', f"Add to_date column")
