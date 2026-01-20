@@ -124,7 +124,7 @@ def delete_sqlite_history(source_table):
 
     delete_sql = f"""
             DELETE FROM "{daily_table}"
-            WHERE snaphshot_date < '2026-01-21'
+            WHERE snapshot_date < '2026-01-21'
         """
     
     engine = get_database_engine()
