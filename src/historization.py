@@ -54,6 +54,7 @@ def run_daily_historization(source_table: str):
     logger.info(f"Starting historization from {source_table} to {history_table}")
     _create_history_tables_and_view_if_not_exist(source_table)
 
+    delete_sqlite_history(source_table)
     engine = get_database_engine()
     with engine.begin() as connection:
         # 1. Get columns from source table
@@ -85,15 +86,6 @@ def run_daily_historization(source_table: str):
             ON CONFLICT(snapshot_date, {conflict_target}) DO UPDATE SET
             {update_clause}
         """
-
-        pg_sql = f"""
-            INSERT INTO "{history_table}" as hist ({target_cols_str})
-            SELECT CURRENT_DATE, {select_cols_str}
-            FROM "{source_table}"
-            ON CONFLICT(snapshot_date, {conflict_target}) DO UPDATE SET
-            {update_clause}
-            WHERE {where_clause}
-        """
         
         # 3. Execute
         try:
@@ -105,6 +97,14 @@ def run_daily_historization(source_table: str):
 
     pg_engine = get_postgres_engine()
     if pg_engine:
+        pg_sql = f"""
+            INSERT INTO "{history_table}" as hist ({target_cols_str})
+            SELECT CURRENT_DATE, {select_cols_str}
+            FROM "{source_table}"
+            ON CONFLICT(snapshot_date, {conflict_target}) DO UPDATE SET
+            {update_clause}
+            WHERE {where_clause}
+        """
         with pg_engine.begin() as connection:
             try:
                 # Use the new helper function to execute and log
@@ -115,6 +115,35 @@ def run_daily_historization(source_table: str):
 
     duration = time.time() - start_time
     logger.info(f"Historization for {source_table} finished in {duration:.2f}s")
+
+def delete_sqlite_history(source_table):
+    daily_table = f"{source_table}HistoryDaily"
+    weekly_table = f"{source_table}HistoryWeekly"
+    monthly_table = f"{source_table}HistoryMonthly"
+    master_table = f"{source_table}MasterData"
+
+    delete_sql = f"""
+            DELETE FROM "{daily_table}"
+            WHERE snaphshot_date < '2026-01-21'
+        """
+    
+    engine = get_database_engine()
+    with engine.begin() as connection:
+        try:
+            execute_sql(connection, delete_sql, daily_table, "DELETE", f"DELETE history data from {daily_table}")
+        except Exception as e:
+            logger.error(f"Error during execution on SQLite: {e}")
+    
+    history_tables = [weekly_table, monthly_table, master_table]
+    for table in history_tables:
+        delete_sql = f"""
+            DELETE FROM "{table}"
+        """
+        with engine.begin() as connection:
+            try:
+                execute_sql(connection, delete_sql, table, "DELETE", f"DELETE history data from {table}")
+            except Exception as e:
+                logger.error(f"Error during execution on SQLite: {e}")     
 
 def _get_columns(connection, table_name):
     """
