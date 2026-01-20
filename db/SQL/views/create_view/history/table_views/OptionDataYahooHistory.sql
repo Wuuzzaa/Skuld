@@ -5,6 +5,10 @@
     
     SELECT
         dates.date,
+        dates.year,
+        dates.month,
+        dates.isoyear,
+        dates.week,
         master_data."contractSymbol",
         master_data."symbol" as "symbol",
 		master_data."option-type" as "option-type",

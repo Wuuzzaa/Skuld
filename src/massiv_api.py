@@ -297,9 +297,6 @@ def get_option_chains_df(tickers: Union[List[str], str] = "auto", limit=250) -> 
     return df
 
 def load_option_chains():
-    # if executed_as_github_action():
-    #     logger.info("Skipping Massive API option data load when executed as GitHub Action")
-    #     return
     symbols = get_filtered_symbols_with_logging("MassiveAPI")
     # symbols = asyncio.run(get_active_tickers_with_options())
     logger.info(f"Loading for {len(symbols)} symbols option data from Massive API")

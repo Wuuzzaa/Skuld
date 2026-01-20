@@ -5,6 +5,10 @@
     
     SELECT
         dates.date,
+        dates.year,
+        dates.month,
+        dates.isoyear,
+        dates.week,
         master_data."symbol",
         coalesce(
                 daily."Recommend.Other",

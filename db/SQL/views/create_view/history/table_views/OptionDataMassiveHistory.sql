@@ -5,6 +5,10 @@
     
     SELECT
         dates.date,
+        dates.year,
+        dates.month,
+        dates.isoyear,
+        dates.week,
         master_data."option_osi",
         coalesce(
                 daily."symbol",
