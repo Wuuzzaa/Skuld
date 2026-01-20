@@ -588,19 +588,6 @@ SELECT
 	c.days_to_earnings,
     c.analyst_mean_target,
 
-	-- Stock Data Barchart
-	c.implied_volatility as implied_volatility_barchart, 
-	c.iv_percentile, 
-	c.iv_rank, 
-	c.iv_high, 
-	c.iv_low, 
-	c.put_call_vol_ratio, 
-	c.put_call_oi_ratio, 
-	c.todays_volume, 
-	c.volume_avg_30d, 
-	c.todays_open_interest, 
-	c.open_int_30d,
-
     -- Technical Indicators
 	CASE WHEN d.symbol IS NOT NULL THEN TRUE ELSE FALSE END as has_technical_indicators,
     d."Recommend.Other", 

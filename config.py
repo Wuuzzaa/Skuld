@@ -51,7 +51,6 @@ TABLE_FUNDAMENTAL_DATA_DIVIDEND_RADAR = 'FundamentalDataDividendRadar'
 TABLE_FUNDAMENTAL_DATA_YAHOO = 'FundamentalDataYahoo'
 TABLE_TECHNICAL_INDICATORS = 'TechnicalIndicators'
 TABLE_STOCK_PRICE = 'StockPrice'
-TABLE_STOCK_DATA_BARCHART = 'StockDataBarchart'
 
 # History enabled tables
 HISTORY_ENABLED_TABLES = [

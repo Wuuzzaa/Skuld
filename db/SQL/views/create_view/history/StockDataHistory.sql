@@ -19,20 +19,7 @@ SELECT
         WHEN c.symbol IS NOT NULL THEN TRUE
         ELSE FALSE
     END as has_analyst_price_target,
-    c.analyst_mean_target,
-    -- Barchart Data
-    d.implied_volatility,
-    d.historical_volatility,
-    d.iv_percentile,
-    d.iv_rank,
-    d.iv_high,
-    d.iv_low,
-    d.put_call_vol_ratio,
-    d.put_call_oi_ratio,
-    d.todays_volume,
-    d.volume_avg_30d,
-    d.todays_open_interest,
-    d.open_int_30d
+    c.analyst_mean_target
 FROM
     StockPriceHistory AS a
     LEFT OUTER JOIN (
@@ -48,6 +35,4 @@ FROM
     ) AS b ON a.symbol = b.symbol
     AND a.date = b.date
     LEFT OUTER JOIN AnalystPriceTargetsHistory AS c ON a.symbol = c.symbol
-    AND a.date = c.date
-    LEFT OUTER JOIN StockDataBarchartHistory AS d ON a.symbol = d.symbol
-    AND a.date = d.date;
+    AND a.date = c.date;

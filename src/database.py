@@ -221,36 +221,8 @@ def select_into_dataframe(query: str = None, sql_file_path: str = None, params: 
     """
     df = select_into_dataframe_pg(query=query, sql_file_path=sql_file_path, params=params)
 
-    if not df is None:
-        return df
-    
-    if sql_file_path is not None and os.path.isfile(sql_file_path):
-        with open(sql_file_path, 'r') as f:
-            sql = f.read()
-    elif query is not None:
-        sql = query
-    else:
-        msg = "Either 'query' or 'sql_file_path' must be provided."
-        logger.error(msg)
-        raise ValueError(msg)
-    try:
-        #print(f"Executing query: {query} parameters: {params}")
-        start = time.time()
-        engine = get_database_engine()
-
-        # If parameters are provided, use text() with bound parameters
-        if params:
-            sql = text(sql)
-            df = pd.read_sql(sql, engine, params=params)
-        else:
-            df = pd.read_sql(sql, engine)
-
-        logger.debug(f"[SQLite]     Rows: {len(df)} - Runtime: {round(time.time() - start, 2)}s.")
-             
-    except Exception as e:
-        logger.error(f"[SQLite]     Error executing query {query}: \n{e}")
-
     return df
+
 
 def select_into_dataframe_pg(query: str = None, sql_file_path: str = None, params: dict = None):
     """
@@ -373,6 +345,9 @@ def _run_migrations_for_engine(engine):
             _recreate_views_for_engine(engine)
             return
 
+        if label == "PostgreSQL":
+            drop_all_views(engine)
+
         for migration_file in pending_migrations:
             logger.info(f"[{label}] Applying migration {migration_file}...")
             try:
@@ -390,12 +365,7 @@ def _run_migrations_for_engine(engine):
                 logger.info(f"[{label}] Migration {migration_file} applied successfully.")
             except Exception as e:
                 logger.error(f"[{label}] Error applying migration {migration_file}: \n{e}")
-                # For PostgreSQL side-by-side, we continue usage, but for the main DB we might raise
-                if label == "SQLite":
-                    raise e
-                # For Postgres, just log and break/continue? 
-                # If migration fails, subsequent interactions might fail.
-                # We'll re-raise if it's the main db, otherwise swallow.
+                raise e
 
         with connection.begin():
             if pending_migrations:
@@ -419,7 +389,7 @@ def run_migrations():
     pg_engine = get_postgres_engine()
     if pg_engine:
         _run_migrations_for_engine(pg_engine)
-        pg_migrations()
+        # pg_migrations()
 
 
 def _recreate_views_for_engine(engine):
@@ -548,7 +518,7 @@ def pg_migrations():
     ALTER TABLE "OptionDataMassive" ALTER COLUMN expiration_date TYPE date USING expiration_date::date;
     """
         # ALTER TABLE "OptionDataYahoo" RENAME COLUMN contractSymbol TO "contractSymbol";
-    error = None;
+    error = None
     try:
         pg_engine = get_postgres_engine()
         if pg_engine:
