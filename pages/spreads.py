@@ -8,6 +8,10 @@ from src.logger_config import setup_logging
 from src.page_display_dataframe import page_display_dataframe
 from src.spreads_calculation import calc_spreads
 
+# ensure logfile gets all columns of wide dataframes
+pd.set_option('display.max_columns', None)
+pd.set_option('display.width', None)
+
 def get_expiration_type(expiration_date):
     date = pd.to_datetime(expiration_date)
     day_of_week = date.dayofweek  # 4 = Freitag
@@ -173,7 +177,8 @@ if spreads_df.empty:
 
 # st.divider()
 #
-# # Spreadfilter. Filters after the spread is calculated. All filters that are not doable in the database query
+# Spreadfilter. Filters after the spreads are calculated.
+#  All filters that are not doable in the database query
 # st.markdown("#### Spreadfilter")
 # col_profit_bpr = st.columns(1)
 #
