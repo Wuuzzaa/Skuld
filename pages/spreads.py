@@ -6,7 +6,7 @@ from config import PATH_DATABASE_QUERY_FOLDER
 from src.database import select_into_dataframe
 from src.logger_config import setup_logging
 from src.page_display_dataframe import page_display_dataframe
-from src.spreads_calculation import calc_spreads
+from src.spreads_calculation import get_page_spreads
 
 # ensure logfile gets all columns of wide dataframes
 pd.set_option('display.max_columns', None)
@@ -168,7 +168,7 @@ with st.spinner("Calculating spreads..."):
     df = select_into_dataframe(sql_file_path=sql_file_path, params=params)
     logging.debug(f"df: {df.head()}")
 
-    spreads_df = calc_spreads(df)
+    spreads_df = get_page_spreads(df)
     logging.debug(f"spreads_df: {spreads_df.head()}")
 
 if spreads_df.empty:

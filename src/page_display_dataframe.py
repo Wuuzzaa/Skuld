@@ -3,20 +3,20 @@ import pandas as pd
 import urllib.parse
 
 
-def _add_tradingview_link(df:pd.DataFrame, symbol_column='symbol'):
+def _add_tradingview_link(df:pd.DataFrame, symbol_column='symbol') -> pd.DataFrame:
     df['TradingView'] = df[symbol_column].apply(
         lambda x: f'https://www.tradingview.com/symbols/{x}/'
     )
     return df
 
-def _add_tradingview_superchart_link(df:pd.DataFrame, symbol_column='symbol'):
+def _add_tradingview_superchart_link(df:pd.DataFrame, symbol_column='symbol') -> pd.DataFrame:
     df['Chart'] = df[symbol_column].apply(
         lambda x: f'https://www.tradingview.com/chart/?symbol={x}'
     )
     return df
 
 
-def _add_claude_analysis_link(df: pd.DataFrame, page=None):
+def _add_claude_analysis_link(df: pd.DataFrame, page=None) -> pd.DataFrame:
     """Adds Claude AI analysis link with pre-filled prompt"""
     if page is None:
         df['Claude'] = df.apply(_create_claude_prompt_default, axis=1)
@@ -99,6 +99,10 @@ def page_display_dataframe(
     df = _add_tradingview_link(df, symbol_column)
     df = _add_tradingview_superchart_link(df, symbol_column)
     df = _add_claude_analysis_link(df, page)
+
+    if page == "spreads":
+        # drop unnecessary columns which where needed for the AI prompt generation
+        df = df.drop(columns=['option_type', 'expiration_date'])
 
     # default configuration
     default_config = {

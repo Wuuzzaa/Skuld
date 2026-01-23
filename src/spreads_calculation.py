@@ -241,6 +241,54 @@ def calc_spreads(
 
     return df
 
+def get_page_spreads(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Use this for the Frontend. It calculates the spreads and get rid of not needed columns in the frontend.
+    """
+    df = calc_spreads(df)
+    columns = [
+            'symbol',
+            'earnings_date',
+            'earnings_warning',
+            'close',
+            'analyst_mean_target',
+            'recommendation',
+            #'days_to_expiration',
+            'days_to_earnings',
+            'sell_strike',
+            'sell_last_option_price',
+            'sell_delta',
+            'sell_iv',
+            #'sell_theta',
+            #'sell_open_interest',
+            'sell_expected_move',
+            'buy_strike',
+            'buy_last_option_price',
+            'buy_delta',
+            #'buy_iv',
+            #'buy_theta',
+            #'buy_open_interest',
+            #'buy_expected_move',
+            #'spread_width',
+            'max_profit',
+            'bpr',
+            'profit_to_bpr',
+            #'spread_theta',
+            'expected_value',
+            'APDI',
+            'APDI_EV',
+            'optionstrat_url',
+
+            # needed for the ai promt drop later in the page :D
+            'option_type',
+            'expiration_date',
+    ]
+    df = df[columns]
+    pass
+
+
+    return df
+
 
 def _build_optionstrat_url(row: pd.Series) -> str:
     """
@@ -365,7 +413,7 @@ if __name__ == "__main__":
     logger.info(f"Start {__name__} ({__file__})")
 
     params = {
-        "expiration_date": "2026-01-16",
+        "expiration_date": "2026-02-20",
         "option_type": "put",
         "delta_target": 0.2,
         "spread_width": 5,
@@ -391,7 +439,9 @@ if __name__ == "__main__":
             days_to_earnings,
             open_interest AS option_open_interest,
             expected_move,
-            ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY abs(greeks_delta) DESC) AS row_num
+            ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY abs(greeks_delta) DESC) AS row_num,
+            analyst_mean_target,
+            recommendation
         FROM
             "OptionDataMerged"
         WHERE
@@ -414,16 +464,18 @@ if __name__ == "__main__":
             close AS sell_close,
             earnings_date,
             days_to_expiration,
-            days_to_ernings,
+            days_to_earnings,
             option_open_interest AS sell_open_interest,
-            expected_move AS sell_expected_move
+            expected_move AS sell_expected_move,
+            analyst_mean_target,
+            recommendation
         FROM
             FilteredOptions
         WHERE
             row_num = 1
     )
     
-    --spread data 
+    --spread data
     SELECT
         -- sell option
         sell.symbol,
@@ -440,6 +492,8 @@ if __name__ == "__main__":
         sell.sell_theta,
         sell.sell_open_interest,
         sell.sell_expected_move,
+        sell.analyst_mean_target,
+        sell.recommendation,
         -- buy option
         buy.strike               AS buy_strike,
         buy.last_option_price    AS buy_last_option_price,
@@ -459,6 +513,7 @@ if __name__ == "__main__":
                 WHEN sell.option_type = 'call' THEN sell.sell_strike + :spread_width
             END
         );
+
     """
 
     start = time.time()
@@ -467,7 +522,7 @@ if __name__ == "__main__":
     if df.empty:
         raise ValueError("Input DataFrame ist leer - keine Optionsdaten vorhanden")
 
-    df = calc_spreads(df)
+    df = get_page_spreads(df)
     ende = time.time()
 
     print(df.head())
