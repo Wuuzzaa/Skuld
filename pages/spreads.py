@@ -166,7 +166,6 @@ with st.spinner("Calculating spreads..."):
 
     spreads_df = calc_spreads(df)
 
-# Dynamically extract unique values for symbol and option_type from calculated spreads_df
 if spreads_df.empty:
     st.warning("No spreads found for the selected criteria.")
     st.stop()
