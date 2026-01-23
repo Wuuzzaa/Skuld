@@ -8,17 +8,22 @@ if [ -f /app/env.sh ]; then
     set +a
 fi
 
-LOCKFILE="/tmp/skuld_data_collection.lock"
-LOGFILE="/var/log/cron.log"
+# Parameter für den Modus (z. B. option_data, saturday_night, marked_start_mid_end, stock_data_daily)
+MODE="$1"
+
+# Modus-spezifische Lockfile, Logfile und Memory-Monitor-Datei
+LOCKFILE="/tmp/skuld_data_collection_${MODE}.lock"
+LOGFILE="/var/log/cron_${MODE}.log"
+MONITOR_LOG="/var/log/memory_monitor_${MODE}.csv"
 
 # Check if already running
 if [ -f "$LOCKFILE" ]; then
     PID=$(cat "$LOCKFILE")
     if ps -p "$PID" > /dev/null 2>&1; then
-        echo "$(date): Data collection already running (PID: $PID). Skipping." >> "$LOGFILE"
+        echo "$(date): Data collection (${MODE}) already running (PID: $PID). Skipping." >> "$LOGFILE"
         exit 0
     else
-        echo "$(date): Stale lockfile found. Removing." >> "$LOGFILE"
+        echo "$(date): Stale lockfile found for ${MODE}. Removing." >> "$LOGFILE"
         rm -f "$LOCKFILE"
     fi
 fi
@@ -27,7 +32,6 @@ fi
 echo $$ > "$LOCKFILE"
 
 # Start Memory Monitor
-MONITOR_LOG="/var/log/memory_monitor.csv"
 echo "Timestamp,RSS_MB" > "$MONITOR_LOG"
 (
     while true; do
@@ -41,8 +45,8 @@ MONITOR_PID=$!
 
 # Run data collection with timeout
 cd /app/Skuld
-echo "$(date): Starting data collection..." >> "$LOGFILE"
-timeout 18000 /usr/local/bin/python main.py --no-upload >> "$LOGFILE" 2>&1
+echo "$(date): Starting data collection (${MODE})..." >> "$LOGFILE"
+timeout 18000 /usr/local/bin/python main.py --mode "$MODE" >> "$LOGFILE" 2>&1
 EXIT_CODE=$?
 
 # Stop Memory Monitor
@@ -51,19 +55,19 @@ kill $MONITOR_PID 2>/dev/null
 # Remove lockfile
 rm -f "$LOCKFILE"
 
+# Handle exit codes
 if [ $EXIT_CODE -eq 124 ]; then
-    echo "$(date): Data collection timed out after 2 hours" >> "$LOGFILE"
-    /usr/local/bin/python src/send_alert.py "SKULD Alert: Timeout" "Data collection timed out after 2 hours." >> "$LOGFILE" 2>&1
+    echo "$(date): Data collection (${MODE}) timed out after 2 hours" >> "$LOGFILE"
+    /usr/local/bin/python src/send_alert.py "SKULD Alert: Timeout" "Data collection (${MODE}) timed out after 2 hours." >> "$LOGFILE" 2>&1
 elif [ $EXIT_CODE -eq 0 ]; then
-    echo "$(date): Data collection completed successfully" >> "$LOGFILE"
+    echo "$(date): Data collection (${MODE}) completed successfully" >> "$LOGFILE"
     # Success alert handled by main.py
 elif [ $EXIT_CODE -eq 137 ]; then
-    echo "$(date): Data collection failed with OUT OF MEMORY (Exit Code 137)" >> "$LOGFILE"
-    # Send Telegram alert
-    /usr/local/bin/python src/send_alert.py "SKULD Alert: Out of Memory" "The data collection process was killed (Exit Code 137). Please check the logs and memory usage." >> "$LOGFILE" 2>&1
+    echo "$(date): Data collection (${MODE}) failed with OUT OF MEMORY (Exit Code 137)" >> "$LOGFILE"
+    /usr/local/bin/python src/send_alert.py "SKULD Alert: Out of Memory" "The data collection process (${MODE}) was killed (Exit Code 137). Please check the logs and memory usage." >> "$LOGFILE" 2>&1
 else
-    echo "$(date): Data collection failed with exit code $EXIT_CODE" >> "$LOGFILE"
-    /usr/local/bin/python src/send_alert.py "SKULD Alert: Failure" "Data collection failed with exit code $EXIT_CODE. Please check the logs." >> "$LOGFILE" 2>&1
+    echo "$(date): Data collection (${MODE}) failed with exit code $EXIT_CODE" >> "$LOGFILE"
+    /usr/local/bin/python src/send_alert.py "SKULD Alert: Failure" "Data collection (${MODE}) failed with exit code $EXIT_CODE. Please check the logs." >> "$LOGFILE" 2>&1
 fi
 
 exit 0
