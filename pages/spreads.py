@@ -3,6 +3,7 @@ import os
 import streamlit as st
 import pandas as pd
 from config import PATH_DATABASE_QUERY_FOLDER
+from pages.documentation_text.spreads_page_doc import get_spreads_documentation
 from src.database import select_into_dataframe
 from src.logger_config import setup_logging
 from src.page_display_dataframe import page_display_dataframe
@@ -239,3 +240,7 @@ column_config = {
 
 # show final dataframe
 page_display_dataframe(filtered_df, page='spreads', symbol_column='symbol', column_config=column_config)
+
+# show documentation
+with st.expander("📖 Dokumentation - Feldübersicht", expanded=False):
+    st.markdown(get_spreads_documentation())
