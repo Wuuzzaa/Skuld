@@ -37,6 +37,10 @@ services:
       
       # Networking Fixes
       - "traefik.docker.network=web"
+      
+      # Override Authelia Middleware to allow HTTP scheme check bypass
+      # We tell Authelia to assume the scheme is https via the RD param query
+      - "traefik.http.middlewares.authelia.forwardauth.address=http://authelia:9091/api/verify?rd=https://${DOMAIN_NAME}/"
 
   authelia:
     labels:
