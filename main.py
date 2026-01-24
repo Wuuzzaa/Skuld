@@ -21,13 +21,14 @@ logger.info("Start SKULD")
 
 
 def main(args):
-    # Initialize Pipeline Monitor with the specific mode
-    pipeline = PipelineMonitor(mode=args.mode)
-    pipeline.start()
-    
-    run_successful = False
-
+    pipeline = None
     try:
+        # Initialize Pipeline Monitor with the specific mode
+        pipeline = PipelineMonitor(mode=args.mode)
+        pipeline.start()
+        
+        run_successful = False
+
         run_migrations()
     
         logger.info("#" * 80)
@@ -138,26 +139,27 @@ def main(args):
     except Exception as e:
         # We catch exceptions to allow finally to run, but we want to re-raise them
         # if they imply a crash.
-        logger.error(f"Critical failure in main pipeline: {e}")
+        logger.error(f"Critical failure in main pipeline: {e}", exc_info=True)
         raise
 
     finally:
-        pipeline.stop()
-        
-        # Generator and log report
-        report, _ = pipeline.generate_report(run_successful)
-        
-        logger.info("\n" + "#" * 80)
-        logger.info("DATA COLLECTION PIPELINE SUMMARY")
-        logger.info("#" * 80)
-        logger.info(report)
-        logger.info("#" * 80 + "\n")
-        
-        # Send Telegram message
-        try:
-             pipeline.send_telegram_summary(run_successful)
-        except Exception as e:
-             logger.error(f"Failed to send Telegram summary: {e}")
+        if pipeline:
+            pipeline.stop()
+            
+            # Generator and log report
+            report, _ = pipeline.generate_report(run_successful)
+            
+            logger.info("\n" + "#" * 80)
+            logger.info("DATA COLLECTION PIPELINE SUMMARY")
+            logger.info("#" * 80)
+            logger.info(report)
+            logger.info("#" * 80 + "\n")
+            
+            # Send Telegram message
+            try:
+                pipeline.send_telegram_summary(run_successful)
+            except Exception as e:
+                logger.error(f"Failed to send Telegram summary: {e}")
 
 
 if __name__ == "__main__":
