@@ -176,12 +176,6 @@ if spreads_df.empty:
     st.warning("No spreads found for the selected criteria.")
     st.stop()
 
-
-st.divider()
-#
-# Spreadfilter. Filters after the spreads are calculated.
-# All filters that are not doable in the database query or need an calcuated spread
-st.markdown("#### Spreadfilter")
 # col_profit_bpr = st.columns(1)
 #
 # # Profit to BPR Filter
@@ -203,12 +197,12 @@ st.markdown("#### Spreadfilter")
 #             format="%.3f"
 #         )
 
-col_max_profit = st.columns(1)
-with col_max_profit[0]:
-    # max_profit_min = float(df['max_profit'].min())
-    # max_profit_max = float(df['max_profit'].max())
+# Filters after the spreads are calculated.
+# All filters that are not doable in the database query or need a calculated spread.
+col_after_calculation_filters = st.columns(2)
 
-    # Nur untere Schranke (min_value=0, da max_profit nicht negativ sein kann)
+# min_max_profit
+with col_after_calculation_filters[0]:
     min_max_profit = st.number_input(
         "Min Max Profit",
         min_value=0.0,
@@ -218,7 +212,15 @@ with col_max_profit[0]:
         format="%.2f"
     )
 
-st.divider()
+# expected_value
+with col_after_calculation_filters[1]:
+    if 'show_only_positiv_expected_value' not in st.session_state:
+        st.session_state.show_only_positiv_expected_value = True
+
+    st.checkbox(
+        "Show only positive expected value",
+        key="show_only_positiv_expected_value"
+    )
 
 # Apply spreadfilter
 filtered_df = spreads_df.copy()
@@ -226,6 +228,12 @@ filtered_df = spreads_df.copy()
 # # Apply Profit to BPR filter
 # filtered_df = filtered_df[filtered_df['profit_to_bpr'] >= profit_bpr_threshold]
 filtered_df = filtered_df[filtered_df['max_profit'] >= min_max_profit]
+
+if st.session_state.show_only_positiv_expected_value:
+    filtered_df = filtered_df[filtered_df['expected_value'] >= 0]
+
+# After the filters reset the index to ensure the zepra style works on the dataframe
+filtered_df.reset_index(drop=True, inplace=True)
 
 st.markdown("### Results")
 
