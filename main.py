@@ -169,7 +169,7 @@ if __name__ == "__main__":
                             "all",
                             "saturday_night",
                             "marked_start_mid_end",
-                            "stock_data_daily"
+                            "stock_data_daily",
                             "option_data",
                             "historization"
                         ],
