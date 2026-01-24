@@ -23,11 +23,17 @@ services:
   # Explicitly disable TLS for Staging routers (since we use HTTP entrypoint)
   skuld-frontend:
     labels:
-      - "traefik.http.routers.skuld.tls=false"
-      # FIX: Force Traefik to use the 'web' network, as this container is attached to multiple networks
+      # Disable the main router defined in docker-compose.yml to strip middlewares/complex rules
+      - "traefik.http.routers.skuld.enable=false"
+      
+      # Define a dedicated Staging Router (No Auth Middleware, Simple Rule)
+      - "traefik.http.routers.skuld-staging.rule=Host(`test.skuld-options.com`)"
+      - "traefik.http.routers.skuld-staging.entrypoints=web"
+      - "traefik.http.routers.skuld-staging.service=skuld"
+      - "traefik.http.routers.skuld-staging.tls=false"
+      
+      # Networking Fixes
       - "traefik.docker.network=web"
-      # DEBUG: Explicitly set the host rule in case variable expansion fails
-      - "traefik.http.routers.skuld.rule=Host(`test.skuld-options.com`)"
 
   authelia:
     labels:
