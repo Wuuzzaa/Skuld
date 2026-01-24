@@ -42,6 +42,12 @@ services:
     labels:
       - "traefik.http.routers.authelia.tls=false"
       - "traefik.docker.network=web"
+    environment:
+      # Allow HTTP cookies for non-HTTPS staging environment
+      - AUTHELIA_SESSION_COOKIES_0_DOMAIN=skuld-options.com
+      - AUTHELIA_SESSION_COOKIES_0_SECURE=false
+      # Use a different session name to avoid conflict with production
+      - AUTHELIA_SESSION_NAME=authelia_session_staging
 
   # Staging Database (Self-contained)
   postgres:

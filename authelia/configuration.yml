@@ -11,10 +11,6 @@ theme: 'dark'
 session:
   name: 'authelia_session'
   domain: 'skuld-options.com' # Root domain
-  cookies:
-    - domain: 'skuld-options.com'
-      authelia_url: 'https://auth.test.skuld-options.com'
-      default_redirection_url: 'https://test.skuld-options.com'
   expiration: '1h'
   inactivity: '15m'
   remember_me: '1M'
