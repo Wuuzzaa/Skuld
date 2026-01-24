@@ -25,6 +25,12 @@ jobs:
           echo "DOMAIN_NAME=${{ env.DOMAIN_NAME }}" > .env
           echo "AUTH_DOMAIN=${{ env.AUTH_DOMAIN }}" >> .env
           
+          # Traefik Configuration (Staging = HTTP / No Cert Resolver)
+          echo "TRAEFIK_ENTRYPOINT=web" >> .env
+          echo "TRAEFIK_CERTRESOLVER=dummy" >> .env
+          # Used in docker-compose.yml for middleware redirect
+          echo "AUTH_SCHEME=http" >> .env
+          
           # Secrets mapping - Using repository secrets. 
           # Ensure these secrets are set for the repo or create Environment-specific secrets in GitHub.
           echo "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" >> .env
@@ -120,8 +126,8 @@ jobs:
             docker build -t skuld-app-image .
 
             echo "=== Starting Staging Stack ==="
-            # Start services using the pre-built image
-            docker compose up -d --no-build --remove-orphans
+            # Start services using the pre-built image, include Staging overrides (Traefik)
+            docker compose -f docker-compose.yml -f docker-compose.staging.yml up -d --no-build --remove-orphans
             
             echo "=== Cleaning up build cache ==="
             docker builder prune -f
