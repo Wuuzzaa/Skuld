@@ -115,8 +115,13 @@ jobs:
               touch financial_data.db
             fi
             
-            echo "=== Building and Starting Staging Stack ==="
-            docker compose up -d --build --remove-orphans
+            echo "=== Building Image Explicitly (Avoiding Parallel Build Race) ==="
+            # Build image once to prevent race condition when multiple services share the same build context
+            docker build -t skuld-app-image .
+
+            echo "=== Starting Staging Stack ==="
+            # Start services using the pre-built image
+            docker compose up -d --no-build --remove-orphans
             
             echo "=== Cleaning up build cache ==="
             docker builder prune -f
