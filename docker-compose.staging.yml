@@ -4,15 +4,14 @@ services:
   # Traefik Reverse Proxy for Staging
   # (Production usually has this running externally, but Staging uses a self-contained one)
   traefik:
-    image: traefik:v3.1
+    image: traefik:v2.11
     container_name: traefik_staging
     command:
       - "--api.insecure=true"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.apiVersion=1.44"
       - "--entrypoints.web.address=:80"
-    environment:
-      - DOCKER_API_VERSION=1.44
     ports:
       - "80:80"
       - "8080:8080"
