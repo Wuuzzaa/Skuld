@@ -58,7 +58,9 @@ jobs:
             
             # Create .env file with secrets (disable xtrace to avoid logging secrets)
             echo "=== Creating .env file ==="
-            echo "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" > .env
+            echo "DOMAIN_NAME=app.skuld-options.com" > .env
+            echo "AUTH_DOMAIN=auth.skuld-options.com" >> .env
+            echo "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" >> .env
             echo "TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}" >> .env
             echo "MASSIVE_API_KEY=${{ secrets.MASSIVE_API_KEY }}" >> .env
             echo "MASSIVE_API_KEY_FLAT_FILES=${{ secrets.MASSIVE_API_KEY_FLAT_FILES }}" >> .env

@@ -24,7 +24,7 @@ services:
     
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.authelia.rule=Host(`auth.skuld-options.com`)"
+      - "traefik.http.routers.authelia.rule=Host(`${AUTH_DOMAIN}`)"
       - "traefik.http.routers.authelia.entrypoints=websecure"
       - "traefik.http.routers.authelia.tls.certresolver=letsencrypt"
       - "traefik.http.services.authelia.loadbalancer.server.port=9091"
@@ -71,13 +71,13 @@ services:
 
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.skuld.rule=Host(`app.skuld-options.com`)"
+      - "traefik.http.routers.skuld.rule=Host(`${DOMAIN_NAME}`)"
       - "traefik.http.routers.skuld.entrypoints=websecure"
       - "traefik.http.routers.skuld.tls.certresolver=letsencrypt"
       - "traefik.http.services.skuld.loadbalancer.server.port=8501"
       
       # Authelia ForwardAuth Middleware
-      - "traefik.http.middlewares.authelia.forwardauth.address=http://authelia:9091/api/verify?rd=https://auth.skuld-options.com/"
+      - "traefik.http.middlewares.authelia.forwardauth.address=http://authelia:9091/api/verify?rd=https://${AUTH_DOMAIN}/"
       - "traefik.http.middlewares.authelia.forwardauth.trustForwardHeader=true"
       - "traefik.http.middlewares.authelia.forwardauth.authResponseHeaders=Remote-User,Remote-Groups,Remote-Name,Remote-Email"
       
