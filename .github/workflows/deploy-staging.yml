@@ -79,6 +79,25 @@ jobs:
             # CRITICAL: Do NOT use --volumes here.
             docker system prune -af || true
 
+      - name: Ensure External Networks Exist
+        run: |
+          echo "=== Checking External Networks ==="
+          # Check and create 'web' network (traefik usually)
+          if ! docker network inspect web >/dev/null 2>&1; then
+            echo "Creating network 'web'..."
+            docker network create web
+          else
+            echo "Network 'web' exists."
+          fi
+          
+          # Check and create 'postgres_setup_default' network (database)
+          if ! docker network inspect postgres_setup_default >/dev/null 2>&1; then
+            echo "Creating network 'postgres_setup_default'..."
+            docker network create postgres_setup_default
+          else
+            echo "Network 'postgres_setup_default' exists."
+          fi
+
       - name: Deploy with Docker Compose
         run: |
             echo "=== Stopping current stack (if running) ==="
