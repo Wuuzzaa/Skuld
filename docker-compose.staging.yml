@@ -32,6 +32,8 @@ services:
       - "traefik.http.routers.skuld-staging.service=skuld"
       - "traefik.http.routers.skuld-staging.priority=100"
       - "traefik.http.routers.skuld-staging.tls=false"
+      # Enable Authelia Middleware
+      - "traefik.http.routers.skuld-staging.middlewares=authelia"
       
       # Networking Fixes
       - "traefik.docker.network=web"
