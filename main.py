@@ -21,8 +21,8 @@ logger.info("Start SKULD")
 
 
 def main(args):
-    # Initialize Pipeline Monitor
-    pipeline = PipelineMonitor()
+    # Initialize Pipeline Monitor with the specific mode
+    pipeline = PipelineMonitor(mode=args.mode)
     pipeline.start()
     
     run_successful = False

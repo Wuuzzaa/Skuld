@@ -7,7 +7,8 @@ from src.send_alert import send_telegram_message
 logger = logging.getLogger(__name__)
 
 class PipelineMonitor:
-    def __init__(self):
+    def __init__(self, mode="all"):
+        self.mode = mode
         self.start_time = None
         self.results = {}
         self.memory_stats = {}
@@ -101,15 +102,23 @@ class PipelineMonitor:
 
     def send_telegram_summary(self, success):
         report, _ = self.generate_report(success)
+        
+        # Determine readable name for the mode
+        mode_display = self.mode.replace("_", " ").title()
+        if self.mode == "all":
+            base_title = "SKULD Pipeline"
+        else:
+            base_title = f"SKULD Job: {mode_display}"
+
         # title logic
         if success:
             # Check for partial failures
             failed_tasks = [name for name, (_, error) in self.results.items() if error is not None]
             if failed_tasks:
-                 title = "SKULD Pipeline: Warning (Completed with Failures)"
+                 title = f"{base_title}: Warning (Completed with Failures)"
             else:
-                 title = "SKULD Pipeline: Success"
+                 title = f"{base_title}: Success"
         else:
-            title = "SKULD Pipeline: FAILED"
+            title = f"{base_title}: FAILED"
 
         send_telegram_message(title, report)
