@@ -9,9 +9,10 @@ services:
     command:
       - "--api.insecure=true"
       - "--providers.docker=true"
-      - "--providers.docker.apiVersion=1.44"
       - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:80"
+    environment:
+      - DOCKER_API_VERSION=1.44
     ports:
       - "80:80"
       - "8080:8080"
