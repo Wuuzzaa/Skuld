@@ -35,6 +35,12 @@ def get_spreads_documentation() -> str:
 
 **Sell Expected Move** - Erwartete Kursbewegung basierend auf IV
 
+**% OTM** - Prozentualer Abstand des Sell-Strikes zum aktuellen Kurs
+```
+% OTM = |Sell Strike - Close| / Close × 100
+```
+*Höherer Wert = größerer Sicherheitspuffer, aber niedrigere Prämie*
+
 ---
 
 ### Buy Option (Long Leg - Protection)

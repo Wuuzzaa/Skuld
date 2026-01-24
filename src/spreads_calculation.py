@@ -162,6 +162,9 @@ def _calculate_spread_metrics(spreads: pd.DataFrame) -> pd.DataFrame:
     # Calculate spread theta
     spreads["spread_theta"] = spreads["sell_theta"] - spreads["buy_theta"]
 
+    # Calculate % Out-of-the-Money (OTM)
+    spreads["%_otm"] = abs(spreads["sell_strike"] - spreads["close"]) / spreads["close"] * 100
+
     # Calculate expected value (computationally expensive)
     spreads["expected_value"] = spreads.apply(
         _calculate_expected_value_for_symbol,
@@ -259,6 +262,7 @@ def get_page_spreads(df: pd.DataFrame) -> pd.DataFrame:
             'sell_last_option_price',
             'sell_delta',
             'sell_iv',
+            '%_otm',
             #'sell_theta',
             #'sell_open_interest',
             'sell_expected_move',
