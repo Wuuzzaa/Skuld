@@ -15,6 +15,18 @@ jobs:
       AUTH_DOMAIN: auth.test.skuld-options.com # Adjust if you use a different auth domain for staging
 
     steps:
+      - name: Fix Permissions (Pre-Checkout)
+        run: |
+          echo "=== Fixing Workspace Permissions ==="
+          # The runner might not have permission to delete files created by Docker containers (root).
+          # We check if the workspace directory exists and has files.
+          if [ -d . ]; then
+             echo "Fixing ownership of $(pwd)..."
+             # Use a lightweight container to chown the current directory to the runner's user ID
+             # $(id -u):$(id -g) returns the current user's UID:GID
+             docker run --rm -v "$(pwd):/clean" alpine chown -R $(id -u):$(id -g) /clean || true
+          fi
+
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -27,7 +39,7 @@ jobs:
           
           # Traefik Configuration (Staging = HTTP / No Cert Resolver)
           echo "TRAEFIK_ENTRYPOINT=web" >> .env
-          echo "TRAEFIK_CERTRESOLVER=dummy" >> .env
+          echo "TRAEFIK_CERTRESOLVER_LABEL=traefik.enable=true" >> .env
           # Used in docker-compose.yml for middleware redirect
           echo "AUTH_SCHEME=http" >> .env
           

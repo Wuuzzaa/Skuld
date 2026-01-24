@@ -63,7 +63,7 @@ jobs:
             
             # Traefik Configuration (Prod = HTTPS / LetsEncrypt)
             echo "TRAEFIK_ENTRYPOINT=websecure" >> .env
-            echo "TRAEFIK_CERTRESOLVER=letsencrypt" >> .env
+            echo "TRAEFIK_CERTRESOLVER_LABEL=traefik.http.routers.skuld.tls.certresolver=letsencrypt" >> .env
             echo "AUTH_SCHEME=https" >> .env
 
             echo "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" >> .env
