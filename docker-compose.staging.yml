@@ -25,13 +25,12 @@ services:
   # Explicitly disable TLS for Staging routers (since we use HTTP entrypoint)
   skuld-frontend:
     labels:
-      # Disable the main router defined in docker-compose.yml to strip middlewares/complex rules
-      - "traefik.http.routers.skuld.enable=false"
-      
-      # Define a dedicated Staging Router (No Auth Middleware, Simple Rule)
+      # Define a dedicated Staging Router with higher priority to override the base one
+      # We skip the 'enable=false' trick because it's prone to failure
       - "traefik.http.routers.skuld-staging.rule=Host(`test.skuld-options.com`)"
       - "traefik.http.routers.skuld-staging.entrypoints=web"
       - "traefik.http.routers.skuld-staging.service=skuld"
+      - "traefik.http.routers.skuld-staging.priority=100"
       - "traefik.http.routers.skuld-staging.tls=false"
       
       # Networking Fixes
