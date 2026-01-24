@@ -35,8 +35,12 @@ services:
     container_name: skuld_staging_db
     env_file:
       - .env
+    # Add alias to ensure resolution on default network or specific networks
     networks:
-      - postgres_setup_default
+      postgres_setup_default:
+        aliases:
+          - postgres
+      web:
     volumes:
       - staging_db_data:/var/lib/postgresql/data
     restart: unless-stopped

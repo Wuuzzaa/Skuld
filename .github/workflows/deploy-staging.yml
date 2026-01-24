@@ -50,8 +50,8 @@ jobs:
           echo "MASSIVE_API_KEY=${{ secrets.MASSIVE_API_KEY }}" >> .env
           echo "MASSIVE_API_KEY_FLAT_FILES=${{ secrets.MASSIVE_API_KEY_FLAT_FILES }}" >> .env
           
-          # Staging uses the internal self-contained DB
-          echo "POSTGRES_HOST=skuld_staging_db" >> .env
+          # Staging uses the internal self-contained DB (Service Name: postgres)
+          echo "POSTGRES_HOST=postgres" >> .env
           echo "POSTGRES_DB=Skuld" >> .env
           echo "POSTGRES_USER=admin" >> .env
           echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env
