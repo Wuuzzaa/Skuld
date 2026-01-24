@@ -74,5 +74,18 @@ services:
       timeout: 5s
       retries: 5
 
+  # PgAdmin for Staging (Localhost Binding Only via Tunnel)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: skuld_staging_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@skuld.local}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+    ports:
+      - "127.0.0.1:5053:80"
+    networks:
+      - postgres_setup_default
+    restart: unless-stopped
+
 volumes:
   staging_db_data:
