@@ -28,3 +28,23 @@ services:
   authelia:
     labels:
       - "traefik.http.routers.authelia.tls=false"
+
+  # Staging Database (Self-contained)
+  postgres:
+    image: postgres:15-alpine
+    container_name: skuld_staging_db
+    env_file:
+      - .env
+    networks:
+      - postgres_setup_default
+    volumes:
+      - staging_db_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d Skuld"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  staging_db_data:
