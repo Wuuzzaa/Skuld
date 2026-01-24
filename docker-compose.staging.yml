@@ -24,10 +24,15 @@ services:
   skuld-frontend:
     labels:
       - "traefik.http.routers.skuld.tls=false"
+      # FIX: Force Traefik to use the 'web' network, as this container is attached to multiple networks
+      - "traefik.docker.network=web"
+      # DEBUG: Explicitly set the host rule in case variable expansion fails
+      - "traefik.http.routers.skuld.rule=Host(`test.skuld-options.com`)"
 
   authelia:
     labels:
       - "traefik.http.routers.authelia.tls=false"
+      - "traefik.docker.network=web"
 
   # Staging Database (Self-contained)
   postgres:
