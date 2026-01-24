@@ -13,6 +13,7 @@ from src.spreads_calculation import get_page_spreads
 pd.set_option('display.max_columns', None)
 pd.set_option('display.width', None)
 
+
 def get_expiration_type(expiration_date):
     date = pd.to_datetime(expiration_date)
     day_of_week = date.dayofweek  # 4 = Freitag
@@ -31,6 +32,7 @@ def get_expiration_type(expiration_date):
     else:
         return "Daily"
 
+
 # enable logging
 setup_logging(component="streamlit", log_level=logging.DEBUG, console_output=True)
 logger = logging.getLogger(os.path.basename(__file__))
@@ -39,118 +41,112 @@ logger.debug(f"Start Page: {os.path.basename(__file__)}")
 # Page header
 st.title("Spreads")
 
-# Main configuration section
-col_epiration_date, col_delta_target, col_spread_width, col_option_type, col_open_interest = st.columns(5)
-
-# expiration date
-with col_epiration_date:
-    # Initialize the session state for checkboxes. Default only monthly options
+# filter with expander section
+with st.expander("Configuration and Filters", expanded=True):
+    # Initialize session state for checkboxes
     if 'show_monthly' not in st.session_state:
         st.session_state.show_monthly = True
     if 'show_weekly' not in st.session_state:
         st.session_state.show_weekly = False
     if 'show_daily' not in st.session_state:
         st.session_state.show_daily = False
+    if 'show_only_positiv_expected_value' not in st.session_state:
+        st.session_state.show_only_positiv_expected_value = True
 
-    sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'expiration_dte_asc.sql'
-    dates_df = select_into_dataframe(sql_file_path=sql_file_path)
+    # first row
+    col1, col2, col3, col4 = st.columns(4)
 
-    # Filter dates_df based on checkbox states
-    filtered_dates_df = dates_df[
-        (dates_df.apply(lambda row: get_expiration_type(row['expiration_date']) == "Monthly", axis=1) & st.session_state.show_monthly) |
-        (dates_df.apply(lambda row: get_expiration_type(row['expiration_date']) == "Weekly", axis=1) & st.session_state.show_weekly) |
-        (dates_df.apply(lambda row: get_expiration_type(row['expiration_date']) == "Daily", axis=1) & st.session_state.show_daily)
-    ]
+    with col1:
+        # Load expiration dates
+        sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'expiration_dte_asc.sql'
+        dates_df = select_into_dataframe(sql_file_path=sql_file_path)
 
-    # dte labels ("5 DTE - Friday 2026-01-16 - Monthly/Weekly/Daily")
-    dte_labels = filtered_dates_df.apply(
-        lambda row: (
-            f"{int(row['days_to_expiration'])} DTE - "
-            f"{pd.to_datetime(row['expiration_date']).strftime('%A')}  "
-            f"{row['expiration_date']} - "
-            f"{get_expiration_type(row['expiration_date'])}"
-        ),
-        axis=1
-    ).tolist()
+        # Filter dates_df based on checkbox states
+        filtered_dates_df = dates_df[
+            (dates_df.apply(lambda row: get_expiration_type(row['expiration_date']) == "Monthly",
+                            axis=1) & st.session_state.show_monthly) |
+            (dates_df.apply(lambda row: get_expiration_type(row['expiration_date']) == "Weekly",
+                            axis=1) & st.session_state.show_weekly) |
+            (dates_df.apply(lambda row: get_expiration_type(row['expiration_date']) == "Daily",
+                            axis=1) & st.session_state.show_daily)
+            ]
 
-    # selectbox with dte labels
-    selected_label = st.selectbox("Expiration Date", dte_labels)
+        # dte labels ("5 DTE - Friday 2026-01-16 - Monthly/Weekly/Daily")
+        dte_labels = filtered_dates_df.apply(
+            lambda row: (
+                f"{int(row['days_to_expiration'])} DTE - "
+                f"{pd.to_datetime(row['expiration_date']).strftime('%A')}  "
+                f"{row['expiration_date']} - "
+                f"{get_expiration_type(row['expiration_date'])}"
+            ),
+            axis=1
+        ).tolist()
 
-    # Checkboxes for filtering
-    st.checkbox(
-        "Show Monthly",
-        key="show_monthly"
-    )
-    st.checkbox(
-        "Show Weekly",
-        key="show_weekly"
-    )
-    st.checkbox(
-        "Show Daily",
-        key="show_daily"
-    )
+        # selectbox with dte labels
+        selected_label = st.selectbox("Expiration Date", dte_labels)
 
-    # extract selected expiration date from dte label
-    selected_index = dte_labels.index(selected_label)
-    expiration_date = filtered_dates_df.iloc[selected_index]['expiration_date']
-    logging.debug(f"extract selected expiration date from dte label expiration_date: {expiration_date}")
+        # extract selected expiration date from dte label
+        selected_index = dte_labels.index(selected_label)
+        expiration_date = filtered_dates_df.iloc[selected_index]['expiration_date']
+        logging.debug(f"extract selected expiration date from dte label expiration_date: {expiration_date}")
 
-# delta target
-with col_delta_target:
-    delta_target = st.number_input("Delta Target", min_value=0.0, max_value=1.0, value=0.2, step=0.01)
+    with col2:
+        delta_target = st.number_input(
+            "Delta Target",
+            min_value=0.0,
+            max_value=1.0,
+            value=0.2,
+            step=0.01
+        )
 
-# spread width
-with col_spread_width:
-    spread_width = st.number_input("Spread Width", min_value=1, max_value=20, value=5, step=1)
+    with col3:
+        spread_width = st.number_input(
+            "Spread Width",
+            min_value=1,
+            max_value=20,
+            value=5,
+            step=1
+        )
 
-with col_option_type:
-    option_type = st.selectbox("Option Type", ["put", "call"])
+    with col4:
+        option_type = st.selectbox("Option Type", ["put", "call"])
 
-# # IVR Filter
-# # todo activate when history is ready to use. adjust the filters and sql query. filter in the query
-# with col_ivr:
-#     ivr_min = float(spreads_df['ivr'].min())
-#     ivr_max = float(spreads_df['ivr'].max())
-#     if ivr_min == ivr_max:
-#         st.text_input("IVR", value=f"{ivr_min:.2f}", disabled=True)
-#         ivr_range = (ivr_min, ivr_max)
-#     else:
-#         # Default minimum value of 0.3
-#         default_min = max(ivr_min, 0.3)
-#         ivr_range = st.slider(
-#             "IVR Range",
-#             min_value=ivr_min,
-#             max_value=ivr_max,
-#             value=(default_min, ivr_max),
-#             step=0.01
-#         )
-#
-# # IVP Filter
-# # todo activate when history is ready to use. adjust the filters and sql query. filter in the query
-# with col_ivp:
-#     ivp_min = float(spreads_df['ivp'].min())
-#     ivp_max = float(spreads_df['ivp'].max())
-#     if ivp_min == ivp_max:
-#         st.text_input("IVP", value=f"{ivp_min:.2f}", disabled=True)
-#         ivp_range = (ivp_min, ivp_max)
-#     else:
-#         # Default minimum value of 0.3
-#         default_min = max(ivp_min, 0.3)
-#         ivp_range = st.slider(
-#             "IVP Range",
-#             min_value=ivp_min,
-#             max_value=ivp_max,
-#             value=(default_min, ivp_max),
-#             step=0.01
-#         )
+    # second row
+    col5, col6, col7, col8 = st.columns(4)
 
-# Open Interest Filter
-with col_open_interest:
-    min_open_interest = st.number_input(
+    with col5:
+        st.checkbox("Show Monthly", key="show_monthly")
+
+    with col6:
+        st.checkbox("Show Weekly", key="show_weekly")
+
+    with col7:
+        st.checkbox("Show Daily", key="show_daily")
+
+    with col8:
+        min_open_interest = st.number_input(
             "Min Open Interest",
             min_value=0,
             value=100,
             step=100
+        )
+
+    # third row
+    col9, col10 = st.columns(2)
+
+    with col9:
+        min_max_profit = st.number_input(
+            "Min Max Profit",
+            min_value=0.0,
+            value=80.0,
+            step=1.0,
+            format="%.2f"
+        )
+
+    with col10:
+        st.checkbox(
+            "Show only positive expected value",
+            key="show_only_positiv_expected_value"
         )
 
 # calculate the spread values with a loading indicator
@@ -172,67 +168,15 @@ with st.spinner("Calculating spreads..."):
     spreads_df = get_page_spreads(df)
     logging.debug(f"spreads_df: {spreads_df.head()}")
 
-if spreads_df.empty:
-    st.warning("No spreads found for the selected criteria.")
-    st.stop()
-
-# col_profit_bpr = st.columns(1)
-#
-# # Profit to BPR Filter
-# with col_profit_bpr:
-#     profit_bpr_min = float(spreads_df['profit_to_bpr'].min())
-#     profit_bpr_max = float(spreads_df['profit_to_bpr'].max())
-#     if profit_bpr_min == profit_bpr_max:
-#         st.text_input("Profit/BPR", value=f"{profit_bpr_min:.3f}", disabled=True)
-#         profit_bpr_threshold = profit_bpr_min
-#     else:
-#         # Default minimum value of 0.1, but not exceeding max
-#         default_profit = min(max(profit_bpr_min, 0.1), profit_bpr_max)
-#         profit_bpr_threshold = st.number_input(
-#             "Min Profit/BPR",
-#             min_value=profit_bpr_min,
-#             max_value=profit_bpr_max,
-#             value=default_profit,
-#             step=0.01,
-#             format="%.3f"
-#         )
-
-# Filters after the spreads are calculated.
-# All filters that are not doable in the database query or need a calculated spread.
-col_after_calculation_filters = st.columns(2)
-
-# min_max_profit
-with col_after_calculation_filters[0]:
-    min_max_profit = st.number_input(
-        "Min Max Profit",
-        min_value=0.0,
-        #max_value=max_profit_max,
-        value=80.0,
-        step=1.0,
-        format="%.2f"
-    )
-
-# expected_value
-with col_after_calculation_filters[1]:
-    if 'show_only_positiv_expected_value' not in st.session_state:
-        st.session_state.show_only_positiv_expected_value = True
-
-    st.checkbox(
-        "Show only positive expected value",
-        key="show_only_positiv_expected_value"
-    )
-
 # Apply spreadfilter
 filtered_df = spreads_df.copy()
 
-# # Apply Profit to BPR filter
-# filtered_df = filtered_df[filtered_df['profit_to_bpr'] >= profit_bpr_threshold]
 filtered_df = filtered_df[filtered_df['max_profit'] >= min_max_profit]
 
 if st.session_state.show_only_positiv_expected_value:
     filtered_df = filtered_df[filtered_df['expected_value'] >= 0]
 
-# After the filters reset the index to ensure the zepra style works on the dataframe
+# After the filters reset the index to ensure the zebra style works on the dataframe
 filtered_df.reset_index(drop=True, inplace=True)
 
 st.markdown("### Results")
