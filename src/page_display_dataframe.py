@@ -79,11 +79,12 @@ Format: Prägnant, faktenbasiert, keine Füllwörter, max. eine Seite.
     encoded_prompt = urllib.parse.quote(prompt)
     return f'https://claude.ai/new?q={encoded_prompt}'
 
+
 def page_display_dataframe(
-    df: pd.DataFrame,
-    page: str | None = None,
-    symbol_column: str = 'symbol',
-    column_config: dict | None = None
+        df: pd.DataFrame,
+        page: str | None = None,
+        symbol_column: str = 'symbol',
+        column_config: dict | None = None
 ):
     """
     Displays DataFrame with TradingView links configured.
@@ -131,9 +132,16 @@ def page_display_dataframe(
                 format="%.2f"
             )
 
+    # Apply styling: alternating row backgrounds
+    styled_df = df.style.apply(
+        lambda x: ['background-color: #1e1e1e' if i % 2 == 0 else 'background-color: #2a2a2a'
+                   for i in range(len(x))],
+        axis=0
+    )
+
     # Color negative numbers red
-    df = df.style.map(
-        lambda val: 'color: red' if val < 0 else '',
+    styled_df = styled_df.map(
+        lambda val: 'color: #ff4444' if isinstance(val, (int, float)) and val < 0 else '',
         subset=df.select_dtypes(include=['number']).columns
     )
 
@@ -143,7 +151,7 @@ def page_display_dataframe(
         default_config.update(column_config)
 
     st.dataframe(
-        df,
+        styled_df,
         column_config=default_config,
         hide_index=True,
         use_container_width=True
