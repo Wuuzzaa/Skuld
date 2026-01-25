@@ -41,7 +41,7 @@ services:
       
       # Override Authelia Middleware to allow HTTP scheme check bypass
       # We tell Authelia to assume the scheme is https via the RD param query
-      - "traefik.http.middlewares.authelia.forwardauth.address=http://authelia:9091/api/verify?rd=https://${DOMAIN_NAME}/"
+      - "traefik.http.middlewares.authelia.forwardauth.address=http://authelia:9091/api/verify?rd=https://auth.${DOMAIN_NAME}/"
 
   authelia:
     labels:
