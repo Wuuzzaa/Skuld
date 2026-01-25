@@ -12,11 +12,15 @@ services:
       - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.web.forwardedHeaders.insecure=true"
+      # Enable HTTPS entrypoint (Self-signed by default) to satisfy Cloudflare 'Full' SSL mode
+      - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.websecure.forwardedHeaders.insecure=true"
     environment:
       - DOCKER_API_VERSION=1.44
     ports:
       - "80:80"
       - "8080:8080"
+      - "443:443"
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
     networks:
@@ -29,10 +33,19 @@ services:
       # Define a dedicated Staging Router with higher priority to override the base one
       # We skip the 'enable=false' trick because it's prone to failure
       - "traefik.http.routers.skuld-staging.rule=Host(`test.skuld-options.com`)"
-      - "traefik.http.routers.skuld-staging.entrypoints=web"
+      # Allow both HTTP and HTTPS entrypoints. Cloudflare might choose either.
+      - "traefik.http.routers.skuld-staging.entrypoints=web,websecure"
       - "traefik.http.routers.skuld-staging.service=skuld"
       - "traefik.http.routers.skuld-staging.priority=100"
-      - "traefik.http.routers.skuld-staging.tls=false"
+      # Enable TLS (Self-signed) for the websecure entrypoint case. Traefik handles HTTP on web automatically if configured right, 
+      # but simplistic way is to separate or just assume TLS.
+      # To support both without redirect loop if Cloudflare sends HTTP:
+      # We set tls=false to allow HTTP plain text on port 80?
+      # NO, if we want to support 'Full' SSL, we need TLS on 443.
+      # Let's set TLS to true, but Cloudflare Flexible (Port 80) might break if it tries to speak HTTP to a TLS router?
+      # Traefik router specific TLS setting applies to the router.
+      # Let's try flexible configuration: TLS enabled but empty resolver (self signed).
+      - "traefik.http.routers.skuld-staging.tls=true"
       # Enable Authelia Middleware
       - "traefik.http.routers.skuld-staging.middlewares=authelia"
       
@@ -45,12 +58,13 @@ services:
 
   authelia:
     labels:
-      - "traefik.http.routers.authelia.tls=false"
+      # Enable TLS (Self-signed)
+      - "traefik.http.routers.authelia.tls=true"
       - "traefik.docker.network=web"
       # IMPORTANT: Explicitly disable TLS for authelia router so Traefik doesn't expect HTTPS from Cloudflare
       # Cloudflare talks to Traefik via HTTP (or we need to set up certs which we haven't), so we treat it as HTTP service behind proxy.
       - "traefik.http.routers.authelia.rule=Host(`${AUTH_DOMAIN}`)"
-      - "traefik.http.routers.authelia.entrypoints=web"
+      - "traefik.http.routers.authelia.entrypoints=web,websecure"
       
     environment:
       # Allow HTTP cookies for non-HTTPS staging environment
