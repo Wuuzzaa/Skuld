@@ -47,6 +47,11 @@ services:
     labels:
       - "traefik.http.routers.authelia.tls=false"
       - "traefik.docker.network=web"
+      # IMPORTANT: Explicitly disable TLS for authelia router so Traefik doesn't expect HTTPS from Cloudflare
+      # Cloudflare talks to Traefik via HTTP (or we need to set up certs which we haven't), so we treat it as HTTP service behind proxy.
+      - "traefik.http.routers.authelia.rule=Host(`${AUTH_DOMAIN}`)"
+      - "traefik.http.routers.authelia.entrypoints=web"
+      
     environment:
       # Allow HTTP cookies for non-HTTPS staging environment
       - AUTHELIA_SESSION_COOKIES_0_DOMAIN=skuld-options.com
