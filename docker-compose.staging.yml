@@ -34,21 +34,24 @@ services:
       # We skip the 'enable=false' trick because it's prone to failure
       - "traefik.http.routers.skuld-staging.rule=Host(`test.skuld-options.com`)"
       # Allow both HTTP and HTTPS entrypoints. Cloudflare might choose either.
-      - "traefik.http.routers.skuld-staging.entrypoints=web,websecure"
-      - "traefik.http.routers.skuld-staging.service=skuld"
-      - "traefik.http.routers.skuld-staging.priority=100"
-      # Enable TLS (Self-signed) for the websecure entrypoint case. Traefik handles HTTP on web automatically if configured right, 
-      # but simplistic way is to separate or just assume TLS.
-      # To support both without redirect loop if Cloudflare sends HTTP:
-      # We set tls=false to allow HTTP plain text on port 80?
-      # NO, if we want to support 'Full' SSL, we need TLS on 443.
-      # Let's set TLS to true, but Cloudflare Flexible (Port 80) might break if it tries to speak HTTP to a TLS router?
-      # Traefik router specific TLS setting applies to the router.
-      # Let's try flexible configuration: TLS enabled but empty resolver (self signed).
-      - "traefik.http.routers.skuld-staging.tls=true"
-      # Enable Authelia Middleware
-      - "traefik.http.routers.skuld-staging.middlewares=authelia"
+      # We confirm Cloudflare sometimes uses HTTP (Flexible) even if Full is desired, causing 404 if TLS is forced.
+      # So we define TWO routers: one for TLS (443) and one for HTTP (80).
       
+      # --- SECURE ROUTER (Port 443) ---
+      - "traefik.http.routers.skuld-staging-secure.rule=Host(`test.skuld-options.com`)"
+      - "traefik.http.routers.skuld-staging-secure.entrypoints=websecure"
+      - "traefik.http.routers.skuld-staging-secure.tls=true"
+      - "traefik.http.routers.skuld-staging-secure.service=skuld"
+      - "traefik.http.routers.skuld-staging-secure.priority=100"
+      - "traefik.http.routers.skuld-staging-secure.middlewares=authelia"
+
+      # --- INSECURE ROUTER (Port 80) ---
+      - "traefik.http.routers.skuld-staging-http.rule=Host(`test.skuld-options.com`)"
+      - "traefik.http.routers.skuld-staging-http.entrypoints=web"
+      - "traefik.http.routers.skuld-staging-http.service=skuld"
+      - "traefik.http.routers.skuld-staging-http.priority=99"
+      - "traefik.http.routers.skuld-staging-http.middlewares=authelia"
+
       # Networking Fixes
       - "traefik.docker.network=web"
       
@@ -58,13 +61,19 @@ services:
 
   authelia:
     labels:
-      # Enable TLS (Self-signed)
-      - "traefik.http.routers.authelia.tls=true"
-      - "traefik.docker.network=web"
-      # IMPORTANT: Explicitly disable TLS for authelia router so Traefik doesn't expect HTTPS from Cloudflare
-      # Cloudflare talks to Traefik via HTTP (or we need to set up certs which we haven't), so we treat it as HTTP service behind proxy.
+      # --- SECURE ROUTER (Port 443) ---
+      # Updates the existing 'authelia' router from base config
       - "traefik.http.routers.authelia.rule=Host(`${AUTH_DOMAIN}`)"
-      - "traefik.http.routers.authelia.entrypoints=web,websecure"
+      - "traefik.http.routers.authelia.entrypoints=websecure"
+      - "traefik.http.routers.authelia.tls=true"
+      
+      # --- INSECURE ROUTER (Port 80) ---
+      # New router for HTTP fallback/Flexible SSL
+      - "traefik.http.routers.authelia-http.rule=Host(`${AUTH_DOMAIN}`)"
+      - "traefik.http.routers.authelia-http.entrypoints=web"
+      - "traefik.http.routers.authelia-http.service=authelia"
+      
+      - "traefik.docker.network=web"
       
     environment:
       # Allow HTTP cookies for non-HTTPS staging environment
