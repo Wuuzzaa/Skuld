@@ -87,7 +87,11 @@ def truncate_table(connection, table_name: str):
     - table_name (str): The name of the table to truncate.
     """
 
-    execute_sql(connection, f'TRUNCATE "{table_name}"', table_name, "TRUNCATE")
+    if hasattr(connection, 'cursor'):
+        with connection.cursor() as cur:
+            cur.execute(f'TRUNCATE "{table_name}"')
+    else:
+        execute_sql(connection, f'TRUNCATE "{table_name}"', table_name, "TRUNCATE")
 
 def log_data_change(connection, operation_type, table_name, affected_rows=None, additional_data=None):
     """
@@ -121,13 +125,14 @@ def insert_into_table(
         start_pg = time.time()
         # Postgres tends to be stricter, so we catch errors but don't stop the flow
         dataframe = dataframe.replace("None", np.nan)
+
         pg_affected = dataframe.to_sql(
                             table_name,
                             connection, 
                             if_exists=if_exists, 
                             index=False,
                             method='multi',
-                            chunksize=1000
+                            chunksize=5000
                         )
         rows_saved = len(dataframe)
         logger.info(f"[PostgreSQL] Successfully saved {rows_saved} rows to {table_name} in {round(time.time() - start_pg, 2)}s.")
@@ -138,6 +143,40 @@ def insert_into_table(
 
     return rows_saved
 
+def insert_into_table_bulk(
+        raw_connection,
+        table_name: str,
+        dataframe: pd.DataFrame,
+        if_exists: Literal["fail", "replace", "append"] = "append"
+    ) -> int:   
+    start = time.time()
+    dataframe = dataframe.replace("None", np.nan)
+    from io import StringIO
+
+    buffer = StringIO()
+    dataframe.to_csv(buffer, index=False, header=False)
+    buffer.seek(0)
+
+    columns = list(dataframe.columns)
+
+    # conn = get_postgres_engine().raw_connection()
+    try:
+        with raw_connection.cursor() as cur:
+            cur.copy_from(
+                buffer,
+                table_name,
+                sep=',',
+                null='',
+                columns=columns
+            )
+        # conn.commit()
+    except Exception as e:
+            logger.error(f"[PostgreSQL] Error executing SQL on {table_name}: \n{e}")
+    # finally:
+    #     raw_connection.close()
+    rows_saved = len(dataframe)
+    logger.info(f"[PostgreSQL] Successfully saved {rows_saved} rows to {table_name} in {round(time.time() - start, 2)}s.")
+    
 def execute_sql(connection, sql: str, table_name: str, operation_type: str = "INSERT", additional_data=None):
     """
     Executes a raw SQL statement and logs the data change.
