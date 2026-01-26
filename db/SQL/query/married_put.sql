@@ -55,17 +55,17 @@ FROM
                                                     "Industry",
                                                     expiration_date,
                                                     days_to_expiration,
-                                                    option_open_interest,
-                                                    bid,
-                                                    ask,
+                                                    open_interest,
+                                                    NULL AS bid,
+                                                    NULL AS ask,
                                                     spread_ptc,
                                                     premium_option_price,
                                                     intrinsic_value,
                                                     extrinsic_value,
-                                                    strike,
-                                                    iv,
-                                                    round(CAST("impliedVolatility" AS NUMERIC),2) as "impliedVolatility",
-                                                    delta,
+                                                    strike_price,
+                                                    NULL iv,
+                                                    round(CAST(implied_volatility AS NUMERIC),2) as "impliedVolatility",
+                                                    greeks_delta AS delta,
                                                     "SMA200",
                                                     live_stock_price,
                                                     strike_stock_price_difference,
@@ -85,18 +85,18 @@ FROM
                                                     "OptionDataMerged"
                                                 WHERE
                                                     has_fundamental_data_dividend_radar = true
-                                                    and "option-type" = 'puts'
+                                                    and contract_type = 'put'
                                                     and strike > live_stock_price * 1.2
-                                            )
-                                    )
-                            )
-                    )
+                                            ) AS sub_1
+                                    ) AS sub_2
+                            ) AS SUB_3
+                    ) AS sub_4
                 WHERE
                     extrinsic_value > 0
-                    and option_open_interest > 0
+                    and open_interest > 0
                     and days_to_expiration > 90
-            )
-    )
+            ) AS sub_5
+    ) AS sub_6
 WHERE
     symbol_option_rank <= 3
 ORDER BY
