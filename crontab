@@ -16,3 +16,6 @@ PYTHONPATH=/app/Skuld
 
 # Stock Data Daily: Montag bis Freitag, 09:30 UTC (10:30 MEZ)
 30 9 * * 1-5 /bin/bash /app/Skuld/run_data_collection.sh stock_data_daily
+
+# Historization: Montag bis Freitag, 21:30 UTC (22:30 MEZ)
+30 21 * * 1-5 /bin/bash /app/Skuld/run_data_collection.sh historization
