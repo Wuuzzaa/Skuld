@@ -5,7 +5,7 @@ import requests
 import pandas as pd
 from config import SYMBOLS_EXCHANGE, TABLE_OPTION_DATA_TRADINGVIEW
 from config_utils import get_filtered_symbols_with_logging
-from src.database import insert_into_table, truncate_table
+from src.database import get_postgres_engine, insert_into_table, truncate_table
 from src.util import opra_to_osi
 
 logger = logging.getLogger(__name__)
@@ -41,66 +41,68 @@ def scrape_option_data_trading_view():
 
     
     # --- Database Persistence ---
-    truncate_table(TABLE_OPTION_DATA_TRADINGVIEW)
+    with get_postgres_engine().begin() as connection:
+        truncate_table(connection, TABLE_OPTION_DATA_TRADINGVIEW)
 
-    # Ermittle Exchanges für alle Symbole
-    symbol_exchange_pairs = [(symbol, SYMBOLS_EXCHANGE[symbol]) for symbol in symbols]
-    # Erstelle die Liste für index_filters
-    underlying_symbols = [f"{exchange}:{symbol}" for symbol, exchange in symbol_exchange_pairs]
+        # Ermittle Exchanges für alle Symbole
+        symbol_exchange_pairs = [(symbol, SYMBOLS_EXCHANGE[symbol]) for symbol in symbols]
+        # Erstelle die Liste für index_filters
+        underlying_symbols = [f"{exchange}:{symbol}" for symbol, exchange in symbol_exchange_pairs]
 
-    total_count = 0
+        total_count = 0
 
-    # Unterteile underlying_symbols in 100er-Pakete (API Limit unbekannt, 500 sollte aber sicher sein)
-    batch_size = 100
-    batch = 1
-    symbol_batches = [underlying_symbols[i:i + batch_size] for i in range(0, len(underlying_symbols), batch_size)]
-    for symbol_batch in symbol_batches:
-        logger.info(f"({batch}/{len(symbol_batches)}) Batch")
-        batch += 1
-        if len(underlying_symbols) > batch_size:
-           logger.info(f"Fetching TradingView option data for batch of {len(symbol_batch)} symbols...")
-        
-        # Additional fields: https://shner-elmo.github.io/TradingView-Screener/fields/options.html
+        # Unterteile underlying_symbols in 100er-Pakete (API Limit unbekannt, 500 sollte aber sicher sein)
+        batch_size = 100
+        batch = 1
+        symbol_batches = [underlying_symbols[i:i + batch_size] for i in range(0, len(underlying_symbols), batch_size)]
+        for symbol_batch in symbol_batches:
+            logger.info(f"({batch}/{len(symbol_batches)}) Batch")
+            batch += 1
+            if len(underlying_symbols) > batch_size:
+                logger.info(f"Fetching TradingView option data for batch of {len(symbol_batch)} symbols...")
+            
+            # Additional fields: https://shner-elmo.github.io/TradingView-Screener/fields/options.html
 
-        request_json = {
-            "columns": ["root","expiration","exchange","strike","ask", "bid", "delta", "gamma", "iv", "option-type", "rho", "theoPrice", "theta", "vega"],
-            "filter": [
-                {"left": "type", "operation": "equal", "right": "option"}
-            ],
-            "ignore_unknown_fields": False,
-            "sort": {"sortBy": "name", "sortOrder": "asc"},
-            "index_filters": [{"name": "underlying_symbol", "values": symbol_batch}]
-        }
+            request_json = {
+                "columns": ["root","expiration","exchange","strike","ask", "bid", "delta", "gamma", "iv", "option-type", "rho", "theoPrice", "theta", "vega"],
+                "filter": [
+                    {"left": "type", "operation": "equal", "right": "option"}
+                ],
+                "ignore_unknown_fields": False,
+                "sort": {"sortBy": "name", "sortOrder": "asc"},
+                "index_filters": [{"name": "underlying_symbol", "values": symbol_batch}]
+            }
 
-        # Header
-        headers = {
-            "Content-Type": "application/json"
-        }
+            # Header
+            headers = {
+                "Content-Type": "application/json"
+            }
 
-        # POST-Request
-        response = requests.post(BASE_URL_OPTION_DATA, json=request_json, headers=headers)
+            # POST-Request
+            response = requests.post(BASE_URL_OPTION_DATA, json=request_json, headers=headers)
 
-        # Handling the response
-        if response.status_code == 200:
-            logger.info(f"Request batch of {len(symbol_batch)} symbols was successful:")
-            data = response.json()
-            if data['totalCount'] > 0:
-                df = _response_to_df(data=data)
-                
-                insert_into_table(
-                    table_name=TABLE_OPTION_DATA_TRADINGVIEW,
-                    dataframe=df,
-                    if_exists="append"
-                )
-                
-                count = len(df)
-                total_count += count
-                logger.info(f"Saved {count} records to DB")
+            # Handling the response
+            if response.status_code == 200:
+                logger.info(f"Request batch of {len(symbol_batch)} symbols was successful:")
+                data = response.json()
+                if data['totalCount'] > 0:
+                    df = _response_to_df(data=data)
+                    
+                    insert_into_table(
+                        connection,
+                        table_name=TABLE_OPTION_DATA_TRADINGVIEW,
+                        dataframe=df,
+                        if_exists="append"
+                    )
+                    
+                    count = len(df)
+                    total_count += count
+                    logger.info(f"Saved {count} records to DB")
+                else:
+                    logger.warning("No data was found")
             else:
-                logger.warning("No data was found")
-        else:
-            logger.error(f"Request {symbols} has failed:")
-            logger.error(f"Error: {response.status_code}")
-            logger.error(response.text)
+                logger.error(f"Request {symbols} has failed:")
+                logger.error(f"Error: {response.status_code}")
+                logger.error(response.text)
             
     logger.info(f"Total options collected and saved: {total_count}")

@@ -73,7 +73,7 @@ def get_postgres_engine():
         return None
 
 
-def truncate_table(table_name):
+def truncate_table(connection, table_name: str):
     """
     Deletes all rows from a specified table in the database.
 
@@ -86,14 +86,8 @@ def truncate_table(table_name):
       for database connection.
     - table_name (str): The name of the table to truncate.
     """
-    sqlite_engine = get_database_engine()
-    with sqlite_engine.begin() as connection:
-        execute_sql(connection, f'DELETE FROM "{table_name}"', table_name, "TRUNCATE")
-    
-    pg_engine = get_postgres_engine()
-    if pg_engine:
-        with pg_engine.begin() as conn:
-            execute_sql(conn, f'TRUNCATE "{table_name}"', table_name, "TRUNCATE")
+
+    execute_sql(connection, f'TRUNCATE "{table_name}"', table_name, "TRUNCATE")
 
 def log_data_change(connection, operation_type, table_name, affected_rows=None, additional_data=None):
     """
@@ -116,55 +110,33 @@ def log_data_change(connection, operation_type, table_name, affected_rows=None, 
         logger.error(f"Error logging data change: \n{e}")
 
 def insert_into_table(
+        connection,
         table_name: str,
         dataframe: pd.DataFrame,
         if_exists: Literal["fail", "replace", "append"] = "append"
     ) -> int:
-    affected_rows = 0
-    start = time.time() 
-    
-    # 1. Execute on SQLite
-    try:
-        engine = get_database_engine()
-        affected_rows = dataframe.to_sql(
-                            table_name, 
-                            engine, 
-                            if_exists=if_exists, 
-                            index=False
-                        )
-        logger.info(f"[SQLite]     Successfully saved {affected_rows} rows to the database table {table_name} in {round(time.time() - start,2)}s.")
-        
-        # Log the operation
-        with engine.begin() as connection:
-            log_data_change(connection, "INSERT", table_name, affected_rows=affected_rows)
-            
-    except Exception as e:
-        logger.error(f"[SQLite]     Error saving to the database table {table_name}: \n{e}")
 
-    # 2. Execute on PostgreSQL (Side-by-side test)
     try:
-        pg_engine = get_postgres_engine()
-        if pg_engine:
-            start_pg = time.time()
-            # Postgres tends to be stricter, so we catch errors but don't stop the flow
-            dataframe = dataframe.replace("None", np.nan)
-            pg_affected = dataframe.to_sql(
-                              table_name,
-                              pg_engine, 
-                              if_exists=if_exists, 
-                              index=False,
-                              method='multi',
-                              chunksize=1000
-                         )
-            rows_saved = len(dataframe)
-            logger.info(f"[PostgreSQL] Successfully saved {rows_saved} rows to {table_name} in {round(time.time() - start_pg, 2)}s.")
-            
-            with pg_engine.begin() as pg_conn:
-                log_data_change(pg_conn, "INSERT", table_name, affected_rows=rows_saved)
+
+        start_pg = time.time()
+        # Postgres tends to be stricter, so we catch errors but don't stop the flow
+        dataframe = dataframe.replace("None", np.nan)
+        pg_affected = dataframe.to_sql(
+                            table_name,
+                            connection, 
+                            if_exists=if_exists, 
+                            index=False,
+                            method='multi',
+                            chunksize=1000
+                        )
+        rows_saved = len(dataframe)
+        logger.info(f"[PostgreSQL] Successfully saved {rows_saved} rows to {table_name} in {round(time.time() - start_pg, 2)}s.")
+        
+        log_data_change(connection, "INSERT", table_name, affected_rows=rows_saved)
     except Exception as e:
         logger.error(f"[PostgreSQL] Error saving to table {table_name}: \n{e}")
 
-    return affected_rows
+    return rows_saved
 
 def execute_sql(connection, sql: str, table_name: str, operation_type: str = "INSERT", additional_data=None):
     """

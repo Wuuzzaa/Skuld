@@ -27,35 +27,6 @@ SELECT
 	a."day_vwap",
 	a."day_last_updated", 
 
-	-- OptionDataYahoo
-	b."option-type", 
-	b.strike, 
-	b.bid, 
-	b.ask, 
-	b."contractSymbol",
-	b.currency,
-	b."lastPrice",
-	b.change,
-	b."percentChange",
-	b.option_open_interest,
-	b."contractSize",
-	b."lastTradeDate",
-	b."impliedVolatility",
-	b."inTheMoney",
-	b.option_volume,
-
-	-- OptionDataTradingView
-	CASE WHEN c.option_osi IS NOT NULL THEN TRUE ELSE FALSE END as has_option_data_tradingview,
-	c.delta,
-	c.gamma,
-	c.iv,
-	c.rho,
-	c."theoPrice",
-	c.theta,
-	c.vega,
-	c.option,
-	c.time,
-	c.exchange,
 	-- OptionPricingMetrics
 	CASE WHEN d.option_osi IS NOT NULL THEN TRUE ELSE FALSE END as has_option_pricing_metrics,
 	d.days_to_expiration,
@@ -68,6 +39,4 @@ SELECT
     d.strike_stock_price_difference_ptc
 FROM
 	"OptionDataMassive" AS a
-	LEFT OUTER JOIN "OptionDataYahoo" as b ON a.option_osi = b."contractSymbol"
-	LEFT OUTER JOIN "OptionDataTradingView" AS c ON a.option_osi = c.option_osi
 	LEFT OUTER JOIN "OptionPricingMetrics" as d ON a.option_osi = d.option_osi;

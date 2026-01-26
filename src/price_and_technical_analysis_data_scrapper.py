@@ -2,7 +2,7 @@ import sys
 import os
 import pandas as pd
 from config import SYMBOLS_EXCHANGE, TABLE_TECHNICAL_INDICATORS
-from src.database import insert_into_table, truncate_table
+from src.database import get_postgres_engine, insert_into_table, truncate_table
 from tradingview_ta import Interval, get_multiple_analysis
 from config_utils import get_filtered_symbols_with_logging
 
@@ -55,9 +55,11 @@ def scrape_and_save_price_and_technical_indicators():
     df = pd.DataFrame(results)
 
     # --- Database Persistence ---
-    truncate_table(TABLE_TECHNICAL_INDICATORS)
-    insert_into_table(
-        table_name=TABLE_TECHNICAL_INDICATORS,
-        dataframe=df,
-        if_exists="append"
-    )
+    with get_postgres_engine().begin() as connection:
+        truncate_table(connection, TABLE_TECHNICAL_INDICATORS)
+        insert_into_table(
+            connection,
+            table_name=TABLE_TECHNICAL_INDICATORS,
+            dataframe=df,
+            if_exists="append"
+        )

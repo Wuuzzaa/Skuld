@@ -6,7 +6,7 @@ from typing import Union, List
 from tqdm import tqdm
 from config import MASSIVE_API_KEY, TABLE_OPTION_DATA_MASSIVE
 from config_utils import get_filtered_symbols_with_logging
-from src.database import insert_into_table, truncate_table
+from src.database import get_postgres_engine, insert_into_table, truncate_table
 from src.decorator_log_function import log_function
 from src.logger_config import setup_logging
 from src.util import executed_as_github_action
@@ -301,26 +301,28 @@ def load_option_chains():
     # symbols = asyncio.run(get_active_tickers_with_options())
     logger.info(f"Loading for {len(symbols)} symbols option data from Massive API")
 
-    truncate_table(TABLE_OPTION_DATA_MASSIVE)
+    with get_postgres_engine().begin() as connection:
+        truncate_table(connection, TABLE_OPTION_DATA_MASSIVE)
 
-    # load batches of option chains for symbols
-    batch_size = 100
-    total_options = 0
-    symbol_batches = [symbols[i:i + batch_size] for i in range(0, len(symbols), batch_size)]
-    batch = 1
-    for symbol_batch in symbol_batches:
-        if len(symbols) > batch_size:
-           logger.info(f"({batch}/{len(symbol_batches)}) Fetching Massive API option data for batch of {len(symbol_batch)} symbols...")
-           batch += 1
-        df = get_option_chains_df(tickers=symbol_batch)
+        # load batches of option chains for symbols
+        batch_size = 500
+        total_options = 0
+        symbol_batches = [symbols[i:i + batch_size] for i in range(0, len(symbols), batch_size)]
+        batch = 1
+        for symbol_batch in symbol_batches:
+            if len(symbols) > batch_size:
+                logger.info(f"({batch}/{len(symbol_batches)}) Fetching Massive API option data for batch of {len(symbol_batch)} symbols...")
+                batch += 1
+            df = get_option_chains_df(tickers=symbol_batch)
 
-        insert_into_table(
-            table_name=TABLE_OPTION_DATA_MASSIVE,
-            dataframe=df,
-            if_exists="append"
-        )
+            insert_into_table(
+                connection,
+                table_name=TABLE_OPTION_DATA_MASSIVE,
+                dataframe=df,
+                if_exists="append"
+            )
 
-        total_options += len(df)
+            total_options += len(df)
 
     logger.info(f"Total options collected and saved from Massive API: {total_options}")
 

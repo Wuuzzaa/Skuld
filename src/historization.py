@@ -55,45 +55,29 @@ def run_daily_historization(source_table: str):
     _create_history_tables_and_view_if_not_exist(source_table)
 
     delete_sqlite_history(source_table)
-    engine = get_database_engine()
-    with engine.begin() as connection:
-        # 1. Get columns from source table
-        source_columns = _get_columns(connection, source_table)
-        if not source_columns:
-            logger.error(f"Source table {source_table} not found or has no columns.")
-            return
 
-        column_names = [col['name'] for col in source_columns]
-        data_column_names = [col['name'] for col in data_columns]
-        
-        # 2. Build the SQL statement
-        # Target columns: snapshot_date + original columns
-        target_cols_str = "snapshot_date, " + ", ".join([f'"{c}"' for c in column_names])
-        select_cols_str = ", ".join([f'"{c}"' for c in column_names])
-        
-        # Update clause for UPSERT
-        # Exclude conflict keys from the update set
+    # 1. Get columns from source table
+    source_columns = _get_columns(source_table)
+    if not source_columns:
+        logger.error(f"Source table {source_table} not found or has no columns.")
+        return
 
-        conflict_target = ", ".join([f'"{key_col}"' for key_col in key_column_names])
-        update_clause = ", ".join([f'"{col}" = excluded."{col}"' for col in data_column_names])
-        where_clause = " OR ".join([f'hist."{col}" IS DISTINCT FROM excluded."{col}"' for col in data_column_names])
+    column_names = [col['name'] for col in source_columns]
+    data_column_names = [col['name'] for col in data_columns]
         
-        sqllite_sql = f"""
-            INSERT INTO "{history_table}" ({target_cols_str})
-            SELECT date('now'), {select_cols_str}
-            FROM "{source_table}" 
-            WHERE 1=1 -- needed because of Parsing Ambiguity. Check SQLite documentation
-            ON CONFLICT(snapshot_date, {conflict_target}) DO UPDATE SET
-            {update_clause}
-        """
+    # 2. Build the SQL statement
+    # Target columns: snapshot_date + original columns
+    target_cols_str = "snapshot_date, " + ", ".join([f'"{c}"' for c in column_names])
+    select_cols_str = ", ".join([f'"{c}"' for c in column_names])
+    
+    # Update clause for UPSERT
+    # Exclude conflict keys from the update set
+
+    conflict_target = ", ".join([f'"{key_col}"' for key_col in key_column_names])
+    update_clause = ", ".join([f'"{col}" = excluded."{col}"' for col in data_column_names])
+    where_clause = " OR ".join([f'hist."{col}" IS DISTINCT FROM excluded."{col}"' for col in data_column_names])
         
-        # 3. Execute
-        try:
-            # Use the new helper function to execute and log
-            execute_sql(connection, sqllite_sql, history_table, "UPSERT", f"Historize data from {source_table} to {history_table}")
-        except Exception as e:
-            logger.error(f"Error during historization execution on SQLite: {e}")
-            raise e
+
 
     pg_engine = get_postgres_engine()
     if pg_engine:
@@ -145,22 +129,25 @@ def delete_sqlite_history(source_table):
             except Exception as e:
                 logger.error(f"Error during execution on SQLite: {e}")     
 
-def _get_columns(connection, table_name):
+def _get_columns(table_name):
     """
     Retrieves the column details for a given table using pragma_table_info.
     Returns a list of dicts: [{'name': 'col1', 'type': 'TEXT'}, ...]
     """
     logger.info(f"Fetching columns for {table_name}")
-    try:
-            # Using pragma_table_info directly
-        query = text(f"SELECT name, type FROM pragma_table_info('{table_name}')")
-        result = connection.execute(query).fetchall()
-        columns = [{"name": row[0], "type": row[1]} for row in result]
-        # logger.info(f"Found columns: {columns}")
-        return columns
-    except Exception as e:
-        logger.error(f"Error fetching columns for {table_name}: {e}")
-        return []
+    engine = get_database_engine()
+
+    with engine.begin() as connection:
+        try:
+                # Using pragma_table_info directly
+            query = text(f"SELECT name, type FROM pragma_table_info('{table_name}')")
+            result = connection.execute(query).fetchall()
+            columns = [{"name": row[0], "type": row[1]} for row in result]
+            # logger.info(f"Found columns: {columns}")
+            return columns
+        except Exception as e:
+            logger.error(f"Error fetching columns for {table_name}: {e}")
+            return []
 
 
 def _create_history_tables_and_view_if_not_exist(source_table: str):
@@ -354,30 +341,6 @@ def _create_history_merge_views():
 
 def _insert_date():
         start_time = time.time()
-        
-        engine = get_database_engine()
-
-        with engine.begin() as conn:
- 
-            insert_sql = f"""
-                INSERT INTO "DatesHistory" (
-                    date,
-                    year,
-                    month,
-                    week
-                )
-                SELECT
-                    DATE('now') as date,
-                    STRFTIME('%Y', DATE('now')) as year,
-                    STRFTIME('%m', DATE('now')) as month,
-                    STRFTIME('%W', DATE('now')) as week
-                ON CONFLICT(date) DO NOTHING
-            """
-            try:
-                affected = execute_sql(conn, insert_sql, 'DatesHistory', 'UPSERT', f"Insert date to DatesHistory")
-            except Exception as e:
-                conn.rollback()
-                logger.error(f"Error inserting new date: {e}")
 
         pg_engine = get_postgres_engine()
         if pg_engine:

@@ -5,7 +5,7 @@ import sys
 import os
 from lxml import html
 from urllib.parse import urljoin
-from src.database import insert_into_table, truncate_table
+from src.database import get_postgres_engine, insert_into_table, truncate_table
 from config import *
 
 # logging
@@ -145,9 +145,11 @@ def process_dividend_data():
         return
 
     # --- Database Persistence ---
-    truncate_table(TABLE_FUNDAMENTAL_DATA_DIVIDEND_RADAR)
-    insert_into_table(
-        table_name=TABLE_FUNDAMENTAL_DATA_DIVIDEND_RADAR,
-        dataframe=df,
-        if_exists="append"
-    )
+    with get_postgres_engine().begin() as connection:
+        truncate_table(connection, TABLE_FUNDAMENTAL_DATA_DIVIDEND_RADAR)
+        insert_into_table(
+            connection,
+            table_name=TABLE_FUNDAMENTAL_DATA_DIVIDEND_RADAR,
+            dataframe=df,
+            if_exists="append"
+        )
