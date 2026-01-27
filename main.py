@@ -35,6 +35,8 @@ def main(args):
         logger.info(f"Starting Data Collection Pipeline")
         logger.info("#" * 80)
 
+        #todo load symbols from massive. Call each task with the correct symbols.
+
         # select the data collection tasks to run
         parallel_tasks = None
         if args.mode == "all":
