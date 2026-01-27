@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from typing import List, Dict, Tuple, Union
 
-from config import TRANSACTION_COST_PER_CONTRACT, RANDOM_SEED, NUM_SIMULATIONS, RISK_FREE_RATE, IV_CORECTION_MODE
+from config import TRANSACTION_COST_PER_CONTRACT, RANDOM_SEED, NUM_SIMULATIONS, RISK_FREE_RATE, IV_CORRECTION_MODE
 
 
 class UniversalOptionsMonteCarloSimulator:
@@ -28,7 +28,7 @@ class UniversalOptionsMonteCarloSimulator:
                  num_simulations: int = NUM_SIMULATIONS,
                  random_seed: int = RANDOM_SEED,
                  transaction_cost_per_contract: float = TRANSACTION_COST_PER_CONTRACT,
-                 iv_correction: Union[str, float] = IV_CORECTION_MODE):
+                 iv_correction: Union[str, float] = IV_CORRECTION_MODE):
         """
         Initialize the universal Monte-Carlo simulator
 
