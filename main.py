@@ -17,7 +17,7 @@ from src.pipeline_monitor import PipelineMonitor
 
 setup_logging(component="data_collector", log_level=logging.INFO, console_output=True)
 logger = logging.getLogger(__name__)
-logger.info("Start SKULD")
+logger.info("data_collector")
 
 
 def main(args):
@@ -32,17 +32,7 @@ def main(args):
         run_migrations()
     
         logger.info("#" * 80)
-        logger.info(f"Starting Data Collection Pipeline (Full Parallel Mode)")
-        logger.info(f"Symbol selection mode: {SYMBOL_SELECTION['mode']}")
-
-        enabled_rules = [rule for rule in OPTIONS_COLLECTION_RULES if rule.get("enabled", False)]
-        logger.info(f"[INFO] Enabled collection rules: {len(enabled_rules)}")
-        for rule in enabled_rules:
-            logger.info(f"  - {rule['name']}: {rule['days_range']} days, {rule['frequency']}")
-
-        if SYMBOL_SELECTION.get("use_max_limit", False) and "max_symbols" in SYMBOL_SELECTION:
-            logger.info(f"[INFO] Symbol limit: {SYMBOL_SELECTION['max_symbols']}")
-
+        logger.info(f"Starting Data Collection Pipeline")
         logger.info("#" * 80)
 
         # select the data collection tasks to run
