@@ -102,47 +102,7 @@ RISK_FREE_RATE = 0.03
 NUM_SIMULATIONS = 100000
 TRANSACTION_COST_PER_CONTRACT = 2.0 # in USD
 
-# =============================================================================
-# SIMPLIFIED DATA COLLECTION CONFIGURATION
-# =============================================================================
-
-# Symbol selection
-SYMBOL_SELECTION = {
-    "mode": "all",                   # "all", "list", "file", "max"
-    "symbols": ["MO"],             # Used when mode="list"
-    "file_path": None,               # Used when mode="file"
-    "max_symbols": 1000,               # Used when mode="max" or as limit for "all"
-    "use_max_limit": True            # If True, applies max_symbols limit to any mode
-}
-
 MAX_WORKERS = int(os.getenv('MAX_WORKERS') if os.getenv('MAX_WORKERS') else 1)  # Max number of parallel workers for data collection
 
-# =============================================================================
-# OPTIONS COLLECTION RULES (processed in order)
-# =============================================================================
-OPTIONS_COLLECTION_RULES = [
-    {
-        "name": "weekly_short_term",
-        "enabled": True,
-        "days_range": [1, 40],            # Today + 1 to 60 days
-        "frequency": "every_friday",      # "every_friday", "monthly_3rd_friday", "quarterly_3rd_friday"
-        "description": "Weekly options for next 2 months"
-    },
-    {
-        "name": "monthly_medium_term", 
-        "enabled": True,
-        "days_range": [61, 120],
-        "frequency": "monthly_3rd_friday",
-        "description": "Monthly options 2-6 months out"
-    },
-    {
-        "name": "leaps_long_term",
-        "enabled": True,                 # Disabled by default
-        "days_range": [180, 500],         # Current married put range
-        "frequency": "monthly_3rd_friday",      # Changed from monthly_3rd_friday to every_friday
-        "description": "LEAPS options for married put strategies"
-    }
-]
 
-# =============================================================================
 
