@@ -307,7 +307,7 @@ def load_option_chains():
         truncate_table(conn, TABLE_OPTION_DATA_MASSIVE)
 
         # load batches of option chains for symbols
-        batch_size = 500
+        batch_size = 1000
         total_options = 0
         symbol_batches = [symbols[i:i + batch_size] for i in range(0, len(symbols), batch_size)]
         batch = 1
