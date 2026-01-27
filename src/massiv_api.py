@@ -6,11 +6,9 @@ import aiohttp
 from typing import Union, List
 from tqdm import tqdm
 from config import MASSIVE_API_KEY, TABLE_OPTION_DATA_MASSIVE
-from config_utils import get_filtered_symbols_with_logging
-from src.database import get_postgres_engine, insert_into_table, truncate_table
+from src.database import get_postgres_engine, truncate_table
 from src.decorator_log_function import log_function
 from src.logger_config import setup_logging
-from src.util import executed_as_github_action
 
 logger = logging.getLogger(__name__)
 
@@ -385,11 +383,39 @@ def load_option_chains_backup():
 
     logger.info(f"Total options collected and saved from Massive API: {total_options}")
 
+def get_symbols(include: str | None = None) -> list | dict[str, list]:
+    """
+    Returns a list or dictionary of stock symbols, indices, and symbols with options.
+    Optionally, you can specify which list to return.
+
+    :param include: Optional string specifying which symbol list to return.
+                    Possible values: "all", "stocks", "indices", "options"
+                    If None, returns a dictionary with all lists.
+    :return: List or dictionary with keys: "all", "stocks", "indices", "options"
+    """
+    all_symbols_stock_indices = asyncio.run(get_all_stocks_and_indices())
+    symbols_stocks = all_symbols_stock_indices["stocks"]
+    symbols_indices = all_symbols_stock_indices["indices"]
+    symbols_with_options = asyncio.run(get_active_tickers_with_options())
+
+    result = {
+        "all": symbols_stocks + symbols_indices + symbols_with_options,
+        "stocks": symbols_stocks,
+        "indices": symbols_indices,
+        "options": symbols_with_options
+    }
+
+    if include is not None:
+        return sorted(list(set(result[include])))
+    return result
+
 if __name__ == "__main__":
     # logging not needed when run from main
     setup_logging(log_level=logging.DEBUG, console_output=True)
     logger = logging.getLogger(__name__)
     logger.info("Start Massiv API test")
+
+    symbols = get_symbols("all")
 
     all_tickers = asyncio.run(get_all_stocks_and_indices())
     tickers_with_options = asyncio.run(get_active_tickers_with_options())
