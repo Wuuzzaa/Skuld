@@ -106,26 +106,15 @@ def delete_sqlite_history(source_table):
     monthly_table = f"{source_table}HistoryMonthly"
     master_table = f"{source_table}MasterData"
 
-    delete_sql = f"""
-            DELETE FROM "{daily_table}"
-            WHERE snapshot_date < '2026-01-21'
-        """
-    
     engine = get_database_engine()
-    with engine.begin() as connection:
-        try:
-            execute_sql(connection, delete_sql, daily_table, "DELETE", f"DELETE history data from {daily_table}")
-        except Exception as e:
-            logger.error(f"Error during execution on SQLite: {e}")
-    
-    history_tables = [weekly_table, monthly_table, master_table]
-    for table in history_tables:
+    tables = [source_table, daily_table, weekly_table, monthly_table, master_table]
+    for table in tables:
         delete_sql = f"""
             DELETE FROM "{table}"
         """
         with engine.begin() as connection:
             try:
-                execute_sql(connection, delete_sql, table, "DELETE", f"DELETE history data from {table}")
+                execute_sql(connection, delete_sql, table, "DELETE", f"DELETE data from {table}")
             except Exception as e:
                 logger.error(f"Error during execution on SQLite: {e}")     
 

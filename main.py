@@ -22,6 +22,7 @@ logger.info("Start SKULD")
 
 def main(args):
     pipeline = None
+    logger.info(f"Mode: {args.mode}")
     try:
         # Initialize Pipeline Monitor with the specific mode
         pipeline = PipelineMonitor(mode=args.mode)
