@@ -45,15 +45,15 @@ def main(args):
                 ("Massive Option Chains", load_option_chains, (symbols["options"])),
                 ("Yahoo Finance Analyst Price Targets", scrape_yahoo_finance_analyst_price_targets, (symbols["stocks"])),
                 ("Price & Technical Indicators", scrape_and_save_price_and_technical_indicators, (symbols["stocks_with_exchange"])),
-                ("Earning Dates", scrape_earning_dates, ()),
-                ("Yahoo Query Fundamentals", generate_fundamental_data, ()),
+                ("Earning Dates", scrape_earning_dates, (symbols["stocks"])),
+                ("Yahoo Query Fundamentals", generate_fundamental_data, (symbols["stocks"])),
                 ("Fetch Current Stock Prices", fetch_current_prices, ()),
             ]
         elif args.mode == "saturday_night":
             parallel_tasks = [
                 ("Yahoo Finance Analyst Price Targets", scrape_yahoo_finance_analyst_price_targets, (symbols["stocks"])),
-                ("Earning Dates", scrape_earning_dates, ()),
-                ("Yahoo Query Fundamentals", generate_fundamental_data, ()),
+                ("Earning Dates", scrape_earning_dates, (symbols["stocks"])),
+                ("Yahoo Query Fundamentals", generate_fundamental_data, (symbols["stocks"])),
             ]
         elif args.mode == "marked_start_mid_end":
             parallel_tasks = [
