@@ -7,12 +7,11 @@ import pandas as pd
 from config import TABLE_FUNDAMENTAL_DATA_YAHOO
 from src.database import get_postgres_engine, insert_into_table, truncate_table
 from src.yahooquery_scraper import YahooQueryScraper
-from config_utils import get_filtered_symbols_with_logging
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-def generate_fundamental_data():
+def generate_fundamental_data(symbols):
 
     """
     Main function to generate fundamental data - called from main.py
@@ -24,12 +23,11 @@ def generate_fundamental_data():
     """
 
     print("Processing fundamentals: collecting ALL available metrics from multiple endpoints...")
-    
-    symbols = get_filtered_symbols_with_logging("Yahoo Fundamentals")
+
 
     # Method 1: Get ALL financial data using all_financial_data (200+ columns)
     print("Fetching comprehensive financial data using all_financial_data()...")
-    yahoo_query = YahooQueryScraper.instance()
+    yahoo_query = YahooQueryScraper.instance(symbols)
     df_all_financial = yahoo_query.get_all_financial_data()
     
     if df_all_financial is not None and not df_all_financial.empty:
@@ -51,7 +49,7 @@ def generate_fundamental_data():
     # Method 2: Add additional data from specific endpoints for completeness
     all_fundamental_data = []
     
-    yahoo_query = YahooQueryScraper.instance()
+    yahoo_query = YahooQueryScraper.instance(symbols)
     data = yahoo_query.get_modules()
 
     for symbol, symbol_data in data.items():
