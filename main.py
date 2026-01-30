@@ -12,7 +12,6 @@ from src.yahooquery_earning_dates import scrape_earning_dates
 from src.yahooquery_financials import generate_fundamental_data
 from src.yfinance_analyst_price_targets import scrape_yahoo_finance_analyst_price_targets
 from config import *
-from src.dividend_radar import process_dividend_data
 from src.historization import run_historization_pipeline
 from src.pipeline_monitor import PipelineMonitor
 
@@ -46,7 +45,6 @@ def main(args):
                 ("Massive Option Chains", load_option_chains, (symbols["options"])),
                 ("Yahoo Finance Analyst Price Targets", scrape_yahoo_finance_analyst_price_targets, (symbols["stocks"])),
                 ("Price & Technical Indicators", scrape_and_save_price_and_technical_indicators, (symbols["stocks_with_exchange"])),
-                ("Dividend Radar", process_dividend_data, ()),
                 ("Earning Dates", scrape_earning_dates, ()),
                 ("Yahoo Query Fundamentals", generate_fundamental_data, ()),
                 ("Fetch Current Stock Prices", fetch_current_prices, ()),
@@ -54,7 +52,6 @@ def main(args):
         elif args.mode == "saturday_night":
             parallel_tasks = [
                 ("Yahoo Finance Analyst Price Targets", scrape_yahoo_finance_analyst_price_targets, (symbols["stocks"])),
-                ("Dividend Radar", process_dividend_data, ()),
                 ("Earning Dates", scrape_earning_dates, ()),
                 ("Yahoo Query Fundamentals", generate_fundamental_data, ()),
             ]
