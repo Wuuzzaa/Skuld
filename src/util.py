@@ -1,10 +1,8 @@
 import re
 import sys
-import os
 import threading
 import logging
 from config import *
-from config_utils import generate_expiry_dates_from_rules
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -187,39 +185,33 @@ class Singleton:
     class that should be a singleton.
 
     The decorated class can define one `__init__` function that
-    takes only the `self` argument. Also, the decorated class cannot be
-    inherited from. Other than that, there are no restrictions that apply
-    to the decorated class.
-
-    To get the singleton instance, use the `instance` method. Trying
-    to use `__call__` will result in a `TypeError` being raised.
-
+    takes arguments. The decorated class cannot be inherited from.
+    To get the singleton instance, use the `instance(*args, **kwargs)` method.
+    Trying to use `__call__` will result in a `TypeError` being raised.
     """
 
     def __init__(self, decorated):
         self._decorated = decorated
         self._lock = threading.Lock()
+        self._instance = None
+        self._args = None
+        self._kwargs = None
 
-    def instance(self):
+    def instance(self, *args, **kwargs):
         """
         Returns the singleton instance. Upon its first call, it creates a
         new instance of the decorated class and calls its `__init__` method.
         On all subsequent calls, the already created instance is returned.
-
         """
-        try:
+        with self._lock:
+            if self._instance is None:
+                self._args = args
+                self._kwargs = kwargs
+                self._instance = self._decorated(*self._args, **self._kwargs)
             return self._instance
-        except AttributeError:
-            with self._lock:
-                # Double-checked locking
-                try:
-                    return self._instance
-                except AttributeError:
-                    self._instance = self._decorated()
-                    return self._instance
 
-    def __call__(self):
-        raise TypeError('Singletons must be accessed through `instance()`.')
+    def __call__(self, *args, **kwargs):
+        raise TypeError('Singletons must be accessed through `instance(*args, **kwargs)`.')
 
     def __instancecheck__(self, inst):
         return isinstance(inst, self._decorated)
