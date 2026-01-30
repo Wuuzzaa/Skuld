@@ -2,6 +2,7 @@ import time
 import logging
 import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from src.massiv_api import get_symbols
 from src.live_stock_price_collector import fetch_current_prices
 from src.logger_config import setup_logging
 from src.database import run_migrations
@@ -36,12 +37,13 @@ def main(args):
         logger.info("#" * 80)
 
         #todo load symbols from massive. Call each task with the correct symbols.
+        symbols = get_symbols()
 
         # select the data collection tasks to run
         parallel_tasks = None
         if args.mode == "all":
             parallel_tasks = [
-                ("Massive Option Chains", load_option_chains, ()),
+                ("Massive Option Chains", load_option_chains, (symbols["options"])),
                 ("Yahoo Finance Analyst Price Targets", scrape_yahoo_finance_analyst_price_targets, ()),
                 ("Price & Technical Indicators", scrape_and_save_price_and_technical_indicators, ()),
                 ("Dividend Radar", process_dividend_data, ()),
@@ -66,7 +68,7 @@ def main(args):
             ]
         elif args.mode == "option_data":
             parallel_tasks = [
-                ("Massive Option Chains", load_option_chains, ()),
+                ("Massive Option Chains", load_option_chains, (symbols["options"])),
             ]
         elif args.mode == "historization":
             pass
