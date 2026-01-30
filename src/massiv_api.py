@@ -51,6 +51,46 @@ async def __get_tickers_by_market(market, session):
 
     return tickers
 
+async def __get_tickers_with_exchange_by_market(session):
+    url = "https://api.massive.com/v3/reference/tickers"
+    params = {
+        "market": "stocks",
+        "active": "true",
+        "order": "asc",
+        "limit": 1000,
+        "sort": "ticker",
+        "apiKey": MASSIVE_API_KEY
+    }
+
+    tickers = {}
+    page = 1
+
+    while url:
+        async with session.get(url, params=params) as response:
+            data = await response.json()
+
+            if data.get('status') != 'OK':
+                break
+
+            results = data.get('results', [])
+
+            for ticker_data in results:
+                ticker = ticker_data.get('ticker')
+                primary_exchange = ticker_data.get('primary_exchange')
+                if ticker:
+                    tickers[ticker] = primary_exchange
+
+            next_url = data.get('next_url')
+            if next_url:
+                url = next_url
+                params = {
+                    "apiKey": MASSIVE_API_KEY}
+                page += 1
+            else:
+                url = None
+
+    return tickers
+
 @log_function
 async def get_all_stocks_and_indices():
     connector = aiohttp.TCPConnector(limit=20)
@@ -60,15 +100,17 @@ async def get_all_stocks_and_indices():
         # Beide Markets parallel abfragen
         stocks_task = __get_tickers_by_market("stocks", session)
         indices_task = __get_tickers_by_market("indices", session)
+        stocks_with_exchange_task = __get_tickers_with_exchange_by_market(session)
 
-        stocks, indices = await asyncio.gather(stocks_task, indices_task)
+        stocks, indices, stocks_with_exchange = await asyncio.gather(stocks_task, indices_task, stocks_with_exchange_task)
 
     all_tickers = stocks + indices
 
     return {
         "all": all_tickers,
         "stocks": stocks,
-        "indices": indices
+        "indices": indices,
+        "stocks_with_exchange": stocks_with_exchange
     }
 
 async def __get_all_option_chains_for_ticker(ticker, session, limit=250):
@@ -334,20 +376,23 @@ def get_symbols(include: str | None = None) -> list | dict[str, list]:
     Optionally, you can specify which list to return.
 
     :param include: Optional string specifying which symbol list to return.
-                    Possible values: "all", "stocks", "indices", "options"
+                    Possible values: "all", "stocks", "indices", "options", "stocks_with_exchange"
                     If None, returns a dictionary with all lists.
-    :return: List or dictionary with keys: "all", "stocks", "indices", "options"
+                    "stocks_with_exchange" is special it is a dict with key = symbol and value the exchange.
+    :return: List or dictionary with keys: "all", "stocks", "indices", "options", "stocks_with_exchange"
     """
     all_symbols_stock_indices = asyncio.run(get_all_stocks_and_indices())
     symbols_stocks = all_symbols_stock_indices["stocks"]
     symbols_indices = all_symbols_stock_indices["indices"]
+    stocks_with_exchange = all_symbols_stock_indices["stocks_with_exchange"]
     symbols_with_options = asyncio.run(get_active_tickers_with_options())
 
     result = {
         "all": symbols_stocks + symbols_indices + symbols_with_options,
         "stocks": symbols_stocks,
         "indices": symbols_indices,
-        "options": symbols_with_options
+        "options": symbols_with_options,
+        "stocks_with_exchange": stocks_with_exchange
     }
 
     if include is not None:
@@ -363,8 +408,8 @@ if __name__ == "__main__":
     symbols = get_symbols("all")
 
     all_tickers = asyncio.run(get_all_stocks_and_indices())
-    tickers_with_options = asyncio.run(get_active_tickers_with_options())
-    df = get_option_chains_df(tickers=tickers_with_options)
+    # tickers_with_options = asyncio.run(get_active_tickers_with_options())
+    # df = get_option_chains_df(tickers=tickers_with_options)
     pass
 
 
