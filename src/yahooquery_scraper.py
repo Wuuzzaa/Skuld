@@ -5,7 +5,6 @@ import time
 import threading
 import pandas as pd
 from yahooquery import Ticker
-from config_utils import get_filtered_symbols_with_logging
 from src.util import Singleton
 from datetime import datetime
 
@@ -19,8 +18,8 @@ MODULES = 'calendarEvents summaryDetail financialData earningsTrend defaultKeySt
 
 @Singleton
 class YahooQueryScraper:
-    def __init__(self):
-        self.symbols = get_filtered_symbols_with_logging("YahooQueryScraper")
+    def __init__(self, symbols):
+        self.symbols = symbols
         # Symbole in 100er-Pakete aufteilen
         self.batch_size = 100
         self.retries = 5
@@ -130,45 +129,7 @@ class YahooQueryScraper:
     def get_all_financial_data(self, force_refresh=False):
         data = self._load_all_financial_data(force_refresh)
         return data
-    
-    def get_option_chain(self):
-        logger.info(f"Loading for {len(self.symbols)} symbols option chain from Yahoo Finance")
-        
-        found_data = False
-        batch = 1
-        for ticker_batch in self.ticker_batches:
-            logger.info(f"({batch}/{len(self.ticker_batches)}) Batch")
-            batch += 1
-            for attempt in range(self.retries):
-                try:
-                    if len(self.symbols) > self.batch_size:
-                        logger.info(f"Fetching Yahoo option chain for batch of up to {self.batch_size} symbols...")
-                    df = ticker_batch.option_chain
-                    if df is not None and not df.empty:
-                        # symbol expiration_date and option-type from index to column
-                        df = df.reset_index()
-                        found_data = True
-                        logger.info(f"SUCCESS: {len(df)} options found")
-                        yield df
-                    else:
-                        logger.warning(f"WARNING: No option data available")
-                        
-                except Exception as e:
-                    logger.error(f"ERROR: Error fetching options - {str(e)}")
-                    logger.error(f"{attempt} failed -> Retry after 10s")
-                    time.sleep(10)
-                else: 
-                    # Success - exit the retry loop
-                    break
-            else:
-                logger.error(" ! " * 80)
-                logger.error("RETRY LIMIT REACHED")
-                logger.error(" ! " * 80)
-            # time.sleep(1)
 
-        if not found_data:
-            logger.warning("WARNING: No option data found for any symbols")
-    
     def validate_module_data(self, module_data):
         symbols_to_be_deleted = []
         for symbol, symbol_data in module_data.items():
