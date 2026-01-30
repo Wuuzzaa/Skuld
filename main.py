@@ -35,7 +35,7 @@ def main(args):
         logger.info(f"Starting Data Collection Pipeline")
         logger.info("#" * 80)
 
-        #todo load symbols from massive. Call each task with the correct symbols.
+        # todo symbols als dataframe aufbereiten. kommt in die datenbank. weiterhin einen task um symbols am wochenende zu bestimmen. symbols werden aus der db gelesen falls möglich.
         symbols = get_symbols()
 
         # select the data collection tasks to run
@@ -47,7 +47,7 @@ def main(args):
                 ("Price & Technical Indicators", scrape_and_save_price_and_technical_indicators, (symbols["stocks_with_exchange"])),
                 ("Earning Dates", scrape_earning_dates, (symbols["stocks"])),
                 ("Yahoo Query Fundamentals", generate_fundamental_data, (symbols["stocks"])),
-                ("Fetch Current Stock Prices", fetch_current_prices, ()),
+                ("Fetch Current Stock Prices", fetch_current_prices, (symbols["stocks"])),
             ]
         elif args.mode == "saturday_night":
             parallel_tasks = [
@@ -57,7 +57,7 @@ def main(args):
             ]
         elif args.mode == "marked_start_mid_end":
             parallel_tasks = [
-                ("Fetch Current Stock Prices", fetch_current_prices, ()),
+                ("Fetch Current Stock Prices", fetch_current_prices, (symbols["stocks"])),
             ]
         elif args.mode == "stock_data_daily":
             parallel_tasks = [

@@ -26,7 +26,7 @@ def ticker_to_symbol(ticker):
         return ticker.split(':', 1)[1]
     return ticker
 
-def fetch_current_prices():
+def fetch_current_prices(symbols):
     """
     Fetch current prices for a list of symbols using yfinance in batches.
 
@@ -34,7 +34,7 @@ def fetch_current_prices():
     """
     results = []
 
-    yahoo_query = YahooQueryScraper.instance()
+    yahoo_query = YahooQueryScraper.instance(symbols)
     data = yahoo_query.get_modules()
 
 
