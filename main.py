@@ -44,7 +44,7 @@ def main(args):
         if args.mode == "all":
             parallel_tasks = [
                 ("Massive Option Chains", load_option_chains, (symbols["options"])),
-                ("Yahoo Finance Analyst Price Targets", scrape_yahoo_finance_analyst_price_targets, ()),
+                ("Yahoo Finance Analyst Price Targets", scrape_yahoo_finance_analyst_price_targets, (symbols["stocks"])),
                 ("Price & Technical Indicators", scrape_and_save_price_and_technical_indicators, ()),
                 ("Dividend Radar", process_dividend_data, ()),
                 ("Earning Dates", scrape_earning_dates, ()),
@@ -53,7 +53,7 @@ def main(args):
             ]
         elif args.mode == "saturday_night":
             parallel_tasks = [
-                ("Yahoo Finance Analyst Price Targets", scrape_yahoo_finance_analyst_price_targets, ()),
+                ("Yahoo Finance Analyst Price Targets", scrape_yahoo_finance_analyst_price_targets, (symbols["stocks"])),
                 ("Dividend Radar", process_dividend_data, ()),
                 ("Earning Dates", scrape_earning_dates, ()),
                 ("Yahoo Query Fundamentals", generate_fundamental_data, ()),
