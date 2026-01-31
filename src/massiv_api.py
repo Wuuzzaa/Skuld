@@ -336,29 +336,35 @@ def load_option_chains_backup():
     # symbols = asyncio.run(get_active_tickers_with_options())
     logger.info(f"Loading for {len(symbols)} symbols option data from Massive API")
 
-    
-    with get_postgres_engine().begin() as connection:
-        truncate_table(connection, TABLE_OPTION_DATA_MASSIVE)
+    raw_connection = get_postgres_engine().raw_connection()
+    try:
+        truncate_table(raw_connection, TABLE_OPTION_DATA_MASSIVE)
 
-    # load batches of option chains for symbols
-    batch_size = 500
-    total_options = 0
-    symbol_batches = [symbols[i:i + batch_size] for i in range(0, len(symbols), batch_size)]
-    batch = 1
-    for symbol_batch in symbol_batches:
-        if len(symbols) > batch_size:
-            logger.info(f"({batch}/{len(symbol_batches)}) Fetching Massive API option data for batch of {len(symbol_batch)} symbols...")
-            batch += 1
-        df = get_option_chains_df(tickers=symbol_batch)
+        # load batches of option chains for symbols
+        batch_size = 500
+        total_options = 0
+        symbol_batches = [symbols[i:i + batch_size] for i in range(0, len(symbols), batch_size)]
+        batch = 1
+        for symbol_batch in symbol_batches:
+            if len(symbols) > batch_size:
+                logger.info(f"({batch}/{len(symbol_batches)}) Fetching Massive API option data for batch of {len(symbol_batch)} symbols...")
+                batch += 1
+            df = get_option_chains_df(tickers=symbol_batch)
 
 
-        insert_into_table_bulk(
-            table_name=TABLE_OPTION_DATA_MASSIVE,
-            dataframe=df,
-            if_exists="append"
-        )
+            insert_into_table_bulk(
+                raw_connection,
+                table_name=TABLE_OPTION_DATA_MASSIVE,
+                dataframe=df,
+                if_exists="append"
+            )
 
-        total_options += len(df)
+            total_options += len(df)
+    except Exception as e:
+        logger.error(f"[PostgreSQL] Error executing SQL: \n{e}")
+        raise e
+    finally:
+        raw_connection.close()
     
     # with get_postgres_engine().begin() as connection:
     #     truncate_table(connection, TABLE_OPTION_DATA_MASSIVE)

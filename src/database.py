@@ -159,7 +159,6 @@ def insert_into_table_bulk(
 
     columns = list(dataframe.columns)
 
-    # conn = get_postgres_engine().raw_connection()
     try:
         with raw_connection.cursor() as cur:
             cur.copy_from(
@@ -169,11 +168,9 @@ def insert_into_table_bulk(
                 null='',
                 columns=columns
             )
-        # conn.commit()
     except Exception as e:
-            logger.error(f"[PostgreSQL] Error executing SQL on {table_name}: \n{e}")
-    # finally:
-    #     raw_connection.close()
+        logger.error(f"[PostgreSQL] Error executing SQL on {table_name}: \n{e}")
+        raise e
     rows_saved = len(dataframe)
     logger.info(f"[PostgreSQL] Successfully saved {rows_saved} rows to {table_name} in {round(time.time() - start, 2)}s.")
     
