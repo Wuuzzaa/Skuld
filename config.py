@@ -51,6 +51,7 @@ TABLE_FUNDAMENTAL_DATA_DIVIDEND_RADAR = 'FundamentalDataDividendRadar'
 TABLE_FUNDAMENTAL_DATA_YAHOO = 'FundamentalDataYahoo'
 TABLE_TECHNICAL_INDICATORS = 'TechnicalIndicators'
 TABLE_STOCK_PRICE = 'StockPrice'
+TABLE_DIVIDENDS = 'Dividends'
 
 # History enabled tables
 HISTORY_ENABLED_TABLES = [
@@ -61,8 +62,7 @@ HISTORY_ENABLED_TABLES = [
     TABLE_ANALYST_PRICE_TARGETS,
     TABLE_FUNDAMENTAL_DATA_DIVIDEND_RADAR,
     TABLE_TECHNICAL_INDICATORS,
-    TABLE_FUNDAMENTAL_DATA_YAHOO,
-    TABLE_STOCK_PRICE
+    TABLE_FUNDAMENTAL_DATA_YAHOO
 ]
 
 #Views
@@ -102,6 +102,10 @@ RISK_FREE_RATE = 0.03
 NUM_SIMULATIONS = 100000
 TRANSACTION_COST_PER_CONTRACT = 2.0 # in USD
 
+# Yahoo Finance History
+YAHOO_HISTORY_PERIOD = '25y'
+YAHOO_HISTORY_INTERVAL = '1d'
+
 # =============================================================================
 # SIMPLIFIED DATA COLLECTION CONFIGURATION
 # =============================================================================
@@ -112,7 +116,7 @@ SYMBOL_SELECTION = {
     "symbols": ["MO"],             # Used when mode="list"
     "file_path": None,               # Used when mode="file"
     "max_symbols": 1000,               # Used when mode="max" or as limit for "all"
-    "use_max_limit": True            # If True, applies max_symbols limit to any mode
+    "use_max_limit": False            # If True, applies max_symbols limit to any mode
 }
 
 MAX_WORKERS = int(os.getenv('MAX_WORKERS') if os.getenv('MAX_WORKERS') else 1)  # Max number of parallel workers for data collection
