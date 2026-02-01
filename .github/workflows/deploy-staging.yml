@@ -143,8 +143,26 @@ jobs:
             # Build image once to prevent race condition when multiple services share the same build context
             docker build -t skuld-app-image .
 
+            echo "=== Pulling images with retry (5 Attempts) ==="
+            # Network is flaky, so we retry the pull operation multiple times
+            n=0
+            until [ "$n" -ge 5 ]
+            do
+               echo "Pull Attempt $((n+1))/5..."
+               docker compose -f docker-compose.yml -f docker-compose.staging.yml pull && break
+               n=$((n+1))
+               echo "⚠️ Pull failed, retrying in 10s..."
+               sleep 10
+            done
+            
+            if [ "$n" -ge 5 ]; then
+               echo "❌ Failed to pull images after 5 attempts."
+               exit 1
+            fi
+
             echo "=== Starting Staging Stack ==="
             # Start services using the pre-built image, include Staging overrides (Traefik)
+            # --no-build ensures we use the image built in previous step
             docker compose -f docker-compose.yml -f docker-compose.staging.yml up -d --no-build --remove-orphans
             
             echo "=== Cleaning up build cache ==="
