@@ -12,149 +12,98 @@
         master_data."option_osi",
         coalesce(
                 daily."symbol",
-                weekly."symbol",
-                monthly."symbol",
-                master_data."symbol"  
+                master_data."symbol"
             ) as "symbol",
 		coalesce(
                 daily."contract_type",
-                weekly."contract_type",
-                monthly."contract_type",
-                master_data."contract_type"  
+                master_data."contract_type"
             ) as "contract_type",
 		coalesce(
                 daily."expiration_date",
-                weekly."expiration_date",
-                monthly."expiration_date",
-                master_data."expiration_date"  
+                master_data."expiration_date"
             ) as "expiration_date",
 		coalesce(
                 daily."strike_price",
-                weekly."strike_price",
-                monthly."strike_price",
-                master_data."strike_price"  
+                master_data."strike_price"
             ) as "strike_price",
 		coalesce(
                 daily."open_interest",
-                weekly."open_interest",
-                monthly."open_interest",
-                master_data."open_interest"  
+                master_data."open_interest"
             ) as "open_interest",
 		coalesce(
                 daily."implied_volatility",
-                weekly."implied_volatility",
-                monthly."implied_volatility",
-                master_data."implied_volatility"  
+                master_data."implied_volatility"
             ) as "implied_volatility",
 		coalesce(
                 daily."exercise_style",
-                weekly."exercise_style",
-                monthly."exercise_style",
-                master_data."exercise_style"  
+                master_data."exercise_style"
             ) as "exercise_style",
 		coalesce(
                 daily."shares_per_contract",
-                weekly."shares_per_contract",
-                monthly."shares_per_contract",
-                master_data."shares_per_contract"  
+                master_data."shares_per_contract"
             ) as "shares_per_contract",
 		coalesce(
                 daily."greeks_delta",
-                weekly."greeks_delta",
-                monthly."greeks_delta",
-                master_data."greeks_delta"  
+                master_data."greeks_delta"
             ) as "greeks_delta",
 		coalesce(
                 daily."greeks_gamma",
-                weekly."greeks_gamma",
-                monthly."greeks_gamma",
-                master_data."greeks_gamma"  
+                master_data."greeks_gamma"
             ) as "greeks_gamma",
 		coalesce(
                 daily."greeks_theta",
-                weekly."greeks_theta",
-                monthly."greeks_theta",
-                master_data."greeks_theta"  
+                master_data."greeks_theta"
             ) as "greeks_theta",
 		coalesce(
                 daily."greeks_vega",
-                weekly."greeks_vega",
-                monthly."greeks_vega",
-                master_data."greeks_vega"  
+                master_data."greeks_vega"
             ) as "greeks_vega",
 		coalesce(
                 daily."day_change",
-                weekly."day_change",
-                monthly."day_change",
-                master_data."day_change"  
+                master_data."day_change"
             ) as "day_change",
 		coalesce(
                 daily."day_change_percent",
-                weekly."day_change_percent",
-                monthly."day_change_percent",
-                master_data."day_change_percent"  
+                master_data."day_change_percent"
             ) as "day_change_percent",
 		coalesce(
                 daily."day_close",
-                weekly."day_close",
-                monthly."day_close",
-                master_data."day_close"  
+                master_data."day_close"
             ) as "day_close",
 		coalesce(
                 daily."day_high",
-                weekly."day_high",
-                monthly."day_high",
-                master_data."day_high"  
+                master_data."day_high"
             ) as "day_high",
 		coalesce(
                 daily."day_low",
-                weekly."day_low",
-                monthly."day_low",
-                master_data."day_low"  
+                master_data."day_low"
             ) as "day_low",
 		coalesce(
                 daily."day_open",
-                weekly."day_open",
-                monthly."day_open",
-                master_data."day_open"  
+                master_data."day_open"
             ) as "day_open",
 		coalesce(
                 daily."day_previous_close",
-                weekly."day_previous_close",
-                monthly."day_previous_close",
-                master_data."day_previous_close"  
+                master_data."day_previous_close"
             ) as "day_previous_close",
 		coalesce(
                 daily."day_volume",
-                weekly."day_volume",
-                monthly."day_volume",
-                master_data."day_volume"  
+                master_data."day_volume"
             ) as "day_volume",
 		coalesce(
                 daily."day_vwap",
-                weekly."day_vwap",
-                monthly."day_vwap",
-                master_data."day_vwap"  
+                master_data."day_vwap"
             ) as "day_vwap",
 		coalesce(
                 daily."day_last_updated",
-                weekly."day_last_updated",
-                monthly."day_last_updated",
-                master_data."day_last_updated"  
+                master_data."day_last_updated"
             ) as "day_last_updated"
     FROM
         "DatesHistory" as dates
-        CROSS JOIN "OptionDataMassiveMasterData" as master_data 
+        INNER JOIN "OptionDataMassiveMasterData" as master_data
+        ON dates.date BETWEEN master_data.from_date AND master_data.to_date 
         LEFT JOIN "OptionDataMassiveHistoryDaily" as daily
         ON dates.date = daily.snapshot_date
         AND master_data."option_osi" = daily."option_osi"
-        LEFT JOIN "OptionDataMassiveHistoryWeekly" as weekly 
-        ON dates.isoyear = weekly.isoyear
-        AND dates.week = weekly.week
-        AND master_data."option_osi" = weekly."option_osi"
-        LEFT JOIN "OptionDataMassiveHistoryMonthly" as monthly 
-        ON dates.year = monthly.year
-        AND dates.month = monthly.month
-        AND master_data."option_osi" = monthly."option_osi"
     ;
     

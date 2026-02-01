@@ -12,2837 +12,1890 @@
         master_data."symbol",
         coalesce(
                 daily."asOfDate",
-                weekly."asOfDate",
-                monthly."asOfDate",
-                master_data."asOfDate"  
+                master_data."asOfDate"
             ) as "asOfDate",
 		coalesce(
                 daily."periodType",
-                weekly."periodType",
-                monthly."periodType",
-                master_data."periodType"  
+                master_data."periodType"
             ) as "periodType",
 		coalesce(
                 daily."currencyCode",
-                weekly."currencyCode",
-                monthly."currencyCode",
-                master_data."currencyCode"  
+                master_data."currencyCode"
             ) as "currencyCode",
 		coalesce(
                 daily."AccountsPayable",
-                weekly."AccountsPayable",
-                monthly."AccountsPayable",
-                master_data."AccountsPayable"  
+                master_data."AccountsPayable"
             ) as "AccountsPayable",
 		coalesce(
                 daily."AccountsReceivable",
-                weekly."AccountsReceivable",
-                monthly."AccountsReceivable",
-                master_data."AccountsReceivable"  
+                master_data."AccountsReceivable"
             ) as "AccountsReceivable",
 		coalesce(
                 daily."AccruedInterestReceivable",
-                weekly."AccruedInterestReceivable",
-                monthly."AccruedInterestReceivable",
-                master_data."AccruedInterestReceivable"  
+                master_data."AccruedInterestReceivable"
             ) as "AccruedInterestReceivable",
 		coalesce(
                 daily."AccumulatedDepreciation",
-                weekly."AccumulatedDepreciation",
-                monthly."AccumulatedDepreciation",
-                master_data."AccumulatedDepreciation"  
+                master_data."AccumulatedDepreciation"
             ) as "AccumulatedDepreciation",
 		coalesce(
                 daily."AdditionalPaidInCapital",
-                weekly."AdditionalPaidInCapital",
-                monthly."AdditionalPaidInCapital",
-                master_data."AdditionalPaidInCapital"  
+                master_data."AdditionalPaidInCapital"
             ) as "AdditionalPaidInCapital",
 		coalesce(
                 daily."AllowanceForDoubtfulAccountsReceivable",
-                weekly."AllowanceForDoubtfulAccountsReceivable",
-                monthly."AllowanceForDoubtfulAccountsReceivable",
-                master_data."AllowanceForDoubtfulAccountsReceivable"  
+                master_data."AllowanceForDoubtfulAccountsReceivable"
             ) as "AllowanceForDoubtfulAccountsReceivable",
 		coalesce(
                 daily."Amortization",
-                weekly."Amortization",
-                monthly."Amortization",
-                master_data."Amortization"  
+                master_data."Amortization"
             ) as "Amortization",
 		coalesce(
                 daily."AmortizationCashFlow",
-                weekly."AmortizationCashFlow",
-                monthly."AmortizationCashFlow",
-                master_data."AmortizationCashFlow"  
+                master_data."AmortizationCashFlow"
             ) as "AmortizationCashFlow",
 		coalesce(
                 daily."AmortizationOfIntangibles",
-                weekly."AmortizationOfIntangibles",
-                monthly."AmortizationOfIntangibles",
-                master_data."AmortizationOfIntangibles"  
+                master_data."AmortizationOfIntangibles"
             ) as "AmortizationOfIntangibles",
 		coalesce(
                 daily."AmortizationOfIntangiblesIncomeStatement",
-                weekly."AmortizationOfIntangiblesIncomeStatement",
-                monthly."AmortizationOfIntangiblesIncomeStatement",
-                master_data."AmortizationOfIntangiblesIncomeStatement"  
+                master_data."AmortizationOfIntangiblesIncomeStatement"
             ) as "AmortizationOfIntangiblesIncomeStatement",
 		coalesce(
                 daily."AmortizationOfSecurities",
-                weekly."AmortizationOfSecurities",
-                monthly."AmortizationOfSecurities",
-                master_data."AmortizationOfSecurities"  
+                master_data."AmortizationOfSecurities"
             ) as "AmortizationOfSecurities",
 		coalesce(
                 daily."AssetImpairmentCharge",
-                weekly."AssetImpairmentCharge",
-                monthly."AssetImpairmentCharge",
-                master_data."AssetImpairmentCharge"  
+                master_data."AssetImpairmentCharge"
             ) as "AssetImpairmentCharge",
 		coalesce(
                 daily."AssetsHeldForSaleCurrent",
-                weekly."AssetsHeldForSaleCurrent",
-                monthly."AssetsHeldForSaleCurrent",
-                master_data."AssetsHeldForSaleCurrent"  
+                master_data."AssetsHeldForSaleCurrent"
             ) as "AssetsHeldForSaleCurrent",
 		coalesce(
                 daily."AvailableForSaleSecurities",
-                weekly."AvailableForSaleSecurities",
-                monthly."AvailableForSaleSecurities",
-                master_data."AvailableForSaleSecurities"  
+                master_data."AvailableForSaleSecurities"
             ) as "AvailableForSaleSecurities",
 		coalesce(
                 daily."AverageDilutionEarnings",
-                weekly."AverageDilutionEarnings",
-                monthly."AverageDilutionEarnings",
-                master_data."AverageDilutionEarnings"  
+                master_data."AverageDilutionEarnings"
             ) as "AverageDilutionEarnings",
 		coalesce(
                 daily."BasicAverageShares",
-                weekly."BasicAverageShares",
-                monthly."BasicAverageShares",
-                master_data."BasicAverageShares"  
+                master_data."BasicAverageShares"
             ) as "BasicAverageShares",
 		coalesce(
                 daily."BasicEPS",
-                weekly."BasicEPS",
-                monthly."BasicEPS",
-                master_data."BasicEPS"  
+                master_data."BasicEPS"
             ) as "BasicEPS",
 		coalesce(
                 daily."BeginningCashPosition",
-                weekly."BeginningCashPosition",
-                monthly."BeginningCashPosition",
-                master_data."BeginningCashPosition"  
+                master_data."BeginningCashPosition"
             ) as "BeginningCashPosition",
 		coalesce(
                 daily."BuildingsAndImprovements",
-                weekly."BuildingsAndImprovements",
-                monthly."BuildingsAndImprovements",
-                master_data."BuildingsAndImprovements"  
+                master_data."BuildingsAndImprovements"
             ) as "BuildingsAndImprovements",
 		coalesce(
                 daily."CapitalExpenditure",
-                weekly."CapitalExpenditure",
-                monthly."CapitalExpenditure",
-                master_data."CapitalExpenditure"  
+                master_data."CapitalExpenditure"
             ) as "CapitalExpenditure",
 		coalesce(
                 daily."CapitalExpenditureReported",
-                weekly."CapitalExpenditureReported",
-                monthly."CapitalExpenditureReported",
-                master_data."CapitalExpenditureReported"  
+                master_data."CapitalExpenditureReported"
             ) as "CapitalExpenditureReported",
 		coalesce(
                 daily."CapitalLeaseObligations",
-                weekly."CapitalLeaseObligations",
-                monthly."CapitalLeaseObligations",
-                master_data."CapitalLeaseObligations"  
+                master_data."CapitalLeaseObligations"
             ) as "CapitalLeaseObligations",
 		coalesce(
                 daily."CapitalStock",
-                weekly."CapitalStock",
-                monthly."CapitalStock",
-                master_data."CapitalStock"  
+                master_data."CapitalStock"
             ) as "CapitalStock",
 		coalesce(
                 daily."CashAndCashEquivalents",
-                weekly."CashAndCashEquivalents",
-                monthly."CashAndCashEquivalents",
-                master_data."CashAndCashEquivalents"  
+                master_data."CashAndCashEquivalents"
             ) as "CashAndCashEquivalents",
 		coalesce(
                 daily."CashCashEquivalentsAndShortTermInvestments",
-                weekly."CashCashEquivalentsAndShortTermInvestments",
-                monthly."CashCashEquivalentsAndShortTermInvestments",
-                master_data."CashCashEquivalentsAndShortTermInvestments"  
+                master_data."CashCashEquivalentsAndShortTermInvestments"
             ) as "CashCashEquivalentsAndShortTermInvestments",
 		coalesce(
                 daily."CashDividendsPaid",
-                weekly."CashDividendsPaid",
-                monthly."CashDividendsPaid",
-                master_data."CashDividendsPaid"  
+                master_data."CashDividendsPaid"
             ) as "CashDividendsPaid",
 		coalesce(
                 daily."CashEquivalents",
-                weekly."CashEquivalents",
-                monthly."CashEquivalents",
-                master_data."CashEquivalents"  
+                master_data."CashEquivalents"
             ) as "CashEquivalents",
 		coalesce(
                 daily."CashFinancial",
-                weekly."CashFinancial",
-                monthly."CashFinancial",
-                master_data."CashFinancial"  
+                master_data."CashFinancial"
             ) as "CashFinancial",
 		coalesce(
                 daily."CashFlowFromContinuingFinancingActivities",
-                weekly."CashFlowFromContinuingFinancingActivities",
-                monthly."CashFlowFromContinuingFinancingActivities",
-                master_data."CashFlowFromContinuingFinancingActivities"  
+                master_data."CashFlowFromContinuingFinancingActivities"
             ) as "CashFlowFromContinuingFinancingActivities",
 		coalesce(
                 daily."CashFlowFromContinuingInvestingActivities",
-                weekly."CashFlowFromContinuingInvestingActivities",
-                monthly."CashFlowFromContinuingInvestingActivities",
-                master_data."CashFlowFromContinuingInvestingActivities"  
+                master_data."CashFlowFromContinuingInvestingActivities"
             ) as "CashFlowFromContinuingInvestingActivities",
 		coalesce(
                 daily."CashFlowFromContinuingOperatingActivities",
-                weekly."CashFlowFromContinuingOperatingActivities",
-                monthly."CashFlowFromContinuingOperatingActivities",
-                master_data."CashFlowFromContinuingOperatingActivities"  
+                master_data."CashFlowFromContinuingOperatingActivities"
             ) as "CashFlowFromContinuingOperatingActivities",
 		coalesce(
                 daily."CashFlowFromDiscontinuedOperation",
-                weekly."CashFlowFromDiscontinuedOperation",
-                monthly."CashFlowFromDiscontinuedOperation",
-                master_data."CashFlowFromDiscontinuedOperation"  
+                master_data."CashFlowFromDiscontinuedOperation"
             ) as "CashFlowFromDiscontinuedOperation",
 		coalesce(
                 daily."CashFlowsfromusedinOperatingActivitiesDirect",
-                weekly."CashFlowsfromusedinOperatingActivitiesDirect",
-                monthly."CashFlowsfromusedinOperatingActivitiesDirect",
-                master_data."CashFlowsfromusedinOperatingActivitiesDirect"  
+                master_data."CashFlowsfromusedinOperatingActivitiesDirect"
             ) as "CashFlowsfromusedinOperatingActivitiesDirect",
 		coalesce(
                 daily."CashFromDiscontinuedFinancingActivities",
-                weekly."CashFromDiscontinuedFinancingActivities",
-                monthly."CashFromDiscontinuedFinancingActivities",
-                master_data."CashFromDiscontinuedFinancingActivities"  
+                master_data."CashFromDiscontinuedFinancingActivities"
             ) as "CashFromDiscontinuedFinancingActivities",
 		coalesce(
                 daily."CashFromDiscontinuedInvestingActivities",
-                weekly."CashFromDiscontinuedInvestingActivities",
-                monthly."CashFromDiscontinuedInvestingActivities",
-                master_data."CashFromDiscontinuedInvestingActivities"  
+                master_data."CashFromDiscontinuedInvestingActivities"
             ) as "CashFromDiscontinuedInvestingActivities",
 		coalesce(
                 daily."CashFromDiscontinuedOperatingActivities",
-                weekly."CashFromDiscontinuedOperatingActivities",
-                monthly."CashFromDiscontinuedOperatingActivities",
-                master_data."CashFromDiscontinuedOperatingActivities"  
+                master_data."CashFromDiscontinuedOperatingActivities"
             ) as "CashFromDiscontinuedOperatingActivities",
 		coalesce(
                 daily."ChangeInAccountPayable",
-                weekly."ChangeInAccountPayable",
-                monthly."ChangeInAccountPayable",
-                master_data."ChangeInAccountPayable"  
+                master_data."ChangeInAccountPayable"
             ) as "ChangeInAccountPayable",
 		coalesce(
                 daily."ChangeInAccruedExpense",
-                weekly."ChangeInAccruedExpense",
-                monthly."ChangeInAccruedExpense",
-                master_data."ChangeInAccruedExpense"  
+                master_data."ChangeInAccruedExpense"
             ) as "ChangeInAccruedExpense",
 		coalesce(
                 daily."ChangeInCashSupplementalAsReported",
-                weekly."ChangeInCashSupplementalAsReported",
-                monthly."ChangeInCashSupplementalAsReported",
-                master_data."ChangeInCashSupplementalAsReported"  
+                master_data."ChangeInCashSupplementalAsReported"
             ) as "ChangeInCashSupplementalAsReported",
 		coalesce(
                 daily."ChangeInDividendPayable",
-                weekly."ChangeInDividendPayable",
-                monthly."ChangeInDividendPayable",
-                master_data."ChangeInDividendPayable"  
+                master_data."ChangeInDividendPayable"
             ) as "ChangeInDividendPayable",
 		coalesce(
                 daily."ChangeInIncomeTaxPayable",
-                weekly."ChangeInIncomeTaxPayable",
-                monthly."ChangeInIncomeTaxPayable",
-                master_data."ChangeInIncomeTaxPayable"  
+                master_data."ChangeInIncomeTaxPayable"
             ) as "ChangeInIncomeTaxPayable",
 		coalesce(
                 daily."ChangeInInterestPayable",
-                weekly."ChangeInInterestPayable",
-                monthly."ChangeInInterestPayable",
-                master_data."ChangeInInterestPayable"  
+                master_data."ChangeInInterestPayable"
             ) as "ChangeInInterestPayable",
 		coalesce(
                 daily."ChangeInInventory",
-                weekly."ChangeInInventory",
-                monthly."ChangeInInventory",
-                master_data."ChangeInInventory"  
+                master_data."ChangeInInventory"
             ) as "ChangeInInventory",
 		coalesce(
                 daily."ChangeInOtherCurrentAssets",
-                weekly."ChangeInOtherCurrentAssets",
-                monthly."ChangeInOtherCurrentAssets",
-                master_data."ChangeInOtherCurrentAssets"  
+                master_data."ChangeInOtherCurrentAssets"
             ) as "ChangeInOtherCurrentAssets",
 		coalesce(
                 daily."ChangeInOtherCurrentLiabilities",
-                weekly."ChangeInOtherCurrentLiabilities",
-                monthly."ChangeInOtherCurrentLiabilities",
-                master_data."ChangeInOtherCurrentLiabilities"  
+                master_data."ChangeInOtherCurrentLiabilities"
             ) as "ChangeInOtherCurrentLiabilities",
 		coalesce(
                 daily."ChangeInOtherWorkingCapital",
-                weekly."ChangeInOtherWorkingCapital",
-                monthly."ChangeInOtherWorkingCapital",
-                master_data."ChangeInOtherWorkingCapital"  
+                master_data."ChangeInOtherWorkingCapital"
             ) as "ChangeInOtherWorkingCapital",
 		coalesce(
                 daily."ChangeInPayable",
-                weekly."ChangeInPayable",
-                monthly."ChangeInPayable",
-                master_data."ChangeInPayable"  
+                master_data."ChangeInPayable"
             ) as "ChangeInPayable",
 		coalesce(
                 daily."ChangeInPayablesAndAccruedExpense",
-                weekly."ChangeInPayablesAndAccruedExpense",
-                monthly."ChangeInPayablesAndAccruedExpense",
-                master_data."ChangeInPayablesAndAccruedExpense"  
+                master_data."ChangeInPayablesAndAccruedExpense"
             ) as "ChangeInPayablesAndAccruedExpense",
 		coalesce(
                 daily."ChangeInPrepaidAssets",
-                weekly."ChangeInPrepaidAssets",
-                monthly."ChangeInPrepaidAssets",
-                master_data."ChangeInPrepaidAssets"  
+                master_data."ChangeInPrepaidAssets"
             ) as "ChangeInPrepaidAssets",
 		coalesce(
                 daily."ChangeInReceivables",
-                weekly."ChangeInReceivables",
-                monthly."ChangeInReceivables",
-                master_data."ChangeInReceivables"  
+                master_data."ChangeInReceivables"
             ) as "ChangeInReceivables",
 		coalesce(
                 daily."ChangeInTaxPayable",
-                weekly."ChangeInTaxPayable",
-                monthly."ChangeInTaxPayable",
-                master_data."ChangeInTaxPayable"  
+                master_data."ChangeInTaxPayable"
             ) as "ChangeInTaxPayable",
 		coalesce(
                 daily."ChangeInWorkingCapital",
-                weekly."ChangeInWorkingCapital",
-                monthly."ChangeInWorkingCapital",
-                master_data."ChangeInWorkingCapital"  
+                master_data."ChangeInWorkingCapital"
             ) as "ChangeInWorkingCapital",
 		coalesce(
                 daily."ChangesInAccountReceivables",
-                weekly."ChangesInAccountReceivables",
-                monthly."ChangesInAccountReceivables",
-                master_data."ChangesInAccountReceivables"  
+                master_data."ChangesInAccountReceivables"
             ) as "ChangesInAccountReceivables",
 		coalesce(
                 daily."ChangesInCash",
-                weekly."ChangesInCash",
-                monthly."ChangesInCash",
-                master_data."ChangesInCash"  
+                master_data."ChangesInCash"
             ) as "ChangesInCash",
 		coalesce(
                 daily."ClassesofCashPayments",
-                weekly."ClassesofCashPayments",
-                monthly."ClassesofCashPayments",
-                master_data."ClassesofCashPayments"  
+                master_data."ClassesofCashPayments"
             ) as "ClassesofCashPayments",
 		coalesce(
                 daily."ClassesofCashReceiptsfromOperatingActivities",
-                weekly."ClassesofCashReceiptsfromOperatingActivities",
-                monthly."ClassesofCashReceiptsfromOperatingActivities",
-                master_data."ClassesofCashReceiptsfromOperatingActivities"  
+                master_data."ClassesofCashReceiptsfromOperatingActivities"
             ) as "ClassesofCashReceiptsfromOperatingActivities",
 		coalesce(
                 daily."CommercialPaper",
-                weekly."CommercialPaper",
-                monthly."CommercialPaper",
-                master_data."CommercialPaper"  
+                master_data."CommercialPaper"
             ) as "CommercialPaper",
 		coalesce(
                 daily."CommonStock",
-                weekly."CommonStock",
-                monthly."CommonStock",
-                master_data."CommonStock"  
+                master_data."CommonStock"
             ) as "CommonStock",
 		coalesce(
                 daily."CommonStockDividendPaid",
-                weekly."CommonStockDividendPaid",
-                monthly."CommonStockDividendPaid",
-                master_data."CommonStockDividendPaid"  
+                master_data."CommonStockDividendPaid"
             ) as "CommonStockDividendPaid",
 		coalesce(
                 daily."CommonStockEquity",
-                weekly."CommonStockEquity",
-                monthly."CommonStockEquity",
-                master_data."CommonStockEquity"  
+                master_data."CommonStockEquity"
             ) as "CommonStockEquity",
 		coalesce(
                 daily."CommonStockIssuance",
-                weekly."CommonStockIssuance",
-                monthly."CommonStockIssuance",
-                master_data."CommonStockIssuance"  
+                master_data."CommonStockIssuance"
             ) as "CommonStockIssuance",
 		coalesce(
                 daily."CommonStockPayments",
-                weekly."CommonStockPayments",
-                monthly."CommonStockPayments",
-                master_data."CommonStockPayments"  
+                master_data."CommonStockPayments"
             ) as "CommonStockPayments",
 		coalesce(
                 daily."ConstructionInProgress",
-                weekly."ConstructionInProgress",
-                monthly."ConstructionInProgress",
-                master_data."ConstructionInProgress"  
+                master_data."ConstructionInProgress"
             ) as "ConstructionInProgress",
 		coalesce(
                 daily."CostOfRevenue",
-                weekly."CostOfRevenue",
-                monthly."CostOfRevenue",
-                master_data."CostOfRevenue"  
+                master_data."CostOfRevenue"
             ) as "CostOfRevenue",
 		coalesce(
                 daily."CurrentAccruedExpenses",
-                weekly."CurrentAccruedExpenses",
-                monthly."CurrentAccruedExpenses",
-                master_data."CurrentAccruedExpenses"  
+                master_data."CurrentAccruedExpenses"
             ) as "CurrentAccruedExpenses",
 		coalesce(
                 daily."CurrentAssets",
-                weekly."CurrentAssets",
-                monthly."CurrentAssets",
-                master_data."CurrentAssets"  
+                master_data."CurrentAssets"
             ) as "CurrentAssets",
 		coalesce(
                 daily."CurrentCapitalLeaseObligation",
-                weekly."CurrentCapitalLeaseObligation",
-                monthly."CurrentCapitalLeaseObligation",
-                master_data."CurrentCapitalLeaseObligation"  
+                master_data."CurrentCapitalLeaseObligation"
             ) as "CurrentCapitalLeaseObligation",
 		coalesce(
                 daily."CurrentDebt",
-                weekly."CurrentDebt",
-                monthly."CurrentDebt",
-                master_data."CurrentDebt"  
+                master_data."CurrentDebt"
             ) as "CurrentDebt",
 		coalesce(
                 daily."CurrentDebtAndCapitalLeaseObligation",
-                weekly."CurrentDebtAndCapitalLeaseObligation",
-                monthly."CurrentDebtAndCapitalLeaseObligation",
-                master_data."CurrentDebtAndCapitalLeaseObligation"  
+                master_data."CurrentDebtAndCapitalLeaseObligation"
             ) as "CurrentDebtAndCapitalLeaseObligation",
 		coalesce(
                 daily."CurrentDeferredAssets",
-                weekly."CurrentDeferredAssets",
-                monthly."CurrentDeferredAssets",
-                master_data."CurrentDeferredAssets"  
+                master_data."CurrentDeferredAssets"
             ) as "CurrentDeferredAssets",
 		coalesce(
                 daily."CurrentDeferredLiabilities",
-                weekly."CurrentDeferredLiabilities",
-                monthly."CurrentDeferredLiabilities",
-                master_data."CurrentDeferredLiabilities"  
+                master_data."CurrentDeferredLiabilities"
             ) as "CurrentDeferredLiabilities",
 		coalesce(
                 daily."CurrentDeferredRevenue",
-                weekly."CurrentDeferredRevenue",
-                monthly."CurrentDeferredRevenue",
-                master_data."CurrentDeferredRevenue"  
+                master_data."CurrentDeferredRevenue"
             ) as "CurrentDeferredRevenue",
 		coalesce(
                 daily."CurrentDeferredTaxesAssets",
-                weekly."CurrentDeferredTaxesAssets",
-                monthly."CurrentDeferredTaxesAssets",
-                master_data."CurrentDeferredTaxesAssets"  
+                master_data."CurrentDeferredTaxesAssets"
             ) as "CurrentDeferredTaxesAssets",
 		coalesce(
                 daily."CurrentDeferredTaxesLiabilities",
-                weekly."CurrentDeferredTaxesLiabilities",
-                monthly."CurrentDeferredTaxesLiabilities",
-                master_data."CurrentDeferredTaxesLiabilities"  
+                master_data."CurrentDeferredTaxesLiabilities"
             ) as "CurrentDeferredTaxesLiabilities",
 		coalesce(
                 daily."CurrentLiabilities",
-                weekly."CurrentLiabilities",
-                monthly."CurrentLiabilities",
-                master_data."CurrentLiabilities"  
+                master_data."CurrentLiabilities"
             ) as "CurrentLiabilities",
 		coalesce(
                 daily."CurrentNotesPayable",
-                weekly."CurrentNotesPayable",
-                monthly."CurrentNotesPayable",
-                master_data."CurrentNotesPayable"  
+                master_data."CurrentNotesPayable"
             ) as "CurrentNotesPayable",
 		coalesce(
                 daily."CurrentProvisions",
-                weekly."CurrentProvisions",
-                monthly."CurrentProvisions",
-                master_data."CurrentProvisions"  
+                master_data."CurrentProvisions"
             ) as "CurrentProvisions",
 		coalesce(
                 daily."DeferredIncomeTax",
-                weekly."DeferredIncomeTax",
-                monthly."DeferredIncomeTax",
-                master_data."DeferredIncomeTax"  
+                master_data."DeferredIncomeTax"
             ) as "DeferredIncomeTax",
 		coalesce(
                 daily."DeferredTax",
-                weekly."DeferredTax",
-                monthly."DeferredTax",
-                master_data."DeferredTax"  
+                master_data."DeferredTax"
             ) as "DeferredTax",
 		coalesce(
                 daily."DefinedPensionBenefit",
-                weekly."DefinedPensionBenefit",
-                monthly."DefinedPensionBenefit",
-                master_data."DefinedPensionBenefit"  
+                master_data."DefinedPensionBenefit"
             ) as "DefinedPensionBenefit",
 		coalesce(
                 daily."Depletion",
-                weekly."Depletion",
-                monthly."Depletion",
-                master_data."Depletion"  
+                master_data."Depletion"
             ) as "Depletion",
 		coalesce(
                 daily."DepletionIncomeStatement",
-                weekly."DepletionIncomeStatement",
-                monthly."DepletionIncomeStatement",
-                master_data."DepletionIncomeStatement"  
+                master_data."DepletionIncomeStatement"
             ) as "DepletionIncomeStatement",
 		coalesce(
                 daily."Depreciation",
-                weekly."Depreciation",
-                monthly."Depreciation",
-                master_data."Depreciation"  
+                master_data."Depreciation"
             ) as "Depreciation",
 		coalesce(
                 daily."DepreciationAmortizationDepletion",
-                weekly."DepreciationAmortizationDepletion",
-                monthly."DepreciationAmortizationDepletion",
-                master_data."DepreciationAmortizationDepletion"  
+                master_data."DepreciationAmortizationDepletion"
             ) as "DepreciationAmortizationDepletion",
 		coalesce(
                 daily."DepreciationAmortizationDepletionIncomeStatement",
-                weekly."DepreciationAmortizationDepletionIncomeStatement",
-                monthly."DepreciationAmortizationDepletionIncomeStatement",
-                master_data."DepreciationAmortizationDepletionIncomeStatement"  
+                master_data."DepreciationAmortizationDepletionIncomeStatement"
             ) as "DepreciationAmortizationDepletionIncomeStatement",
 		coalesce(
                 daily."DepreciationAndAmortization",
-                weekly."DepreciationAndAmortization",
-                monthly."DepreciationAndAmortization",
-                master_data."DepreciationAndAmortization"  
+                master_data."DepreciationAndAmortization"
             ) as "DepreciationAndAmortization",
 		coalesce(
                 daily."DepreciationAndAmortizationInIncomeStatement",
-                weekly."DepreciationAndAmortizationInIncomeStatement",
-                monthly."DepreciationAndAmortizationInIncomeStatement",
-                master_data."DepreciationAndAmortizationInIncomeStatement"  
+                master_data."DepreciationAndAmortizationInIncomeStatement"
             ) as "DepreciationAndAmortizationInIncomeStatement",
 		coalesce(
                 daily."DepreciationIncomeStatement",
-                weekly."DepreciationIncomeStatement",
-                monthly."DepreciationIncomeStatement",
-                master_data."DepreciationIncomeStatement"  
+                master_data."DepreciationIncomeStatement"
             ) as "DepreciationIncomeStatement",
 		coalesce(
                 daily."DerivativeProductLiabilities",
-                weekly."DerivativeProductLiabilities",
-                monthly."DerivativeProductLiabilities",
-                master_data."DerivativeProductLiabilities"  
+                master_data."DerivativeProductLiabilities"
             ) as "DerivativeProductLiabilities",
 		coalesce(
                 daily."DilutedAverageShares",
-                weekly."DilutedAverageShares",
-                monthly."DilutedAverageShares",
-                master_data."DilutedAverageShares"  
+                master_data."DilutedAverageShares"
             ) as "DilutedAverageShares",
 		coalesce(
                 daily."DilutedEPS",
-                weekly."DilutedEPS",
-                monthly."DilutedEPS",
-                master_data."DilutedEPS"  
+                master_data."DilutedEPS"
             ) as "DilutedEPS",
 		coalesce(
                 daily."DilutedNIAvailtoComStockholders",
-                weekly."DilutedNIAvailtoComStockholders",
-                monthly."DilutedNIAvailtoComStockholders",
-                master_data."DilutedNIAvailtoComStockholders"  
+                master_data."DilutedNIAvailtoComStockholders"
             ) as "DilutedNIAvailtoComStockholders",
 		coalesce(
                 daily."DividendPaidCFO",
-                weekly."DividendPaidCFO",
-                monthly."DividendPaidCFO",
-                master_data."DividendPaidCFO"  
+                master_data."DividendPaidCFO"
             ) as "DividendPaidCFO",
 		coalesce(
                 daily."DividendReceivedCFO",
-                weekly."DividendReceivedCFO",
-                monthly."DividendReceivedCFO",
-                master_data."DividendReceivedCFO"  
+                master_data."DividendReceivedCFO"
             ) as "DividendReceivedCFO",
 		coalesce(
                 daily."DividendsPayable",
-                weekly."DividendsPayable",
-                monthly."DividendsPayable",
-                master_data."DividendsPayable"  
+                master_data."DividendsPayable"
             ) as "DividendsPayable",
 		coalesce(
                 daily."DividendsReceivedCFI",
-                weekly."DividendsReceivedCFI",
-                monthly."DividendsReceivedCFI",
-                master_data."DividendsReceivedCFI"  
+                master_data."DividendsReceivedCFI"
             ) as "DividendsReceivedCFI",
 		coalesce(
                 daily."DuefromRelatedPartiesCurrent",
-                weekly."DuefromRelatedPartiesCurrent",
-                monthly."DuefromRelatedPartiesCurrent",
-                master_data."DuefromRelatedPartiesCurrent"  
+                master_data."DuefromRelatedPartiesCurrent"
             ) as "DuefromRelatedPartiesCurrent",
 		coalesce(
                 daily."DuefromRelatedPartiesNonCurrent",
-                weekly."DuefromRelatedPartiesNonCurrent",
-                monthly."DuefromRelatedPartiesNonCurrent",
-                master_data."DuefromRelatedPartiesNonCurrent"  
+                master_data."DuefromRelatedPartiesNonCurrent"
             ) as "DuefromRelatedPartiesNonCurrent",
 		coalesce(
                 daily."DuetoRelatedPartiesCurrent",
-                weekly."DuetoRelatedPartiesCurrent",
-                monthly."DuetoRelatedPartiesCurrent",
-                master_data."DuetoRelatedPartiesCurrent"  
+                master_data."DuetoRelatedPartiesCurrent"
             ) as "DuetoRelatedPartiesCurrent",
 		coalesce(
                 daily."DuetoRelatedPartiesNonCurrent",
-                weekly."DuetoRelatedPartiesNonCurrent",
-                monthly."DuetoRelatedPartiesNonCurrent",
-                master_data."DuetoRelatedPartiesNonCurrent"  
+                master_data."DuetoRelatedPartiesNonCurrent"
             ) as "DuetoRelatedPartiesNonCurrent",
 		coalesce(
                 daily."EBIT",
-                weekly."EBIT",
-                monthly."EBIT",
-                master_data."EBIT"  
+                master_data."EBIT"
             ) as "EBIT",
 		coalesce(
                 daily."EBITDA",
-                weekly."EBITDA",
-                monthly."EBITDA",
-                master_data."EBITDA"  
+                master_data."EBITDA"
             ) as "EBITDA",
 		coalesce(
                 daily."EarningsFromEquityInterest",
-                weekly."EarningsFromEquityInterest",
-                monthly."EarningsFromEquityInterest",
-                master_data."EarningsFromEquityInterest"  
+                master_data."EarningsFromEquityInterest"
             ) as "EarningsFromEquityInterest",
 		coalesce(
                 daily."EarningsFromEquityInterestNetOfTax",
-                weekly."EarningsFromEquityInterestNetOfTax",
-                monthly."EarningsFromEquityInterestNetOfTax",
-                master_data."EarningsFromEquityInterestNetOfTax"  
+                master_data."EarningsFromEquityInterestNetOfTax"
             ) as "EarningsFromEquityInterestNetOfTax",
 		coalesce(
                 daily."EarningsLossesFromEquityInvestments",
-                weekly."EarningsLossesFromEquityInvestments",
-                monthly."EarningsLossesFromEquityInvestments",
-                master_data."EarningsLossesFromEquityInvestments"  
+                master_data."EarningsLossesFromEquityInvestments"
             ) as "EarningsLossesFromEquityInvestments",
 		coalesce(
                 daily."EffectOfExchangeRateChanges",
-                weekly."EffectOfExchangeRateChanges",
-                monthly."EffectOfExchangeRateChanges",
-                master_data."EffectOfExchangeRateChanges"  
+                master_data."EffectOfExchangeRateChanges"
             ) as "EffectOfExchangeRateChanges",
 		coalesce(
                 daily."EmployeeBenefits",
-                weekly."EmployeeBenefits",
-                monthly."EmployeeBenefits",
-                master_data."EmployeeBenefits"  
+                master_data."EmployeeBenefits"
             ) as "EmployeeBenefits",
 		coalesce(
                 daily."EndCashPosition",
-                weekly."EndCashPosition",
-                monthly."EndCashPosition",
-                master_data."EndCashPosition"  
+                master_data."EndCashPosition"
             ) as "EndCashPosition",
 		coalesce(
                 daily."EnterpriseValue",
-                weekly."EnterpriseValue",
-                monthly."EnterpriseValue",
-                master_data."EnterpriseValue"  
+                master_data."EnterpriseValue"
             ) as "EnterpriseValue",
 		coalesce(
                 daily."EnterprisesValueEBITDARatio",
-                weekly."EnterprisesValueEBITDARatio",
-                monthly."EnterprisesValueEBITDARatio",
-                master_data."EnterprisesValueEBITDARatio"  
+                master_data."EnterprisesValueEBITDARatio"
             ) as "EnterprisesValueEBITDARatio",
 		coalesce(
                 daily."EnterprisesValueRevenueRatio",
-                weekly."EnterprisesValueRevenueRatio",
-                monthly."EnterprisesValueRevenueRatio",
-                master_data."EnterprisesValueRevenueRatio"  
+                master_data."EnterprisesValueRevenueRatio"
             ) as "EnterprisesValueRevenueRatio",
 		coalesce(
                 daily."ExcessTaxBenefitFromStockBasedCompensation",
-                weekly."ExcessTaxBenefitFromStockBasedCompensation",
-                monthly."ExcessTaxBenefitFromStockBasedCompensation",
-                master_data."ExcessTaxBenefitFromStockBasedCompensation"  
+                master_data."ExcessTaxBenefitFromStockBasedCompensation"
             ) as "ExcessTaxBenefitFromStockBasedCompensation",
 		coalesce(
                 daily."ExciseTaxes",
-                weekly."ExciseTaxes",
-                monthly."ExciseTaxes",
-                master_data."ExciseTaxes"  
+                master_data."ExciseTaxes"
             ) as "ExciseTaxes",
 		coalesce(
                 daily."FinancialAssets",
-                weekly."FinancialAssets",
-                monthly."FinancialAssets",
-                master_data."FinancialAssets"  
+                master_data."FinancialAssets"
             ) as "FinancialAssets",
 		coalesce(
                 daily."FinancialAssetsDesignatedasFairValueThroughProfitorLossTotal",
-                weekly."FinancialAssetsDesignatedasFairValueThroughProfitorLossTotal",
-                monthly."FinancialAssetsDesignatedasFairValueThroughProfitorLossTotal",
-                master_data."FinancialAssetsDesignatedasFairValueThroughProfitorLossTotal"  
+                master_data."FinancialAssetsDesignatedasFairValueThroughProfitorLossTotal"
             ) as "FinancialAssetsDesignatedasFairValueThroughProfitorLossTotal",
 		coalesce(
                 daily."FinancingCashFlow",
-                weekly."FinancingCashFlow",
-                monthly."FinancingCashFlow",
-                master_data."FinancingCashFlow"  
+                master_data."FinancingCashFlow"
             ) as "FinancingCashFlow",
 		coalesce(
                 daily."FinishedGoods",
-                weekly."FinishedGoods",
-                monthly."FinishedGoods",
-                master_data."FinishedGoods"  
+                master_data."FinishedGoods"
             ) as "FinishedGoods",
 		coalesce(
                 daily."FixedAssetsRevaluationReserve",
-                weekly."FixedAssetsRevaluationReserve",
-                monthly."FixedAssetsRevaluationReserve",
-                master_data."FixedAssetsRevaluationReserve"  
+                master_data."FixedAssetsRevaluationReserve"
             ) as "FixedAssetsRevaluationReserve",
 		coalesce(
                 daily."ForeignCurrencyTranslationAdjustments",
-                weekly."ForeignCurrencyTranslationAdjustments",
-                monthly."ForeignCurrencyTranslationAdjustments",
-                master_data."ForeignCurrencyTranslationAdjustments"  
+                master_data."ForeignCurrencyTranslationAdjustments"
             ) as "ForeignCurrencyTranslationAdjustments",
 		coalesce(
                 daily."FreeCashFlow",
-                weekly."FreeCashFlow",
-                monthly."FreeCashFlow",
-                master_data."FreeCashFlow"  
+                master_data."FreeCashFlow"
             ) as "FreeCashFlow",
 		coalesce(
                 daily."GainLossOnInvestmentSecurities",
-                weekly."GainLossOnInvestmentSecurities",
-                monthly."GainLossOnInvestmentSecurities",
-                master_data."GainLossOnInvestmentSecurities"  
+                master_data."GainLossOnInvestmentSecurities"
             ) as "GainLossOnInvestmentSecurities",
 		coalesce(
                 daily."GainLossOnSaleOfBusiness",
-                weekly."GainLossOnSaleOfBusiness",
-                monthly."GainLossOnSaleOfBusiness",
-                master_data."GainLossOnSaleOfBusiness"  
+                master_data."GainLossOnSaleOfBusiness"
             ) as "GainLossOnSaleOfBusiness",
 		coalesce(
                 daily."GainLossOnSaleOfPPE",
-                weekly."GainLossOnSaleOfPPE",
-                monthly."GainLossOnSaleOfPPE",
-                master_data."GainLossOnSaleOfPPE"  
+                master_data."GainLossOnSaleOfPPE"
             ) as "GainLossOnSaleOfPPE",
 		coalesce(
                 daily."GainOnSaleOfBusiness",
-                weekly."GainOnSaleOfBusiness",
-                monthly."GainOnSaleOfBusiness",
-                master_data."GainOnSaleOfBusiness"  
+                master_data."GainOnSaleOfBusiness"
             ) as "GainOnSaleOfBusiness",
 		coalesce(
                 daily."GainOnSaleOfPPE",
-                weekly."GainOnSaleOfPPE",
-                monthly."GainOnSaleOfPPE",
-                master_data."GainOnSaleOfPPE"  
+                master_data."GainOnSaleOfPPE"
             ) as "GainOnSaleOfPPE",
 		coalesce(
                 daily."GainOnSaleOfSecurity",
-                weekly."GainOnSaleOfSecurity",
-                monthly."GainOnSaleOfSecurity",
-                master_data."GainOnSaleOfSecurity"  
+                master_data."GainOnSaleOfSecurity"
             ) as "GainOnSaleOfSecurity",
 		coalesce(
                 daily."GainsLossesNotAffectingRetainedEarnings",
-                weekly."GainsLossesNotAffectingRetainedEarnings",
-                monthly."GainsLossesNotAffectingRetainedEarnings",
-                master_data."GainsLossesNotAffectingRetainedEarnings"  
+                master_data."GainsLossesNotAffectingRetainedEarnings"
             ) as "GainsLossesNotAffectingRetainedEarnings",
 		coalesce(
                 daily."GeneralAndAdministrativeExpense",
-                weekly."GeneralAndAdministrativeExpense",
-                monthly."GeneralAndAdministrativeExpense",
-                master_data."GeneralAndAdministrativeExpense"  
+                master_data."GeneralAndAdministrativeExpense"
             ) as "GeneralAndAdministrativeExpense",
 		coalesce(
                 daily."GeneralPartnershipCapital",
-                weekly."GeneralPartnershipCapital",
-                monthly."GeneralPartnershipCapital",
-                master_data."GeneralPartnershipCapital"  
+                master_data."GeneralPartnershipCapital"
             ) as "GeneralPartnershipCapital",
 		coalesce(
                 daily."Goodwill",
-                weekly."Goodwill",
-                monthly."Goodwill",
-                master_data."Goodwill"  
+                master_data."Goodwill"
             ) as "Goodwill",
 		coalesce(
                 daily."GoodwillAndOtherIntangibleAssets",
-                weekly."GoodwillAndOtherIntangibleAssets",
-                monthly."GoodwillAndOtherIntangibleAssets",
-                master_data."GoodwillAndOtherIntangibleAssets"  
+                master_data."GoodwillAndOtherIntangibleAssets"
             ) as "GoodwillAndOtherIntangibleAssets",
 		coalesce(
                 daily."GrossAccountsReceivable",
-                weekly."GrossAccountsReceivable",
-                monthly."GrossAccountsReceivable",
-                master_data."GrossAccountsReceivable"  
+                master_data."GrossAccountsReceivable"
             ) as "GrossAccountsReceivable",
 		coalesce(
                 daily."GrossPPE",
-                weekly."GrossPPE",
-                monthly."GrossPPE",
-                master_data."GrossPPE"  
+                master_data."GrossPPE"
             ) as "GrossPPE",
 		coalesce(
                 daily."GrossProfit",
-                weekly."GrossProfit",
-                monthly."GrossProfit",
-                master_data."GrossProfit"  
+                master_data."GrossProfit"
             ) as "GrossProfit",
 		coalesce(
                 daily."HedgingAssetsCurrent",
-                weekly."HedgingAssetsCurrent",
-                monthly."HedgingAssetsCurrent",
-                master_data."HedgingAssetsCurrent"  
+                master_data."HedgingAssetsCurrent"
             ) as "HedgingAssetsCurrent",
 		coalesce(
                 daily."HeldToMaturitySecurities",
-                weekly."HeldToMaturitySecurities",
-                monthly."HeldToMaturitySecurities",
-                master_data."HeldToMaturitySecurities"  
+                master_data."HeldToMaturitySecurities"
             ) as "HeldToMaturitySecurities",
 		coalesce(
                 daily."ImpairmentOfCapitalAssets",
-                weekly."ImpairmentOfCapitalAssets",
-                monthly."ImpairmentOfCapitalAssets",
-                master_data."ImpairmentOfCapitalAssets"  
+                master_data."ImpairmentOfCapitalAssets"
             ) as "ImpairmentOfCapitalAssets",
 		coalesce(
                 daily."IncomeTaxPaidSupplementalData",
-                weekly."IncomeTaxPaidSupplementalData",
-                monthly."IncomeTaxPaidSupplementalData",
-                master_data."IncomeTaxPaidSupplementalData"  
+                master_data."IncomeTaxPaidSupplementalData"
             ) as "IncomeTaxPaidSupplementalData",
 		coalesce(
                 daily."IncomeTaxPayable",
-                weekly."IncomeTaxPayable",
-                monthly."IncomeTaxPayable",
-                master_data."IncomeTaxPayable"  
+                master_data."IncomeTaxPayable"
             ) as "IncomeTaxPayable",
 		coalesce(
                 daily."InsuranceAndClaims",
-                weekly."InsuranceAndClaims",
-                monthly."InsuranceAndClaims",
-                master_data."InsuranceAndClaims"  
+                master_data."InsuranceAndClaims"
             ) as "InsuranceAndClaims",
 		coalesce(
                 daily."InterestExpense",
-                weekly."InterestExpense",
-                monthly."InterestExpense",
-                master_data."InterestExpense"  
+                master_data."InterestExpense"
             ) as "InterestExpense",
 		coalesce(
                 daily."InterestExpenseNonOperating",
-                weekly."InterestExpenseNonOperating",
-                monthly."InterestExpenseNonOperating",
-                master_data."InterestExpenseNonOperating"  
+                master_data."InterestExpenseNonOperating"
             ) as "InterestExpenseNonOperating",
 		coalesce(
                 daily."InterestIncome",
-                weekly."InterestIncome",
-                monthly."InterestIncome",
-                master_data."InterestIncome"  
+                master_data."InterestIncome"
             ) as "InterestIncome",
 		coalesce(
                 daily."InterestIncomeNonOperating",
-                weekly."InterestIncomeNonOperating",
-                monthly."InterestIncomeNonOperating",
-                master_data."InterestIncomeNonOperating"  
+                master_data."InterestIncomeNonOperating"
             ) as "InterestIncomeNonOperating",
 		coalesce(
                 daily."InterestPaidCFF",
-                weekly."InterestPaidCFF",
-                monthly."InterestPaidCFF",
-                master_data."InterestPaidCFF"  
+                master_data."InterestPaidCFF"
             ) as "InterestPaidCFF",
 		coalesce(
                 daily."InterestPaidCFO",
-                weekly."InterestPaidCFO",
-                monthly."InterestPaidCFO",
-                master_data."InterestPaidCFO"  
+                master_data."InterestPaidCFO"
             ) as "InterestPaidCFO",
 		coalesce(
                 daily."InterestPaidSupplementalData",
-                weekly."InterestPaidSupplementalData",
-                monthly."InterestPaidSupplementalData",
-                master_data."InterestPaidSupplementalData"  
+                master_data."InterestPaidSupplementalData"
             ) as "InterestPaidSupplementalData",
 		coalesce(
                 daily."InterestPayable",
-                weekly."InterestPayable",
-                monthly."InterestPayable",
-                master_data."InterestPayable"  
+                master_data."InterestPayable"
             ) as "InterestPayable",
 		coalesce(
                 daily."InterestReceivedCFI",
-                weekly."InterestReceivedCFI",
-                monthly."InterestReceivedCFI",
-                master_data."InterestReceivedCFI"  
+                master_data."InterestReceivedCFI"
             ) as "InterestReceivedCFI",
 		coalesce(
                 daily."InterestReceivedCFO",
-                weekly."InterestReceivedCFO",
-                monthly."InterestReceivedCFO",
-                master_data."InterestReceivedCFO"  
+                master_data."InterestReceivedCFO"
             ) as "InterestReceivedCFO",
 		coalesce(
                 daily."InventoriesAdjustmentsAllowances",
-                weekly."InventoriesAdjustmentsAllowances",
-                monthly."InventoriesAdjustmentsAllowances",
-                master_data."InventoriesAdjustmentsAllowances"  
+                master_data."InventoriesAdjustmentsAllowances"
             ) as "InventoriesAdjustmentsAllowances",
 		coalesce(
                 daily."Inventory",
-                weekly."Inventory",
-                monthly."Inventory",
-                master_data."Inventory"  
+                master_data."Inventory"
             ) as "Inventory",
 		coalesce(
                 daily."InvestedCapital",
-                weekly."InvestedCapital",
-                monthly."InvestedCapital",
-                master_data."InvestedCapital"  
+                master_data."InvestedCapital"
             ) as "InvestedCapital",
 		coalesce(
                 daily."InvestingCashFlow",
-                weekly."InvestingCashFlow",
-                monthly."InvestingCashFlow",
-                master_data."InvestingCashFlow"  
+                master_data."InvestingCashFlow"
             ) as "InvestingCashFlow",
 		coalesce(
                 daily."InvestmentProperties",
-                weekly."InvestmentProperties",
-                monthly."InvestmentProperties",
-                master_data."InvestmentProperties"  
+                master_data."InvestmentProperties"
             ) as "InvestmentProperties",
 		coalesce(
                 daily."InvestmentinFinancialAssets",
-                weekly."InvestmentinFinancialAssets",
-                monthly."InvestmentinFinancialAssets",
-                master_data."InvestmentinFinancialAssets"  
+                master_data."InvestmentinFinancialAssets"
             ) as "InvestmentinFinancialAssets",
 		coalesce(
                 daily."InvestmentsAndAdvances",
-                weekly."InvestmentsAndAdvances",
-                monthly."InvestmentsAndAdvances",
-                master_data."InvestmentsAndAdvances"  
+                master_data."InvestmentsAndAdvances"
             ) as "InvestmentsAndAdvances",
 		coalesce(
                 daily."InvestmentsInOtherVenturesUnderEquityMethod",
-                weekly."InvestmentsInOtherVenturesUnderEquityMethod",
-                monthly."InvestmentsInOtherVenturesUnderEquityMethod",
-                master_data."InvestmentsInOtherVenturesUnderEquityMethod"  
+                master_data."InvestmentsInOtherVenturesUnderEquityMethod"
             ) as "InvestmentsInOtherVenturesUnderEquityMethod",
 		coalesce(
                 daily."InvestmentsinAssociatesatCost",
-                weekly."InvestmentsinAssociatesatCost",
-                monthly."InvestmentsinAssociatesatCost",
-                master_data."InvestmentsinAssociatesatCost"  
+                master_data."InvestmentsinAssociatesatCost"
             ) as "InvestmentsinAssociatesatCost",
 		coalesce(
                 daily."InvestmentsinJointVenturesatCost",
-                weekly."InvestmentsinJointVenturesatCost",
-                monthly."InvestmentsinJointVenturesatCost",
-                master_data."InvestmentsinJointVenturesatCost"  
+                master_data."InvestmentsinJointVenturesatCost"
             ) as "InvestmentsinJointVenturesatCost",
 		coalesce(
                 daily."InvestmentsinSubsidiariesatCost",
-                weekly."InvestmentsinSubsidiariesatCost",
-                monthly."InvestmentsinSubsidiariesatCost",
-                master_data."InvestmentsinSubsidiariesatCost"  
+                master_data."InvestmentsinSubsidiariesatCost"
             ) as "InvestmentsinSubsidiariesatCost",
 		coalesce(
                 daily."IssuanceOfCapitalStock",
-                weekly."IssuanceOfCapitalStock",
-                monthly."IssuanceOfCapitalStock",
-                master_data."IssuanceOfCapitalStock"  
+                master_data."IssuanceOfCapitalStock"
             ) as "IssuanceOfCapitalStock",
 		coalesce(
                 daily."IssuanceOfDebt",
-                weekly."IssuanceOfDebt",
-                monthly."IssuanceOfDebt",
-                master_data."IssuanceOfDebt"  
+                master_data."IssuanceOfDebt"
             ) as "IssuanceOfDebt",
 		coalesce(
                 daily."LandAndImprovements",
-                weekly."LandAndImprovements",
-                monthly."LandAndImprovements",
-                master_data."LandAndImprovements"  
+                master_data."LandAndImprovements"
             ) as "LandAndImprovements",
 		coalesce(
                 daily."Leases",
-                weekly."Leases",
-                monthly."Leases",
-                master_data."Leases"  
+                master_data."Leases"
             ) as "Leases",
 		coalesce(
                 daily."LiabilitiesHeldforSaleNonCurrent",
-                weekly."LiabilitiesHeldforSaleNonCurrent",
-                monthly."LiabilitiesHeldforSaleNonCurrent",
-                master_data."LiabilitiesHeldforSaleNonCurrent"  
+                master_data."LiabilitiesHeldforSaleNonCurrent"
             ) as "LiabilitiesHeldforSaleNonCurrent",
 		coalesce(
                 daily."LimitedPartnershipCapital",
-                weekly."LimitedPartnershipCapital",
-                monthly."LimitedPartnershipCapital",
-                master_data."LimitedPartnershipCapital"  
+                master_data."LimitedPartnershipCapital"
             ) as "LimitedPartnershipCapital",
 		coalesce(
                 daily."LineOfCredit",
-                weekly."LineOfCredit",
-                monthly."LineOfCredit",
-                master_data."LineOfCredit"  
+                master_data."LineOfCredit"
             ) as "LineOfCredit",
 		coalesce(
                 daily."LoansReceivable",
-                weekly."LoansReceivable",
-                monthly."LoansReceivable",
-                master_data."LoansReceivable"  
+                master_data."LoansReceivable"
             ) as "LoansReceivable",
 		coalesce(
                 daily."LongTermCapitalLeaseObligation",
-                weekly."LongTermCapitalLeaseObligation",
-                monthly."LongTermCapitalLeaseObligation",
-                master_data."LongTermCapitalLeaseObligation"  
+                master_data."LongTermCapitalLeaseObligation"
             ) as "LongTermCapitalLeaseObligation",
 		coalesce(
                 daily."LongTermDebt",
-                weekly."LongTermDebt",
-                monthly."LongTermDebt",
-                master_data."LongTermDebt"  
+                master_data."LongTermDebt"
             ) as "LongTermDebt",
 		coalesce(
                 daily."LongTermDebtAndCapitalLeaseObligation",
-                weekly."LongTermDebtAndCapitalLeaseObligation",
-                monthly."LongTermDebtAndCapitalLeaseObligation",
-                master_data."LongTermDebtAndCapitalLeaseObligation"  
+                master_data."LongTermDebtAndCapitalLeaseObligation"
             ) as "LongTermDebtAndCapitalLeaseObligation",
 		coalesce(
                 daily."LongTermDebtIssuance",
-                weekly."LongTermDebtIssuance",
-                monthly."LongTermDebtIssuance",
-                master_data."LongTermDebtIssuance"  
+                master_data."LongTermDebtIssuance"
             ) as "LongTermDebtIssuance",
 		coalesce(
                 daily."LongTermDebtPayments",
-                weekly."LongTermDebtPayments",
-                monthly."LongTermDebtPayments",
-                master_data."LongTermDebtPayments"  
+                master_data."LongTermDebtPayments"
             ) as "LongTermDebtPayments",
 		coalesce(
                 daily."LongTermEquityInvestment",
-                weekly."LongTermEquityInvestment",
-                monthly."LongTermEquityInvestment",
-                master_data."LongTermEquityInvestment"  
+                master_data."LongTermEquityInvestment"
             ) as "LongTermEquityInvestment",
 		coalesce(
                 daily."LongTermProvisions",
-                weekly."LongTermProvisions",
-                monthly."LongTermProvisions",
-                master_data."LongTermProvisions"  
+                master_data."LongTermProvisions"
             ) as "LongTermProvisions",
 		coalesce(
                 daily."MachineryFurnitureEquipment",
-                weekly."MachineryFurnitureEquipment",
-                monthly."MachineryFurnitureEquipment",
-                master_data."MachineryFurnitureEquipment"  
+                master_data."MachineryFurnitureEquipment"
             ) as "MachineryFurnitureEquipment",
 		coalesce(
                 daily."MarketCap",
-                weekly."MarketCap",
-                monthly."MarketCap",
-                master_data."MarketCap"  
+                master_data."MarketCap"
             ) as "MarketCap",
 		coalesce(
                 daily."MinimumPensionLiabilities",
-                weekly."MinimumPensionLiabilities",
-                monthly."MinimumPensionLiabilities",
-                master_data."MinimumPensionLiabilities"  
+                master_data."MinimumPensionLiabilities"
             ) as "MinimumPensionLiabilities",
 		coalesce(
                 daily."MinorityInterest",
-                weekly."MinorityInterest",
-                monthly."MinorityInterest",
-                master_data."MinorityInterest"  
+                master_data."MinorityInterest"
             ) as "MinorityInterest",
 		coalesce(
                 daily."MinorityInterests",
-                weekly."MinorityInterests",
-                monthly."MinorityInterests",
-                master_data."MinorityInterests"  
+                master_data."MinorityInterests"
             ) as "MinorityInterests",
 		coalesce(
                 daily."NetBusinessPurchaseAndSale",
-                weekly."NetBusinessPurchaseAndSale",
-                monthly."NetBusinessPurchaseAndSale",
-                master_data."NetBusinessPurchaseAndSale"  
+                master_data."NetBusinessPurchaseAndSale"
             ) as "NetBusinessPurchaseAndSale",
 		coalesce(
                 daily."NetCommonStockIssuance",
-                weekly."NetCommonStockIssuance",
-                monthly."NetCommonStockIssuance",
-                master_data."NetCommonStockIssuance"  
+                master_data."NetCommonStockIssuance"
             ) as "NetCommonStockIssuance",
 		coalesce(
                 daily."NetDebt",
-                weekly."NetDebt",
-                monthly."NetDebt",
-                master_data."NetDebt"  
+                master_data."NetDebt"
             ) as "NetDebt",
 		coalesce(
                 daily."NetForeignCurrencyExchangeGainLoss",
-                weekly."NetForeignCurrencyExchangeGainLoss",
-                monthly."NetForeignCurrencyExchangeGainLoss",
-                master_data."NetForeignCurrencyExchangeGainLoss"  
+                master_data."NetForeignCurrencyExchangeGainLoss"
             ) as "NetForeignCurrencyExchangeGainLoss",
 		coalesce(
                 daily."NetIncome",
-                weekly."NetIncome",
-                monthly."NetIncome",
-                master_data."NetIncome"  
+                master_data."NetIncome"
             ) as "NetIncome",
 		coalesce(
                 daily."NetIncomeCommonStockholders",
-                weekly."NetIncomeCommonStockholders",
-                monthly."NetIncomeCommonStockholders",
-                master_data."NetIncomeCommonStockholders"  
+                master_data."NetIncomeCommonStockholders"
             ) as "NetIncomeCommonStockholders",
 		coalesce(
                 daily."NetIncomeContinuousOperations",
-                weekly."NetIncomeContinuousOperations",
-                monthly."NetIncomeContinuousOperations",
-                master_data."NetIncomeContinuousOperations"  
+                master_data."NetIncomeContinuousOperations"
             ) as "NetIncomeContinuousOperations",
 		coalesce(
                 daily."NetIncomeDiscontinuousOperations",
-                weekly."NetIncomeDiscontinuousOperations",
-                monthly."NetIncomeDiscontinuousOperations",
-                master_data."NetIncomeDiscontinuousOperations"  
+                master_data."NetIncomeDiscontinuousOperations"
             ) as "NetIncomeDiscontinuousOperations",
 		coalesce(
                 daily."NetIncomeExtraordinary",
-                weekly."NetIncomeExtraordinary",
-                monthly."NetIncomeExtraordinary",
-                master_data."NetIncomeExtraordinary"  
+                master_data."NetIncomeExtraordinary"
             ) as "NetIncomeExtraordinary",
 		coalesce(
                 daily."NetIncomeFromContinuingAndDiscontinuedOperation",
-                weekly."NetIncomeFromContinuingAndDiscontinuedOperation",
-                monthly."NetIncomeFromContinuingAndDiscontinuedOperation",
-                master_data."NetIncomeFromContinuingAndDiscontinuedOperation"  
+                master_data."NetIncomeFromContinuingAndDiscontinuedOperation"
             ) as "NetIncomeFromContinuingAndDiscontinuedOperation",
 		coalesce(
                 daily."NetIncomeFromContinuingOperationNetMinorityInterest",
-                weekly."NetIncomeFromContinuingOperationNetMinorityInterest",
-                monthly."NetIncomeFromContinuingOperationNetMinorityInterest",
-                master_data."NetIncomeFromContinuingOperationNetMinorityInterest"  
+                master_data."NetIncomeFromContinuingOperationNetMinorityInterest"
             ) as "NetIncomeFromContinuingOperationNetMinorityInterest",
 		coalesce(
                 daily."NetIncomeFromContinuingOperations",
-                weekly."NetIncomeFromContinuingOperations",
-                monthly."NetIncomeFromContinuingOperations",
-                master_data."NetIncomeFromContinuingOperations"  
+                master_data."NetIncomeFromContinuingOperations"
             ) as "NetIncomeFromContinuingOperations",
 		coalesce(
                 daily."NetIncomeFromTaxLossCarryforward",
-                weekly."NetIncomeFromTaxLossCarryforward",
-                monthly."NetIncomeFromTaxLossCarryforward",
-                master_data."NetIncomeFromTaxLossCarryforward"  
+                master_data."NetIncomeFromTaxLossCarryforward"
             ) as "NetIncomeFromTaxLossCarryforward",
 		coalesce(
                 daily."NetIncomeIncludingNoncontrollingInterests",
-                weekly."NetIncomeIncludingNoncontrollingInterests",
-                monthly."NetIncomeIncludingNoncontrollingInterests",
-                master_data."NetIncomeIncludingNoncontrollingInterests"  
+                master_data."NetIncomeIncludingNoncontrollingInterests"
             ) as "NetIncomeIncludingNoncontrollingInterests",
 		coalesce(
                 daily."NetIntangiblesPurchaseAndSale",
-                weekly."NetIntangiblesPurchaseAndSale",
-                monthly."NetIntangiblesPurchaseAndSale",
-                master_data."NetIntangiblesPurchaseAndSale"  
+                master_data."NetIntangiblesPurchaseAndSale"
             ) as "NetIntangiblesPurchaseAndSale",
 		coalesce(
                 daily."NetInterestIncome",
-                weekly."NetInterestIncome",
-                monthly."NetInterestIncome",
-                master_data."NetInterestIncome"  
+                master_data."NetInterestIncome"
             ) as "NetInterestIncome",
 		coalesce(
                 daily."NetInvestmentPropertiesPurchaseAndSale",
-                weekly."NetInvestmentPropertiesPurchaseAndSale",
-                monthly."NetInvestmentPropertiesPurchaseAndSale",
-                master_data."NetInvestmentPropertiesPurchaseAndSale"  
+                master_data."NetInvestmentPropertiesPurchaseAndSale"
             ) as "NetInvestmentPropertiesPurchaseAndSale",
 		coalesce(
                 daily."NetInvestmentPurchaseAndSale",
-                weekly."NetInvestmentPurchaseAndSale",
-                monthly."NetInvestmentPurchaseAndSale",
-                master_data."NetInvestmentPurchaseAndSale"  
+                master_data."NetInvestmentPurchaseAndSale"
             ) as "NetInvestmentPurchaseAndSale",
 		coalesce(
                 daily."NetIssuancePaymentsOfDebt",
-                weekly."NetIssuancePaymentsOfDebt",
-                monthly."NetIssuancePaymentsOfDebt",
-                master_data."NetIssuancePaymentsOfDebt"  
+                master_data."NetIssuancePaymentsOfDebt"
             ) as "NetIssuancePaymentsOfDebt",
 		coalesce(
                 daily."NetLongTermDebtIssuance",
-                weekly."NetLongTermDebtIssuance",
-                monthly."NetLongTermDebtIssuance",
-                master_data."NetLongTermDebtIssuance"  
+                master_data."NetLongTermDebtIssuance"
             ) as "NetLongTermDebtIssuance",
 		coalesce(
                 daily."NetNonOperatingInterestIncomeExpense",
-                weekly."NetNonOperatingInterestIncomeExpense",
-                monthly."NetNonOperatingInterestIncomeExpense",
-                master_data."NetNonOperatingInterestIncomeExpense"  
+                master_data."NetNonOperatingInterestIncomeExpense"
             ) as "NetNonOperatingInterestIncomeExpense",
 		coalesce(
                 daily."NetOtherFinancingCharges",
-                weekly."NetOtherFinancingCharges",
-                monthly."NetOtherFinancingCharges",
-                master_data."NetOtherFinancingCharges"  
+                master_data."NetOtherFinancingCharges"
             ) as "NetOtherFinancingCharges",
 		coalesce(
                 daily."NetOtherInvestingChanges",
-                weekly."NetOtherInvestingChanges",
-                monthly."NetOtherInvestingChanges",
-                master_data."NetOtherInvestingChanges"  
+                master_data."NetOtherInvestingChanges"
             ) as "NetOtherInvestingChanges",
 		coalesce(
                 daily."NetPPE",
-                weekly."NetPPE",
-                monthly."NetPPE",
-                master_data."NetPPE"  
+                master_data."NetPPE"
             ) as "NetPPE",
 		coalesce(
                 daily."NetPPEPurchaseAndSale",
-                weekly."NetPPEPurchaseAndSale",
-                monthly."NetPPEPurchaseAndSale",
-                master_data."NetPPEPurchaseAndSale"  
+                master_data."NetPPEPurchaseAndSale"
             ) as "NetPPEPurchaseAndSale",
 		coalesce(
                 daily."NetPreferredStockIssuance",
-                weekly."NetPreferredStockIssuance",
-                monthly."NetPreferredStockIssuance",
-                master_data."NetPreferredStockIssuance"  
+                master_data."NetPreferredStockIssuance"
             ) as "NetPreferredStockIssuance",
 		coalesce(
                 daily."NetShortTermDebtIssuance",
-                weekly."NetShortTermDebtIssuance",
-                monthly."NetShortTermDebtIssuance",
-                master_data."NetShortTermDebtIssuance"  
+                master_data."NetShortTermDebtIssuance"
             ) as "NetShortTermDebtIssuance",
 		coalesce(
                 daily."NetTangibleAssets",
-                weekly."NetTangibleAssets",
-                monthly."NetTangibleAssets",
-                master_data."NetTangibleAssets"  
+                master_data."NetTangibleAssets"
             ) as "NetTangibleAssets",
 		coalesce(
                 daily."NonCurrentAccountsReceivable",
-                weekly."NonCurrentAccountsReceivable",
-                monthly."NonCurrentAccountsReceivable",
-                master_data."NonCurrentAccountsReceivable"  
+                master_data."NonCurrentAccountsReceivable"
             ) as "NonCurrentAccountsReceivable",
 		coalesce(
                 daily."NonCurrentAccruedExpenses",
-                weekly."NonCurrentAccruedExpenses",
-                monthly."NonCurrentAccruedExpenses",
-                master_data."NonCurrentAccruedExpenses"  
+                master_data."NonCurrentAccruedExpenses"
             ) as "NonCurrentAccruedExpenses",
 		coalesce(
                 daily."NonCurrentDeferredAssets",
-                weekly."NonCurrentDeferredAssets",
-                monthly."NonCurrentDeferredAssets",
-                master_data."NonCurrentDeferredAssets"  
+                master_data."NonCurrentDeferredAssets"
             ) as "NonCurrentDeferredAssets",
 		coalesce(
                 daily."NonCurrentDeferredLiabilities",
-                weekly."NonCurrentDeferredLiabilities",
-                monthly."NonCurrentDeferredLiabilities",
-                master_data."NonCurrentDeferredLiabilities"  
+                master_data."NonCurrentDeferredLiabilities"
             ) as "NonCurrentDeferredLiabilities",
 		coalesce(
                 daily."NonCurrentDeferredRevenue",
-                weekly."NonCurrentDeferredRevenue",
-                monthly."NonCurrentDeferredRevenue",
-                master_data."NonCurrentDeferredRevenue"  
+                master_data."NonCurrentDeferredRevenue"
             ) as "NonCurrentDeferredRevenue",
 		coalesce(
                 daily."NonCurrentDeferredTaxesAssets",
-                weekly."NonCurrentDeferredTaxesAssets",
-                monthly."NonCurrentDeferredTaxesAssets",
-                master_data."NonCurrentDeferredTaxesAssets"  
+                master_data."NonCurrentDeferredTaxesAssets"
             ) as "NonCurrentDeferredTaxesAssets",
 		coalesce(
                 daily."NonCurrentDeferredTaxesLiabilities",
-                weekly."NonCurrentDeferredTaxesLiabilities",
-                monthly."NonCurrentDeferredTaxesLiabilities",
-                master_data."NonCurrentDeferredTaxesLiabilities"  
+                master_data."NonCurrentDeferredTaxesLiabilities"
             ) as "NonCurrentDeferredTaxesLiabilities",
 		coalesce(
                 daily."NonCurrentNoteReceivables",
-                weekly."NonCurrentNoteReceivables",
-                monthly."NonCurrentNoteReceivables",
-                master_data."NonCurrentNoteReceivables"  
+                master_data."NonCurrentNoteReceivables"
             ) as "NonCurrentNoteReceivables",
 		coalesce(
                 daily."NonCurrentPensionAndOtherPostretirementBenefitPlans",
-                weekly."NonCurrentPensionAndOtherPostretirementBenefitPlans",
-                monthly."NonCurrentPensionAndOtherPostretirementBenefitPlans",
-                master_data."NonCurrentPensionAndOtherPostretirementBenefitPlans"  
+                master_data."NonCurrentPensionAndOtherPostretirementBenefitPlans"
             ) as "NonCurrentPensionAndOtherPostretirementBenefitPlans",
 		coalesce(
                 daily."NonCurrentPrepaidAssets",
-                weekly."NonCurrentPrepaidAssets",
-                monthly."NonCurrentPrepaidAssets",
-                master_data."NonCurrentPrepaidAssets"  
+                master_data."NonCurrentPrepaidAssets"
             ) as "NonCurrentPrepaidAssets",
 		coalesce(
                 daily."NormalizedEBITDA",
-                weekly."NormalizedEBITDA",
-                monthly."NormalizedEBITDA",
-                master_data."NormalizedEBITDA"  
+                master_data."NormalizedEBITDA"
             ) as "NormalizedEBITDA",
 		coalesce(
                 daily."NormalizedIncome",
-                weekly."NormalizedIncome",
-                monthly."NormalizedIncome",
-                master_data."NormalizedIncome"  
+                master_data."NormalizedIncome"
             ) as "NormalizedIncome",
 		coalesce(
                 daily."NotesReceivable",
-                weekly."NotesReceivable",
-                monthly."NotesReceivable",
-                master_data."NotesReceivable"  
+                master_data."NotesReceivable"
             ) as "NotesReceivable",
 		coalesce(
                 daily."OperatingCashFlow",
-                weekly."OperatingCashFlow",
-                monthly."OperatingCashFlow",
-                master_data."OperatingCashFlow"  
+                master_data."OperatingCashFlow"
             ) as "OperatingCashFlow",
 		coalesce(
                 daily."OperatingExpense",
-                weekly."OperatingExpense",
-                monthly."OperatingExpense",
-                master_data."OperatingExpense"  
+                master_data."OperatingExpense"
             ) as "OperatingExpense",
 		coalesce(
                 daily."OperatingGainsLosses",
-                weekly."OperatingGainsLosses",
-                monthly."OperatingGainsLosses",
-                master_data."OperatingGainsLosses"  
+                master_data."OperatingGainsLosses"
             ) as "OperatingGainsLosses",
 		coalesce(
                 daily."OperatingIncome",
-                weekly."OperatingIncome",
-                monthly."OperatingIncome",
-                master_data."OperatingIncome"  
+                master_data."OperatingIncome"
             ) as "OperatingIncome",
 		coalesce(
                 daily."OperatingRevenue",
-                weekly."OperatingRevenue",
-                monthly."OperatingRevenue",
-                master_data."OperatingRevenue"  
+                master_data."OperatingRevenue"
             ) as "OperatingRevenue",
 		coalesce(
                 daily."OrdinarySharesNumber",
-                weekly."OrdinarySharesNumber",
-                monthly."OrdinarySharesNumber",
-                master_data."OrdinarySharesNumber"  
+                master_data."OrdinarySharesNumber"
             ) as "OrdinarySharesNumber",
 		coalesce(
                 daily."OtherCashAdjustmentInsideChangeinCash",
-                weekly."OtherCashAdjustmentInsideChangeinCash",
-                monthly."OtherCashAdjustmentInsideChangeinCash",
-                master_data."OtherCashAdjustmentInsideChangeinCash"  
+                master_data."OtherCashAdjustmentInsideChangeinCash"
             ) as "OtherCashAdjustmentInsideChangeinCash",
 		coalesce(
                 daily."OtherCashAdjustmentOutsideChangeinCash",
-                weekly."OtherCashAdjustmentOutsideChangeinCash",
-                monthly."OtherCashAdjustmentOutsideChangeinCash",
-                master_data."OtherCashAdjustmentOutsideChangeinCash"  
+                master_data."OtherCashAdjustmentOutsideChangeinCash"
             ) as "OtherCashAdjustmentOutsideChangeinCash",
 		coalesce(
                 daily."OtherCashPaymentsfromOperatingActivities",
-                weekly."OtherCashPaymentsfromOperatingActivities",
-                monthly."OtherCashPaymentsfromOperatingActivities",
-                master_data."OtherCashPaymentsfromOperatingActivities"  
+                master_data."OtherCashPaymentsfromOperatingActivities"
             ) as "OtherCashPaymentsfromOperatingActivities",
 		coalesce(
                 daily."OtherCashReceiptsfromOperatingActivities",
-                weekly."OtherCashReceiptsfromOperatingActivities",
-                monthly."OtherCashReceiptsfromOperatingActivities",
-                master_data."OtherCashReceiptsfromOperatingActivities"  
+                master_data."OtherCashReceiptsfromOperatingActivities"
             ) as "OtherCashReceiptsfromOperatingActivities",
 		coalesce(
                 daily."OtherCurrentAssets",
-                weekly."OtherCurrentAssets",
-                monthly."OtherCurrentAssets",
-                master_data."OtherCurrentAssets"  
+                master_data."OtherCurrentAssets"
             ) as "OtherCurrentAssets",
 		coalesce(
                 daily."OtherCurrentBorrowings",
-                weekly."OtherCurrentBorrowings",
-                monthly."OtherCurrentBorrowings",
-                master_data."OtherCurrentBorrowings"  
+                master_data."OtherCurrentBorrowings"
             ) as "OtherCurrentBorrowings",
 		coalesce(
                 daily."OtherCurrentLiabilities",
-                weekly."OtherCurrentLiabilities",
-                monthly."OtherCurrentLiabilities",
-                master_data."OtherCurrentLiabilities"  
+                master_data."OtherCurrentLiabilities"
             ) as "OtherCurrentLiabilities",
 		coalesce(
                 daily."OtherEquityAdjustments",
-                weekly."OtherEquityAdjustments",
-                monthly."OtherEquityAdjustments",
-                master_data."OtherEquityAdjustments"  
+                master_data."OtherEquityAdjustments"
             ) as "OtherEquityAdjustments",
 		coalesce(
                 daily."OtherEquityInterest",
-                weekly."OtherEquityInterest",
-                monthly."OtherEquityInterest",
-                master_data."OtherEquityInterest"  
+                master_data."OtherEquityInterest"
             ) as "OtherEquityInterest",
 		coalesce(
                 daily."OtherGandA",
-                weekly."OtherGandA",
-                monthly."OtherGandA",
-                master_data."OtherGandA"  
+                master_data."OtherGandA"
             ) as "OtherGandA",
 		coalesce(
                 daily."OtherIncomeExpense",
-                weekly."OtherIncomeExpense",
-                monthly."OtherIncomeExpense",
-                master_data."OtherIncomeExpense"  
+                master_data."OtherIncomeExpense"
             ) as "OtherIncomeExpense",
 		coalesce(
                 daily."OtherIntangibleAssets",
-                weekly."OtherIntangibleAssets",
-                monthly."OtherIntangibleAssets",
-                master_data."OtherIntangibleAssets"  
+                master_data."OtherIntangibleAssets"
             ) as "OtherIntangibleAssets",
 		coalesce(
                 daily."OtherInventories",
-                weekly."OtherInventories",
-                monthly."OtherInventories",
-                master_data."OtherInventories"  
+                master_data."OtherInventories"
             ) as "OtherInventories",
 		coalesce(
                 daily."OtherInvestments",
-                weekly."OtherInvestments",
-                monthly."OtherInvestments",
-                master_data."OtherInvestments"  
+                master_data."OtherInvestments"
             ) as "OtherInvestments",
 		coalesce(
                 daily."OtherNonCashItems",
-                weekly."OtherNonCashItems",
-                monthly."OtherNonCashItems",
-                master_data."OtherNonCashItems"  
+                master_data."OtherNonCashItems"
             ) as "OtherNonCashItems",
 		coalesce(
                 daily."OtherNonCurrentAssets",
-                weekly."OtherNonCurrentAssets",
-                monthly."OtherNonCurrentAssets",
-                master_data."OtherNonCurrentAssets"  
+                master_data."OtherNonCurrentAssets"
             ) as "OtherNonCurrentAssets",
 		coalesce(
                 daily."OtherNonCurrentLiabilities",
-                weekly."OtherNonCurrentLiabilities",
-                monthly."OtherNonCurrentLiabilities",
-                master_data."OtherNonCurrentLiabilities"  
+                master_data."OtherNonCurrentLiabilities"
             ) as "OtherNonCurrentLiabilities",
 		coalesce(
                 daily."OtherNonOperatingIncomeExpenses",
-                weekly."OtherNonOperatingIncomeExpenses",
-                monthly."OtherNonOperatingIncomeExpenses",
-                master_data."OtherNonOperatingIncomeExpenses"  
+                master_data."OtherNonOperatingIncomeExpenses"
             ) as "OtherNonOperatingIncomeExpenses",
 		coalesce(
                 daily."OtherOperatingExpenses",
-                weekly."OtherOperatingExpenses",
-                monthly."OtherOperatingExpenses",
-                master_data."OtherOperatingExpenses"  
+                master_data."OtherOperatingExpenses"
             ) as "OtherOperatingExpenses",
 		coalesce(
                 daily."OtherPayable",
-                weekly."OtherPayable",
-                monthly."OtherPayable",
-                master_data."OtherPayable"  
+                master_data."OtherPayable"
             ) as "OtherPayable",
 		coalesce(
                 daily."OtherProperties",
-                weekly."OtherProperties",
-                monthly."OtherProperties",
-                master_data."OtherProperties"  
+                master_data."OtherProperties"
             ) as "OtherProperties",
 		coalesce(
                 daily."OtherReceivables",
-                weekly."OtherReceivables",
-                monthly."OtherReceivables",
-                master_data."OtherReceivables"  
+                master_data."OtherReceivables"
             ) as "OtherReceivables",
 		coalesce(
                 daily."OtherShortTermInvestments",
-                weekly."OtherShortTermInvestments",
-                monthly."OtherShortTermInvestments",
-                master_data."OtherShortTermInvestments"  
+                master_data."OtherShortTermInvestments"
             ) as "OtherShortTermInvestments",
 		coalesce(
                 daily."OtherSpecialCharges",
-                weekly."OtherSpecialCharges",
-                monthly."OtherSpecialCharges",
-                master_data."OtherSpecialCharges"  
+                master_data."OtherSpecialCharges"
             ) as "OtherSpecialCharges",
 		coalesce(
                 daily."OtherTaxes",
-                weekly."OtherTaxes",
-                monthly."OtherTaxes",
-                master_data."OtherTaxes"  
+                master_data."OtherTaxes"
             ) as "OtherTaxes",
 		coalesce(
                 daily."OtherunderPreferredStockDividend",
-                weekly."OtherunderPreferredStockDividend",
-                monthly."OtherunderPreferredStockDividend",
-                master_data."OtherunderPreferredStockDividend"  
+                master_data."OtherunderPreferredStockDividend"
             ) as "OtherunderPreferredStockDividend",
 		coalesce(
                 daily."Payables",
-                weekly."Payables",
-                monthly."Payables",
-                master_data."Payables"  
+                master_data."Payables"
             ) as "Payables",
 		coalesce(
                 daily."PayablesAndAccruedExpenses",
-                weekly."PayablesAndAccruedExpenses",
-                monthly."PayablesAndAccruedExpenses",
-                master_data."PayablesAndAccruedExpenses"  
+                master_data."PayablesAndAccruedExpenses"
             ) as "PayablesAndAccruedExpenses",
 		coalesce(
                 daily."PaymentsonBehalfofEmployees",
-                weekly."PaymentsonBehalfofEmployees",
-                monthly."PaymentsonBehalfofEmployees",
-                master_data."PaymentsonBehalfofEmployees"  
+                master_data."PaymentsonBehalfofEmployees"
             ) as "PaymentsonBehalfofEmployees",
 		coalesce(
                 daily."PensionAndEmployeeBenefitExpense",
-                weekly."PensionAndEmployeeBenefitExpense",
-                monthly."PensionAndEmployeeBenefitExpense",
-                master_data."PensionAndEmployeeBenefitExpense"  
+                master_data."PensionAndEmployeeBenefitExpense"
             ) as "PensionAndEmployeeBenefitExpense",
 		coalesce(
                 daily."PensionandOtherPostRetirementBenefitPlansCurrent",
-                weekly."PensionandOtherPostRetirementBenefitPlansCurrent",
-                monthly."PensionandOtherPostRetirementBenefitPlansCurrent",
-                master_data."PensionandOtherPostRetirementBenefitPlansCurrent"  
+                master_data."PensionandOtherPostRetirementBenefitPlansCurrent"
             ) as "PensionandOtherPostRetirementBenefitPlansCurrent",
 		coalesce(
                 daily."PreferredSecuritiesOutsideStockEquity",
-                weekly."PreferredSecuritiesOutsideStockEquity",
-                monthly."PreferredSecuritiesOutsideStockEquity",
-                master_data."PreferredSecuritiesOutsideStockEquity"  
+                master_data."PreferredSecuritiesOutsideStockEquity"
             ) as "PreferredSecuritiesOutsideStockEquity",
 		coalesce(
                 daily."PreferredSharesNumber",
-                weekly."PreferredSharesNumber",
-                monthly."PreferredSharesNumber",
-                master_data."PreferredSharesNumber"  
+                master_data."PreferredSharesNumber"
             ) as "PreferredSharesNumber",
 		coalesce(
                 daily."PreferredStock",
-                weekly."PreferredStock",
-                monthly."PreferredStock",
-                master_data."PreferredStock"  
+                master_data."PreferredStock"
             ) as "PreferredStock",
 		coalesce(
                 daily."PreferredStockDividendPaid",
-                weekly."PreferredStockDividendPaid",
-                monthly."PreferredStockDividendPaid",
-                master_data."PreferredStockDividendPaid"  
+                master_data."PreferredStockDividendPaid"
             ) as "PreferredStockDividendPaid",
 		coalesce(
                 daily."PreferredStockDividends",
-                weekly."PreferredStockDividends",
-                monthly."PreferredStockDividends",
-                master_data."PreferredStockDividends"  
+                master_data."PreferredStockDividends"
             ) as "PreferredStockDividends",
 		coalesce(
                 daily."PreferredStockEquity",
-                weekly."PreferredStockEquity",
-                monthly."PreferredStockEquity",
-                master_data."PreferredStockEquity"  
+                master_data."PreferredStockEquity"
             ) as "PreferredStockEquity",
 		coalesce(
                 daily."PreferredStockIssuance",
-                weekly."PreferredStockIssuance",
-                monthly."PreferredStockIssuance",
-                master_data."PreferredStockIssuance"  
+                master_data."PreferredStockIssuance"
             ) as "PreferredStockIssuance",
 		coalesce(
                 daily."PreferredStockPayments",
-                weekly."PreferredStockPayments",
-                monthly."PreferredStockPayments",
-                master_data."PreferredStockPayments"  
+                master_data."PreferredStockPayments"
             ) as "PreferredStockPayments",
 		coalesce(
                 daily."PrepaidAssets",
-                weekly."PrepaidAssets",
-                monthly."PrepaidAssets",
-                master_data."PrepaidAssets"  
+                master_data."PrepaidAssets"
             ) as "PrepaidAssets",
 		coalesce(
                 daily."PretaxIncome",
-                weekly."PretaxIncome",
-                monthly."PretaxIncome",
-                master_data."PretaxIncome"  
+                master_data."PretaxIncome"
             ) as "PretaxIncome",
 		coalesce(
                 daily."ProceedsFromStockOptionExercised",
-                weekly."ProceedsFromStockOptionExercised",
-                monthly."ProceedsFromStockOptionExercised",
-                master_data."ProceedsFromStockOptionExercised"  
+                master_data."ProceedsFromStockOptionExercised"
             ) as "ProceedsFromStockOptionExercised",
 		coalesce(
                 daily."Properties",
-                weekly."Properties",
-                monthly."Properties",
-                master_data."Properties"  
+                master_data."Properties"
             ) as "Properties",
 		coalesce(
                 daily."ProvisionForDoubtfulAccounts",
-                weekly."ProvisionForDoubtfulAccounts",
-                monthly."ProvisionForDoubtfulAccounts",
-                master_data."ProvisionForDoubtfulAccounts"  
+                master_data."ProvisionForDoubtfulAccounts"
             ) as "ProvisionForDoubtfulAccounts",
 		coalesce(
                 daily."ProvisionandWriteOffofAssets",
-                weekly."ProvisionandWriteOffofAssets",
-                monthly."ProvisionandWriteOffofAssets",
-                master_data."ProvisionandWriteOffofAssets"  
+                master_data."ProvisionandWriteOffofAssets"
             ) as "ProvisionandWriteOffofAssets",
 		coalesce(
                 daily."PurchaseOfBusiness",
-                weekly."PurchaseOfBusiness",
-                monthly."PurchaseOfBusiness",
-                master_data."PurchaseOfBusiness"  
+                master_data."PurchaseOfBusiness"
             ) as "PurchaseOfBusiness",
 		coalesce(
                 daily."PurchaseOfIntangibles",
-                weekly."PurchaseOfIntangibles",
-                monthly."PurchaseOfIntangibles",
-                master_data."PurchaseOfIntangibles"  
+                master_data."PurchaseOfIntangibles"
             ) as "PurchaseOfIntangibles",
 		coalesce(
                 daily."PurchaseOfInvestment",
-                weekly."PurchaseOfInvestment",
-                monthly."PurchaseOfInvestment",
-                master_data."PurchaseOfInvestment"  
+                master_data."PurchaseOfInvestment"
             ) as "PurchaseOfInvestment",
 		coalesce(
                 daily."PurchaseOfInvestmentProperties",
-                weekly."PurchaseOfInvestmentProperties",
-                monthly."PurchaseOfInvestmentProperties",
-                master_data."PurchaseOfInvestmentProperties"  
+                master_data."PurchaseOfInvestmentProperties"
             ) as "PurchaseOfInvestmentProperties",
 		coalesce(
                 daily."PurchaseOfPPE",
-                weekly."PurchaseOfPPE",
-                monthly."PurchaseOfPPE",
-                master_data."PurchaseOfPPE"  
+                master_data."PurchaseOfPPE"
             ) as "PurchaseOfPPE",
 		coalesce(
                 daily."RawMaterials",
-                weekly."RawMaterials",
-                monthly."RawMaterials",
-                master_data."RawMaterials"  
+                master_data."RawMaterials"
             ) as "RawMaterials",
 		coalesce(
                 daily."Receivables",
-                weekly."Receivables",
-                monthly."Receivables",
-                master_data."Receivables"  
+                master_data."Receivables"
             ) as "Receivables",
 		coalesce(
                 daily."ReceivablesAdjustmentsAllowances",
-                weekly."ReceivablesAdjustmentsAllowances",
-                monthly."ReceivablesAdjustmentsAllowances",
-                master_data."ReceivablesAdjustmentsAllowances"  
+                master_data."ReceivablesAdjustmentsAllowances"
             ) as "ReceivablesAdjustmentsAllowances",
 		coalesce(
                 daily."ReconciledCostOfRevenue",
-                weekly."ReconciledCostOfRevenue",
-                monthly."ReconciledCostOfRevenue",
-                master_data."ReconciledCostOfRevenue"  
+                master_data."ReconciledCostOfRevenue"
             ) as "ReconciledCostOfRevenue",
 		coalesce(
                 daily."ReconciledDepreciation",
-                weekly."ReconciledDepreciation",
-                monthly."ReconciledDepreciation",
-                master_data."ReconciledDepreciation"  
+                master_data."ReconciledDepreciation"
             ) as "ReconciledDepreciation",
 		coalesce(
                 daily."RentAndLandingFees",
-                weekly."RentAndLandingFees",
-                monthly."RentAndLandingFees",
-                master_data."RentAndLandingFees"  
+                master_data."RentAndLandingFees"
             ) as "RentAndLandingFees",
 		coalesce(
                 daily."RentExpenseSupplemental",
-                weekly."RentExpenseSupplemental",
-                monthly."RentExpenseSupplemental",
-                master_data."RentExpenseSupplemental"  
+                master_data."RentExpenseSupplemental"
             ) as "RentExpenseSupplemental",
 		coalesce(
                 daily."RepaymentOfDebt",
-                weekly."RepaymentOfDebt",
-                monthly."RepaymentOfDebt",
-                master_data."RepaymentOfDebt"  
+                master_data."RepaymentOfDebt"
             ) as "RepaymentOfDebt",
 		coalesce(
                 daily."RepurchaseOfCapitalStock",
-                weekly."RepurchaseOfCapitalStock",
-                monthly."RepurchaseOfCapitalStock",
-                master_data."RepurchaseOfCapitalStock"  
+                master_data."RepurchaseOfCapitalStock"
             ) as "RepurchaseOfCapitalStock",
 		coalesce(
                 daily."ResearchAndDevelopment",
-                weekly."ResearchAndDevelopment",
-                monthly."ResearchAndDevelopment",
-                master_data."ResearchAndDevelopment"  
+                master_data."ResearchAndDevelopment"
             ) as "ResearchAndDevelopment",
 		coalesce(
                 daily."RestrictedCash",
-                weekly."RestrictedCash",
-                monthly."RestrictedCash",
-                master_data."RestrictedCash"  
+                master_data."RestrictedCash"
             ) as "RestrictedCash",
 		coalesce(
                 daily."RestructuringAndMergernAcquisition",
-                weekly."RestructuringAndMergernAcquisition",
-                monthly."RestructuringAndMergernAcquisition",
-                master_data."RestructuringAndMergernAcquisition"  
+                master_data."RestructuringAndMergernAcquisition"
             ) as "RestructuringAndMergernAcquisition",
 		coalesce(
                 daily."RetainedEarnings",
-                weekly."RetainedEarnings",
-                monthly."RetainedEarnings",
-                master_data."RetainedEarnings"  
+                master_data."RetainedEarnings"
             ) as "RetainedEarnings",
 		coalesce(
                 daily."SalariesAndWages",
-                weekly."SalariesAndWages",
-                monthly."SalariesAndWages",
-                master_data."SalariesAndWages"  
+                master_data."SalariesAndWages"
             ) as "SalariesAndWages",
 		coalesce(
                 daily."SaleOfBusiness",
-                weekly."SaleOfBusiness",
-                monthly."SaleOfBusiness",
-                master_data."SaleOfBusiness"  
+                master_data."SaleOfBusiness"
             ) as "SaleOfBusiness",
 		coalesce(
                 daily."SaleOfIntangibles",
-                weekly."SaleOfIntangibles",
-                monthly."SaleOfIntangibles",
-                master_data."SaleOfIntangibles"  
+                master_data."SaleOfIntangibles"
             ) as "SaleOfIntangibles",
 		coalesce(
                 daily."SaleOfInvestment",
-                weekly."SaleOfInvestment",
-                monthly."SaleOfInvestment",
-                master_data."SaleOfInvestment"  
+                master_data."SaleOfInvestment"
             ) as "SaleOfInvestment",
 		coalesce(
                 daily."SaleOfInvestmentProperties",
-                weekly."SaleOfInvestmentProperties",
-                monthly."SaleOfInvestmentProperties",
-                master_data."SaleOfInvestmentProperties"  
+                master_data."SaleOfInvestmentProperties"
             ) as "SaleOfInvestmentProperties",
 		coalesce(
                 daily."SaleOfPPE",
-                weekly."SaleOfPPE",
-                monthly."SaleOfPPE",
-                master_data."SaleOfPPE"  
+                master_data."SaleOfPPE"
             ) as "SaleOfPPE",
 		coalesce(
                 daily."SecuritiesAmortization",
-                weekly."SecuritiesAmortization",
-                monthly."SecuritiesAmortization",
-                master_data."SecuritiesAmortization"  
+                master_data."SecuritiesAmortization"
             ) as "SecuritiesAmortization",
 		coalesce(
                 daily."SellingAndMarketingExpense",
-                weekly."SellingAndMarketingExpense",
-                monthly."SellingAndMarketingExpense",
-                master_data."SellingAndMarketingExpense"  
+                master_data."SellingAndMarketingExpense"
             ) as "SellingAndMarketingExpense",
 		coalesce(
                 daily."SellingGeneralAndAdministration",
-                weekly."SellingGeneralAndAdministration",
-                monthly."SellingGeneralAndAdministration",
-                master_data."SellingGeneralAndAdministration"  
+                master_data."SellingGeneralAndAdministration"
             ) as "SellingGeneralAndAdministration",
 		coalesce(
                 daily."ShareIssued",
-                weekly."ShareIssued",
-                monthly."ShareIssued",
-                master_data."ShareIssued"  
+                master_data."ShareIssued"
             ) as "ShareIssued",
 		coalesce(
                 daily."ShortTermDebtIssuance",
-                weekly."ShortTermDebtIssuance",
-                monthly."ShortTermDebtIssuance",
-                master_data."ShortTermDebtIssuance"  
+                master_data."ShortTermDebtIssuance"
             ) as "ShortTermDebtIssuance",
 		coalesce(
                 daily."ShortTermDebtPayments",
-                weekly."ShortTermDebtPayments",
-                monthly."ShortTermDebtPayments",
-                master_data."ShortTermDebtPayments"  
+                master_data."ShortTermDebtPayments"
             ) as "ShortTermDebtPayments",
 		coalesce(
                 daily."SpecialIncomeCharges",
-                weekly."SpecialIncomeCharges",
-                monthly."SpecialIncomeCharges",
-                master_data."SpecialIncomeCharges"  
+                master_data."SpecialIncomeCharges"
             ) as "SpecialIncomeCharges",
 		coalesce(
                 daily."StockBasedCompensation",
-                weekly."StockBasedCompensation",
-                monthly."StockBasedCompensation",
-                master_data."StockBasedCompensation"  
+                master_data."StockBasedCompensation"
             ) as "StockBasedCompensation",
 		coalesce(
                 daily."StockholdersEquity",
-                weekly."StockholdersEquity",
-                monthly."StockholdersEquity",
-                master_data."StockholdersEquity"  
+                master_data."StockholdersEquity"
             ) as "StockholdersEquity",
 		coalesce(
                 daily."TangibleBookValue",
-                weekly."TangibleBookValue",
-                monthly."TangibleBookValue",
-                master_data."TangibleBookValue"  
+                master_data."TangibleBookValue"
             ) as "TangibleBookValue",
 		coalesce(
                 daily."TaxEffectOfUnusualItems",
-                weekly."TaxEffectOfUnusualItems",
-                monthly."TaxEffectOfUnusualItems",
-                master_data."TaxEffectOfUnusualItems"  
+                master_data."TaxEffectOfUnusualItems"
             ) as "TaxEffectOfUnusualItems",
 		coalesce(
                 daily."TaxProvision",
-                weekly."TaxProvision",
-                monthly."TaxProvision",
-                master_data."TaxProvision"  
+                master_data."TaxProvision"
             ) as "TaxProvision",
 		coalesce(
                 daily."TaxRateForCalcs",
-                weekly."TaxRateForCalcs",
-                monthly."TaxRateForCalcs",
-                master_data."TaxRateForCalcs"  
+                master_data."TaxRateForCalcs"
             ) as "TaxRateForCalcs",
 		coalesce(
                 daily."TaxesReceivable",
-                weekly."TaxesReceivable",
-                monthly."TaxesReceivable",
-                master_data."TaxesReceivable"  
+                master_data."TaxesReceivable"
             ) as "TaxesReceivable",
 		coalesce(
                 daily."TaxesRefundPaid",
-                weekly."TaxesRefundPaid",
-                monthly."TaxesRefundPaid",
-                master_data."TaxesRefundPaid"  
+                master_data."TaxesRefundPaid"
             ) as "TaxesRefundPaid",
 		coalesce(
                 daily."TotalAssets",
-                weekly."TotalAssets",
-                monthly."TotalAssets",
-                master_data."TotalAssets"  
+                master_data."TotalAssets"
             ) as "TotalAssets",
 		coalesce(
                 daily."TotalCapitalization",
-                weekly."TotalCapitalization",
-                monthly."TotalCapitalization",
-                master_data."TotalCapitalization"  
+                master_data."TotalCapitalization"
             ) as "TotalCapitalization",
 		coalesce(
                 daily."TotalDebt",
-                weekly."TotalDebt",
-                monthly."TotalDebt",
-                master_data."TotalDebt"  
+                master_data."TotalDebt"
             ) as "TotalDebt",
 		coalesce(
                 daily."TotalEquityGrossMinorityInterest",
-                weekly."TotalEquityGrossMinorityInterest",
-                monthly."TotalEquityGrossMinorityInterest",
-                master_data."TotalEquityGrossMinorityInterest"  
+                master_data."TotalEquityGrossMinorityInterest"
             ) as "TotalEquityGrossMinorityInterest",
 		coalesce(
                 daily."TotalExpenses",
-                weekly."TotalExpenses",
-                monthly."TotalExpenses",
-                master_data."TotalExpenses"  
+                master_data."TotalExpenses"
             ) as "TotalExpenses",
 		coalesce(
                 daily."TotalLiabilitiesNetMinorityInterest",
-                weekly."TotalLiabilitiesNetMinorityInterest",
-                monthly."TotalLiabilitiesNetMinorityInterest",
-                master_data."TotalLiabilitiesNetMinorityInterest"  
+                master_data."TotalLiabilitiesNetMinorityInterest"
             ) as "TotalLiabilitiesNetMinorityInterest",
 		coalesce(
                 daily."TotalNonCurrentAssets",
-                weekly."TotalNonCurrentAssets",
-                monthly."TotalNonCurrentAssets",
-                master_data."TotalNonCurrentAssets"  
+                master_data."TotalNonCurrentAssets"
             ) as "TotalNonCurrentAssets",
 		coalesce(
                 daily."TotalNonCurrentLiabilitiesNetMinorityInterest",
-                weekly."TotalNonCurrentLiabilitiesNetMinorityInterest",
-                monthly."TotalNonCurrentLiabilitiesNetMinorityInterest",
-                master_data."TotalNonCurrentLiabilitiesNetMinorityInterest"  
+                master_data."TotalNonCurrentLiabilitiesNetMinorityInterest"
             ) as "TotalNonCurrentLiabilitiesNetMinorityInterest",
 		coalesce(
                 daily."TotalOperatingIncomeAsReported",
-                weekly."TotalOperatingIncomeAsReported",
-                monthly."TotalOperatingIncomeAsReported",
-                master_data."TotalOperatingIncomeAsReported"  
+                master_data."TotalOperatingIncomeAsReported"
             ) as "TotalOperatingIncomeAsReported",
 		coalesce(
                 daily."TotalOtherFinanceCost",
-                weekly."TotalOtherFinanceCost",
-                monthly."TotalOtherFinanceCost",
-                master_data."TotalOtherFinanceCost"  
+                master_data."TotalOtherFinanceCost"
             ) as "TotalOtherFinanceCost",
 		coalesce(
                 daily."TotalPartnershipCapital",
-                weekly."TotalPartnershipCapital",
-                monthly."TotalPartnershipCapital",
-                master_data."TotalPartnershipCapital"  
+                master_data."TotalPartnershipCapital"
             ) as "TotalPartnershipCapital",
 		coalesce(
                 daily."TotalRevenue",
-                weekly."TotalRevenue",
-                monthly."TotalRevenue",
-                master_data."TotalRevenue"  
+                master_data."TotalRevenue"
             ) as "TotalRevenue",
 		coalesce(
                 daily."TotalTaxPayable",
-                weekly."TotalTaxPayable",
-                monthly."TotalTaxPayable",
-                master_data."TotalTaxPayable"  
+                master_data."TotalTaxPayable"
             ) as "TotalTaxPayable",
 		coalesce(
                 daily."TotalUnusualItems",
-                weekly."TotalUnusualItems",
-                monthly."TotalUnusualItems",
-                master_data."TotalUnusualItems"  
+                master_data."TotalUnusualItems"
             ) as "TotalUnusualItems",
 		coalesce(
                 daily."TotalUnusualItemsExcludingGoodwill",
-                weekly."TotalUnusualItemsExcludingGoodwill",
-                monthly."TotalUnusualItemsExcludingGoodwill",
-                master_data."TotalUnusualItemsExcludingGoodwill"  
+                master_data."TotalUnusualItemsExcludingGoodwill"
             ) as "TotalUnusualItemsExcludingGoodwill",
 		coalesce(
                 daily."TradeandOtherPayablesNonCurrent",
-                weekly."TradeandOtherPayablesNonCurrent",
-                monthly."TradeandOtherPayablesNonCurrent",
-                master_data."TradeandOtherPayablesNonCurrent"  
+                master_data."TradeandOtherPayablesNonCurrent"
             ) as "TradeandOtherPayablesNonCurrent",
 		coalesce(
                 daily."TradingSecurities",
-                weekly."TradingSecurities",
-                monthly."TradingSecurities",
-                master_data."TradingSecurities"  
+                master_data."TradingSecurities"
             ) as "TradingSecurities",
 		coalesce(
                 daily."TreasurySharesNumber",
-                weekly."TreasurySharesNumber",
-                monthly."TreasurySharesNumber",
-                master_data."TreasurySharesNumber"  
+                master_data."TreasurySharesNumber"
             ) as "TreasurySharesNumber",
 		coalesce(
                 daily."TreasuryStock",
-                weekly."TreasuryStock",
-                monthly."TreasuryStock",
-                master_data."TreasuryStock"  
+                master_data."TreasuryStock"
             ) as "TreasuryStock",
 		coalesce(
                 daily."UnrealizedGainLoss",
-                weekly."UnrealizedGainLoss",
-                monthly."UnrealizedGainLoss",
-                master_data."UnrealizedGainLoss"  
+                master_data."UnrealizedGainLoss"
             ) as "UnrealizedGainLoss",
 		coalesce(
                 daily."UnrealizedGainLossOnInvestmentSecurities",
-                weekly."UnrealizedGainLossOnInvestmentSecurities",
-                monthly."UnrealizedGainLossOnInvestmentSecurities",
-                master_data."UnrealizedGainLossOnInvestmentSecurities"  
+                master_data."UnrealizedGainLossOnInvestmentSecurities"
             ) as "UnrealizedGainLossOnInvestmentSecurities",
 		coalesce(
                 daily."WorkInProcess",
-                weekly."WorkInProcess",
-                monthly."WorkInProcess",
-                master_data."WorkInProcess"  
+                master_data."WorkInProcess"
             ) as "WorkInProcess",
 		coalesce(
                 daily."WorkingCapital",
-                weekly."WorkingCapital",
-                monthly."WorkingCapital",
-                master_data."WorkingCapital"  
+                master_data."WorkingCapital"
             ) as "WorkingCapital",
 		coalesce(
                 daily."WriteOff",
-                weekly."WriteOff",
-                monthly."WriteOff",
-                master_data."WriteOff"  
+                master_data."WriteOff"
             ) as "WriteOff",
 		coalesce(
                 daily."InterestPaidDirect",
-                weekly."InterestPaidDirect",
-                monthly."InterestPaidDirect",
-                master_data."InterestPaidDirect"  
+                master_data."InterestPaidDirect"
             ) as "InterestPaidDirect",
 		coalesce(
                 daily."InterestReceivedDirect",
-                weekly."InterestReceivedDirect",
-                monthly."InterestReceivedDirect",
-                master_data."InterestReceivedDirect"  
+                master_data."InterestReceivedDirect"
             ) as "InterestReceivedDirect",
 		coalesce(
                 daily."PaymentstoSuppliersforGoodsandServices",
-                weekly."PaymentstoSuppliersforGoodsandServices",
-                monthly."PaymentstoSuppliersforGoodsandServices",
-                master_data."PaymentstoSuppliersforGoodsandServices"  
+                master_data."PaymentstoSuppliersforGoodsandServices"
             ) as "PaymentstoSuppliersforGoodsandServices",
 		coalesce(
                 daily."ReceiptsfromCustomers",
-                weekly."ReceiptsfromCustomers",
-                monthly."ReceiptsfromCustomers",
-                master_data."ReceiptsfromCustomers"  
+                master_data."ReceiptsfromCustomers"
             ) as "ReceiptsfromCustomers",
 		coalesce(
                 daily."RestrictedCommonStock",
-                weekly."RestrictedCommonStock",
-                monthly."RestrictedCommonStock",
-                master_data."RestrictedCommonStock"  
+                master_data."RestrictedCommonStock"
             ) as "RestrictedCommonStock",
 		coalesce(
                 daily."TaxesRefundPaidDirect",
-                weekly."TaxesRefundPaidDirect",
-                monthly."TaxesRefundPaidDirect",
-                master_data."TaxesRefundPaidDirect"  
+                master_data."TaxesRefundPaidDirect"
             ) as "TaxesRefundPaidDirect",
 		coalesce(
                 daily."KeyStats_maxAge",
-                weekly."KeyStats_maxAge",
-                monthly."KeyStats_maxAge",
-                master_data."KeyStats_maxAge"  
+                master_data."KeyStats_maxAge"
             ) as "KeyStats_maxAge",
 		coalesce(
                 daily."KeyStats_priceHint",
-                weekly."KeyStats_priceHint",
-                monthly."KeyStats_priceHint",
-                master_data."KeyStats_priceHint"  
+                master_data."KeyStats_priceHint"
             ) as "KeyStats_priceHint",
 		coalesce(
                 daily."KeyStats_enterpriseValue",
-                weekly."KeyStats_enterpriseValue",
-                monthly."KeyStats_enterpriseValue",
-                master_data."KeyStats_enterpriseValue"  
+                master_data."KeyStats_enterpriseValue"
             ) as "KeyStats_enterpriseValue",
 		coalesce(
                 daily."KeyStats_forwardPE",
-                weekly."KeyStats_forwardPE",
-                monthly."KeyStats_forwardPE",
-                master_data."KeyStats_forwardPE"  
+                master_data."KeyStats_forwardPE"
             ) as "KeyStats_forwardPE",
 		coalesce(
                 daily."KeyStats_profitMargins",
-                weekly."KeyStats_profitMargins",
-                monthly."KeyStats_profitMargins",
-                master_data."KeyStats_profitMargins"  
+                master_data."KeyStats_profitMargins"
             ) as "KeyStats_profitMargins",
 		coalesce(
                 daily."KeyStats_floatShares",
-                weekly."KeyStats_floatShares",
-                monthly."KeyStats_floatShares",
-                master_data."KeyStats_floatShares"  
+                master_data."KeyStats_floatShares"
             ) as "KeyStats_floatShares",
 		coalesce(
                 daily."KeyStats_sharesOutstanding",
-                weekly."KeyStats_sharesOutstanding",
-                monthly."KeyStats_sharesOutstanding",
-                master_data."KeyStats_sharesOutstanding"  
+                master_data."KeyStats_sharesOutstanding"
             ) as "KeyStats_sharesOutstanding",
 		coalesce(
                 daily."KeyStats_sharesShort",
-                weekly."KeyStats_sharesShort",
-                monthly."KeyStats_sharesShort",
-                master_data."KeyStats_sharesShort"  
+                master_data."KeyStats_sharesShort"
             ) as "KeyStats_sharesShort",
 		coalesce(
                 daily."KeyStats_sharesShortPriorMonth",
-                weekly."KeyStats_sharesShortPriorMonth",
-                monthly."KeyStats_sharesShortPriorMonth",
-                master_data."KeyStats_sharesShortPriorMonth"  
+                master_data."KeyStats_sharesShortPriorMonth"
             ) as "KeyStats_sharesShortPriorMonth",
 		coalesce(
                 daily."KeyStats_sharesShortPreviousMonthDate",
-                weekly."KeyStats_sharesShortPreviousMonthDate",
-                monthly."KeyStats_sharesShortPreviousMonthDate",
-                master_data."KeyStats_sharesShortPreviousMonthDate"  
+                master_data."KeyStats_sharesShortPreviousMonthDate"
             ) as "KeyStats_sharesShortPreviousMonthDate",
 		coalesce(
                 daily."KeyStats_dateShortInterest",
-                weekly."KeyStats_dateShortInterest",
-                monthly."KeyStats_dateShortInterest",
-                master_data."KeyStats_dateShortInterest"  
+                master_data."KeyStats_dateShortInterest"
             ) as "KeyStats_dateShortInterest",
 		coalesce(
                 daily."KeyStats_sharesPercentSharesOut",
-                weekly."KeyStats_sharesPercentSharesOut",
-                monthly."KeyStats_sharesPercentSharesOut",
-                master_data."KeyStats_sharesPercentSharesOut"  
+                master_data."KeyStats_sharesPercentSharesOut"
             ) as "KeyStats_sharesPercentSharesOut",
 		coalesce(
                 daily."KeyStats_heldPercentInsiders",
-                weekly."KeyStats_heldPercentInsiders",
-                monthly."KeyStats_heldPercentInsiders",
-                master_data."KeyStats_heldPercentInsiders"  
+                master_data."KeyStats_heldPercentInsiders"
             ) as "KeyStats_heldPercentInsiders",
 		coalesce(
                 daily."KeyStats_heldPercentInstitutions",
-                weekly."KeyStats_heldPercentInstitutions",
-                monthly."KeyStats_heldPercentInstitutions",
-                master_data."KeyStats_heldPercentInstitutions"  
+                master_data."KeyStats_heldPercentInstitutions"
             ) as "KeyStats_heldPercentInstitutions",
 		coalesce(
                 daily."KeyStats_shortRatio",
-                weekly."KeyStats_shortRatio",
-                monthly."KeyStats_shortRatio",
-                master_data."KeyStats_shortRatio"  
+                master_data."KeyStats_shortRatio"
             ) as "KeyStats_shortRatio",
 		coalesce(
                 daily."KeyStats_shortPercentOfFloat",
-                weekly."KeyStats_shortPercentOfFloat",
-                monthly."KeyStats_shortPercentOfFloat",
-                master_data."KeyStats_shortPercentOfFloat"  
+                master_data."KeyStats_shortPercentOfFloat"
             ) as "KeyStats_shortPercentOfFloat",
 		coalesce(
                 daily."KeyStats_beta",
-                weekly."KeyStats_beta",
-                monthly."KeyStats_beta",
-                master_data."KeyStats_beta"  
+                master_data."KeyStats_beta"
             ) as "KeyStats_beta",
 		coalesce(
                 daily."KeyStats_impliedSharesOutstanding",
-                weekly."KeyStats_impliedSharesOutstanding",
-                monthly."KeyStats_impliedSharesOutstanding",
-                master_data."KeyStats_impliedSharesOutstanding"  
+                master_data."KeyStats_impliedSharesOutstanding"
             ) as "KeyStats_impliedSharesOutstanding",
 		coalesce(
                 daily."KeyStats_category",
-                weekly."KeyStats_category",
-                monthly."KeyStats_category",
-                master_data."KeyStats_category"  
+                master_data."KeyStats_category"
             ) as "KeyStats_category",
 		coalesce(
                 daily."KeyStats_bookValue",
-                weekly."KeyStats_bookValue",
-                monthly."KeyStats_bookValue",
-                master_data."KeyStats_bookValue"  
+                master_data."KeyStats_bookValue"
             ) as "KeyStats_bookValue",
 		coalesce(
                 daily."KeyStats_priceToBook",
-                weekly."KeyStats_priceToBook",
-                monthly."KeyStats_priceToBook",
-                master_data."KeyStats_priceToBook"  
+                master_data."KeyStats_priceToBook"
             ) as "KeyStats_priceToBook",
 		coalesce(
                 daily."KeyStats_fundFamily",
-                weekly."KeyStats_fundFamily",
-                monthly."KeyStats_fundFamily",
-                master_data."KeyStats_fundFamily"  
+                master_data."KeyStats_fundFamily"
             ) as "KeyStats_fundFamily",
 		coalesce(
                 daily."KeyStats_legalType",
-                weekly."KeyStats_legalType",
-                monthly."KeyStats_legalType",
-                master_data."KeyStats_legalType"  
+                master_data."KeyStats_legalType"
             ) as "KeyStats_legalType",
 		coalesce(
                 daily."KeyStats_lastFiscalYearEnd",
-                weekly."KeyStats_lastFiscalYearEnd",
-                monthly."KeyStats_lastFiscalYearEnd",
-                master_data."KeyStats_lastFiscalYearEnd"  
+                master_data."KeyStats_lastFiscalYearEnd"
             ) as "KeyStats_lastFiscalYearEnd",
 		coalesce(
                 daily."KeyStats_nextFiscalYearEnd",
-                weekly."KeyStats_nextFiscalYearEnd",
-                monthly."KeyStats_nextFiscalYearEnd",
-                master_data."KeyStats_nextFiscalYearEnd"  
+                master_data."KeyStats_nextFiscalYearEnd"
             ) as "KeyStats_nextFiscalYearEnd",
 		coalesce(
                 daily."KeyStats_mostRecentQuarter",
-                weekly."KeyStats_mostRecentQuarter",
-                monthly."KeyStats_mostRecentQuarter",
-                master_data."KeyStats_mostRecentQuarter"  
+                master_data."KeyStats_mostRecentQuarter"
             ) as "KeyStats_mostRecentQuarter",
 		coalesce(
                 daily."KeyStats_earningsQuarterlyGrowth",
-                weekly."KeyStats_earningsQuarterlyGrowth",
-                monthly."KeyStats_earningsQuarterlyGrowth",
-                master_data."KeyStats_earningsQuarterlyGrowth"  
+                master_data."KeyStats_earningsQuarterlyGrowth"
             ) as "KeyStats_earningsQuarterlyGrowth",
 		coalesce(
                 daily."KeyStats_netIncomeToCommon",
-                weekly."KeyStats_netIncomeToCommon",
-                monthly."KeyStats_netIncomeToCommon",
-                master_data."KeyStats_netIncomeToCommon"  
+                master_data."KeyStats_netIncomeToCommon"
             ) as "KeyStats_netIncomeToCommon",
 		coalesce(
                 daily."KeyStats_trailingEps",
-                weekly."KeyStats_trailingEps",
-                monthly."KeyStats_trailingEps",
-                master_data."KeyStats_trailingEps"  
+                master_data."KeyStats_trailingEps"
             ) as "KeyStats_trailingEps",
 		coalesce(
                 daily."KeyStats_forwardEps",
-                weekly."KeyStats_forwardEps",
-                monthly."KeyStats_forwardEps",
-                master_data."KeyStats_forwardEps"  
+                master_data."KeyStats_forwardEps"
             ) as "KeyStats_forwardEps",
 		coalesce(
                 daily."KeyStats_lastSplitFactor",
-                weekly."KeyStats_lastSplitFactor",
-                monthly."KeyStats_lastSplitFactor",
-                master_data."KeyStats_lastSplitFactor"  
+                master_data."KeyStats_lastSplitFactor"
             ) as "KeyStats_lastSplitFactor",
 		coalesce(
                 daily."KeyStats_lastSplitDate",
-                weekly."KeyStats_lastSplitDate",
-                monthly."KeyStats_lastSplitDate",
-                master_data."KeyStats_lastSplitDate"  
+                master_data."KeyStats_lastSplitDate"
             ) as "KeyStats_lastSplitDate",
 		coalesce(
                 daily."KeyStats_enterpriseToRevenue",
-                weekly."KeyStats_enterpriseToRevenue",
-                monthly."KeyStats_enterpriseToRevenue",
-                master_data."KeyStats_enterpriseToRevenue"  
+                master_data."KeyStats_enterpriseToRevenue"
             ) as "KeyStats_enterpriseToRevenue",
 		coalesce(
                 daily."KeyStats_enterpriseToEbitda",
-                weekly."KeyStats_enterpriseToEbitda",
-                monthly."KeyStats_enterpriseToEbitda",
-                master_data."KeyStats_enterpriseToEbitda"  
+                master_data."KeyStats_enterpriseToEbitda"
             ) as "KeyStats_enterpriseToEbitda",
 		coalesce(
                 daily."KeyStats_52WeekChange",
-                weekly."KeyStats_52WeekChange",
-                monthly."KeyStats_52WeekChange",
-                master_data."KeyStats_52WeekChange"  
+                master_data."KeyStats_52WeekChange"
             ) as "KeyStats_52WeekChange",
 		coalesce(
                 daily."KeyStats_SandP52WeekChange",
-                weekly."KeyStats_SandP52WeekChange",
-                monthly."KeyStats_SandP52WeekChange",
-                master_data."KeyStats_SandP52WeekChange"  
+                master_data."KeyStats_SandP52WeekChange"
             ) as "KeyStats_SandP52WeekChange",
 		coalesce(
                 daily."KeyStats_lastDividendValue",
-                weekly."KeyStats_lastDividendValue",
-                monthly."KeyStats_lastDividendValue",
-                master_data."KeyStats_lastDividendValue"  
+                master_data."KeyStats_lastDividendValue"
             ) as "KeyStats_lastDividendValue",
 		coalesce(
                 daily."KeyStats_lastDividendDate",
-                weekly."KeyStats_lastDividendDate",
-                monthly."KeyStats_lastDividendDate",
-                master_data."KeyStats_lastDividendDate"  
+                master_data."KeyStats_lastDividendDate"
             ) as "KeyStats_lastDividendDate",
 		coalesce(
                 daily."KeyStats_latestShareClass",
-                weekly."KeyStats_latestShareClass",
-                monthly."KeyStats_latestShareClass",
-                master_data."KeyStats_latestShareClass"  
+                master_data."KeyStats_latestShareClass"
             ) as "KeyStats_latestShareClass",
 		coalesce(
                 daily."KeyStats_leadInvestor",
-                weekly."KeyStats_leadInvestor",
-                monthly."KeyStats_leadInvestor",
-                master_data."KeyStats_leadInvestor"  
+                master_data."KeyStats_leadInvestor"
             ) as "KeyStats_leadInvestor",
 		coalesce(
                 daily."Forward_EPS_Growth_Percent",
-                weekly."Forward_EPS_Growth_Percent",
-                monthly."Forward_EPS_Growth_Percent",
-                master_data."Forward_EPS_Growth_Percent"  
+                master_data."Forward_EPS_Growth_Percent"
             ) as "Forward_EPS_Growth_Percent",
 		coalesce(
                 daily."Summary_maxAge",
-                weekly."Summary_maxAge",
-                monthly."Summary_maxAge",
-                master_data."Summary_maxAge"  
+                master_data."Summary_maxAge"
             ) as "Summary_maxAge",
 		coalesce(
                 daily."Summary_priceHint",
-                weekly."Summary_priceHint",
-                monthly."Summary_priceHint",
-                master_data."Summary_priceHint"  
+                master_data."Summary_priceHint"
             ) as "Summary_priceHint",
 		coalesce(
                 daily."Summary_previousClose",
-                weekly."Summary_previousClose",
-                monthly."Summary_previousClose",
-                master_data."Summary_previousClose"  
+                master_data."Summary_previousClose"
             ) as "Summary_previousClose",
 		coalesce(
                 daily."Summary_open",
-                weekly."Summary_open",
-                monthly."Summary_open",
-                master_data."Summary_open"  
+                master_data."Summary_open"
             ) as "Summary_open",
 		coalesce(
                 daily."Summary_dayLow",
-                weekly."Summary_dayLow",
-                monthly."Summary_dayLow",
-                master_data."Summary_dayLow"  
+                master_data."Summary_dayLow"
             ) as "Summary_dayLow",
 		coalesce(
                 daily."Summary_dayHigh",
-                weekly."Summary_dayHigh",
-                monthly."Summary_dayHigh",
-                master_data."Summary_dayHigh"  
+                master_data."Summary_dayHigh"
             ) as "Summary_dayHigh",
 		coalesce(
                 daily."Summary_regularMarketPreviousClose",
-                weekly."Summary_regularMarketPreviousClose",
-                monthly."Summary_regularMarketPreviousClose",
-                master_data."Summary_regularMarketPreviousClose"  
+                master_data."Summary_regularMarketPreviousClose"
             ) as "Summary_regularMarketPreviousClose",
 		coalesce(
                 daily."Summary_regularMarketOpen",
-                weekly."Summary_regularMarketOpen",
-                monthly."Summary_regularMarketOpen",
-                master_data."Summary_regularMarketOpen"  
+                master_data."Summary_regularMarketOpen"
             ) as "Summary_regularMarketOpen",
 		coalesce(
                 daily."Summary_regularMarketDayLow",
-                weekly."Summary_regularMarketDayLow",
-                monthly."Summary_regularMarketDayLow",
-                master_data."Summary_regularMarketDayLow"  
+                master_data."Summary_regularMarketDayLow"
             ) as "Summary_regularMarketDayLow",
 		coalesce(
                 daily."Summary_regularMarketDayHigh",
-                weekly."Summary_regularMarketDayHigh",
-                monthly."Summary_regularMarketDayHigh",
-                master_data."Summary_regularMarketDayHigh"  
+                master_data."Summary_regularMarketDayHigh"
             ) as "Summary_regularMarketDayHigh",
 		coalesce(
                 daily."Summary_dividendRate",
-                weekly."Summary_dividendRate",
-                monthly."Summary_dividendRate",
-                master_data."Summary_dividendRate"  
+                master_data."Summary_dividendRate"
             ) as "Summary_dividendRate",
 		coalesce(
                 daily."Summary_dividendYield",
-                weekly."Summary_dividendYield",
-                monthly."Summary_dividendYield",
-                master_data."Summary_dividendYield"  
+                master_data."Summary_dividendYield"
             ) as "Summary_dividendYield",
 		coalesce(
                 daily."Summary_exDividendDate",
-                weekly."Summary_exDividendDate",
-                monthly."Summary_exDividendDate",
-                master_data."Summary_exDividendDate"  
+                master_data."Summary_exDividendDate"
             ) as "Summary_exDividendDate",
 		coalesce(
                 daily."Summary_payoutRatio",
-                weekly."Summary_payoutRatio",
-                monthly."Summary_payoutRatio",
-                master_data."Summary_payoutRatio"  
+                master_data."Summary_payoutRatio"
             ) as "Summary_payoutRatio",
 		coalesce(
                 daily."Summary_fiveYearAvgDividendYield",
-                weekly."Summary_fiveYearAvgDividendYield",
-                monthly."Summary_fiveYearAvgDividendYield",
-                master_data."Summary_fiveYearAvgDividendYield"  
+                master_data."Summary_fiveYearAvgDividendYield"
             ) as "Summary_fiveYearAvgDividendYield",
 		coalesce(
                 daily."Summary_beta",
-                weekly."Summary_beta",
-                monthly."Summary_beta",
-                master_data."Summary_beta"  
+                master_data."Summary_beta"
             ) as "Summary_beta",
 		coalesce(
                 daily."Summary_trailingPE",
-                weekly."Summary_trailingPE",
-                monthly."Summary_trailingPE",
-                master_data."Summary_trailingPE"  
+                master_data."Summary_trailingPE"
             ) as "Summary_trailingPE",
 		coalesce(
                 daily."Summary_forwardPE",
-                weekly."Summary_forwardPE",
-                monthly."Summary_forwardPE",
-                master_data."Summary_forwardPE"  
+                master_data."Summary_forwardPE"
             ) as "Summary_forwardPE",
 		coalesce(
                 daily."Summary_volume",
-                weekly."Summary_volume",
-                monthly."Summary_volume",
-                master_data."Summary_volume"  
+                master_data."Summary_volume"
             ) as "Summary_volume",
 		coalesce(
                 daily."Summary_regularMarketVolume",
-                weekly."Summary_regularMarketVolume",
-                monthly."Summary_regularMarketVolume",
-                master_data."Summary_regularMarketVolume"  
+                master_data."Summary_regularMarketVolume"
             ) as "Summary_regularMarketVolume",
 		coalesce(
                 daily."Summary_averageVolume",
-                weekly."Summary_averageVolume",
-                monthly."Summary_averageVolume",
-                master_data."Summary_averageVolume"  
+                master_data."Summary_averageVolume"
             ) as "Summary_averageVolume",
 		coalesce(
                 daily."Summary_averageVolume10days",
-                weekly."Summary_averageVolume10days",
-                monthly."Summary_averageVolume10days",
-                master_data."Summary_averageVolume10days"  
+                master_data."Summary_averageVolume10days"
             ) as "Summary_averageVolume10days",
 		coalesce(
                 daily."Summary_averageDailyVolume10Day",
-                weekly."Summary_averageDailyVolume10Day",
-                monthly."Summary_averageDailyVolume10Day",
-                master_data."Summary_averageDailyVolume10Day"  
+                master_data."Summary_averageDailyVolume10Day"
             ) as "Summary_averageDailyVolume10Day",
 		coalesce(
                 daily."Summary_bid",
-                weekly."Summary_bid",
-                monthly."Summary_bid",
-                master_data."Summary_bid"  
+                master_data."Summary_bid"
             ) as "Summary_bid",
 		coalesce(
                 daily."Summary_ask",
-                weekly."Summary_ask",
-                monthly."Summary_ask",
-                master_data."Summary_ask"  
+                master_data."Summary_ask"
             ) as "Summary_ask",
 		coalesce(
                 daily."Summary_bidSize",
-                weekly."Summary_bidSize",
-                monthly."Summary_bidSize",
-                master_data."Summary_bidSize"  
+                master_data."Summary_bidSize"
             ) as "Summary_bidSize",
 		coalesce(
                 daily."Summary_askSize",
-                weekly."Summary_askSize",
-                monthly."Summary_askSize",
-                master_data."Summary_askSize"  
+                master_data."Summary_askSize"
             ) as "Summary_askSize",
 		coalesce(
                 daily."Summary_marketCap",
-                weekly."Summary_marketCap",
-                monthly."Summary_marketCap",
-                master_data."Summary_marketCap"  
+                master_data."Summary_marketCap"
             ) as "Summary_marketCap",
 		coalesce(
                 daily."Summary_fiftyTwoWeekLow",
-                weekly."Summary_fiftyTwoWeekLow",
-                monthly."Summary_fiftyTwoWeekLow",
-                master_data."Summary_fiftyTwoWeekLow"  
+                master_data."Summary_fiftyTwoWeekLow"
             ) as "Summary_fiftyTwoWeekLow",
 		coalesce(
                 daily."Summary_fiftyTwoWeekHigh",
-                weekly."Summary_fiftyTwoWeekHigh",
-                monthly."Summary_fiftyTwoWeekHigh",
-                master_data."Summary_fiftyTwoWeekHigh"  
+                master_data."Summary_fiftyTwoWeekHigh"
             ) as "Summary_fiftyTwoWeekHigh",
 		coalesce(
                 daily."Summary_allTimeHigh",
-                weekly."Summary_allTimeHigh",
-                monthly."Summary_allTimeHigh",
-                master_data."Summary_allTimeHigh"  
+                master_data."Summary_allTimeHigh"
             ) as "Summary_allTimeHigh",
 		coalesce(
                 daily."Summary_allTimeLow",
-                weekly."Summary_allTimeLow",
-                monthly."Summary_allTimeLow",
-                master_data."Summary_allTimeLow"  
+                master_data."Summary_allTimeLow"
             ) as "Summary_allTimeLow",
 		coalesce(
                 daily."Summary_priceToSalesTrailing12Months",
-                weekly."Summary_priceToSalesTrailing12Months",
-                monthly."Summary_priceToSalesTrailing12Months",
-                master_data."Summary_priceToSalesTrailing12Months"  
+                master_data."Summary_priceToSalesTrailing12Months"
             ) as "Summary_priceToSalesTrailing12Months",
 		coalesce(
                 daily."Summary_fiftyDayAverage",
-                weekly."Summary_fiftyDayAverage",
-                monthly."Summary_fiftyDayAverage",
-                master_data."Summary_fiftyDayAverage"  
+                master_data."Summary_fiftyDayAverage"
             ) as "Summary_fiftyDayAverage",
 		coalesce(
                 daily."Summary_twoHundredDayAverage",
-                weekly."Summary_twoHundredDayAverage",
-                monthly."Summary_twoHundredDayAverage",
-                master_data."Summary_twoHundredDayAverage"  
+                master_data."Summary_twoHundredDayAverage"
             ) as "Summary_twoHundredDayAverage",
 		coalesce(
                 daily."Summary_trailingAnnualDividendRate",
-                weekly."Summary_trailingAnnualDividendRate",
-                monthly."Summary_trailingAnnualDividendRate",
-                master_data."Summary_trailingAnnualDividendRate"  
+                master_data."Summary_trailingAnnualDividendRate"
             ) as "Summary_trailingAnnualDividendRate",
 		coalesce(
                 daily."Summary_trailingAnnualDividendYield",
-                weekly."Summary_trailingAnnualDividendYield",
-                monthly."Summary_trailingAnnualDividendYield",
-                master_data."Summary_trailingAnnualDividendYield"  
+                master_data."Summary_trailingAnnualDividendYield"
             ) as "Summary_trailingAnnualDividendYield",
 		coalesce(
                 daily."Summary_currency",
-                weekly."Summary_currency",
-                monthly."Summary_currency",
-                master_data."Summary_currency"  
+                master_data."Summary_currency"
             ) as "Summary_currency",
 		coalesce(
                 daily."Summary_fromCurrency",
-                weekly."Summary_fromCurrency",
-                monthly."Summary_fromCurrency",
-                master_data."Summary_fromCurrency"  
+                master_data."Summary_fromCurrency"
             ) as "Summary_fromCurrency",
 		coalesce(
                 daily."Summary_toCurrency",
-                weekly."Summary_toCurrency",
-                monthly."Summary_toCurrency",
-                master_data."Summary_toCurrency"  
+                master_data."Summary_toCurrency"
             ) as "Summary_toCurrency",
 		coalesce(
                 daily."Summary_lastMarket",
-                weekly."Summary_lastMarket",
-                monthly."Summary_lastMarket",
-                master_data."Summary_lastMarket"  
+                master_data."Summary_lastMarket"
             ) as "Summary_lastMarket",
 		coalesce(
                 daily."Summary_coinMarketCapLink",
-                weekly."Summary_coinMarketCapLink",
-                monthly."Summary_coinMarketCapLink",
-                master_data."Summary_coinMarketCapLink"  
+                master_data."Summary_coinMarketCapLink"
             ) as "Summary_coinMarketCapLink",
 		coalesce(
                 daily."Summary_algorithm",
-                weekly."Summary_algorithm",
-                monthly."Summary_algorithm",
-                master_data."Summary_algorithm"  
+                master_data."Summary_algorithm"
             ) as "Summary_algorithm",
 		coalesce(
                 daily."Summary_tradeable",
-                weekly."Summary_tradeable",
-                monthly."Summary_tradeable",
-                master_data."Summary_tradeable"  
+                master_data."Summary_tradeable"
             ) as "Summary_tradeable",
 		coalesce(
                 daily."FinData_maxAge",
-                weekly."FinData_maxAge",
-                monthly."FinData_maxAge",
-                master_data."FinData_maxAge"  
+                master_data."FinData_maxAge"
             ) as "FinData_maxAge",
 		coalesce(
                 daily."FinData_currentPrice",
-                weekly."FinData_currentPrice",
-                monthly."FinData_currentPrice",
-                master_data."FinData_currentPrice"  
+                master_data."FinData_currentPrice"
             ) as "FinData_currentPrice",
 		coalesce(
                 daily."FinData_targetHighPrice",
-                weekly."FinData_targetHighPrice",
-                monthly."FinData_targetHighPrice",
-                master_data."FinData_targetHighPrice"  
+                master_data."FinData_targetHighPrice"
             ) as "FinData_targetHighPrice",
 		coalesce(
                 daily."FinData_targetLowPrice",
-                weekly."FinData_targetLowPrice",
-                monthly."FinData_targetLowPrice",
-                master_data."FinData_targetLowPrice"  
+                master_data."FinData_targetLowPrice"
             ) as "FinData_targetLowPrice",
 		coalesce(
                 daily."FinData_targetMeanPrice",
-                weekly."FinData_targetMeanPrice",
-                monthly."FinData_targetMeanPrice",
-                master_data."FinData_targetMeanPrice"  
+                master_data."FinData_targetMeanPrice"
             ) as "FinData_targetMeanPrice",
 		coalesce(
                 daily."FinData_targetMedianPrice",
-                weekly."FinData_targetMedianPrice",
-                monthly."FinData_targetMedianPrice",
-                master_data."FinData_targetMedianPrice"  
+                master_data."FinData_targetMedianPrice"
             ) as "FinData_targetMedianPrice",
 		coalesce(
                 daily."FinData_recommendationMean",
-                weekly."FinData_recommendationMean",
-                monthly."FinData_recommendationMean",
-                master_data."FinData_recommendationMean"  
+                master_data."FinData_recommendationMean"
             ) as "FinData_recommendationMean",
 		coalesce(
                 daily."FinData_recommendationKey",
-                weekly."FinData_recommendationKey",
-                monthly."FinData_recommendationKey",
-                master_data."FinData_recommendationKey"  
+                master_data."FinData_recommendationKey"
             ) as "FinData_recommendationKey",
 		coalesce(
                 daily."FinData_numberOfAnalystOpinions",
-                weekly."FinData_numberOfAnalystOpinions",
-                monthly."FinData_numberOfAnalystOpinions",
-                master_data."FinData_numberOfAnalystOpinions"  
+                master_data."FinData_numberOfAnalystOpinions"
             ) as "FinData_numberOfAnalystOpinions",
 		coalesce(
                 daily."FinData_totalCash",
-                weekly."FinData_totalCash",
-                monthly."FinData_totalCash",
-                master_data."FinData_totalCash"  
+                master_data."FinData_totalCash"
             ) as "FinData_totalCash",
 		coalesce(
                 daily."FinData_totalCashPerShare",
-                weekly."FinData_totalCashPerShare",
-                monthly."FinData_totalCashPerShare",
-                master_data."FinData_totalCashPerShare"  
+                master_data."FinData_totalCashPerShare"
             ) as "FinData_totalCashPerShare",
 		coalesce(
                 daily."FinData_ebitda",
-                weekly."FinData_ebitda",
-                monthly."FinData_ebitda",
-                master_data."FinData_ebitda"  
+                master_data."FinData_ebitda"
             ) as "FinData_ebitda",
 		coalesce(
                 daily."FinData_totalDebt",
-                weekly."FinData_totalDebt",
-                monthly."FinData_totalDebt",
-                master_data."FinData_totalDebt"  
+                master_data."FinData_totalDebt"
             ) as "FinData_totalDebt",
 		coalesce(
                 daily."FinData_quickRatio",
-                weekly."FinData_quickRatio",
-                monthly."FinData_quickRatio",
-                master_data."FinData_quickRatio"  
+                master_data."FinData_quickRatio"
             ) as "FinData_quickRatio",
 		coalesce(
                 daily."FinData_currentRatio",
-                weekly."FinData_currentRatio",
-                monthly."FinData_currentRatio",
-                master_data."FinData_currentRatio"  
+                master_data."FinData_currentRatio"
             ) as "FinData_currentRatio",
 		coalesce(
                 daily."FinData_totalRevenue",
-                weekly."FinData_totalRevenue",
-                monthly."FinData_totalRevenue",
-                master_data."FinData_totalRevenue"  
+                master_data."FinData_totalRevenue"
             ) as "FinData_totalRevenue",
 		coalesce(
                 daily."FinData_debtToEquity",
-                weekly."FinData_debtToEquity",
-                monthly."FinData_debtToEquity",
-                master_data."FinData_debtToEquity"  
+                master_data."FinData_debtToEquity"
             ) as "FinData_debtToEquity",
 		coalesce(
                 daily."FinData_revenuePerShare",
-                weekly."FinData_revenuePerShare",
-                monthly."FinData_revenuePerShare",
-                master_data."FinData_revenuePerShare"  
+                master_data."FinData_revenuePerShare"
             ) as "FinData_revenuePerShare",
 		coalesce(
                 daily."FinData_returnOnAssets",
-                weekly."FinData_returnOnAssets",
-                monthly."FinData_returnOnAssets",
-                master_data."FinData_returnOnAssets"  
+                master_data."FinData_returnOnAssets"
             ) as "FinData_returnOnAssets",
 		coalesce(
                 daily."FinData_returnOnEquity",
-                weekly."FinData_returnOnEquity",
-                monthly."FinData_returnOnEquity",
-                master_data."FinData_returnOnEquity"  
+                master_data."FinData_returnOnEquity"
             ) as "FinData_returnOnEquity",
 		coalesce(
                 daily."FinData_grossProfits",
-                weekly."FinData_grossProfits",
-                monthly."FinData_grossProfits",
-                master_data."FinData_grossProfits"  
+                master_data."FinData_grossProfits"
             ) as "FinData_grossProfits",
 		coalesce(
                 daily."FinData_freeCashflow",
-                weekly."FinData_freeCashflow",
-                monthly."FinData_freeCashflow",
-                master_data."FinData_freeCashflow"  
+                master_data."FinData_freeCashflow"
             ) as "FinData_freeCashflow",
 		coalesce(
                 daily."FinData_operatingCashflow",
-                weekly."FinData_operatingCashflow",
-                monthly."FinData_operatingCashflow",
-                master_data."FinData_operatingCashflow"  
+                master_data."FinData_operatingCashflow"
             ) as "FinData_operatingCashflow",
 		coalesce(
                 daily."FinData_earningsGrowth",
-                weekly."FinData_earningsGrowth",
-                monthly."FinData_earningsGrowth",
-                master_data."FinData_earningsGrowth"  
+                master_data."FinData_earningsGrowth"
             ) as "FinData_earningsGrowth",
 		coalesce(
                 daily."FinData_revenueGrowth",
-                weekly."FinData_revenueGrowth",
-                monthly."FinData_revenueGrowth",
-                master_data."FinData_revenueGrowth"  
+                master_data."FinData_revenueGrowth"
             ) as "FinData_revenueGrowth",
 		coalesce(
                 daily."FinData_grossMargins",
-                weekly."FinData_grossMargins",
-                monthly."FinData_grossMargins",
-                master_data."FinData_grossMargins"  
+                master_data."FinData_grossMargins"
             ) as "FinData_grossMargins",
 		coalesce(
                 daily."FinData_ebitdaMargins",
-                weekly."FinData_ebitdaMargins",
-                monthly."FinData_ebitdaMargins",
-                master_data."FinData_ebitdaMargins"  
+                master_data."FinData_ebitdaMargins"
             ) as "FinData_ebitdaMargins",
 		coalesce(
                 daily."FinData_operatingMargins",
-                weekly."FinData_operatingMargins",
-                monthly."FinData_operatingMargins",
-                master_data."FinData_operatingMargins"  
+                master_data."FinData_operatingMargins"
             ) as "FinData_operatingMargins",
 		coalesce(
                 daily."FinData_profitMargins",
-                weekly."FinData_profitMargins",
-                monthly."FinData_profitMargins",
-                master_data."FinData_profitMargins"  
+                master_data."FinData_profitMargins"
             ) as "FinData_profitMargins",
 		coalesce(
                 daily."FinData_financialCurrency",
-                weekly."FinData_financialCurrency",
-                monthly."FinData_financialCurrency",
-                master_data."FinData_financialCurrency"  
+                master_data."FinData_financialCurrency"
             ) as "FinData_financialCurrency",
 		coalesce(
                 daily."KeyStats_ytdReturn",
-                weekly."KeyStats_ytdReturn",
-                monthly."KeyStats_ytdReturn",
-                master_data."KeyStats_ytdReturn"  
+                master_data."KeyStats_ytdReturn"
             ) as "KeyStats_ytdReturn",
 		coalesce(
                 daily."KeyStats_beta3Year",
-                weekly."KeyStats_beta3Year",
-                monthly."KeyStats_beta3Year",
-                master_data."KeyStats_beta3Year"  
+                master_data."KeyStats_beta3Year"
             ) as "KeyStats_beta3Year",
 		coalesce(
                 daily."KeyStats_totalAssets",
-                weekly."KeyStats_totalAssets",
-                monthly."KeyStats_totalAssets",
-                master_data."KeyStats_totalAssets"  
+                master_data."KeyStats_totalAssets"
             ) as "KeyStats_totalAssets",
 		coalesce(
                 daily."KeyStats_yield",
-                weekly."KeyStats_yield",
-                monthly."KeyStats_yield",
-                master_data."KeyStats_yield"  
+                master_data."KeyStats_yield"
             ) as "KeyStats_yield",
 		coalesce(
                 daily."KeyStats_fundInceptionDate",
-                weekly."KeyStats_fundInceptionDate",
-                monthly."KeyStats_fundInceptionDate",
-                master_data."KeyStats_fundInceptionDate"  
+                master_data."KeyStats_fundInceptionDate"
             ) as "KeyStats_fundInceptionDate",
 		coalesce(
                 daily."KeyStats_threeYearAverageReturn",
-                weekly."KeyStats_threeYearAverageReturn",
-                monthly."KeyStats_threeYearAverageReturn",
-                master_data."KeyStats_threeYearAverageReturn"  
+                master_data."KeyStats_threeYearAverageReturn"
             ) as "KeyStats_threeYearAverageReturn",
 		coalesce(
                 daily."KeyStats_fiveYearAverageReturn",
-                weekly."KeyStats_fiveYearAverageReturn",
-                monthly."KeyStats_fiveYearAverageReturn",
-                master_data."KeyStats_fiveYearAverageReturn"  
+                master_data."KeyStats_fiveYearAverageReturn"
             ) as "KeyStats_fiveYearAverageReturn",
 		coalesce(
                 daily."Summary_yield",
-                weekly."Summary_yield",
-                monthly."Summary_yield",
-                master_data."Summary_yield"  
+                master_data."Summary_yield"
             ) as "Summary_yield",
 		coalesce(
                 daily."Summary_totalAssets",
-                weekly."Summary_totalAssets",
-                monthly."Summary_totalAssets",
-                master_data."Summary_totalAssets"  
+                master_data."Summary_totalAssets"
             ) as "Summary_totalAssets",
 		coalesce(
                 daily."Summary_navPrice",
-                weekly."Summary_navPrice",
-                monthly."Summary_navPrice",
-                master_data."Summary_navPrice"  
+                master_data."Summary_navPrice"
             ) as "Summary_navPrice"
     FROM
         "DatesHistory" as dates
-        CROSS JOIN "FundamentalDataYahooMasterData" as master_data 
+        INNER JOIN "FundamentalDataYahooMasterData" as master_data
+        ON dates.date BETWEEN master_data.from_date AND master_data.to_date 
         LEFT JOIN "FundamentalDataYahooHistoryDaily" as daily
         ON dates.date = daily.snapshot_date
         AND master_data."symbol" = daily."symbol"
-        LEFT JOIN "FundamentalDataYahooHistoryWeekly" as weekly 
-        ON dates.isoyear = weekly.isoyear
-        AND dates.week = weekly.week
-        AND master_data."symbol" = weekly."symbol"
-        LEFT JOIN "FundamentalDataYahooHistoryMonthly" as monthly 
-        ON dates.year = monthly.year
-        AND dates.month = monthly.month
-        AND master_data."symbol" = monthly."symbol"
     ;
     
