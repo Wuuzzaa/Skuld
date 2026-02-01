@@ -493,7 +493,7 @@ class DataAgingService:
                 {history_where_str}
                 AND {key_where_str}
             """
-            logger.info(null_sql)
+            logger.debug(null_sql)
 
             logger.info(f"Start execution: NULL columns in {table}")
             with pg_engine.begin() as conn:
