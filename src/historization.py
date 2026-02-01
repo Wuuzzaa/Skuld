@@ -4,9 +4,9 @@ import pathlib
 import time
 from sqlalchemy import text
 from config import HISTORY_ENABLED_TABLES, HISTORY_ENABLED_VIEWS
-from src.database import column_exists, drop_all_views, get_database_engine, execute_sql, get_postgres_engine, get_table_key_and_data_columns, mapping_sqlite_to_postgres, pg_migrate_week_to_ISO_week, recreate_views, select_into_dataframe, table_exists, view_exists
+from src.database import column_exists, drop_all_views, get_database_engine, execute_sql, get_postgres_engine, get_table_key_and_data_columns, mapping_sqlite_to_postgres, pg_migrate_week_to_ISO_week, recreate_views, run_migrations, select_into_dataframe, table_exists, view_exists
 from src.decorator_log_function import log_function
-from src.data_aging import DataAgingService, get_history_select_statement
+from src.data_aging import DataAgingService, get_history_select_statement, is_weekend
 from src.util import executed_as_github_action
 
 logger = logging.getLogger(__name__)
@@ -28,10 +28,15 @@ def run_historization_pipeline():
             run_daily_historization(
                 source_table=table
             )
+            pass
 
-        # for table in HISTORY_ENABLED_TABLES:
-        #     DataAgingService.run(source_table=table)
+        for table in HISTORY_ENABLED_TABLES:
+            # sql = get_history_select_statement(table, optimized=True)
+            # logger.info(f"Data Aging SQL for {table}:\n{sql}")
+            DataAgingService.run(source_table=table)
+            pass
 
+        run_migrations()
         logger.info("Historization Pipeline Completed Successfully.")
     except Exception as e:
         logger.error(f"Historization Pipeline Failed: {e}")
@@ -54,6 +59,10 @@ def run_daily_historization(source_table: str):
     logger.info(f"Starting historization from {source_table} to {history_table}")
     _create_history_tables_and_view_if_not_exist(source_table)
 
+    if is_weekend():
+        logger.info("It's weekend, skipping daily historization.")
+        return
+    
     delete_sqlite_history(source_table)
 
     # 1. Get columns from source table
@@ -93,6 +102,7 @@ def run_daily_historization(source_table: str):
             try:
                 # Use the new helper function to execute and log
                 execute_sql(connection, pg_sql, history_table, "UPSERT", f"Historize data from {source_table} to {history_table}")
+                pass
             except Exception as e:
                 logger.error(f"Error during historization execution on Postgres: {e}")
                 raise e
@@ -117,6 +127,25 @@ def delete_sqlite_history(source_table):
                 execute_sql(connection, delete_sql, table, "DELETE", f"DELETE data from {table}")
             except Exception as e:
                 logger.error(f"Error during execution on SQLite: {e}")     
+
+def delete_postgres_history(source_table):
+    if source_table in ["OptionDataYahoo", "OptionDataTradingView", "StockDataBarchart"]:
+        daily_table = f"{source_table}HistoryDaily"
+        weekly_table = f"{source_table}HistoryWeekly"
+        monthly_table = f"{source_table}HistoryMonthly"
+        master_table = f"{source_table}MasterData"
+
+        engine = get_postgres_engine()
+        tables = [source_table, daily_table, weekly_table, monthly_table, master_table]
+        for table in tables:
+            delete_sql = f"""
+                DELETE FROM "{table}"
+            """
+            with engine.begin() as connection:
+                try:
+                    execute_sql(connection, delete_sql, table, "DELETE", f"DELETE data from {table}")
+                except Exception as e:
+                    logger.error(f"Error during execution on SQLite: {e}")   
 
 def _get_columns(table_name):
     """
@@ -331,6 +360,10 @@ def _create_history_merge_views():
 def _insert_date():
         start_time = time.time()
 
+        if is_weekend():
+            logger.info("It's weekend, skipping daily historization.")
+            return
+
         pg_engine = get_postgres_engine()
         if pg_engine:
             with pg_engine.begin() as conn:
@@ -356,6 +389,7 @@ def _insert_date():
                 except Exception as e:
                     conn.rollback()
                     logger.error(f"Error inserting new date: {e}")
+                    raise e
 
         logger.info(f"Inserted date to Dates History in {round(time.time() - start_time, 2)}s.")
 

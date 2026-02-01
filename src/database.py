@@ -70,6 +70,7 @@ def get_postgres_engine():
 
     except Exception as e:
         logger.error(f"Failed to connect to PostgreSQL: \n{e}")
+        raise e
         return None
 
 
@@ -112,6 +113,7 @@ def log_data_change(connection, operation_type, table_name, affected_rows=None, 
         })
     except Exception as e:
         logger.error(f"Error logging data change: \n{e}")
+        raise e
 
 def insert_into_table(
         connection,
@@ -132,7 +134,7 @@ def insert_into_table(
                             if_exists=if_exists, 
                             index=False,
                             method='multi',
-                            chunksize=5000
+                            chunksize=500
                         )
         rows_saved = len(dataframe)
         logger.info(f"[PostgreSQL] Successfully saved {rows_saved} rows to {table_name} in {round(time.time() - start_pg, 2)}s.")
@@ -140,6 +142,7 @@ def insert_into_table(
         log_data_change(connection, "INSERT", table_name, affected_rows=rows_saved)
     except Exception as e:
         logger.error(f"[PostgreSQL] Error saving to table {table_name}: \n{e}")
+        raise e
 
     return rows_saved
 
@@ -159,7 +162,6 @@ def insert_into_table_bulk(
 
     columns = list(dataframe.columns)
 
-    # conn = get_postgres_engine().raw_connection()
     try:
         with raw_connection.cursor() as cur:
             cur.copy_from(
@@ -169,11 +171,9 @@ def insert_into_table_bulk(
                 null='',
                 columns=columns
             )
-        # conn.commit()
     except Exception as e:
-            logger.error(f"[PostgreSQL] Error executing SQL on {table_name}: \n{e}")
-    # finally:
-    #     raw_connection.close()
+        logger.error(f"[PostgreSQL] Error executing SQL on {table_name}: \n{e}")
+        raise e
     rows_saved = len(dataframe)
     logger.info(f"[PostgreSQL] Successfully saved {rows_saved} rows to {table_name} in {round(time.time() - start, 2)}s.")
     
@@ -187,7 +187,8 @@ def execute_sql(connection, sql: str, table_name: str, operation_type: str = "IN
     - table_name (str): The name of the table being modified.
     - operation_type (str): The type of operation (INSERT, UPDATE, DELETE).
     """
-    
+    logger.debug(f"SQL Statement for {additional_data}:\n{text(sql)}")
+
     # if connection is SQLite, we execute directly
     if 'sqlite' in str(connection.engine.url):
         try:
@@ -216,6 +217,7 @@ def execute_sql(connection, sql: str, table_name: str, operation_type: str = "IN
             return pg_affected
         except Exception as e:
             logger.error(f"[PostgreSQL] Error executing SQL on {table_name}: \n{e}")
+            raise e
 
 def select_into_dataframe(query: str = None, sql_file_path: str = None, params: dict = None):
     """
@@ -271,8 +273,9 @@ def select_into_dataframe_pg(query: str = None, sql_file_path: str = None, param
                 df = pd.read_sql(text(str(sql)), pg_engine)
             logger.debug(f"[PostgreSQL] Rows: {len(df)} - Runtime: {round(time.time() - start_pg, 2)}s.")
     except Exception as e:
-            logger.error(f"[PostgreSQL] Error executing query: \n{e}")
-            logger.error(f"\n{str(sql)}")
+        logger.error(f"[PostgreSQL] Error executing query: \n{e}")
+        logger.error(f"\n{str(sql)}")
+        raise e
     return df
 
 def get_table_key_and_data_columns(table_name):
@@ -333,7 +336,7 @@ def _run_migrations_for_engine(engine):
                 except Exception as e:
                     logger.error(f"[{label}] Error initializing DbVersion: \n{e}")
                     # If this fails (e.g. invalid SQL for Postgres), we might stop here for this engine
-                    return
+                    raise e
 
         with connection.begin():
             result = connection.execute(text('SELECT version FROM "DbVersion"')).fetchone()
@@ -361,6 +364,13 @@ def _run_migrations_for_engine(engine):
 
         for migration_file in pending_migrations:
             logger.info(f"[{label}] Applying migration {migration_file}...")
+            last_migration_version = int(pending_migrations[-1].split(".")[0])
+            if label == "PostgreSQL" and last_migration_version == 19:
+                # recover_history()
+                with connection.begin():
+                    for table in HISTORY_ENABLED_TABLES:
+                        add_from_date_to_date_master_data_table(connection, table)
+                        # change_column_data_types(connection, table)
             try:
                 with open(os.path.join(migrations_path, migration_file), "r") as f:
                     sql_script = f.read()
@@ -542,12 +552,14 @@ def pg_migrations():
                     except Exception as e:
                         error = True
                         logger.warning(f"[PostgreSQL] statement '{statement}': \n{e}")
+                        raise e
             if not error:
                 logger.info(f"[PostgreSQL] Successfully in {round(time.time() - start_pg, 2)}s.")
             else:
                 logger.info(f"[PostgreSQL] Completed with some errors in {round(time.time() - start_pg, 2)}s.")
     except Exception as e:
         logger.error(f"[PostgreSQL] Error: \n{e}")
+        raise e
 
 def mapping_sqlite_to_postgres(sql: str) -> str:
     """
@@ -666,4 +678,257 @@ def drop_all_views(engine):
                 logger.info(f"{label} Dropped view {view}.")
             except Exception as e:
                 logger.error(f"{label} Error dropping view {view}: \n{e}")
+                raise e
     
+def change_column_data_types(conn, table):
+    if 'OptionDataMassive' in table:
+        
+        try:
+            for massive_table in ["OptionDataMassive", "OptionDataMassiveHistoryDaily", "OptionDataMassiveHistoryWeekly", "OptionDataMassiveHistoryMonthly", "OptionDataMassiveMasterData"]:
+                # double precision to real
+                # for col in ["strike_price", "implied_volatility", "greeks_delta", "greeks_gamma", "greeks_theta", "greeks_vega", "day_change", "day_change_percent", "day_close", "day_high", "day_low", "day_open", "day_previous_close", "day_volume", "day_vwap"]:
+                for col in ["strike_price", "day_change", "day_change_percent", "day_close", "day_high", "day_low", "day_open", "day_previous_close", "day_volume", "day_vwap"]:
+                
+                    alter_statement = f'''ALTER TABLE "{massive_table}" ALTER COLUMN "{col}" TYPE real USING (
+                                                                                                            CASE 
+                                                                                                                WHEN abs("{col}") < 1e-37 THEN 0 
+                                                                                                                ELSE "{col}" 
+                                                                                                            END
+                                                                                                        )::real'''
+                    execute_sql(conn, alter_statement, massive_table, 'ALTER', f"Change {col} column data type from double precision to real {massive_table}")
+                # Bigint to int
+                for col in ["open_interest"]:
+                    alter_statement = f'ALTER TABLE "{massive_table}" ALTER COLUMN "{col}" TYPE integer'
+                    execute_sql(conn, alter_statement, massive_table, 'ALTER', f"Change {col} column data type from bigint to int {massive_table}")
+                # Bigint to smallint
+                for col in ["shares_per_contract"]:
+                    alter_statement = f'ALTER TABLE "{massive_table}" ALTER COLUMN "{col}" TYPE smallint'
+                    execute_sql(conn, alter_statement, massive_table, 'ALTER', f"Change {col} column data type from bigint to smallint {massive_table}")
+                # text to date
+                for col in ["expiration_date"]:
+                    alter_statement = f'ALTER TABLE "{massive_table}" ALTER COLUMN "{col}" TYPE date USING expiration_date::date'
+                    execute_sql(conn, alter_statement, massive_table, 'ALTER', f"Change {col} column data type from text to date {massive_table}")
+
+        except Exception as e:
+            logger.warning(f"Error during column data type change: {e}")
+            raise e
+    
+    try:
+        for hist_table in ["DatesHistory", f"{table}HistoryWeekly"]:
+            # int to smallint
+            for col in ["isoyear", "week"]:
+                alter_statement = f'ALTER TABLE "{hist_table}" ALTER COLUMN "{col}" TYPE smallint'
+                execute_sql(conn, alter_statement, hist_table, 'ALTER', f"Change {col} column data type from int to smallint {hist_table}")
+        for hist_table in ["DatesHistory", f"{table}HistoryMonthly"]:
+            # int to smallint
+            for col in ["year", "month"]:
+                alter_statement = f'ALTER TABLE "{hist_table}" ALTER COLUMN "{col}" TYPE smallint'
+                execute_sql(conn, alter_statement, hist_table, 'ALTER', f"Change {col} column data type from int to smallint {hist_table}")
+    except Exception as e:
+        logger.warning(f"Error during column data type change: {e}")
+        raise e
+
+def add_from_date_to_date_master_data_table(conn, table):
+    try:
+        ########
+        weekly_table = f"{table}HistoryWeekly"
+        monthly_table = f"{table}HistoryMonthly"
+        master_data_table = f"{table}MasterData"
+
+        create_from_to_date_columns(conn, master_data_table)
+
+        key_columns, _ = get_table_key_and_data_columns(master_data_table)
+        key_columns_str = ", ".join([f'"{col["name"]}"' for col in key_columns])
+
+        insert_sql = f"""
+            INSERT INTO "{master_data_table}" AS ORIGINAL (
+                FROM_DATE,
+                TO_DATE,
+                {key_columns_str}
+            )
+            SELECT
+                MIN(DATES.DATE) as FROM_DATE,
+                MAX(DATES.DATE) as TO_DATE,
+                {key_columns_str}
+            FROM
+                "DatesHistory" AS DATES
+                INNER JOIN "{weekly_table}" AS WEEKLY 
+                ON DATES.ISOYEAR = WEEKLY.ISOYEAR
+                AND DATES.WEEK = WEEKLY.WEEK
+            GROUP BY {key_columns_str}
+            ON CONFLICT ({key_columns_str}) DO UPDATE
+            SET
+                FROM_DATE = CASE
+                    WHEN ORIGINAL.FROM_DATE IS NULL OR EXCLUDED.FROM_DATE < ORIGINAL.FROM_DATE THEN EXCLUDED.FROM_DATE
+                    ELSE ORIGINAL.FROM_DATE
+                END,
+                TO_DATE = CASE
+                    WHEN ORIGINAL.FROM_DATE IS NULL OR EXCLUDED.TO_DATE > ORIGINAL.TO_DATE THEN EXCLUDED.TO_DATE
+                    ELSE ORIGINAL.TO_DATE
+                END;
+        """
+
+        logger.info(f"Start execution: Insert keys from Weekly to Master Data {master_data_table}")
+        # execute_sql(conn, insert_sql, master_data_table, 'UPSERT', f"Insert keys from Weekly to Master Data")
+
+        #### 
+
+        insert_sql = f"""
+            INSERT INTO "{master_data_table}" AS ORIGINAL (
+                FROM_DATE,
+                TO_DATE,
+                {key_columns_str}
+            )
+            SELECT
+                MIN(DATES.DATE) as FROM_DATE,
+                MAX(DATES.DATE) as TO_DATE,
+                {key_columns_str}
+            FROM
+                "DatesHistory" AS DATES
+                INNER JOIN "{monthly_table}" AS MONTHLY 
+                ON DATES.YEAR = MONTHLY.YEAR
+                AND DATES.MONTH = MONTHLY.MONTH
+            GROUP BY {key_columns_str}
+            ON CONFLICT ({key_columns_str}) DO UPDATE
+            SET
+                FROM_DATE = CASE
+                    WHEN ORIGINAL.FROM_DATE IS NULL OR EXCLUDED.FROM_DATE < ORIGINAL.FROM_DATE THEN EXCLUDED.FROM_DATE
+                    ELSE ORIGINAL.FROM_DATE
+                END,
+                TO_DATE = CASE
+                    WHEN ORIGINAL.FROM_DATE IS NULL OR EXCLUDED.TO_DATE > ORIGINAL.TO_DATE THEN EXCLUDED.TO_DATE
+                    ELSE ORIGINAL.TO_DATE
+                END;
+        """
+
+        logger.info(f"Start execution: Insert keys from Monthly to Master Data {master_data_table}")
+        # execute_sql(conn, insert_sql, master_data_table, 'UPSERT', f"Insert keys from Monthly to Master Data")
+    except Exception as e:
+        logger.warning(f"Error: {e}")
+        raise e
+
+def create_from_to_date_columns(conn, master_data_table):
+    for col in ["from_date", "to_date"]:
+        alter_statement = f'ALTER TABLE "{master_data_table}" ADD COLUMN IF NOT EXISTS {col} DATE'
+        try:
+            execute_sql(conn, alter_statement, master_data_table, 'ALTER', f"Add {col} column to {master_data_table}")
+        except Exception as e:
+            conn.rollback()
+            raise e
+
+def recover_history():
+    sqlite_engine = get_database_engine()
+    pg_engine = get_postgres_engine()
+
+    for table in HISTORY_ENABLED_TABLES:
+        daily_table = f"{table}HistoryDaily"
+        weekly_table = f"{table}HistoryWeekly"
+        monthly_table = f"{table}HistoryMonthly"
+        master_data_table = f"{table}MasterData"
+
+        backup_table = f"{daily_table}Backup"
+        select_all = f'select * from "{daily_table}"'
+        logger.info(f"Select all data from {daily_table}")
+        df = pd.read_sql(text(str(select_all)), sqlite_engine)
+        logger.info(f"Size: {table} - {len(df)}")
+
+        try:
+            drop_backup_sql = f'''
+                DROP TABLE IF EXISTS "{backup_table}";
+            '''
+            with pg_engine.begin() as connection:
+                execute_sql(connection, drop_backup_sql, backup_table, 'DROP', f"Drop backup table {backup_table}")
+
+            create_table = f'CREATE TABLE "{backup_table}" (LIKE "{daily_table}" INCLUDING ALL);'
+            with pg_engine.begin() as connection:
+                execute_sql(connection, create_table, backup_table, 'CREATE', f"Create {backup_table} table")
+
+            if table == "OptionDataMassive":
+                raw_connection =  pg_engine.raw_connection()
+                try:
+                    insert_into_table_bulk(
+                        raw_connection,
+                        table_name=backup_table,
+                        dataframe=df
+                    )
+                    raw_connection.commit()
+                except Exception as e:
+                    logger.error(f"[PostgreSQL] Error executing SQL: \n{e}")
+                    raise e
+                finally:
+                    raw_connection.close()
+            else:
+                with pg_engine.begin() as connection:
+                    insert_into_table(
+                        connection,
+                        table_name=backup_table,
+                        dataframe=df,
+                        if_exists="append"
+                    )
+
+            key_columns, data_columns = get_table_key_and_data_columns(table)
+            update_set_str = ", ".join([f'"{col["name"]}" = EXCLUDED."{col["name"]}"' for col in data_columns])
+            key_columns_str = ", ".join([f'"{col["name"]}"' for col in key_columns])
+
+            insert_sql = f'''
+                INSERT INTO "{daily_table}" 
+                SELECT * FROM "{backup_table}"
+                ON CONFLICT (snapshot_date, {key_columns_str}) 
+                DO UPDATE SET 
+                    {update_set_str};
+            '''
+
+            with pg_engine.begin() as connection:
+                execute_sql(connection, insert_sql, daily_table, 'UPSERT', f"Recover data to {daily_table}")
+        except Exception as e:
+            logger.error(f"Error during history recovery for table {table}: {e}")
+            raise e
+        finally:
+             # clean up backup table
+            drop_backup_sql = f'''
+                DROP TABLE IF EXISTS "{backup_table}";
+            '''
+            with pg_engine.begin() as connection:
+                execute_sql(connection, drop_backup_sql, backup_table, 'DROP', f"Drop backup table {backup_table}")
+
+        for hist_table in [weekly_table, monthly_table, master_data_table, "DatesHistory"]:
+            truncate_sql = f'''
+                TRUNCATE TABLE "{hist_table}";
+            '''
+            with pg_engine.begin() as connection:
+                execute_sql(connection, truncate_sql, hist_table, 'TRUNCATE', f"Truncate data {hist_table}")
+
+        ## clean up corrupted history
+        delete_sql = f'''
+            DELETE FROM "{daily_table}"
+            WHERE snapshot_date < '2026-01-05'
+            OR EXTRACT(ISODOW FROM snapshot_date) IN (6, 7);
+        '''
+        with pg_engine.begin() as connection:
+            execute_sql(connection, delete_sql, daily_table, 'DELETE', f"DELETE corrupted data from {daily_table}")
+
+    with pg_engine.begin() as conn:
+        
+        insert_sql = f"""
+            INSERT INTO "DatesHistory" (
+                date,
+                year,
+                month,
+                isoyear,
+                week
+            )
+            SELECT DISTINCT
+                snapshot_date                               AS date,
+                EXTRACT(YEAR  FROM snapshot_date)::int      AS year,
+                EXTRACT(MONTH FROM snapshot_date)::int      AS month,
+                EXTRACT(ISOYEAR  FROM snapshot_date)::int   AS year,
+                EXTRACT(WEEK  FROM snapshot_date)::int      AS week
+            FROM "OptionDataMassiveHistoryDaily"
+            ON CONFLICT(date) DO NOTHING
+        """
+        try:
+            affected = execute_sql(conn, insert_sql, 'DatesHistory', 'UPSERT', f"Insert dates to DatesHistory")
+        except Exception as e:
+            conn.rollback()
+            logger.error(f"Error inserting new date: {e}")
+            raise e
