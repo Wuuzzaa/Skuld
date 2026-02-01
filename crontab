@@ -19,3 +19,6 @@ PYTHONPATH=/app/Skuld
 
 # Historization: Montag bis Freitag, 21:30 UTC (22:30 MEZ)
 30 21 * * 1-5 /bin/bash /app/Skuld/run_data_collection.sh historization
+
+# Dividend Metrics Calculation: Wöchentlich (Montag), 02:00 UTC (03:00 MEZ)
+0 2 * * 1 /bin/bash /app/Skuld/run_data_collection.sh calculate_dividend_metrics

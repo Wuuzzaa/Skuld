@@ -7,13 +7,13 @@ from src.logger_config import setup_logging
 from src.database import run_migrations
 from src.massiv_api import load_option_chains
 from src.price_and_technical_analysis_data_scrapper import scrape_and_save_price_and_technical_indicators
-from src.yahooquery_earning_dates import scrape_earning_dates
-from src.yahooquery_financials import generate_fundamental_data
+
+from src.yahoo_data_provider import generate_fundamental_data, fetch_historical_prices, fetch_dividends
 from src.yfinance_analyst_price_targets import scrape_yahoo_finance_analyst_price_targets
 from config import *
-from src.dividend_radar import process_dividend_data
 from src.historization import run_historization_pipeline
 from src.pipeline_monitor import PipelineMonitor
+from src.calculate_dividend_metrics import main_calculation_job
 
 setup_logging(component="data_collector", log_level=logging.INFO, console_output=True)
 logger = logging.getLogger(__name__)
@@ -53,17 +53,19 @@ def main(args):
                 ("Massive Option Chains", load_option_chains, ()),
                 ("Yahoo Finance Analyst Price Targets", scrape_yahoo_finance_analyst_price_targets, ()),
                 ("Price & Technical Indicators", scrape_and_save_price_and_technical_indicators, ()),
-                ("Dividend Radar", process_dividend_data, ()),
-                ("Earning Dates", scrape_earning_dates, ()),
+                ("Yahoo Historical Prices", fetch_historical_prices, ()),
+                ("Yahoo Dividends", fetch_dividends, ()),
                 ("Yahoo Query Fundamentals", generate_fundamental_data, ()),
+                ("Dividend Metrics Calculation", main_calculation_job, ()),
                 ("Fetch Current Stock Prices", fetch_current_prices, ()),
             ]
         elif args.mode == "saturday_night":
             parallel_tasks = [
                 ("Yahoo Finance Analyst Price Targets", scrape_yahoo_finance_analyst_price_targets, ()),
-                ("Dividend Radar", process_dividend_data, ()),
-                ("Earning Dates", scrape_earning_dates, ()),
+                ("Yahoo Historical Prices", fetch_historical_prices, ()),
+                ("Yahoo Dividends", fetch_dividends, ()),
                 ("Yahoo Query Fundamentals", generate_fundamental_data, ()),
+                ("Dividend Metrics Calculation", main_calculation_job, ()),
             ]
         elif args.mode == "marked_start_mid_end":
             parallel_tasks = [
@@ -72,6 +74,9 @@ def main(args):
         elif args.mode == "stock_data_daily":
             parallel_tasks = [
                 ("Price & Technical Indicators", scrape_and_save_price_and_technical_indicators, ()),
+                ("Yahoo Historical Prices", fetch_historical_prices, ()),
+                ("Yahoo Dividends", fetch_dividends, ()),
+                ("Dividend Metrics Calculation", main_calculation_job, ()),
             ]
         elif args.mode == "option_data":
             parallel_tasks = [

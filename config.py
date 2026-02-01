@@ -51,6 +51,7 @@ TABLE_FUNDAMENTAL_DATA_DIVIDEND_RADAR = 'FundamentalDataDividendRadar'
 TABLE_FUNDAMENTAL_DATA_YAHOO = 'FundamentalDataYahoo'
 TABLE_TECHNICAL_INDICATORS = 'TechnicalIndicators'
 TABLE_STOCK_PRICE = 'StockPrice'
+TABLE_DIVIDENDS = 'Dividends'
 
 # History enabled tables
 HISTORY_ENABLED_TABLES = [
@@ -100,13 +101,17 @@ RISK_FREE_RATE = 0.03
 NUM_SIMULATIONS = 100000
 TRANSACTION_COST_PER_CONTRACT = 2.0 # in USD
 
+# Yahoo Finance History
+YAHOO_HISTORY_PERIOD = '25y'
+YAHOO_HISTORY_INTERVAL = '1d'
+
 # =============================================================================
 # SIMPLIFIED DATA COLLECTION CONFIGURATION
 # =============================================================================
 
 # Symbol selection
 SYMBOL_SELECTION = {
-    "mode": "all",                   # "all", "list", "file", "max"
+    "mode": "list",                   # "all", "list", "file", "max"
     "symbols": ["MO"],             # Used when mode="list"
     "file_path": None,               # Used when mode="file"
     "max_symbols": 1000,               # Used when mode="max" or as limit for "all"
