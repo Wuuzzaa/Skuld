@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 
 from config import TABLE_FUNDAMENTAL_DATA_YAHOO
-from src.database import insert_into_table, truncate_table
+from src.database import get_postgres_engine, insert_into_table, truncate_table
 from src.yahooquery_scraper import YahooQueryScraper
 from config_utils import get_filtered_symbols_with_logging
 
@@ -134,12 +134,14 @@ def generate_fundamental_data():
         except Exception:
             pass
 
-    truncate_table(TABLE_FUNDAMENTAL_DATA_YAHOO)
-    insert_into_table(
-        table_name=TABLE_FUNDAMENTAL_DATA_YAHOO,
-        dataframe=df_all_fundamentals,
-        if_exists="append"
-    )
+    with get_postgres_engine().begin() as connection:
+        truncate_table(connection, TABLE_FUNDAMENTAL_DATA_YAHOO)
+        insert_into_table(
+            connection,
+            table_name=TABLE_FUNDAMENTAL_DATA_YAHOO,
+            dataframe=df_all_fundamentals,
+            if_exists="append"
+        )
 
 if __name__ == "__main__":
 

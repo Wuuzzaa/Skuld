@@ -214,18 +214,18 @@ echo -e "\n${CYAN}=== STARTING FRESH REBUILD ===${NC}"
 # Update servers.json
 cat <<EOT > "$SERVERS_JSON"
 {
-    "Servers": {
-        "1": {
-            "Name": "Skuld Local ($DB_NAME)",
-            "Group": "Servers",
-            "Host": "skuld-local-db",
-            "Port": 5432,
-            "MaintenanceDB": "$DB_NAME",
-            "Username": "$DB_USER",
-            "SSLMode": "prefer",
-            "PassFile": "/tmp/pgpass" 
-        }
-    }
+    "Servers":  {
+                        "1":  {
+                                  "Username":  "$DB_USER",
+                                  "MaintenanceDB":  "$DB_NAME",
+                                  "Group":  "Servers",
+                                  "SSLMode":  "prefer",
+                                  "Name":  "Skuld Local ($DB_NAME)",
+                                  "Host":  "skuld-local-db",
+                                  "Port":  5432,
+                                  "PassFile":  "/tmp/pgpass"
+                              }
+                }
 }
 EOT
 

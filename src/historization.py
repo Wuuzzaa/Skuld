@@ -4,9 +4,9 @@ import pathlib
 import time
 from sqlalchemy import text
 from config import HISTORY_ENABLED_TABLES, HISTORY_ENABLED_VIEWS
-from src.database import column_exists, drop_all_views, get_database_engine, execute_sql, get_postgres_engine, get_table_key_and_data_columns, mapping_sqlite_to_postgres, pg_migrate_week_to_ISO_week, recreate_views, select_into_dataframe, table_exists, view_exists
+from src.database import column_exists, drop_all_views, get_database_engine, execute_sql, get_postgres_engine, get_table_key_and_data_columns, mapping_sqlite_to_postgres, pg_migrate_week_to_ISO_week, recreate_views, run_migrations, select_into_dataframe, table_exists, view_exists
 from src.decorator_log_function import log_function
-from src.data_aging import DataAgingService, get_history_select_statement
+from src.data_aging import DataAgingService, get_history_select_statement, is_weekend
 from src.util import executed_as_github_action
 
 logger = logging.getLogger(__name__)
@@ -28,10 +28,15 @@ def run_historization_pipeline():
             run_daily_historization(
                 source_table=table
             )
+            pass
 
-        # for table in HISTORY_ENABLED_TABLES:
-        #     DataAgingService.run(source_table=table)
+        for table in HISTORY_ENABLED_TABLES:
+            # sql = get_history_select_statement(table, optimized=True)
+            # logger.info(f"Data Aging SQL for {table}:\n{sql}")
+            DataAgingService.run(source_table=table)
+            pass
 
+        run_migrations()
         logger.info("Historization Pipeline Completed Successfully.")
     except Exception as e:
         logger.error(f"Historization Pipeline Failed: {e}")
@@ -54,38 +59,37 @@ def run_daily_historization(source_table: str):
     logger.info(f"Starting historization from {source_table} to {history_table}")
     _create_history_tables_and_view_if_not_exist(source_table)
 
-    engine = get_database_engine()
-    with engine.begin() as connection:
-        # 1. Get columns from source table
-        source_columns = _get_columns(connection, source_table)
-        if not source_columns:
-            logger.error(f"Source table {source_table} not found or has no columns.")
-            return
+    if is_weekend():
+        logger.info("It's weekend, skipping daily historization.")
+        return
+    
+    delete_sqlite_history(source_table)
 
-        column_names = [col['name'] for col in source_columns]
-        data_column_names = [col['name'] for col in data_columns]
-        
-        # 2. Build the SQL statement
-        # Target columns: snapshot_date + original columns
-        target_cols_str = "snapshot_date, " + ", ".join([f'"{c}"' for c in column_names])
-        select_cols_str = ", ".join([f'"{c}"' for c in column_names])
-        
-        # Update clause for UPSERT
-        # Exclude conflict keys from the update set
+    # 1. Get columns from source table
+    source_columns = _get_columns(source_table)
+    if not source_columns:
+        logger.error(f"Source table {source_table} not found or has no columns.")
+        return
 
-        conflict_target = ", ".join([f'"{key_col}"' for key_col in key_column_names])
-        update_clause = ", ".join([f'"{col}" = excluded."{col}"' for col in data_column_names])
-        where_clause = " OR ".join([f'hist."{col}" IS DISTINCT FROM excluded."{col}"' for col in data_column_names])
+    column_names = [col['name'] for col in source_columns]
+    data_column_names = [col['name'] for col in data_columns]
         
-        sqllite_sql = f"""
-            INSERT INTO "{history_table}" ({target_cols_str})
-            SELECT date('now'), {select_cols_str}
-            FROM "{source_table}" 
-            WHERE 1=1 -- needed because of Parsing Ambiguity. Check SQLite documentation
-            ON CONFLICT(snapshot_date, {conflict_target}) DO UPDATE SET
-            {update_clause}
-        """
+    # 2. Build the SQL statement
+    # Target columns: snapshot_date + original columns
+    target_cols_str = "snapshot_date, " + ", ".join([f'"{c}"' for c in column_names])
+    select_cols_str = ", ".join([f'"{c}"' for c in column_names])
+    
+    # Update clause for UPSERT
+    # Exclude conflict keys from the update set
 
+    conflict_target = ", ".join([f'"{key_col}"' for key_col in key_column_names])
+    update_clause = ", ".join([f'"{col}" = excluded."{col}"' for col in data_column_names])
+    where_clause = " OR ".join([f'hist."{col}" IS DISTINCT FROM excluded."{col}"' for col in data_column_names])
+        
+
+
+    pg_engine = get_postgres_engine()
+    if pg_engine:
         pg_sql = f"""
             INSERT INTO "{history_table}" as hist ({target_cols_str})
             SELECT CURRENT_DATE, {select_cols_str}
@@ -94,21 +98,11 @@ def run_daily_historization(source_table: str):
             {update_clause}
             WHERE {where_clause}
         """
-        
-        # 3. Execute
-        try:
-            # Use the new helper function to execute and log
-            execute_sql(connection, sqllite_sql, history_table, "UPSERT", f"Historize data from {source_table} to {history_table}")
-        except Exception as e:
-            logger.error(f"Error during historization execution on SQLite: {e}")
-            raise e
-
-    pg_engine = get_postgres_engine()
-    if pg_engine:
         with pg_engine.begin() as connection:
             try:
                 # Use the new helper function to execute and log
                 execute_sql(connection, pg_sql, history_table, "UPSERT", f"Historize data from {source_table} to {history_table}")
+                pass
             except Exception as e:
                 logger.error(f"Error during historization execution on Postgres: {e}")
                 raise e
@@ -116,22 +110,62 @@ def run_daily_historization(source_table: str):
     duration = time.time() - start_time
     logger.info(f"Historization for {source_table} finished in {duration:.2f}s")
 
-def _get_columns(connection, table_name):
+def delete_sqlite_history(source_table):
+    daily_table = f"{source_table}HistoryDaily"
+    weekly_table = f"{source_table}HistoryWeekly"
+    monthly_table = f"{source_table}HistoryMonthly"
+    master_table = f"{source_table}MasterData"
+
+    engine = get_database_engine()
+    tables = [source_table, daily_table, weekly_table, monthly_table, master_table]
+    for table in tables:
+        delete_sql = f"""
+            DELETE FROM "{table}"
+        """
+        with engine.begin() as connection:
+            try:
+                execute_sql(connection, delete_sql, table, "DELETE", f"DELETE data from {table}")
+            except Exception as e:
+                logger.error(f"Error during execution on SQLite: {e}")     
+
+def delete_postgres_history(source_table):
+    if source_table in ["OptionDataYahoo", "OptionDataTradingView", "StockDataBarchart"]:
+        daily_table = f"{source_table}HistoryDaily"
+        weekly_table = f"{source_table}HistoryWeekly"
+        monthly_table = f"{source_table}HistoryMonthly"
+        master_table = f"{source_table}MasterData"
+
+        engine = get_postgres_engine()
+        tables = [source_table, daily_table, weekly_table, monthly_table, master_table]
+        for table in tables:
+            delete_sql = f"""
+                DELETE FROM "{table}"
+            """
+            with engine.begin() as connection:
+                try:
+                    execute_sql(connection, delete_sql, table, "DELETE", f"DELETE data from {table}")
+                except Exception as e:
+                    logger.error(f"Error during execution on SQLite: {e}")   
+
+def _get_columns(table_name):
     """
     Retrieves the column details for a given table using pragma_table_info.
     Returns a list of dicts: [{'name': 'col1', 'type': 'TEXT'}, ...]
     """
     logger.info(f"Fetching columns for {table_name}")
-    try:
-            # Using pragma_table_info directly
-        query = text(f"SELECT name, type FROM pragma_table_info('{table_name}')")
-        result = connection.execute(query).fetchall()
-        columns = [{"name": row[0], "type": row[1]} for row in result]
-        # logger.info(f"Found columns: {columns}")
-        return columns
-    except Exception as e:
-        logger.error(f"Error fetching columns for {table_name}: {e}")
-        return []
+    engine = get_database_engine()
+
+    with engine.begin() as connection:
+        try:
+                # Using pragma_table_info directly
+            query = text(f"SELECT name, type FROM pragma_table_info('{table_name}')")
+            result = connection.execute(query).fetchall()
+            columns = [{"name": row[0], "type": row[1]} for row in result]
+            # logger.info(f"Found columns: {columns}")
+            return columns
+        except Exception as e:
+            logger.error(f"Error fetching columns for {table_name}: {e}")
+            return []
 
 
 def _create_history_tables_and_view_if_not_exist(source_table: str):
@@ -325,30 +359,10 @@ def _create_history_merge_views():
 
 def _insert_date():
         start_time = time.time()
-        
-        engine = get_database_engine()
 
-        with engine.begin() as conn:
- 
-            insert_sql = f"""
-                INSERT INTO "DatesHistory" (
-                    date,
-                    year,
-                    month,
-                    week
-                )
-                SELECT
-                    DATE('now') as date,
-                    STRFTIME('%Y', DATE('now')) as year,
-                    STRFTIME('%m', DATE('now')) as month,
-                    STRFTIME('%W', DATE('now')) as week
-                ON CONFLICT(date) DO NOTHING
-            """
-            try:
-                affected = execute_sql(conn, insert_sql, 'DatesHistory', 'UPSERT', f"Insert date to DatesHistory")
-            except Exception as e:
-                conn.rollback()
-                logger.error(f"Error inserting new date: {e}")
+        if is_weekend():
+            logger.info("It's weekend, skipping daily historization.")
+            return
 
         pg_engine = get_postgres_engine()
         if pg_engine:
@@ -375,6 +389,7 @@ def _insert_date():
                 except Exception as e:
                     conn.rollback()
                     logger.error(f"Error inserting new date: {e}")
+                    raise e
 
         logger.info(f"Inserted date to Dates History in {round(time.time() - start_time, 2)}s.")
 

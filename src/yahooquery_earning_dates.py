@@ -2,7 +2,7 @@ import sys
 import os
 import pandas as pd
 from config import TABLE_EARNING_DATES
-from src.database import insert_into_table, truncate_table
+from src.database import get_postgres_engine, insert_into_table, truncate_table
 from src.yahooquery_scraper import YahooQueryScraper
 from datetime import datetime
 
@@ -23,17 +23,21 @@ def scrape_earning_dates():
             formatted_date = date_obj.strftime("%d.%m.%Y")
             earnings_dates[symbol] = formatted_date
         except (TypeError, IndexError) as e:
-            earnings_dates[symbol] = "No date or no stock"
+            earnings_dates[symbol] = None
 
     # store dataframe
     df = pd.DataFrame(list(earnings_dates.items()), columns=['symbol', 'earnings_date'])
+    if len(df) == 0:
+        raise Exception("No Data fetching earnings dates from Yahoo API")
     # --- Database Persistence ---
-    truncate_table(TABLE_EARNING_DATES)
-    insert_into_table(
-        table_name=TABLE_EARNING_DATES,
-        dataframe=df,
-        if_exists="append"
-    )
+    with get_postgres_engine().begin() as connection:
+        truncate_table(connection, TABLE_EARNING_DATES)
+        insert_into_table(
+            connection,
+            table_name=TABLE_EARNING_DATES,
+            dataframe=df,
+            if_exists="append"
+        )
 
 if __name__ == '__main__':
     import time

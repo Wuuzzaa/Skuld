@@ -14,7 +14,7 @@ OUTPUT_DIR = "db/SQL/views/create_view/history"
 KNOWN_TABLES = [
     "FundamentalDataYahoo", "FundamentalDataDividendRadar",
     "OptionDataYahoo", "OptionDataTradingView", "OptionPricingMetrics",
-    "StockPrice", "EarningDates", "AnalystPriceTargets", "StockDataBarchart",
+    "StockPrice", "EarningDates", "AnalystPriceTargets",
     "OptionData", "FundamentalData", "StockData", "TechnicalIndicators",
     "OptionDataMerged"
 ]

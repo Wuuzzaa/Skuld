@@ -2,7 +2,7 @@ import sys
 import os
 import pandas as pd
 from config import TABLE_ANALYST_PRICE_TARGETS
-from src.database import insert_into_table, truncate_table
+from src.database import get_postgres_engine, insert_into_table, truncate_table
 from src.yahooquery_scraper import YahooQueryScraper
 
 # Add parent directory to path for imports
@@ -40,9 +40,11 @@ def scrape_yahoo_finance_analyst_price_targets():
     df = pd.DataFrame(results)
 
     # --- Database Persistence ---
-    truncate_table(TABLE_ANALYST_PRICE_TARGETS)
-    insert_into_table(
-        table_name=TABLE_ANALYST_PRICE_TARGETS,
-        dataframe=df,
-        if_exists="append"
-    )
+    with get_postgres_engine().begin() as connection:
+        truncate_table(connection, TABLE_ANALYST_PRICE_TARGETS)
+        insert_into_table(
+            connection,
+            table_name=TABLE_ANALYST_PRICE_TARGETS,
+            dataframe=df,
+            if_exists="append"
+        )

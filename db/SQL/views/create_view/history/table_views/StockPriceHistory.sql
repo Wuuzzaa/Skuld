@@ -5,38 +5,29 @@
     
     SELECT
         dates.date,
+        dates.year,
+        dates.month,
+        dates.isoyear,
+        dates.week,
         master_data."symbol",
         coalesce(
                 daily."live_stock_price",
-                weekly."live_stock_price",
-                monthly."live_stock_price",
-                master_data."live_stock_price"  
+                master_data."live_stock_price"
             ) as "live_stock_price",
 		coalesce(
                 daily."price_source",
-                weekly."price_source",
-                monthly."price_source",
-                master_data."price_source"  
+                master_data."price_source"
             ) as "price_source",
 		coalesce(
                 daily."live_price_timestamp",
-                weekly."live_price_timestamp",
-                monthly."live_price_timestamp",
-                master_data."live_price_timestamp"  
+                master_data."live_price_timestamp"
             ) as "live_price_timestamp"
     FROM
         "DatesHistory" as dates
-        CROSS JOIN "StockPriceMasterData" as master_data 
+        INNER JOIN "StockPriceMasterData" as master_data
+        ON dates.date BETWEEN master_data.from_date AND master_data.to_date 
         LEFT JOIN "StockPriceHistoryDaily" as daily
         ON dates.date = daily.snapshot_date
         AND master_data."symbol" = daily."symbol"
-        LEFT JOIN "StockPriceHistoryWeekly" as weekly 
-        ON dates.isoyear = weekly.isoyear
-        AND dates.week = weekly.week
-        AND master_data."symbol" = weekly."symbol"
-        LEFT JOIN "StockPriceHistoryMonthly" as monthly 
-        ON dates.year = monthly.year
-        AND dates.month = monthly.month
-        AND master_data."symbol" = monthly."symbol"
     ;
     

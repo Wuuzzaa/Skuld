@@ -51,14 +51,11 @@ TABLE_FUNDAMENTAL_DATA_DIVIDEND_RADAR = 'FundamentalDataDividendRadar'
 TABLE_FUNDAMENTAL_DATA_YAHOO = 'FundamentalDataYahoo'
 TABLE_TECHNICAL_INDICATORS = 'TechnicalIndicators'
 TABLE_STOCK_PRICE = 'StockPrice'
-TABLE_STOCK_DATA_BARCHART = 'StockDataBarchart'
 
 # History enabled tables
 HISTORY_ENABLED_TABLES = [
     TABLE_EARNING_DATES,
     TABLE_OPTION_DATA_MASSIVE,
-    TABLE_OPTION_DATA_YAHOO,
-    TABLE_OPTION_DATA_TRADINGVIEW,
     TABLE_ANALYST_PRICE_TARGETS,
     TABLE_FUNDAMENTAL_DATA_DIVIDEND_RADAR,
     TABLE_TECHNICAL_INDICATORS,
@@ -116,7 +113,7 @@ SYMBOL_SELECTION = {
     "use_max_limit": True            # If True, applies max_symbols limit to any mode
 }
 
-MAX_WORKERS = 1  # Max number of parallel workers for data collection
+MAX_WORKERS = int(os.getenv('MAX_WORKERS') if os.getenv('MAX_WORKERS') else 1)  # Max number of parallel workers for data collection
 
 # =============================================================================
 # OPTIONS COLLECTION RULES (processed in order)

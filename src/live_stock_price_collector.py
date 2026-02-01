@@ -3,7 +3,7 @@ import sys
 import os
 from datetime import datetime
 from config import TABLE_STOCK_PRICE
-from src.database import insert_into_table, truncate_table
+from src.database import get_postgres_engine, insert_into_table, truncate_table
 from src.yahooquery_scraper import YahooQueryScraper
 
 # Add parent directory to path for imports
@@ -49,12 +49,14 @@ def fetch_current_prices():
     df = pd.DataFrame(results)
 
     # --- Database Persistence ---
-    truncate_table(TABLE_STOCK_PRICE)
-    insert_into_table(
-        table_name=TABLE_STOCK_PRICE,
-        dataframe=df,
-        if_exists="append"
-    )
+    with get_postgres_engine().begin() as connection:
+        truncate_table(connection, TABLE_STOCK_PRICE)
+        insert_into_table(
+            connection,
+            table_name=TABLE_STOCK_PRICE,
+            dataframe=df,
+            if_exists="append"
+        )
     return df
 
 if __name__ == '__main__':

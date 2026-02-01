@@ -14,7 +14,9 @@ WITH FilteredOptions AS (
         days_to_earnings,
         open_interest AS option_open_interest,
         expected_move,
-        ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY abs(greeks_delta) DESC) AS row_num
+        ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY abs(greeks_delta) DESC) AS row_num,
+        analyst_mean_target,
+        recommendation
     FROM
         "OptionDataMerged"
     WHERE
@@ -39,7 +41,9 @@ SelectedSellOptions AS (
         days_to_expiration,
         days_to_earnings,
         option_open_interest AS sell_open_interest,
-        expected_move AS sell_expected_move
+        expected_move AS sell_expected_move,
+        analyst_mean_target,
+        recommendation
     FROM
         FilteredOptions
     WHERE
@@ -63,6 +67,8 @@ SELECT
     sell.sell_theta,
     sell.sell_open_interest,
     sell.sell_expected_move,
+    sell.analyst_mean_target,
+    sell.recommendation,
     -- buy option
     buy.strike               AS buy_strike,
     buy.last_option_price    AS buy_last_option_price,

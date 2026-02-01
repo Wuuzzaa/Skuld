@@ -12,23 +12,14 @@
         master_data."symbol",
         coalesce(
                 daily."earnings_date",
-                weekly."earnings_date",
-                monthly."earnings_date",
-                master_data."earnings_date"  
+                master_data."earnings_date"
             ) as "earnings_date"
     FROM
         "DatesHistory" as dates
-        CROSS JOIN "EarningDatesMasterData" as master_data 
+        INNER JOIN "EarningDatesMasterData" as master_data
+        ON dates.date BETWEEN master_data.from_date AND master_data.to_date 
         LEFT JOIN "EarningDatesHistoryDaily" as daily
         ON dates.date = daily.snapshot_date
         AND master_data."symbol" = daily."symbol"
-        LEFT JOIN "EarningDatesHistoryWeekly" as weekly 
-        ON dates.isoyear = weekly.isoyear
-        AND dates.week = weekly.week
-        AND master_data."symbol" = weekly."symbol"
-        LEFT JOIN "EarningDatesHistoryMonthly" as monthly 
-        ON dates.year = monthly.year
-        AND dates.month = monthly.month
-        AND master_data."symbol" = monthly."symbol"
     ;
     
