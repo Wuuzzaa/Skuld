@@ -13,6 +13,10 @@ jobs:
       # Define Staging Domains here to be used in steps
       DOMAIN_NAME: test.skuld-options.com
       AUTH_DOMAIN: auth.test.skuld-options.com # Adjust if you use a different auth domain for staging
+      
+      # Increase timeouts for Docker operations to handle network flakiness
+      COMPOSE_HTTP_TIMEOUT: "300"
+      DOCKER_CLIENT_TIMEOUT: "300"
 
     steps:
       - name: Fix Permissions (Pre-Checkout)
@@ -96,7 +100,8 @@ jobs:
             # This cleans stopped containers, unused networks, and dangling images.
             # It also cleans unused images (not just dangling) because of -a.
             # CRITICAL: Do NOT use --volumes here.
-            docker system prune -af || true
+            # We removed -a to keep cached images (like postgres, traefik) and only remove dangling ones.
+            docker system prune -f || true
 
       - name: Ensure External Networks Exist
         run: |
