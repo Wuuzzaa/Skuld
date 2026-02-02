@@ -197,18 +197,17 @@ filtered_df = filtered_df[filtered_df['max_profit'] >= min_max_profit]
 if st.session_state.show_only_positiv_expected_value:
     filtered_df = filtered_df[filtered_df['expected_value'] >= 0]
 
-# Tag heute als Timestamp
-tag_heute = pd.Timestamp.now().normalize()
+# only spreads with no earnings till expiration
 
-# Konvertiere expiration_date zu Timestamp
+# helper variables
+today = pd.Timestamp.now().normalize()
 expiration_date_ts = pd.Timestamp(expiration_date)
 
-# Filter anwenden
 if st.session_state.show_only_spreads_with_no_earnings_till_expiration:
     filtered_df = filtered_df[
         ~(
-            (filtered_df['earnings_date'] > tag_heute) &
-            (filtered_df['earnings_date'] < expiration_date_ts)
+                (filtered_df['earnings_date'] > today) &
+                (filtered_df['earnings_date'] < expiration_date_ts)
         )
     ]
 # min_sell_iv
