@@ -36,7 +36,8 @@ services:
       - "traefik.http.routers.skuld.entrypoints=web"
       
       # Ensure middleware is attached (overriding base if needed)
-      - "traefik.http.routers.skuld.middlewares=authelia"
+      # We chain 'force-https' BEFORE 'authelia' so Authelia sees the correct proto
+      - "traefik.http.routers.skuld.middlewares=force-https,authelia"
 
       # Explicitly disable TLS on this router just in case
       - "traefik.http.routers.skuld.tls=false"
@@ -44,6 +45,9 @@ services:
       # Networking Fixes
       - "traefik.docker.network=web"
       
+      # Middleware: Force HTTPS Scheme (Fix for Cloudflare Tunnel -> HTTP Traefik)
+      - "traefik.http.middlewares.force-https.headers.customrequestheaders.X-Forwarded-Proto=https"
+
       # Override Authelia Middleware to allow HTTP scheme check bypass
       # We tell Authelia to redirect back to HTTPS (public URL)
       - "traefik.http.middlewares.authelia.forwardauth.address=http://authelia:9091/api/verify?rd=https://${AUTH_DOMAIN}/"
