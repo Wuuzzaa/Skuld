@@ -31,25 +31,15 @@ services:
     labels:
       # Define a dedicated Staging Router with higher priority to override the base one
       # We skip the 'enable=false' trick because it's prone to failure
-      - "traefik.http.routers.skuld-staging.rule=Host(`test.skuld-options.com`)"
-      # Allow both HTTP and HTTPS entrypoints. Cloudflare might choose either.
-      # We confirm Cloudflare sometimes uses HTTP (Flexible) even if Full is desired, causing 404 if TLS is forced.
-      # So we define TWO routers: one for TLS (443) and one for HTTP (80).
+      # Define a dedicated Staging Router by overriding the base 'skuld' router
+      - "traefik.http.routers.skuld.rule=Host(`test.skuld-options.com`)"
+      - "traefik.http.routers.skuld.entrypoints=web"
       
-      # --- SECURE ROUTER (Port 443) - DISABLED for Tunnel Mode
-      # - "traefik.http.routers.skuld-staging-secure.rule=Host(`test.skuld-options.com`)"
-      # - "traefik.http.routers.skuld-staging-secure.entrypoints=websecure"
-      # - "traefik.http.routers.skuld-staging-secure.tls=true"
-      # - "traefik.http.routers.skuld-staging-secure.service=skuld"
-      # - "traefik.http.routers.skuld-staging-secure.priority=100"
-      # - "traefik.http.routers.skuld-staging-secure.middlewares=authelia"
+      # Ensure middleware is attached (overriding base if needed)
+      - "traefik.http.routers.skuld.middlewares=authelia"
 
-      # --- INSECURE ROUTER (Port 80) ---
-      - "traefik.http.routers.skuld-staging-http.rule=Host(`test.skuld-options.com`)"
-      - "traefik.http.routers.skuld-staging-http.entrypoints=web"
-      - "traefik.http.routers.skuld-staging-http.service=skuld"
-      - "traefik.http.routers.skuld-staging-http.priority=99"
-      - "traefik.http.routers.skuld-staging-http.middlewares=authelia"
+      # Explicitly disable TLS on this router just in case
+      - "traefik.http.routers.skuld.tls=false"
 
       # Networking Fixes
       - "traefik.docker.network=web"
@@ -62,15 +52,10 @@ services:
     labels:
       # --- SECURE ROUTER (Port 443) - DISABLED for Tunnel
       # Updates the existing 'authelia' router from base config
-      # - "traefik.http.routers.authelia.rule=Host(`${AUTH_DOMAIN}`)"
-      # - "traefik.http.routers.authelia.entrypoints=websecure"
-      # - "traefik.http.routers.authelia.tls=true"
-      
-      # --- INSECURE ROUTER (Port 80) ---
-      # New router for HTTP fallback/Flexible SSL
-      - "traefik.http.routers.authelia-http.rule=Host(`${AUTH_DOMAIN}`)"
-      - "traefik.http.routers.authelia-http.entrypoints=web"
-      - "traefik.http.routers.authelia-http.service=authelia"
+      # Update 'authelia' router from base to use HTTP
+      - "traefik.http.routers.authelia.rule=Host(`${AUTH_DOMAIN}`)"
+      - "traefik.http.routers.authelia.entrypoints=web"
+      - "traefik.http.routers.authelia.tls=false"
       
       - "traefik.docker.network=web"
       
