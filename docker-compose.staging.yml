@@ -45,8 +45,9 @@ services:
       - "traefik.docker.network=web"
       
       # Override Authelia Middleware to allow HTTP scheme check bypass
-      # We tell Authelia to assume the scheme is http (matching Tunnel)
-      - "traefik.http.middlewares.authelia.forwardauth.address=http://authelia:9091/api/verify?rd=http://${AUTH_DOMAIN}/"
+      # We tell Authelia to redirect back to HTTPS (public URL)
+      - "traefik.http.middlewares.authelia.forwardauth.address=http://authelia:9091/api/verify?rd=https://${AUTH_DOMAIN}/"
+      - "traefik.http.middlewares.authelia.forwardauth.trustForwardHeader=true"
 
   authelia:
     labels:
