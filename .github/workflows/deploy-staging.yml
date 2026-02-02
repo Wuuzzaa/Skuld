@@ -12,7 +12,7 @@ jobs:
     env:
       # Define Staging Domains here to be used in steps
       DOMAIN_NAME: test.skuld-options.com
-      AUTH_DOMAIN: auth.test.skuld-options.com # Adjust if you use a different auth domain for staging
+      AUTH_DOMAIN: auth-test.skuld-options.com # Adjusted to match existing DNS record
       
       # Increase timeouts for Docker operations to handle network flakiness
       COMPOSE_HTTP_TIMEOUT: "300"

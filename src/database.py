@@ -90,9 +90,9 @@ def truncate_table(connection, table_name: str):
 
     if hasattr(connection, 'cursor'):
         with connection.cursor() as cur:
-            cur.execute(f'TRUNCATE "{table_name}"')
+            cur.execute(f'DELETE FROM "{table_name}"')
     else:
-        execute_sql(connection, f'TRUNCATE "{table_name}"', table_name, "TRUNCATE")
+        execute_sql(connection, f'DELETE FROM "{table_name}"', table_name, "TRUNCATE")
 
 def log_data_change(connection, operation_type, table_name, affected_rows=None, additional_data=None):
     """
