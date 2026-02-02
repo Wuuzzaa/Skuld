@@ -175,5 +175,11 @@ if __name__ == "__main__":
                             "historization"
                         ],
                         help="Mode for data collection")
+    parser.add_argument("--env", type=str, required=False, default=None,
+                        help="Environment name (e.g. Staging, Prod)")
     args = parser.parse_args()
+
+    if args.env:
+        os.environ['SKULD_ENV'] = args.env
+
     main(args)

@@ -48,9 +48,12 @@ jobs:
           echo "AUTH_SCHEME=http" >> .env
           
           # Secrets mapping - Using repository secrets. 
-          # Ensure these secrets are set for the repo or create Environment-specific secrets in GitHub.
+           # Ensure these secrets are set for the repo or create Environment-specific secrets in GitHub.
           echo "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" >> .env
-          echo "TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}" >> .env
+          # Use Staging Channel ID
+          echo "TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID_STAGING }}" >> .env
+          # Set Environment Name for Message Prefix
+          echo "SKULD_ENV=Staging" >> .env
           echo "MASSIVE_API_KEY=${{ secrets.MASSIVE_API_KEY }}" >> .env
           echo "MASSIVE_API_KEY_FLAT_FILES=${{ secrets.MASSIVE_API_KEY_FLAT_FILES }}" >> .env
           

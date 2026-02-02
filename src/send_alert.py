@@ -30,6 +30,11 @@ def send_telegram_message(title, message):
     elif "warning" in title.lower():
         emoji = "🟡"
 
+    # Prepend Environment if set
+    env_name = os.environ.get('SKULD_ENV')
+    if env_name:
+        title = f"[{env_name}] {title}"
+
     # Format the message
     full_message = f"{emoji} *{title}*\n\n{message}"
     
