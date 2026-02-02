@@ -52,6 +52,9 @@ with st.expander("Configuration and Filters", expanded=True):
         st.session_state.show_daily = False
     if 'show_only_positiv_expected_value' not in st.session_state:
         st.session_state.show_only_positiv_expected_value = True
+    if 'show_only_spreads_with_no_earnings_till_expiration' not in st.session_state:
+        st.session_state.show_only_spreads_with_no_earnings_till_expiration = True
+
 
     # first row
     col1, col2, col3, col4 = st.columns(4)
@@ -124,15 +127,14 @@ with st.expander("Configuration and Filters", expanded=True):
         st.checkbox("Show Daily", key="show_daily")
 
     with col8:
-        min_open_interest = st.number_input(
-            "Min Open Interest",
-            min_value=0,
-            value=100,
-            step=100
+        st.checkbox(
+            "Show only positive expected value",
+            key="show_only_positiv_expected_value"
         )
 
+
     # third row
-    col9, col10, col11 = st.columns(3)
+    col9, col10, col11, col12 = st.columns(4)
 
     with col9:
         min_max_profit = st.number_input(
@@ -144,9 +146,11 @@ with st.expander("Configuration and Filters", expanded=True):
         )
 
     with col10:
-        st.checkbox(
-            "Show only positive expected value",
-            key="show_only_positiv_expected_value"
+        min_open_interest = st.number_input(
+            "Min Open Interest",
+            min_value=0,
+            value=100,
+            step=100
         )
 
     with col11:
@@ -156,6 +160,12 @@ with st.expander("Configuration and Filters", expanded=True):
             value=0.3,
             step=0.05,
             format="%.2f"
+        )
+
+    with col12:
+        st.checkbox(
+            "Show only spreads with no earnings till expiration",
+            key="show_only_spreads_with_no_earnings_till_expiration"
         )
 
 # calculate the spread values with a loading indicator
@@ -187,13 +197,27 @@ filtered_df = filtered_df[filtered_df['max_profit'] >= min_max_profit]
 if st.session_state.show_only_positiv_expected_value:
     filtered_df = filtered_df[filtered_df['expected_value'] >= 0]
 
+# Tag heute als Timestamp
+tag_heute = pd.Timestamp.now().normalize()
+
+# Konvertiere expiration_date zu Timestamp
+expiration_date_ts = pd.Timestamp(expiration_date)
+
+# Filter anwenden
+if st.session_state.show_only_spreads_with_no_earnings_till_expiration:
+    filtered_df = filtered_df[
+        ~(
+            (filtered_df['earnings_date'] > tag_heute) &
+            (filtered_df['earnings_date'] < expiration_date_ts)
+        )
+    ]
 # min_sell_iv
 filtered_df = filtered_df[filtered_df['sell_iv'] >= min_sell_iv]
 
 # After the filters reset the index to ensure the zebra style works on the dataframe
 filtered_df.reset_index(drop=True, inplace=True)
 
-st.markdown("### Results")
+st.markdown(f"### {len(filtered_df)} Results")
 
 # optionstrat_url is only on the spread page so declare it here
 column_config = {
@@ -206,6 +230,7 @@ column_config = {
 
 # show final dataframe
 page_display_dataframe(filtered_df, page='spreads', symbol_column='symbol', column_config=column_config)
+
 
 # show documentation
 with st.expander("📖 Dokumentation - Feldübersicht", expanded=False):
