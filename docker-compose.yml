@@ -39,6 +39,7 @@ services:
   # --- FRONTEND SERVICE (Streamlit) ---
   skuld-frontend:
     image: skuld-app-image
+    pull_policy: never
     build: .
     container_name: skuld-frontend
     command: /app/start_frontend.sh
@@ -94,6 +95,7 @@ services:
   # --- BACKEND SERVICE (Cron / Scraper) ---
   skuld-backend:
     image: skuld-app-image
+    pull_policy: never
     build: .
     container_name: skuld-backend
     command: /app/start_backend.sh
