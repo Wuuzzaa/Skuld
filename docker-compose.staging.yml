@@ -12,15 +12,14 @@ services:
       - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.web.forwardedHeaders.insecure=true"
-      # Enable HTTPS entrypoint (Self-signed by default) to satisfy Cloudflare 'Full' SSL mode
-      - "--entrypoints.websecure.address=:443"
-      - "--entrypoints.websecure.forwardedHeaders.insecure=true"
+      # - "--entrypoints.websecure.address=:443"  <-- DISABLED to prevent HTTPS confusion
+      # - "--entrypoints.websecure.forwardedHeaders.insecure=true"
     environment:
       - DOCKER_API_VERSION=1.44
     ports:
       - "80:80"
       - "8080:8080"
-      - "443:443"
+      # - "443:443" <-- DISABLED
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
     networks:
@@ -56,8 +55,8 @@ services:
       - "traefik.docker.network=web"
       
       # Override Authelia Middleware to allow HTTP scheme check bypass
-      # We tell Authelia to assume the scheme is https via the RD param query
-      - "traefik.http.middlewares.authelia.forwardauth.address=http://authelia:9091/api/verify?rd=https://${AUTH_DOMAIN}/"
+      # We tell Authelia to assume the scheme is http (matching Tunnel)
+      - "traefik.http.middlewares.authelia.forwardauth.address=http://authelia:9091/api/verify?rd=http://${AUTH_DOMAIN}/"
 
   authelia:
     labels:
