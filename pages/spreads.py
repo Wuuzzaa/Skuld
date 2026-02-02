@@ -132,7 +132,7 @@ with st.expander("Configuration and Filters", expanded=True):
         )
 
     # third row
-    col9, col10 = st.columns(2)
+    col9, col10, col11 = st.columns(3)
 
     with col9:
         min_max_profit = st.number_input(
@@ -147,6 +147,15 @@ with st.expander("Configuration and Filters", expanded=True):
         st.checkbox(
             "Show only positive expected value",
             key="show_only_positiv_expected_value"
+        )
+
+    with col11:
+        min_sell_iv = st.number_input(
+            "Min sell iv",
+            min_value=0.0,
+            value=0.3,
+            step=0.05,
+            format="%.2f"
         )
 
 # calculate the spread values with a loading indicator
@@ -171,10 +180,15 @@ with st.spinner("Calculating spreads..."):
 # Apply spreadfilter
 filtered_df = spreads_df.copy()
 
+# min_max_profit
 filtered_df = filtered_df[filtered_df['max_profit'] >= min_max_profit]
 
+# only positive expected value
 if st.session_state.show_only_positiv_expected_value:
     filtered_df = filtered_df[filtered_df['expected_value'] >= 0]
+
+# min_sell_iv
+filtered_df = filtered_df[filtered_df['sell_iv'] >= min_sell_iv]
 
 # After the filters reset the index to ensure the zebra style works on the dataframe
 filtered_df.reset_index(drop=True, inplace=True)
