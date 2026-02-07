@@ -1,8 +1,14 @@
 import subprocess
+import os
 from datetime import datetime
 
 def get_version(cwd):
     """Get detailed version with commit count, hash, date and time."""
+    # Check for environment variable first (for Docker)
+    env_version = os.getenv('SKULD_VERSION')
+    if env_version:
+        return env_version
+
     try:
         count_result = subprocess.run(
             ['git', 'rev-list', '--count', 'HEAD'],
