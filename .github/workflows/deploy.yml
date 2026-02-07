@@ -44,7 +44,11 @@ jobs:
 
       - name: Get version
         id: get_version
-        run: echo "VERSION=$(git describe --tags --always --dirty)" >> $GITHUB_OUTPUT
+        run: |
+          COUNT=$(git rev-list --count HEAD)
+          HASH=$(git rev-parse --short HEAD)
+          DATE=$(git log -1 --format=%cd --date=format:'%Y-%m-%d %H:%M')
+          echo "VERSION=${COUNT}-${HASH} (${DATE})" >> $GITHUB_OUTPUT
 
       - name: Build and deploy Docker container (Production)
         run: |
