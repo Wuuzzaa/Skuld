@@ -6,8 +6,9 @@ import pandas as pd
 import logging
 from typing import Literal
 from sqlalchemy import create_engine, text, inspect
-from config import HISTORY_ENABLED_TABLES, PATH_DATABASE_FILE, SSH_PKEY_PATH, SSH_HOST, SSH_USER, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_PORT, POSTGRES_HOST
+from config import HISTORY_ENABLED_TABLES, PATH_DATABASE_FILE, SSH_PKEY_PATH, SSH_HOST, SSH_USER, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_PORT, POSTGRES_HOST, TABLE_STOCK_DAY_PRICES_YAHOO
 import numpy as np
+from src.yahooquery_scraper import YahooQueryScraper
 
 # logging
 logger = logging.getLogger(__name__)
@@ -371,6 +372,9 @@ def _run_migrations_for_engine(engine):
                     for table in HISTORY_ENABLED_TABLES:
                         add_from_date_to_date_master_data_table(connection, table)
                         # change_column_data_types(connection, table)
+            if label == "PostgreSQL" and last_migration_version == 20:
+                load_historical_prices()
+
             try:
                 with open(os.path.join(migrations_path, migration_file), "r") as f:
                     sql_script = f.read()
@@ -470,6 +474,7 @@ def _recreate_views_for_engine(engine):
             logger.info(f"[{label}] All views recreated successfully in {round(time.time() - start, 2)}s.")
         else:
             logger.info(f"[{label}] View recreation finished with errors in {round(time.time() - start, 2)}s.")
+            raise Exception(f"Failed to recreate some views in {label}: {pending_views}")
 
 
 def recreate_views():
@@ -932,3 +937,18 @@ def recover_history():
             conn.rollback()
             logger.error(f"Error inserting new date: {e}")
             raise e
+        
+def load_historical_prices():
+    yahoo_query = YahooQueryScraper.instance()
+    for df in yahoo_query.get_historical_prices(period='26y'):
+        if df is not None and not df.empty:
+            # rename date column to snapshot_date for consistency
+            if 'date' in df.columns:
+                df = df.rename(columns={'date': 'snapshot_date'})
+            with get_postgres_engine().begin() as connection:
+                insert_into_table(
+                    connection, 
+                    f"{TABLE_STOCK_DAY_PRICES_YAHOO}HistoryDaily", 
+                    df, 
+                    if_exists="append"
+                )

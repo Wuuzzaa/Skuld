@@ -8,7 +8,7 @@ from src.database import run_migrations
 from src.massiv_api import load_option_chains
 from src.price_and_technical_analysis_data_scrapper import scrape_and_save_price_and_technical_indicators
 from src.yahooquery_earning_dates import scrape_earning_dates
-from src.yahooquery_financials import generate_fundamental_data
+from src.yahooquery_financials import generate_fundamental_data, load_previous_day_prices
 from src.yfinance_analyst_price_targets import scrape_yahoo_finance_analyst_price_targets
 from config import *
 from src.dividend_radar import process_dividend_data
@@ -31,7 +31,7 @@ def main(args):
         run_successful = False
 
         run_migrations()
-    
+
         logger.info("#" * 80)
         logger.info(f"Starting Data Collection Pipeline (Full Parallel Mode)")
         logger.info(f"Symbol selection mode: {SYMBOL_SELECTION['mode']}")
@@ -133,6 +133,7 @@ def main(args):
             logger.info(f"{'=' * 80}\n")
 
         if args.mode == "historization" or args.mode == "all":
+            load_previous_day_prices()
             # Historization
             run_historization_pipeline()
         run_successful = True

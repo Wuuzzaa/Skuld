@@ -25,7 +25,7 @@ class YahooQueryScraper:
         self.batch_size = 100
         self.retries = 5
         self.symbol_batches = [self.symbols[i:i + self.batch_size] for i in range(0, len(self.symbols), self.batch_size)]
-        logger.info(f"Initializing {len(self.symbol_batches)} ticker batches")
+        logger.info(f"Initializing {len(self.symbol_batches)} ticker batches with batch size {self.batch_size} for YahooQueryScraper - total symbols: {len(self.symbols)}")
         # asynchronous=True, max_workers=2, is not possible because of the high number of symbols and the rate limit
         self.ticker_batches = [Ticker(symbol_batch, progress=True) for symbol_batch in self.symbol_batches]
         
@@ -169,6 +169,38 @@ class YahooQueryScraper:
         if not found_data:
             logger.warning("WARNING: No option data found for any symbols")
     
+    def get_historical_prices(self, period="1d"):
+        found_data = False
+        batch = 1
+        for ticker_batch in self.ticker_batches:
+            logger.info(f"({batch}/{len(self.ticker_batches)}) Batch")
+            batch += 1
+            for attempt in range(self.retries):
+                try:
+                    if len(self.symbols) > self.batch_size:
+                        logger.info(f"Fetching Yahoo historical data for batch of up to {self.batch_size} symbols...")
+                    df = ticker_batch.history(period=period, interval='1d')
+                    if df is not None and not df.empty:
+                        # symbol expiration_date and option-type from index to column
+                        df = df.reset_index()
+                        found_data = True
+                        logger.info(f"SUCCESS: {len(df)} historical prices found")
+                        yield df
+                    else:
+                        logger.warning(f"WARNING: No historical prices available")
+                        
+                except Exception as e:
+                    logger.error(f"ERROR: Error fetching historical prices - {str(e)}")
+                    logger.error(f"{attempt} failed -> Retry after 10s")
+                    time.sleep(10)
+                else: 
+                    # Success - exit the retry loop
+                    break
+            else:
+                logger.error(" ! " * 80)
+                logger.error("RETRY LIMIT REACHED")
+                logger.error(" ! " * 80)
+
     def validate_module_data(self, module_data):
         symbols_to_be_deleted = []
         for symbol, symbol_data in module_data.items():

@@ -4,7 +4,7 @@ import os
 import numpy as np
 import pandas as pd
 
-from config import TABLE_FUNDAMENTAL_DATA_YAHOO
+from config import TABLE_FUNDAMENTAL_DATA_YAHOO, TABLE_STOCK_DAY_PRICES_YAHOO
 from src.database import get_postgres_engine, insert_into_table, truncate_table
 from src.yahooquery_scraper import YahooQueryScraper
 from config_utils import get_filtered_symbols_with_logging
@@ -142,6 +142,23 @@ def generate_fundamental_data():
             dataframe=df_all_fundamentals,
             if_exists="append"
         )
+
+def load_previous_day_prices():
+    yahoo_query = YahooQueryScraper.instance()
+    with get_postgres_engine().begin() as connection:
+        truncate_table(connection, TABLE_STOCK_DAY_PRICES_YAHOO)
+        for df in yahoo_query.get_historical_prices(period='1d'):
+            if df is not None and not df.empty:
+                # drop date column
+                if 'date' in df.columns:
+                    df = df.drop(columns=['date'])
+                    insert_into_table(
+                        connection, 
+                        TABLE_STOCK_DAY_PRICES_YAHOO, 
+                        df, 
+                        if_exists="append"
+                    )
+                
 
 if __name__ == "__main__":
 
