@@ -8,7 +8,7 @@ WITH CleanedData AS (
         symbol,
         EXTRACT(YEAR FROM SNAPSHOT_DATE) as div_year,
         dividends
-    FROM "StockDayPricesYahooHistoryDaily"
+    FROM "StockPricesYahooHistoryDaily"
     WHERE dividends > 0 
       AND dividends < 5 -- Filtert die 21.90 und 51.06 Ausreißer aus deinem Bild
 ),

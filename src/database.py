@@ -389,7 +389,7 @@ def _run_migrations_for_engine(engine):
             except Exception as e:
                 logger.error(f"[{label}] Error applying migration {migration_file}: \n{e}")
                 raise e
-        if label == "PostgreSQL" and last_migration_version == 21:
+        if label == "PostgreSQL" and last_migration_version == 22:
             load_historical_prices()
         with connection.begin():
             if pending_migrations:

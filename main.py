@@ -8,7 +8,7 @@ from src.database import run_migrations
 from src.massiv_api import load_option_chains
 from src.price_and_technical_analysis_data_scrapper import scrape_and_save_price_and_technical_indicators
 from src.yahooquery_earning_dates import scrape_earning_dates
-from src.yahooquery_financials import generate_fundamental_data, load_previous_day_prices
+from src.yahooquery_financials import generate_fundamental_data, load_stock_prices
 from src.yfinance_analyst_price_targets import scrape_yahoo_finance_analyst_price_targets
 from config import *
 from src.dividend_radar import process_dividend_data
@@ -68,7 +68,7 @@ def main(args):
         elif args.mode == "marked_start_mid_end":
             parallel_tasks = [
                 ("Fetch Current Stock Prices", fetch_current_prices, ()),
-                ("Fetch Current Stock Day Prices", load_previous_day_prices, ()),
+                ("Fetch Current Stock Day Prices", load_stock_prices, ()),
             ]
         elif args.mode == "stock_data_daily":
             parallel_tasks = [

@@ -49,7 +49,7 @@ class DataAgingService:
         monthly_table = f"{source_table}HistoryMonthly"  
         master_data_table = f"{source_table}MasterData" 
 
-        key_columns, _ = get_table_key_and_data_columns(master_data_table)
+        key_columns, _ = get_table_key_and_data_columns(source_table)
         key_columns_str = ", ".join([f'"{col["name"]}"' for col in key_columns])
 
         logger.info(f"Processing {source_table} key {key_columns_str}...")

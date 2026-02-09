@@ -146,7 +146,7 @@ def generate_fundamental_data():
             if_exists="append"
         )
 
-def load_stock_day_prices():
+def load_stock_prices():
     logger.info("Fetching day stock prices (high, low, close) using YahooQueryScraper...")
     yahoo_query = YahooQueryScraper.instance()
     with get_postgres_engine().begin() as connection:
