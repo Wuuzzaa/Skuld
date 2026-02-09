@@ -68,6 +68,7 @@ def main(args):
         elif args.mode == "marked_start_mid_end":
             parallel_tasks = [
                 ("Fetch Current Stock Prices", fetch_current_prices, ()),
+                ("Fetch Current Stock Day Prices", load_previous_day_prices, ()),
             ]
         elif args.mode == "stock_data_daily":
             parallel_tasks = [
@@ -133,7 +134,6 @@ def main(args):
             logger.info(f"{'=' * 80}\n")
 
         if args.mode == "historization" or args.mode == "all":
-            load_previous_day_prices()
             # Historization
             run_historization_pipeline()
         run_successful = True

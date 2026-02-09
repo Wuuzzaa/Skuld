@@ -6,7 +6,7 @@ import pandas as pd
 import logging
 from typing import Literal
 from sqlalchemy import create_engine, text, inspect
-from config import HISTORY_ENABLED_TABLES, PATH_DATABASE_FILE, SSH_PKEY_PATH, SSH_HOST, SSH_USER, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_PORT, POSTGRES_HOST, TABLE_STOCK_DAY_PRICES_YAHOO
+from config import HISTORY_ENABLED_TABLES, PATH_DATABASE_FILE, SSH_PKEY_PATH, SSH_HOST, SSH_USER, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_PORT, POSTGRES_HOST, TABLE_STOCK_PRICES_YAHOO
 import numpy as np
 from src.yahooquery_scraper import YahooQueryScraper
 
@@ -372,8 +372,6 @@ def _run_migrations_for_engine(engine):
                     for table in HISTORY_ENABLED_TABLES:
                         add_from_date_to_date_master_data_table(connection, table)
                         # change_column_data_types(connection, table)
-            if label == "PostgreSQL" and last_migration_version == 20:
-                load_historical_prices()
 
             try:
                 with open(os.path.join(migrations_path, migration_file), "r") as f:
@@ -391,7 +389,8 @@ def _run_migrations_for_engine(engine):
             except Exception as e:
                 logger.error(f"[{label}] Error applying migration {migration_file}: \n{e}")
                 raise e
-
+        if label == "PostgreSQL" and last_migration_version == 21:
+            load_historical_prices()
         with connection.begin():
             if pending_migrations:
                 last_migration_version = int(pending_migrations[-1].split(".")[0])
@@ -948,7 +947,7 @@ def load_historical_prices():
             with get_postgres_engine().begin() as connection:
                 insert_into_table(
                     connection, 
-                    f"{TABLE_STOCK_DAY_PRICES_YAHOO}HistoryDaily", 
+                    f"{TABLE_STOCK_PRICES_YAHOO}HistoryDaily", 
                     df, 
                     if_exists="append"
                 )
