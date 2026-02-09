@@ -391,6 +391,7 @@ def _run_migrations_for_engine(engine):
                 raise e
         if label == "PostgreSQL" and last_migration_version == 22:
             load_historical_prices()
+            #todo kann das hier raus? sonst müssen die symbols übergeben werden an die migrationen
         with connection.begin():
             if pending_migrations:
                 last_migration_version = int(pending_migrations[-1].split(".")[0])

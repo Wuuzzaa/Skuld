@@ -144,9 +144,9 @@ def generate_fundamental_data(symbols):
             if_exists="append"
         )
 
-def load_stock_prices():
+def load_stock_prices(symbols):
     logger.info("Fetching day stock prices (high, low, close) using YahooQueryScraper...")
-    yahoo_query = YahooQueryScraper.instance()
+    yahoo_query = YahooQueryScraper.instance(symbols)
     with get_postgres_engine().begin() as connection:
         truncate_table(connection, TABLE_STOCK_PRICES_YAHOO)
         for df in yahoo_query.get_historical_prices(period='1d'):

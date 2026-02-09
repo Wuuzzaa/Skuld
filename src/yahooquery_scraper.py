@@ -119,6 +119,38 @@ class YahooQueryScraper:
             df.info(memory_usage='deep')
             return df
 
+    def get_historical_prices(self, period="1d"):
+        found_data = False
+        batch = 1
+        for ticker_batch in self.ticker_batches:
+            logger.info(f"({batch}/{len(self.ticker_batches)}) Batch")
+            batch += 1
+            for attempt in range(self.retries):
+                try:
+                    if len(self.symbols) > self.batch_size:
+                        logger.info(f"Fetching Yahoo historical data for batch of up to {self.batch_size} symbols...")
+                    df = ticker_batch.history(period=period, interval='1d')
+                    if df is not None and not df.empty:
+                        # symbol expiration_date and option-type from index to column
+                        df = df.reset_index()
+                        found_data = True
+                        logger.info(f"SUCCESS: {len(df)} historical prices found")
+                        yield df
+                    else:
+                        logger.warning(f"WARNING: No historical prices available")
+
+                except Exception as e:
+                    logger.error(f"ERROR: Error fetching historical prices - {str(e)}")
+                    logger.error(f"{attempt} failed -> Retry after 10s")
+                    time.sleep(10)
+                else:
+                    # Success - exit the retry loop
+                    break
+            else:
+                logger.error(" ! " * 80)
+                logger.error("RETRY LIMIT REACHED")
+                logger.error(" ! " * 80)
+
     def get_modules(self, force_refresh=False):
         data = self._load_module_data(force_refresh)
         return data

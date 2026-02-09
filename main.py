@@ -36,7 +36,9 @@ def main(args):
         logger.info(f"Starting Data Collection Pipeline")
         logger.info("#" * 80)
 
-        # todo symbols als dataframe aufbereiten. kommt in die datenbank. weiterhin einen task um symbols am wochenende zu bestimmen. symbols werden aus der db gelesen falls möglich.
+        # todo symbols als dataframe aufbereiten. kommt in die datenbank. weiterhin einen task um symbols am Wochenende
+        # todo zu bestimmen. symbols werden aus der db gelesen falls möglich. Sonst via massive bestimmt.
+        # todo spalten symbol, is_stock, is_index, has_options, exchange_massive, exchange_yahoo(hier muss ich noch schauen wie gemapt werden kann)
         symbols = get_symbols()
 
         # select the data collection tasks to run
@@ -55,11 +57,13 @@ def main(args):
                 ("Yahoo Finance Analyst Price Targets", scrape_yahoo_finance_analyst_price_targets, (symbols["stocks"])),
                 ("Earning Dates", scrape_earning_dates, (symbols["stocks"])),
                 ("Yahoo Query Fundamentals", generate_fundamental_data, (symbols["stocks"])),
+                #todo task für symbole anpassen
             ]
         elif args.mode == "marked_start_mid_end":
+            #todo werden hier beide benötigt?
             parallel_tasks = [
-                ("Fetch Current Stock Prices", fetch_current_prices, ()),
-                ("Fetch Current Stock Day Prices", load_stock_prices, ()),
+                ("Fetch Current Stock Prices", fetch_current_prices, (symbols["stocks"])),
+                ("Fetch Current Stock Day Prices", load_stock_prices, (symbols["stocks"])),
             ]
         elif args.mode == "stock_data_daily":
             parallel_tasks = [
