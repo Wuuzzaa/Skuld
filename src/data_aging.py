@@ -49,7 +49,7 @@ class DataAgingService:
         monthly_table = f"{source_table}HistoryMonthly"  
         master_data_table = f"{source_table}MasterData" 
 
-        key_columns, _ = get_table_key_and_data_columns(master_data_table)
+        key_columns, _ = get_table_key_and_data_columns(source_table)
         key_columns_str = ", ".join([f'"{col["name"]}"' for col in key_columns])
 
         logger.info(f"Processing {source_table} key {key_columns_str}...")
@@ -493,7 +493,7 @@ class DataAgingService:
                 {history_where_str}
                 AND {key_where_str}
             """
-            logger.info(null_sql)
+            logger.debug(null_sql)
 
             logger.info(f"Start execution: NULL columns in {table}")
             with pg_engine.begin() as conn:

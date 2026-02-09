@@ -42,6 +42,14 @@ jobs:
             --exclude 'authelia/storage_encryption_key' \
             ./ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/skuld/
 
+      - name: Get version
+        id: get_version
+        run: |
+          COUNT=$(git rev-list --count HEAD)
+          HASH=$(git rev-parse --short HEAD)
+          DATE=$(git log -1 --format=%cd --date=format:'%Y-%m-%d %H:%M')
+          echo "VERSION=${COUNT}-${HASH} (${DATE})" >> $GITHUB_OUTPUT
+
       - name: Build and deploy Docker container (Production)
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
@@ -62,6 +70,7 @@ jobs:
             echo "TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}" >> .env
             echo "MASSIVE_API_KEY=${{ secrets.MASSIVE_API_KEY }}" >> .env
             echo "MASSIVE_API_KEY_FLAT_FILES=${{ secrets.MASSIVE_API_KEY_FLAT_FILES }}" >> .env
+            echo "SKULD_VERSION=${{ steps.get_version.outputs.VERSION }}" >> .env
             echo "POSTGRES_HOST=postgres_setup-db-1" >> .env
             echo "POSTGRES_DB=Skuld" >> .env
             echo "POSTGRES_USER=admin" >> .env

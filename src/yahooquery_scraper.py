@@ -24,7 +24,7 @@ class YahooQueryScraper:
         self.batch_size = 100
         self.retries = 5
         self.symbol_batches = [self.symbols[i:i + self.batch_size] for i in range(0, len(self.symbols), self.batch_size)]
-        logger.info(f"Initializing {len(self.symbol_batches)} ticker batches")
+        logger.info(f"Initializing {len(self.symbol_batches)} ticker batches with batch size {self.batch_size} for YahooQueryScraper - total symbols: {len(self.symbols)}")
         # asynchronous=True, max_workers=2, is not possible because of the high number of symbols and the rate limit
         self.ticker_batches = [Ticker(symbol_batch, progress=True) for symbol_batch in self.symbol_batches]
         

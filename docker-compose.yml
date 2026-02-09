@@ -49,6 +49,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - TZ=Europe/Berlin
+      - SKULD_VERSION=${SKULD_VERSION:-}
     restart: unless-stopped
     networks:
       - web
@@ -104,6 +105,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - TZ=Europe/Berlin
+      - SKULD_VERSION=${SKULD_VERSION:-}
     restart: unless-stopped
     networks:
       - web
