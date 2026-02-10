@@ -56,7 +56,8 @@ def main(args):
                 ("Dividend Radar", process_dividend_data, ()),
                 ("Earning Dates", scrape_earning_dates, ()),
                 ("Yahoo Query Fundamentals", generate_fundamental_data, ()),
-                ("Fetch Current Stock Prices", fetch_current_prices, ()),
+                # ("Fetch Current Stock Prices", fetch_current_prices, ()),
+                ("Fetch Current Stock Day Prices", load_stock_prices, ()),
             ]
         elif args.mode == "saturday_night":
             parallel_tasks = [
@@ -67,7 +68,7 @@ def main(args):
             ]
         elif args.mode == "marked_start_mid_end":
             parallel_tasks = [
-                ("Fetch Current Stock Prices", fetch_current_prices, ()),
+                # ("Fetch Current Stock Prices", fetch_current_prices, ()),
                 ("Fetch Current Stock Day Prices", load_stock_prices, ()),
             ]
         elif args.mode == "stock_data_daily":

@@ -476,7 +476,6 @@ SELECT
 	a."Summary_navPrice",
 
 	-- FundamentalDataDividendRadar
-	CASE WHEN b."Symbol" IS NOT NULL THEN TRUE ELSE FALSE END as has_fundamental_data_dividend_radar,
 	b."Company", 
 	b."FV", 
 	b."Sector", 
