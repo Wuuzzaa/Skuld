@@ -6,7 +6,7 @@ from sqlalchemy import text
 from config import HISTORY_ENABLED_TABLES, HISTORY_ENABLED_VIEWS
 from src.database import column_exists, drop_all_views, get_database_engine, execute_sql, get_postgres_engine, get_table_key_and_data_columns, mapping_sqlite_to_postgres, pg_migrate_week_to_ISO_week, recreate_views, run_migrations, select_into_dataframe, table_exists, view_exists
 from src.decorator_log_function import log_function
-from src.data_aging import DataAgingService, get_history_select_statement, is_weekend
+from src.data_aging import DataAgingService, get_history_select_statement, is_weekend, is_classified_for_master_data
 from src.util import executed_as_github_action
 
 logger = logging.getLogger(__name__)
@@ -31,8 +31,6 @@ def run_historization_pipeline():
             pass
 
         for table in HISTORY_ENABLED_TABLES:
-            # sql = get_history_select_statement(table, optimized=True)
-            # logger.info(f"Data Aging SQL for {table}:\n{sql}")
             DataAgingService.run(source_table=table)
             pass
 
@@ -53,8 +51,6 @@ def run_daily_historization(source_table: str):
     start_time = time.time()
     
     history_table = f"{source_table}HistoryDaily"
-    key_columns, data_columns = get_table_key_and_data_columns(source_table)
-    key_column_names = [col['name'] for col in key_columns]
 
     logger.info(f"Starting historization from {source_table} to {history_table}")
     _create_history_tables_and_view_if_not_exist(source_table)
@@ -63,38 +59,46 @@ def run_daily_historization(source_table: str):
         logger.info("It's weekend, skipping daily historization.")
         return
     
-    delete_sqlite_history(source_table)
+    # delete_sqlite_history(source_table)
 
-    # 1. Get columns from source table
-    source_columns = _get_columns(source_table)
-    if not source_columns:
-        logger.error(f"Source table {source_table} not found or has no columns.")
+    insert_into_daily_history_table(source_table)
+    insert_into_master_data_table(source_table)
+
+    duration = time.time() - start_time
+    logger.info(f"Historization for {source_table} finished in {duration:.2f}s")
+
+def insert_into_daily_history_table(source_table):
+
+    history_table = f"{source_table}HistoryDaily"
+    key_columns, data_columns = get_table_key_and_data_columns(source_table)
+    key_column_names = [col['name'] for col in key_columns]
+    
+    # filter out columns which are classified as master data columns
+    data_column_names = []
+    for col in data_columns:
+        if not is_classified_for_master_data(source_table, col['name']):
+            data_column_names.append(col['name'])
+    data_columns = []
+
+    if not data_column_names:
+        logger.info(f"No data columns to historize for {history_table}, skipping.")
         return
 
-    column_names = [col['name'] for col in source_columns]
-    data_column_names = [col['name'] for col in data_columns]
-        
-    # 2. Build the SQL statement
-    # Target columns: snapshot_date + original columns
-    target_cols_str = "snapshot_date, " + ", ".join([f'"{c}"' for c in column_names])
-    select_cols_str = ", ".join([f'"{c}"' for c in column_names])
-    
-    # Update clause for UPSERT
-    # Exclude conflict keys from the update set
+    logger.info(f"Data columns to historize for {history_table}: {data_column_names}")
 
-    conflict_target = ", ".join([f'"{key_col}"' for key_col in key_column_names])
+    data_column_names_str = ", ".join([f'"{c}"' for c in data_column_names])
+    key_column_names_str = ", ".join([f'"{c}"' for c in key_column_names])
+        
     update_clause = ", ".join([f'"{col}" = excluded."{col}"' for col in data_column_names])
     where_clause = " OR ".join([f'hist."{col}" IS DISTINCT FROM excluded."{col}"' for col in data_column_names])
         
-
-
     pg_engine = get_postgres_engine()
     if pg_engine:
         pg_sql = f"""
-            INSERT INTO "{history_table}" as hist ({target_cols_str})
-            SELECT CURRENT_DATE, {select_cols_str}
+            INSERT INTO "{history_table}" as hist (snapshot_date, {key_column_names_str}, {data_column_names_str})
+            SELECT CURRENT_DATE, {key_column_names_str}, {data_column_names_str}
             FROM "{source_table}"
-            ON CONFLICT(snapshot_date, {conflict_target}) DO UPDATE SET
+            ON CONFLICT(snapshot_date, {key_column_names_str}) DO UPDATE SET
             {update_clause}
             WHERE {where_clause}
         """
@@ -107,8 +111,49 @@ def run_daily_historization(source_table: str):
                 logger.error(f"Error during historization execution on Postgres: {e}")
                 raise e
 
-    duration = time.time() - start_time
-    logger.info(f"Historization for {source_table} finished in {duration:.2f}s")
+def insert_into_master_data_table(source_table):
+
+    history_table = f"{source_table}MasterData"
+    key_columns, data_columns = get_table_key_and_data_columns(source_table)
+    key_column_names = [col['name'] for col in key_columns]
+    
+    # filter columns which are classified as master data columns
+    data_column_names = []
+    for col in data_columns:
+        if is_classified_for_master_data(source_table, col['name']):
+            data_column_names.append(col['name'])
+    data_columns = []
+
+    if not data_column_names:
+        logger.info(f"No data columns to historize for {history_table}, skipping.")
+        return
+    
+    logger.info(f"Data columns to historize for {history_table}: {data_column_names}")
+
+    data_column_names_str = ", ".join([f'"{c}"' for c in data_column_names])
+    key_column_names_str = ", ".join([f'"{c}"' for c in key_column_names])
+        
+    update_clause = ", ".join([f'"{col}" = excluded."{col}"' for col in data_column_names])
+    where_clause = " OR ".join([f'hist."{col}" IS DISTINCT FROM excluded."{col}"' for col in data_column_names])
+        
+    pg_engine = get_postgres_engine()
+    if pg_engine:
+        pg_sql = f"""
+            INSERT INTO "{history_table}" as hist ({key_column_names_str}, {data_column_names_str})
+            SELECT {key_column_names_str}, {data_column_names_str}
+            FROM "{source_table}"
+            ON CONFLICT({key_column_names_str}) DO UPDATE SET
+            {update_clause}
+            WHERE {where_clause}
+        """
+        with pg_engine.begin() as connection:
+            try:
+                # Use the new helper function to execute and log
+                execute_sql(connection, pg_sql, history_table, "UPSERT", f"Historize data from {source_table} to {history_table}")
+                pass
+            except Exception as e:
+                logger.error(f"Error during historization execution on Postgres: {e}")
+                raise e
 
 def delete_sqlite_history(source_table):
     daily_table = f"{source_table}HistoryDaily"
@@ -183,10 +228,10 @@ def _create_history_tables_and_view_if_not_exist(source_table: str):
     table = source_table
   
     daily_history_table_name, create_daily_table_sql = _get_daily_history_table_name_create_statement(table)
+    # write sql to file "{daily_history_table_name}.sql" to db/SQL/tables/create_table/history/
+    with open(f"{path_sql_create_table_statements}/{daily_history_table_name}.sql", "w") as f:
+        f.write(create_daily_table_sql)
     if not table_exists(daily_history_table_name):
-        # write sql to file "{daily_history_table_name}.sql" to db/SQL/tables/create_table/history/
-        with open(f"{path_sql_create_table_statements}/{daily_history_table_name}.sql", "w") as f:
-            f.write(create_daily_table_sql)
         with pg_engine.begin() as connection:
             execute_sql(connection, create_daily_table_sql, daily_history_table_name, "CREATE TABLE")
     
