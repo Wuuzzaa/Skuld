@@ -27,7 +27,6 @@ SELECT
 	a."day_vwap",
 	a."day_last_updated", 
 	-- OptionPricingMetrics
-	a.has_option_pricing_metrics,
 	a.days_to_expiration,
 	a.premium_option_price,
 	a.spread,
@@ -38,7 +37,6 @@ SELECT
     a.strike_stock_price_difference_ptc,
 
     -- Fundamental Data
-	b.has_fundamental_data_dividend_radar,
 	b."Company", 
 	b."FV", 
 	b."Sector", 
@@ -550,18 +548,18 @@ SELECT
 	b."Summary_navPrice",
 
     -- Stock Data
-	CASE WHEN c.symbol IS NOT NULL THEN TRUE ELSE FALSE END as has_stock_data,
-	c.has_earnings_date,
-	c.has_analyst_price_target,
 	c.live_stock_price,
-    c.price_source,
-    c.live_price_timestamp,
     c.earnings_date,
 	c.days_to_earnings,
     c.analyst_mean_target,
+	-- StockImpliedVolatilityMassive
+    c.iv,
+    c.iv_low,
+    c.iv_high,
+    c.iv_rank,
+    c.iv_percentile,
 
     -- Technical Indicators
-	CASE WHEN d.symbol IS NOT NULL THEN TRUE ELSE FALSE END as has_technical_indicators,
     d."Recommend.Other", 
 	d."Recommend.All", 
 	d."Recommend.MA", 

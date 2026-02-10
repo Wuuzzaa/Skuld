@@ -28,7 +28,6 @@ SELECT
 	a."day_last_updated", 
 
 	-- OptionPricingMetrics
-	CASE WHEN d.option_osi IS NOT NULL THEN TRUE ELSE FALSE END as has_option_pricing_metrics,
 	d.days_to_expiration,
 	d.premium_option_price,
 	d.spread,

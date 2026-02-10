@@ -21,11 +21,6 @@ class DataAgingService:
         nulled out in the daily table.
         """
 
-        # only run on mondays
-        # if not is_monday():
-        #     logger.info(f"Data aging skipped - runs only on Mondays.")
-        #     return
-
         logger.info(f"Starting data aging for {source_table}...")
         start_time = time.time()
         
@@ -49,7 +44,7 @@ class DataAgingService:
         monthly_table = f"{source_table}HistoryMonthly"  
         master_data_table = f"{source_table}MasterData" 
 
-        key_columns, _ = get_table_key_and_data_columns(master_data_table)
+        key_columns, _ = get_table_key_and_data_columns(source_table)
         key_columns_str = ", ".join([f'"{col["name"]}"' for col in key_columns])
 
         logger.info(f"Processing {source_table} key {key_columns_str}...")
@@ -111,41 +106,12 @@ class DataAgingService:
                 continue
             
             history_select = get_history_select_statement(source_table, optimized=True, needed_data_columns=[col_name], min_bucket='weekly')
-            # key_columns_not_exist_higher_bucket_str = " AND ".join([f'DAILY."{col["name"]}" = HIGHER_BUCKET."{col["name"]}"' for col in key_columns])
             key_columns_not_exist_higher_bucket_str = " AND ".join([f'SUBQUERY."{col["name"]}" = HIGHER_BUCKET."{col["name"]}"' for col in key_columns])
 
 
             with pg_engine.begin() as conn:
                 # 1. Promote to Weekly (Insert/Update)
                 # We insert the constant value. We primarily use min(val) since min=max.
-                
-                # pg_promote_sql = f"""
-                #     INSERT INTO "{weekly_table}" (
-                #         isoyear, week, {key_columns_str}, "{col_name}"
-                #     )
-                #     SELECT
-                #         EXTRACT(ISOYEAR FROM snapshot_date::date)::int as isoyear,
-                #         EXTRACT(WEEK FROM snapshot_date::date)::int as week,
-                #         {key_columns_str},
-                #         MIN("{col_name}") as val
-                #     FROM "{daily_table}" AS DAILY
-                #     WHERE "{col_name}" IS NOT NULL
-                #         -- AND date_trunc('week', snapshot_date::date) < date_trunc('week', CURRENT_DATE) -- exclude current week
-                #         AND NOT EXISTS (
-                #             SELECT 
-                #                 1
-                #             FROM ({history_select}) AS HIGHER_BUCKET
-                #             WHERE DAILY.snapshot_date = HIGHER_BUCKET.date
-                #             AND {key_columns_not_exist_higher_bucket_str}
-                #             -- AND DAILY."{col_name}" = HIGHER_BUCKET."{col_name}"
-                #             AND "{col_name}" IS NOT NULL
-                #         )
-                #     GROUP BY isoyear, week, {key_columns_str}
-                #     HAVING 
-                #         (MIN("{col_name}") = MAX("{col_name}"))
-                #     ON CONFLICT(isoyear, week, {key_columns_str}) 
-                #     DO UPDATE SET "{col_name}" = excluded."{col_name}"
-                # """
 
                 pg_promote_sql = f"""
                     INSERT INTO "{weekly_table}" (
@@ -202,9 +168,6 @@ class DataAgingService:
         logger.info(f"Data promoted from daily to weekly in {round(time.time() - start_time, 2)}s.")
 
     def _promote_data_from_weekly_to_monthly(source_table: str):
-        # if not is_first_weekday_of_month():
-        #     logger.info(f"Data aging promotion to month skipped - runs only on first weekday of the month.")
-        #     return
         start_time = time.time()
         
         pg_engine = get_postgres_engine()
@@ -218,8 +181,6 @@ class DataAgingService:
         key_columns, data_columns = get_table_key_and_data_columns(master_data_table)
         key_columns_str = ", ".join([f'"{col["name"]}"' for col in key_columns])
 
-        # key_columns_not_exist_month_str = " AND ".join([f'HISTORY_SELECT."{col["name"]}" = MONTHLY."{col["name"]}"' for col in key_columns])
-        # key_columns_not_exist_master_str = " AND ".join([f'HISTORY_SELECT."{col["name"]}" = MASTER_DATA."{col["name"]}"' for col in key_columns])
         key_columns_not_exist_month_str = " AND ".join([f'SUBQUERY."{col["name"]}" = MONTHLY."{col["name"]}"' for col in key_columns])
         key_columns_not_exist_master_str = " AND ".join([f'SUBQUERY."{col["name"]}" = MASTER_DATA."{col["name"]}"' for col in key_columns])
 
@@ -239,43 +200,7 @@ class DataAgingService:
             with pg_engine.begin() as conn:
                 # 1. Promote to Monthly (Insert/Update)
                 # We insert the constant value. We primarily use min(val) since min=max.
-                
-                # promote_sql = f"""
-                #     INSERT INTO "{monthly_table}" (
-                #         year, month, {key_columns_str}, "{col_name}"
-                #     )
-                #     SELECT
-                #         year,
-                #         month,
-                #         {key_columns_str},
-                #         MIN("{col_name}") as val
-                #     FROM ({history_select}) AS HISTORY_SELECT
-                #     WHERE "{col_name}" IS NOT NULL
-                #         AND NOT EXISTS (
-                #             SELECT 
-                #                 1 
-                #             FROM "{monthly_table}" AS MONTHLY
-                #             WHERE HISTORY_SELECT.year = MONTHLY.year
-                #             AND HISTORY_SELECT.month = MONTHLY.month
-                #             AND {key_columns_not_exist_month_str} 
-                #             AND HISTORY_SELECT."{col_name}" = MONTHLY."{col_name}"
-                #             AND "{col_name}" IS NOT NULL
-                #         )
-                #         AND NOT EXISTS (
-                #             SELECT 
-                #                 1 
-                #             FROM "{master_data_table}" AS MASTER_DATA
-                #             WHERE {key_columns_not_exist_master_str}
-                #             AND HISTORY_SELECT."{col_name}" = MASTER_DATA."{col_name}"
-                #             AND "{col_name}" IS NOT NULL
-                #         )
-                #     GROUP BY year, month, {key_columns_str}
-                #     HAVING 
-                #         (MIN("{col_name}") = MAX("{col_name}"))
-                #     ON CONFLICT(year, month, {key_columns_str}) 
-                #     DO UPDATE SET "{col_name}" = excluded."{col_name}"
-                # """
-
+            
                 promote_sql = f"""
                     INSERT INTO "{monthly_table}" (
                         year, month, {key_columns_str}, "{col_name}"
@@ -348,7 +273,6 @@ class DataAgingService:
     
         key_columns, data_columns = get_table_key_and_data_columns(master_data_table)
         key_columns_str = ", ".join([f'"{col["name"]}"' for col in key_columns])
-        # key_columns_not_exist_master_str = " AND ".join([f'HISTORY_SELECT."{col["name"]}" = MASTER_DATA."{col["name"]}"' for col in key_columns])
         key_columns_not_exist_master_str = " AND ".join([f'SUBQUERY."{col["name"]}" = MASTER_DATA."{col["name"]}"' for col in key_columns])
 
 
@@ -356,7 +280,7 @@ class DataAgingService:
         for col in data_columns:
             col_name = col['name']
             col_type = col['type']
-            if is_classified_for_daily(source_table, col_name) or is_classified_for_weekly(source_table, col_name) or is_classified_for_monthly(source_table, col_name):
+            if is_classified(source_table, col_name):
                 logger.info(f"Skipping column {col_name} as it is not classified for Master Data promotion.")
                 continue
 
@@ -365,37 +289,6 @@ class DataAgingService:
                 logger.info(f"[PostgreSQL] Processing {source_table} column {col_name}...")
                 # 1. Promote to Master Data (Insert/Update)
                 # We insert the constant value. We primarily use min(val) since min=max.
-                
-                # promote_sql = f"""
-                #     INSERT INTO "{master_data_table}" (
-                #         {key_columns_str}, "{col_name}"
-                #     )
-                #     SELECT
-                #         {key_columns_str},
-                #         MIN("{col_name}") as "{col_name}"
-                #     FROM ({history_select}) AS HISTORY_SELECT
-                #     WHERE "{col_name}" IS NOT NULL
-                #         AND NOT EXISTS (
-                #             SELECT 
-                #                 1 
-                #             FROM "{master_data_table}" AS MASTER_DATA
-                #             WHERE {key_columns_not_exist_master_str}
-                #             --AND  HISTORY_SELECT."{col_name}" = MASTER_DATA."{col_name}"
-                #             AND "{col_name}" IS NOT NULL
-                #         )
-                #     GROUP BY {key_columns_str}
-                #     HAVING 
-                #         MIN("{col_name}") = MAX("{col_name}")
-                #         OR EXISTS(
-                #             SELECT 1 
-                #             FROM "DataAgingFieldClassification" AS dac
-                #             WHERE dac.table_name = '{source_table}' 
-                #                 AND dac.field_name = '{col_name}' 
-                #                 AND dac.tier = 'Master'
-                #         )                
-                #     ON CONFLICT({key_columns_str}) 
-                #     DO UPDATE SET "{col_name}" = excluded."{col_name}"
-                # """
 
                 promote_sql = f"""
                     INSERT INTO "{master_data_table}" (
@@ -457,12 +350,20 @@ class DataAgingService:
         # Determine the underlying history tables
         # For simplicity, we assume the naming convention is consistent
 
+        key_columns, data_columns = get_table_key_and_data_columns(source_table)
+        data_column_names = []
+        for col in data_columns:
+            if not is_classified(source_table, col['name']):
+                data_column_names.append(col['name'])
+
+        if data_column_names == []:
+            logger.info(f"No data columns to clean up for {source_table}. Skipping cleanup.")
+            return
+        
+        key_where_str = " AND ".join([f'original."{col["name"]}" = higher_bucket_data."{col["name"]}"' for col in key_columns])
+        
         for bucket in ['Daily']: #['Monthly', 'Weekly', 'Daily']:
             table = f"{source_table}History{bucket}"
-            key_columns, data_columns = get_table_key_and_data_columns(source_table)
-            data_column_names = [col['name'] for col in data_columns]
-
-            key_where_str = " AND ".join([f'original."{col["name"]}" = higher_bucket_data."{col["name"]}"' for col in key_columns])
 
             # check if data is in higher bucket
             if bucket.lower() == 'daily':
@@ -483,7 +384,7 @@ class DataAgingService:
                     AND original.month = higher_bucket_data.month
                 """
 
-            history_select = get_history_select_statement(source_table, optimized=True, min_bucket=min_bucket)
+            history_select = get_history_select_statement(source_table, optimized=True, min_bucket=min_bucket, needed_data_columns=data_column_names)
             update_columns = ", ".join([f'"{col}" = CASE WHEN higher_bucket_data."{col}" IS NOT NULL THEN NULL ELSE original."{col}" END' for col in data_column_names])
             null_sql = f"""
                 UPDATE "{table}" AS original
@@ -507,7 +408,8 @@ class DataAgingService:
                     raise e
 
             # Build the SQL to delete rows where all data columns are NULL
-            null_conditions = " AND ".join([f'"{col}" IS NULL' for col in data_column_names])
+            all_data_column_names = [col['name'] for col in data_columns]
+            null_conditions = " AND ".join([f'"{col}" IS NULL' for col in all_data_column_names])
             delete_sql = f"""
                 DELETE FROM "{table}"
                 WHERE {null_conditions}
@@ -578,6 +480,10 @@ def is_classified_for_weekly(source_table: str, column_name: str) -> bool:
 
 def is_classified_for_monthly(source_table: str, column_name: str) -> bool:
     return _check_classification(source_table, column_name, 'Monthly')    
+
+def is_classified(source_table: str, column_name: str) -> bool:
+    return is_classified_for_master_data(source_table, column_name) or is_classified_for_daily(source_table, column_name) or is_classified_for_weekly(source_table, column_name) or is_classified_for_monthly(source_table, column_name)    
+
 
 
 def get_history_select_statement(table_name: str, optimized: bool = True, needed_data_columns: list[str] | None = None, min_bucket: str  | None = None) -> str:

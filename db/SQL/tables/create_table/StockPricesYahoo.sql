@@ -1,0 +1,12 @@
+CREATE TABLE IF NOT EXISTS "StockPricesYahoo" (
+    symbol TEXT,
+	open DOUBLE PRECISION,
+	high DOUBLE PRECISION,
+	low DOUBLE PRECISION,
+	close DOUBLE PRECISION,
+	volume BIGINT,
+	adjclose DOUBLE PRECISION,
+	dividends REAL,
+	splits DOUBLE PRECISION,
+	PRIMARY KEY (symbol)
+);
