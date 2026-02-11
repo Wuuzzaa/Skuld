@@ -14,7 +14,10 @@ SELECT
     d.iv_low,
     d.iv_high,
     d.iv_rank,
-    d.iv_percentile
+    d.iv_percentile,
+
+	-- StockVolatility
+	e.historical_volatility_30d
 FROM
 	"StockPricesYahoo" AS A
 	LEFT OUTER JOIN (
@@ -28,4 +31,5 @@ FROM
 			"EarningDates"
 	) AS B ON A.SYMBOL = B.SYMBOL
 	LEFT OUTER JOIN "AnalystPriceTargets" AS C ON A.SYMBOL = C.SYMBOL
-	LEFT OUTER JOIN "StockImpliedVolatilityMassive" AS d ON a.symbol = d.symbol;
+	LEFT OUTER JOIN "StockImpliedVolatilityMassive" AS d ON a.symbol = d.symbol
+	LEFT OUTER JOIN "StockVolatility" AS E ON A.SYMBOL = E.SYMBOL;

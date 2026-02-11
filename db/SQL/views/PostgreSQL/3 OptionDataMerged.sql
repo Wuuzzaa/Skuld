@@ -558,6 +558,8 @@ SELECT
     c.iv_high,
     c.iv_rank,
     c.iv_percentile,
+	-- StockVolatility
+	c.historical_volatility_30d,
 
     -- Technical Indicators
     d."Recommend.Other", 

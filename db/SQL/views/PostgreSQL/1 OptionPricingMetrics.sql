@@ -21,20 +21,19 @@ FROM
 			A.SYMBOL,
 			A.OPTION_OSI,
 			CASE WHEN (A.EXPIRATION_DATE::DATE - CURRENT_DATE) >= 0 THEN (A.EXPIRATION_DATE::DATE - CURRENT_DATE) ELSE NULL END AS DAYS_TO_EXPIRATION,
-			C.LIVE_STOCK_PRICE,
 			ROUND(
-				(A."strike_price" - C.LIVE_STOCK_PRICE)::NUMERIC,
+				(A."strike_price" - C.close)::NUMERIC,
 				2
 			) AS STRIKE_STOCK_PRICE_DIFFERENCE,
 			ROUND(
 				(
-					(A."strike_price" - C.LIVE_STOCK_PRICE) / NULLIF(C.LIVE_STOCK_PRICE, 0) * 100
+					(A."strike_price" - C.close) / NULLIF(C.close, 0) * 100
 				)::NUMERIC,
 				2
 			) AS STRIKE_STOCK_PRICE_DIFFERENCE_PTC,
 			CASE
-				WHEN A."contract_type" = 'call' THEN GREATEST(C.LIVE_STOCK_PRICE - A."strike_price", 0)
-				WHEN A."contract_type" = 'put' THEN GREATEST(A."strike_price" - C.LIVE_STOCK_PRICE, 0)
+				WHEN A."contract_type" = 'call' THEN GREATEST(C.close - A."strike_price", 0)
+				WHEN A."contract_type" = 'put' THEN GREATEST(A."strike_price" - C.close, 0)
 				ELSE NULL
 			END AS INTRINSIC_VALUE,
 			a.day_close AS PREMIUM_OPTION_PRICE
@@ -45,5 +44,5 @@ FROM
 			-- ) AS SPREAD_PTC
 		FROM
 			"OptionDataMassive" AS A
-			LEFT OUTER JOIN "StockPrice" AS C ON A.SYMBOL = C.SYMBOL
+			LEFT OUTER JOIN "StockPricesYahoo" AS C ON A.SYMBOL = C.SYMBOL
 	) AS OPTION_PRICING_DATA;
