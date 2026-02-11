@@ -12,10 +12,10 @@ PYTHONPATH=/app/Skuld
 0 21 * * 6 /bin/bash /app/Skuld/run_data_collection.sh saturday_night
 
 # Marked Start/Mid/End: Montag bis Freitag, 09:00, 14:00, 19:00 UTC (10:00, 15:00, 20:00 MEZ)
-0 9,14,19 * * 1-5 /bin/bash /app/Skuld/run_data_collection.sh marked_start_mid_end
+15 9,14,19 * * 1-5 /bin/bash /app/Skuld/run_data_collection.sh marked_start_mid_end
 
 # Stock Data Daily: Montag bis Freitag, 09:30 UTC (10:30 MEZ)
-30 9 * * 1-5 /bin/bash /app/Skuld/run_data_collection.sh stock_data_daily
+45 9 * * 1-5 /bin/bash /app/Skuld/run_data_collection.sh stock_data_daily
 
 # Historization: Montag bis Freitag, 21:30 UTC (22:30 MEZ)
 30 21 * * 1-5 /bin/bash /app/Skuld/run_data_collection.sh historization
