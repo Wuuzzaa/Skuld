@@ -60,9 +60,8 @@ def main(args):
                 #todo task für symbole anpassen
             ]
         elif args.mode == "marked_start_mid_end":
-            #todo werden hier beide benötigt?
             parallel_tasks = [
-                ("Fetch Current Stock Prices", fetch_current_prices, (symbols["stocks"])),
+                #("Fetch Current Stock Prices", fetch_current_prices, (symbols["stocks"])),
                 ("Fetch Current Stock Day Prices", load_stock_prices, (symbols["stocks"])),
             ]
         elif args.mode == "stock_data_daily":

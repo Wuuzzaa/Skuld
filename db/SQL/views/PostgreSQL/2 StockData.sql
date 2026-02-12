@@ -4,22 +4,22 @@ CREATE VIEW
     "StockData" AS
 SELECT
 	A.SYMBOL,
-	A.LIVE_STOCK_PRICE,
-	A.PRICE_SOURCE,
-	A.LIVE_PRICE_TIMESTAMP,
-	CASE
-		WHEN B.SYMBOL IS NOT NULL THEN TRUE
-		ELSE FALSE
-	END AS HAS_EARNINGS_DATE,
+	A.close as LIVE_STOCK_PRICE,
 	B.EARNINGS_DATE,
 	CAST(B.EARNINGS_DATE::DATE - CURRENT_DATE AS INTEGER) AS days_to_earnings,
-	CASE
-		WHEN C.SYMBOL IS NOT NULL THEN TRUE
-		ELSE FALSE
-	END AS HAS_ANALYST_PRICE_TARGET,
-	C.ANALYST_MEAN_TARGET
+	C.ANALYST_MEAN_TARGET,
+
+	-- StockImpliedVolatilityMassive
+    d.iv,
+    d.iv_low,
+    d.iv_high,
+    d.iv_rank,
+    d.iv_percentile,
+
+	-- StockVolatility
+	e.historical_volatility_30d
 FROM
-	"StockPrice" AS A
+	"StockPricesYahoo" AS A
 	LEFT OUTER JOIN (
 		SELECT
 			SYMBOL,
@@ -30,4 +30,6 @@ FROM
 		FROM
 			"EarningDates"
 	) AS B ON A.SYMBOL = B.SYMBOL
-	LEFT OUTER JOIN "AnalystPriceTargets" AS C ON A.SYMBOL = C.SYMBOL;
+	LEFT OUTER JOIN "AnalystPriceTargets" AS C ON A.SYMBOL = C.SYMBOL
+	LEFT OUTER JOIN "StockImpliedVolatilityMassive" AS d ON a.symbol = d.symbol
+	LEFT OUTER JOIN "StockVolatility" AS E ON A.SYMBOL = E.SYMBOL;

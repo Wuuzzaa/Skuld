@@ -9,6 +9,8 @@ from config import MASSIVE_API_KEY, TABLE_OPTION_DATA_MASSIVE
 from src.database import get_postgres_engine, truncate_table
 from src.decorator_log_function import log_function
 from src.logger_config import setup_logging
+from src.stock_volatility import calculate_and_store_stock_implied_volatility
+from src.util import executed_as_github_action
 
 logger = logging.getLogger(__name__)
 
@@ -368,6 +370,8 @@ def load_option_chains(symbols):
     finally:
         conn.close()
     logger.info(f"Total options collected and saved from Massive API: {total_options}")
+
+    calculate_and_store_stock_implied_volatility()
 
 
 def get_symbols(include: str | None = None) -> list | dict[str, list]:
