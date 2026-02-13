@@ -546,6 +546,11 @@ SELECT
 	b."Summary_yield", 
 	b."Summary_totalAssets", 
 	b."Summary_navPrice",
+	-- StockAssetProfilesYahoo
+	b.industry,
+	b.sector,
+	b.country,
+	b.long_business_summary,
 
     -- Stock Data
 	c.live_stock_price,

@@ -514,10 +514,20 @@ SELECT
 	b."PEG", 
 	b."New-Member", 
 	b."Industry", 
-	b."Classification"
+	b."Classification",
+
+	-- StockAssetProfilesYahoo
+	c.industry,
+	c.sector,
+	c.country,
+	c.long_business_summary
 
 FROM 
     "FundamentalDataYahoo" as a
 LEFT OUTER JOIN 
     "FundamentalDataDividendRadar" AS b
-ON a.symbol = b."Symbol";
+ON a.symbol = b."Symbol"
+LEFT OUTER JOIN 
+	"StockAssetProfilesYahoo" AS c
+ON a.symbol = c.symbol
+;
