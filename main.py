@@ -7,6 +7,7 @@ from src.logger_config import setup_logging
 from src.database import run_migrations
 from src.massiv_api import load_option_chains
 from src.price_and_technical_analysis_data_scrapper import scrape_and_save_price_and_technical_indicators
+from src.yahoo_asset_profile import load_asset_profile
 from src.yahooquery_earning_dates import scrape_earning_dates
 from src.yahooquery_financials import generate_fundamental_data, load_stock_prices
 from src.yfinance_analyst_price_targets import scrape_yahoo_finance_analyst_price_targets
@@ -56,8 +57,8 @@ def main(args):
                 ("Dividend Radar", process_dividend_data, ()),
                 ("Earning Dates", scrape_earning_dates, ()),
                 ("Yahoo Query Fundamentals", generate_fundamental_data, ()),
-                # ("Fetch Current Stock Prices", fetch_current_prices, ()),
                 ("Fetch Current Stock Day Prices", load_stock_prices, ()),
+                ("Yahoo Asset Profiles", load_asset_profile, ()),
             ]
         elif args.mode == "saturday_night":
             parallel_tasks = [
@@ -65,6 +66,7 @@ def main(args):
                 ("Dividend Radar", process_dividend_data, ()),
                 ("Earning Dates", scrape_earning_dates, ()),
                 ("Yahoo Query Fundamentals", generate_fundamental_data, ()),
+                ("Yahoo Asset Profiles", load_asset_profile, ()),
             ]
         elif args.mode == "marked_start_mid_end":
             parallel_tasks = [
