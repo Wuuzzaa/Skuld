@@ -1,11 +1,11 @@
-from src.database import insert_into_table_bulk
+from src.database import insert_into_table, insert_into_table_bulk, select_into_dataframe
 import logging
 import pandas as pd
 import asyncio
 import aiohttp
 from typing import Union, List
 from tqdm import tqdm
-from config import MASSIVE_API_KEY, TABLE_OPTION_DATA_MASSIVE
+from config import MASSIVE_API_KEY, TABLE_OPTION_DATA_MASSIVE, TABLE_STOCK_SYMBOLS_MASSIVE
 from src.database import get_postgres_engine, truncate_table
 from src.decorator_log_function import log_function
 from src.logger_config import setup_logging
@@ -385,23 +385,72 @@ def get_symbols(include: str | None = None) -> list | dict[str, list]:
                     "stocks_with_exchange" is special it is a dict with key = symbol and value the exchange.
     :return: List or dictionary with keys: "all", "stocks", "indices", "options", "stocks_with_exchange"
     """
-    all_symbols_stock_indices = asyncio.run(get_all_stocks_and_indices())
-    symbols_stocks = all_symbols_stock_indices["stocks"]
-    symbols_indices = all_symbols_stock_indices["indices"]
-    stocks_with_exchange = all_symbols_stock_indices["stocks_with_exchange"]
-    symbols_with_options = asyncio.run(get_active_tickers_with_options())
+
+    logger.info("Loading symbols from database...")
+    symbols = select_into_dataframe(f'SELECT symbol FROM "{TABLE_STOCK_SYMBOLS_MASSIVE}"').squeeze().tolist()
+    if len(symbols) == 0:
+        load_symbols()
+        symbols = select_into_dataframe(f'SELECT symbol FROM "{TABLE_STOCK_SYMBOLS_MASSIVE}"').squeeze().tolist()
+    
+    option_symbols = select_into_dataframe(f'SELECT symbol FROM "{TABLE_STOCK_SYMBOLS_MASSIVE}" WHERE has_options = true').squeeze().tolist()
+    symbols_exchange = select_into_dataframe(f"""
+                                             SELECT 
+                                                symbol,
+                                                CASE 
+                                                    WHEN exchange_mic = 'XNAS' THEN 'NASDAQ'
+                                                    WHEN exchange_mic = 'XNYS' OR exchange_mic = 'ARCX' THEN 'NYSE'
+                                                    WHEN exchange_mic = 'XASE' THEN 'AMEX'
+                                                    ELSE exchange_mic
+                                                END AS exchange
+                                             FROM "{TABLE_STOCK_SYMBOLS_MASSIVE}"
+                                             """)
+
+    symbols_exchange.set_index('symbol').to_dict()
+
+    logger.info(f"Loaded {len(symbols)} stock symbols, {len(option_symbols)} symbols with options and exchange info for {len(symbols_exchange)} symbols from the database.")
 
     result = {
-        "all": symbols_stocks + symbols_indices + symbols_with_options,
-        "stocks": symbols_stocks,
-        "indices": symbols_indices,
-        "options": symbols_with_options,
-        "stocks_with_exchange": stocks_with_exchange
+        "all": symbols,
+        "stocks": symbols,
+        "indices": [], # not needed currently
+        "options": option_symbols,
+        "stocks_with_exchange": symbols_exchange
     }
 
     if include is not None:
         return sorted(list(set(result[include])))
     return result
+
+def load_symbols():
+    """
+    Returns a list or dictionary of stock symbols, indices, and symbols with options.
+    Optionally, you can specify which list to return.
+
+    :param include: Optional string specifying which symbol list to return.
+                    Possible values: "all", "stocks", "indices", "options", "stocks_with_exchange"
+                    If None, returns a dictionary with all lists.
+                    "stocks_with_exchange" is special it is a dict with key = symbol and value the exchange.
+    :return: List or dictionary with keys: "all", "stocks", "indices", "options", "stocks_with_exchange"
+    """
+    logger.info("Loading symbols from Massive API...")
+
+    all_symbols_stock_indices = asyncio.run(get_all_stocks_and_indices())
+    # symbols_stocks = all_symbols_stock_indices["stocks"]
+    # symbols_indices = all_symbols_stock_indices["indices"]
+    stocks_with_exchange = all_symbols_stock_indices["stocks_with_exchange"]
+    symbols_with_options = asyncio.run(get_active_tickers_with_options())
+
+    df = pd.DataFrame(stocks_with_exchange.items(), columns=["symbol", "exchange_mic"])
+    df["has_options"] = df["symbol"].apply(lambda x: x in symbols_with_options)
+    with get_postgres_engine().begin() as connection:
+        truncate_table(connection, TABLE_STOCK_SYMBOLS_MASSIVE)
+        insert_into_table(
+            connection,
+            table_name= TABLE_STOCK_SYMBOLS_MASSIVE,
+            dataframe=df,
+            if_exists="append"
+        )
+    logger.info(f"Loaded {len(df)} stock symbols with exchange and options info into the database.")
 
 if __name__ == "__main__":
     # logging not needed when run from main
