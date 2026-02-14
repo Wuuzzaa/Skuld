@@ -105,7 +105,7 @@ jobs:
             # It also cleans unused images (not just dangling) because of -a.
             # CRITICAL: Do NOT use --volumes here.
             # We removed -a to keep cached images (like postgres, traefik) and only remove dangling ones.
-            docker system prune -f || true
+            # docker system prune -f || true
 
       - name: Ensure External Networks Exist
         run: |
@@ -169,8 +169,8 @@ jobs:
             # --no-build ensures we use the image built in previous step
             docker compose -f docker-compose.yml -f docker-compose.staging.yml up -d --no-build --remove-orphans
             
-            echo "=== Cleaning up build cache ==="
-            docker builder prune -f
+            echo "=== Skipping build cache cleanup to improve speed ==="
+            # docker builder prune -f
             
             echo "=== New Container Status ==="
             docker compose ps
