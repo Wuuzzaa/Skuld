@@ -565,6 +565,9 @@ SELECT
     c.iv_percentile,
 	-- StockVolatility
 	c.historical_volatility_30d,
+	-- DividendData
+	c.dividend_growth_years,
+	c.dividend_growth_status,
 
     -- Technical Indicators
     d."Recommend.Other", 

@@ -17,7 +17,11 @@ SELECT
     d.iv_percentile,
 
 	-- StockVolatility
-	e.historical_volatility_30d
+	e.historical_volatility_30d,
+
+	-- DividendData
+	f.years_of_growth as dividend_growth_years,
+	f.status as dividend_growth_status
 FROM
 	"StockPricesYahoo" AS A
 	LEFT OUTER JOIN (
@@ -32,4 +36,5 @@ FROM
 	) AS B ON A.SYMBOL = B.SYMBOL
 	LEFT OUTER JOIN "AnalystPriceTargets" AS C ON A.SYMBOL = C.SYMBOL
 	LEFT OUTER JOIN "StockImpliedVolatilityMassive" AS d ON a.symbol = d.symbol
-	LEFT OUTER JOIN "StockVolatility" AS E ON A.SYMBOL = E.SYMBOL;
+	LEFT OUTER JOIN "StockVolatility" AS E ON A.SYMBOL = E.SYMBOL
+	LEFT OUTER JOIN "DividendData" AS F ON A.SYMBOL = F.SYMBOL;
