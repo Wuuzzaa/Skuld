@@ -42,31 +42,31 @@ def main(args):
         parallel_tasks = None
         if args.mode == "all":
             parallel_tasks = [
-                ("Massive Option Chains", load_option_chains, (symbols["options"])),
-                ("Yahoo Finance Analyst Price Targets", scrape_yahoo_finance_analyst_price_targets, (symbols["stocks"])),
-                ("Price & Technical Indicators", scrape_and_save_price_and_technical_indicators, (symbols["stocks_with_exchange"])),
-                ("Earning Dates", scrape_earning_dates, (symbols["stocks"])),
-                ("Yahoo Query Fundamentals", generate_fundamental_data, (symbols["stocks"])),
-                ("Fetch Current Stock Prices", fetch_current_prices, (symbols["stocks"])),
+                ("Massive Option Chains", load_option_chains, (symbols["options"],)),
+                ("Yahoo Finance Analyst Price Targets", scrape_yahoo_finance_analyst_price_targets, (symbols["stocks"],)),
+                ("Price & Technical Indicators", scrape_and_save_price_and_technical_indicators, (symbols["stocks_with_exchange"],)),
+                ("Earning Dates", scrape_earning_dates, (symbols["stocks"],)),
+                ("Yahoo Query Fundamentals", generate_fundamental_data, (symbols["stocks"],)),
+                ("Fetch Current Stock Prices", fetch_current_prices, (symbols["stocks"],)),
             ]
         elif args.mode == "saturday_night":
             parallel_tasks = [
-                ("Yahoo Finance Analyst Price Targets", scrape_yahoo_finance_analyst_price_targets, (symbols["stocks"])),
-                ("Earning Dates", scrape_earning_dates, (symbols["stocks"])),
-                ("Yahoo Query Fundamentals", generate_fundamental_data, (symbols["stocks"])),
+                ("Yahoo Finance Analyst Price Targets", scrape_yahoo_finance_analyst_price_targets, (symbols["stocks"],)),
+                ("Earning Dates", scrape_earning_dates, (symbols["stocks"],)),
+                ("Yahoo Query Fundamentals", generate_fundamental_data, (symbols["stocks"],)),
                 #todo task für symbole anpassen
             ]
         elif args.mode == "marked_start_mid_end":
             parallel_tasks = [
-                ("Fetch Current Stock Day Prices", load_stock_prices, (symbols["stocks"])),
+                ("Fetch Current Stock Day Prices", load_stock_prices, (symbols["stocks"],)),
             ]
         elif args.mode == "stock_data_daily":
             parallel_tasks = [
-                ("Price & Technical Indicators", scrape_and_save_price_and_technical_indicators, (symbols["stocks_with_exchange"])),
+                ("Price & Technical Indicators", scrape_and_save_price_and_technical_indicators, (symbols["stocks_with_exchange"],)),
             ]
         elif args.mode == "option_data":
             parallel_tasks = [
-                ("Massive Option Chains", load_option_chains, (symbols["options"])),
+                ("Massive Option Chains", load_option_chains, (symbols["options"],)),
             ]
         elif args.mode == "historization":
             pass
