@@ -547,6 +547,7 @@ SELECT
 	b."Summary_totalAssets", 
 	b."Summary_navPrice",
 	-- StockAssetProfilesYahoo
+	b.name,
 	b.industry,
 	b.sector,
 	b.country,
