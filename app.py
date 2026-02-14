@@ -30,6 +30,7 @@ spreads = st.Page("pages/spreads.py", title="Spreads")
 marrieds = st.Page("pages/married_put_analysis.py", title="Married Puts")
 multifactor_swingtrading = st.Page('pages/multifactor_swingtrading.py', title="Multifactor Swingtrading")
 expected_value = st.Page('pages/expected_value.py', title="Expected Value")
+position_insurance = st.Page('pages/position_insurance_tool.py', title="Position Insurance Tool")
 data_logs = st.Page("pages/data_change_logs.py", title="Data Logs")
 
 # Set up navigation
@@ -38,6 +39,7 @@ page = st.navigation(
         analyst_prices,
         spreads,
         marrieds,
+        position_insurance,
         multifactor_swingtrading,
         expected_value,
         data_logs
