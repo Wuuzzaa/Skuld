@@ -2,6 +2,9 @@ name: Deploy SKULD Staging to Home Server
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - position-insurance-tool
 
 
 jobs:
