@@ -156,6 +156,6 @@ def page_display_dataframe(
         styled_df,
         column_config=default_config,
         hide_index=True,
-        width="stretch",
+        use_container_width=True,
         #height="content",
     )

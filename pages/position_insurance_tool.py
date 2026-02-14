@@ -143,8 +143,10 @@ if st.session_state['pi_df'] is not None:
         unique_months = df[['exp_month_sort', 'exp_month_display']].drop_duplicates().sort_values('exp_month_sort')
         available_months_display = unique_months['exp_month_display'].tolist()
         
-        col_filter, _ = st.columns([1, 2])
-        with col_filter:
+        # --- Smart Logic: Inputs ---
+        col_filters_1, col_filters_2 = st.columns([1, 1])
+        
+        with col_filters_1:
             # Month Filter
             # key='selected_month_key' helps Streamlit track this widget specifically
             selected_month_display = st.selectbox(
@@ -153,15 +155,54 @@ if st.session_state['pi_df'] is not None:
                 index=0 if available_months_display else None,
                 key='selected_month_key' 
             )
+            
+        with col_filters_2:
+             # Smart Filter: Min. Locked-in Profit %
+            # Determine dynamic max for slider
+            max_profit_pct = df['locked_in_profit_pct'].max()
+            if pd.isna(max_profit_pct) or max_profit_pct < 0:
+                max_profit_pct = 10.0
+            
+            # Default 0% (just break even) or 30% if user wants
+            min_profit_target = st.slider(
+                "Min. Locked-in Profit (%)",
+                min_value=0.0,
+                max_value=float(max_profit_pct) + 5.0,
+                value=0.0,
+                step=0.5,
+                help="Filtert Optionen, die weniger als diesen Prozentsatz an Gewinn garantieren."
+            )
         
-        # Filter DF by Month
+        # --- Applying Filters ---
+        # 1. Month
         if selected_month_display:
             display_df = df[df['exp_month_display'] == selected_month_display].copy()
-            # Extract month name for header
             header_month = selected_month_display
         else:
             display_df = df.copy()
             header_month = "Alle"
+
+        # 2. Profit Logic
+        if min_profit_target > 0:
+            display_df = display_df[display_df['locked_in_profit_pct'] >= min_profit_target]
+
+        # --- Smart Logic: Recommendation (Best Value) ---
+        # "Best Value" = Lowest Time Value per Month among the visible (filtered) options
+        best_value_row = None
+        if not display_df.empty:
+            # Only consider those with valid time value
+            candidates = display_df[display_df['time_value_per_month'] > 0]
+            if not candidates.empty:
+                # Get the one with min Time Value per Month
+                best_value_idx = candidates['time_value_per_month'].idxmin()
+                best_value_row = candidates.loc[best_value_idx]
+        
+        # Display Recommendation
+        if best_value_row is not None:
+             st.info(
+                f"💡 **Effizienz-Tipp:** {best_value_row['option_label']} kostet nur **{best_value_row['time_value_per_month']:.2f} $/Monat** Zeitwert "
+                f"und sichert **{best_value_row['locked_in_profit_pct']:.2f}%** Gewinn."
+            )
 
         # Column Config
         column_config = {
