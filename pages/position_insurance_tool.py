@@ -109,81 +109,98 @@ if st.session_state['pi_df'] is not None:
 
     # --- Filtering & Display ---
     
-    # --- Filtering & Display ---
-    
-    # 1. Generate Helper Columns for Display & Filtering
-    # Month Year for Grouping (e.g. "2026-02")
-    df['exp_month'] = df['expiration_date'].apply(lambda x: x.strftime('%Y-%m'))
-    
-    # Formatted Option Label: "NVDA 2026 18-FEB 120.00 PUT (42)"
-    # Note: x.strftime('%d-%b').upper() gives "18-FEB"
-    df['option_label'] = df.apply(
-        lambda row: f"{row['symbol']} {row['expiration_date'].year} {row['expiration_date'].strftime('%d-%b').upper()} {row['strike_price']:.2f} PUT ({int(row['days_to_expiration'])})",
-        axis=1
-    )
+    # Ensure expiration_date is datetime
+    df['expiration_date'] = pd.to_datetime(df['expiration_date'])
 
-    available_months = sorted(df['exp_month'].unique())
-    
-    col_filter, _ = st.columns([1, 2])
-    with col_filter:
-        # Month Filter
-        # Default: Select first available month (nearest term) to avoid overwhelming list, or all? 
-        # User said: "Buy Put Month" -> Dropdown. Single Select or Multi?
-        # "Select a call month as well as a put month from the boxes below" -> Suggests Dropdown (Single Select)
-        # Let's offer a Selectbox for Month.
-        selected_month = st.selectbox(
-            "Verfallsmonat auswählen",
-            options=available_months,
-            index=0 if available_months else None
-        )
-    
-    # Filter DF by Month
-    if selected_month:
-        display_df = df[df['exp_month'] == selected_month].copy()
+    # 0. Pre-Filter: Only Strike Price >= Cost Basis (as requested "Put Prices [Strikes] above Cost Basis")
+    # This locks in a profit (or minimizes loss to a specific degree in other contexts, but usually "Insurance" implies Strike >= Cost)
+    # User said: "will ich ja prinzipiell nur Put Preise die über meinem Einstandaspreis lagen"
+    df = df[df['strike_price'] >= cost_basis_input].copy()
+
+    if df.empty:
+        st.warning(f"Keine Put-Optionen mit Strike >= {cost_basis_input:.2f} gefunden.")
     else:
-        display_df = df.copy()
+        # 1. Generate Helper Columns for Display & Filtering
+        # Month Year for Grouping (e.g. "2026-02")
+        # And Month Name for Display
+        month_map = {
+            1: 'Januar', 2: 'Februar', 3: 'März', 4: 'April', 5: 'Mai', 6: 'Juni',
+            7: 'Juli', 8: 'August', 9: 'September', 10: 'Oktober', 11: 'November', 12: 'Dezember'
+        }
+        
+        df['exp_month_sort'] = df['expiration_date'].apply(lambda x: x.strftime('%Y-%m'))
+        df['exp_month_display'] = df['expiration_date'].apply(lambda x: f"{x.strftime('%Y-%m')} ({month_map.get(x.month, '')})")
+        
+        # Formatted Option Label: "NVDA 2026 18-FEB 120.00 PUT (42)"
+        # Note: x.strftime('%d-%b').upper() gives "18-FEB"
+        df['option_label'] = df.apply(
+            lambda row: f"{row['symbol']} {row['expiration_date'].year} {row['expiration_date'].strftime('%d-%b').upper()} {row['strike_price']:.2f} PUT ({int(row['days_to_expiration'])})",
+            axis=1
+        )
 
-    # Column Config
-    column_config = {
-        "option_label": st.column_config.TextColumn("Put (DTE)", width="large"),
-        "expiration_date": None, # Hiding original date as it is in label
-        "strike_price": None, # Hiding strike as it is in label
-        "option_price": st.column_config.NumberColumn("Put Preis", format="%.2f $"),
-        "new_cost_basis": st.column_config.NumberColumn("Neuer Einstand", format="%.2f $"),
-        "locked_in_profit": st.column_config.NumberColumn("Locked-in Profit ($)", format="%.2f $"),
-        "locked_in_profit_pct": st.column_config.NumberColumn("Locked-in Profit (%)", format="%.2f %%"),
-        "risk_pct": st.column_config.NumberColumn("Max Risiko", format="%.2f %%"),
-        "time_value_per_month": st.column_config.NumberColumn("Zeitwert/Monat", format="%.2f $"),
-        "days_to_expiration": None, # In label
-        "live_stock_price": None, # Hide
-        "stock_close": None, # Hide
-        "greeks_delta": st.column_config.NumberColumn("Delta", format="%.2f"),
-        "contract_type": None,
-        "symbol": None,
-        "open_interest": st.column_config.NumberColumn("Open Interest"),
-        "greeks_theta": None,
-        "intrinsic_value": None,
-        "time_value": None,
-        "exp_month": None # Helper
-    }
-    
-    st.markdown(f"### Ergebnisse für {selected_month} ({len(display_df)} Optionen)")
-    
-    # Reorder columns to put option_label first
-    # We need to construct a robust column list.
-    base_cols = ['option_label', 'option_price', 'time_value_per_month', 'new_cost_basis', 'locked_in_profit', 'locked_in_profit_pct']
-    # Add others to end if they exist
-    cols_to_show = base_cols + [c for c in display_df.columns if c not in base_cols and c in column_config and column_config[c] is not None]
-    
-    # Filter columns for display
-    # page_display_dataframe takes the whole DF and uses config to hide/show. 
-    # But to enforce order, we might need to pass a subset DF.
-    # However, page_display_dataframe adds 'TradingView' etc links. 
-    # Let's just rely on config hiding and hope for decent default order or select columns explicitly.
-    display_df_ordered = display_df[cols_to_show].copy() # This enforces order!
-    
-    # We must ensure 'symbol' is present for the links generation in page_display_dataframe
-    if 'symbol' not in display_df_ordered.columns:
-        display_df_ordered['symbol'] = display_df['symbol']
+        # Get unique months, sorted by the sort key (YYYY-MM), but display the display string
+        # We drop duplicates on the sort key
+        unique_months = df[['exp_month_sort', 'exp_month_display']].drop_duplicates().sort_values('exp_month_sort')
+        available_months_display = unique_months['exp_month_display'].tolist()
+        
+        col_filter, _ = st.columns([1, 2])
+        with col_filter:
+            # Month Filter
+            # key='selected_month_key' helps Streamlit track this widget specifically
+            selected_month_display = st.selectbox(
+                "Verfallsmonat auswählen",
+                options=available_months_display,
+                index=0 if available_months_display else None,
+                key='selected_month_key' 
+            )
+        
+        # Filter DF by Month
+        if selected_month_display:
+            display_df = df[df['exp_month_display'] == selected_month_display].copy()
+            # Extract month name for header
+            header_month = selected_month_display
+        else:
+            display_df = df.copy()
+            header_month = "Alle"
 
-    page_display_dataframe(display_df_ordered, page='position_insurance', symbol_column='symbol', column_config=column_config)
+        # Column Config
+        column_config = {
+            "option_label": st.column_config.TextColumn("Put (DTE)", width="large"),
+            "expiration_date": None, # Hiding original date as it is in label
+            "strike_price": None, # Hiding strike as it is in label
+            "option_price": st.column_config.NumberColumn("Put Preis", format="%.2f $"),
+            "new_cost_basis": st.column_config.NumberColumn("Neuer Einstand", format="%.2f $"),
+            "locked_in_profit": st.column_config.NumberColumn("Locked-in Profit ($)", format="%.2f $"),
+            "locked_in_profit_pct": st.column_config.NumberColumn("Locked-in Profit (%)", format="%.2f %%"),
+            "risk_pct": st.column_config.NumberColumn("Max Risiko", format="%.2f %%"),
+            "time_value_per_month": st.column_config.NumberColumn("Zeitwert/Monat", format="%.2f $"),
+            "days_to_expiration": None, # In label
+            "live_stock_price": None, # Hide
+            "stock_close": None, # Hide
+            "greeks_delta": st.column_config.NumberColumn("Delta", format="%.2f"),
+            "contract_type": None,
+            "symbol": None,
+            "open_interest": st.column_config.NumberColumn("Open Interest"),
+            "greeks_theta": None,
+            "intrinsic_value": None,
+            "time_value": None,
+            "exp_month_sort": None, # Helper
+            "exp_month_display": None # Helper
+        }
+        
+        st.markdown(f"### Ergebnisse für {header_month} ({len(display_df)} Optionen)")
+        
+        # Reorder columns to put option_label first
+        # We need to construct a robust column list.
+        base_cols = ['option_label', 'option_price', 'time_value_per_month', 'new_cost_basis', 'locked_in_profit', 'locked_in_profit_pct']
+        # Add others to end if they exist
+        cols_to_show = base_cols + [c for c in display_df.columns if c not in base_cols and c in column_config and column_config[c] is not None]
+        
+        # Filter columns for display
+        display_df_ordered = display_df[cols_to_show].copy() # This enforces order!
+        
+        # We must ensure 'symbol' is present for the links generation in page_display_dataframe
+        if 'symbol' not in display_df_ordered.columns:
+            display_df_ordered['symbol'] = display_df['symbol']
+
+        page_display_dataframe(display_df_ordered, page='position_insurance', symbol_column='symbol', column_config=column_config)
