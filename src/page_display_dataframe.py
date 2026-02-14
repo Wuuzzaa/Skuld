@@ -22,6 +22,8 @@ def _add_claude_analysis_link(df: pd.DataFrame, page=None) -> pd.DataFrame:
         df['Claude'] = df.apply(_create_claude_prompt_default, axis=1)
     elif page == 'spreads':
         df['Claude'] = df.apply(_create_claude_prompt_page_spreads, axis=1)
+    elif page == 'position_insurance':
+        df['Claude'] = df.apply(_create_claude_prompt_default, axis=1)
     else:
         raise ValueError('Page not recognized')
     return df
