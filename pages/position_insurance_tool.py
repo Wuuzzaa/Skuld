@@ -109,35 +109,52 @@ if st.session_state['pi_df'] is not None:
 
     # --- Filtering & Display ---
     
-    available_expirations = sorted(df['expiration_date'].unique())
-    available_expirations_str = [str(d) for d in available_expirations]
+    # --- Filtering & Display ---
     
-    # Expiration Filter
-    # Default: Empty list means "All" (common UX pattern)
-    selected_expirations = st.multiselect(
-        "Filter Verfallsdatum (Leer lassen = Alle anzeigen)", 
-        options=available_expirations_str,
-        default=[] 
+    # 1. Generate Helper Columns for Display & Filtering
+    # Month Year for Grouping (e.g. "2026-02")
+    df['exp_month'] = df['expiration_date'].apply(lambda x: x.strftime('%Y-%m'))
+    
+    # Formatted Option Label: "NVDA 2026 18-FEB 120.00 PUT (42)"
+    # Note: x.strftime('%d-%b').upper() gives "18-FEB"
+    df['option_label'] = df.apply(
+        lambda row: f"{row['symbol']} {row['expiration_date'].year} {row['expiration_date'].strftime('%d-%b').upper()} {row['strike_price']:.2f} PUT ({int(row['days_to_expiration'])})",
+        axis=1
     )
+
+    available_months = sorted(df['exp_month'].unique())
     
-    # Filter DF
-    if selected_expirations:
-        mask = df['expiration_date'].astype(str).isin(selected_expirations)
-        display_df = df[mask].copy()
+    col_filter, _ = st.columns([1, 2])
+    with col_filter:
+        # Month Filter
+        # Default: Select first available month (nearest term) to avoid overwhelming list, or all? 
+        # User said: "Buy Put Month" -> Dropdown. Single Select or Multi?
+        # "Select a call month as well as a put month from the boxes below" -> Suggests Dropdown (Single Select)
+        # Let's offer a Selectbox for Month.
+        selected_month = st.selectbox(
+            "Verfallsmonat auswählen",
+            options=available_months,
+            index=0 if available_months else None
+        )
+    
+    # Filter DF by Month
+    if selected_month:
+        display_df = df[df['exp_month'] == selected_month].copy()
     else:
         display_df = df.copy()
 
     # Column Config
     column_config = {
-        "expiration_date": st.column_config.DateColumn("Verfall"),
-        "strike_price": st.column_config.NumberColumn("Strike", format="%.2f $"),
+        "option_label": st.column_config.TextColumn("Put (DTE)", width="large"),
+        "expiration_date": None, # Hiding original date as it is in label
+        "strike_price": None, # Hiding strike as it is in label
         "option_price": st.column_config.NumberColumn("Put Preis", format="%.2f $"),
         "new_cost_basis": st.column_config.NumberColumn("Neuer Einstand", format="%.2f $"),
         "locked_in_profit": st.column_config.NumberColumn("Locked-in Profit ($)", format="%.2f $"),
         "locked_in_profit_pct": st.column_config.NumberColumn("Locked-in Profit (%)", format="%.2f %%"),
         "risk_pct": st.column_config.NumberColumn("Max Risiko", format="%.2f %%"),
         "time_value_per_month": st.column_config.NumberColumn("Zeitwert/Monat", format="%.2f $"),
-        "days_to_expiration": st.column_config.NumberColumn("Tage", format="%d"),
+        "days_to_expiration": None, # In label
         "live_stock_price": None, # Hide
         "stock_close": None, # Hide
         "greeks_delta": st.column_config.NumberColumn("Delta", format="%.2f"),
@@ -146,55 +163,27 @@ if st.session_state['pi_df'] is not None:
         "open_interest": st.column_config.NumberColumn("Open Interest"),
         "greeks_theta": None,
         "intrinsic_value": None,
-        "time_value": None
+        "time_value": None,
+        "exp_month": None # Helper
     }
     
-    st.markdown(f"### Ergebnisse ({len(display_df)} Optionen)")
+    st.markdown(f"### Ergebnisse für {selected_month} ({len(display_df)} Optionen)")
     
-    # Create a styler for custom backgound colors based on Logic
-    # We want Locked-In Profit > 0 to be Green
-    def highlight_profit(row):
-        # We need to return a list of strings (CSS styles) corresponding to columns
-        # Pandas Styler `apply` works on Series (columns or rows).
-        # We want to highlight the whole row? Or just specific cells?
-        # Let's highlight specific cells for readability.
-        
-        # Default style
-        styles = ['' for _ in row.index]
-        
-        # Logic
-        if row['locked_in_profit'] > 0:
-            # Find index of columns to highlight
-            # We can just highlight the Profit columns
-            cols_to_color = ['locked_in_profit', 'locked_in_profit_pct']
-            for col in cols_to_color:
-                if col in row.index:
-                    idx = row.index.get_loc(col)
-                    styles[idx] = 'background-color: #d4edda; color: black' # Light Green
-        elif row['locked_in_profit'] < 0:
-             cols_to_color = ['locked_in_profit', 'locked_in_profit_pct']
-             for col in cols_to_color:
-                if col in row.index:
-                    idx = row.index.get_loc(col)
-                    styles[idx] = 'background-color: #f8d7da; color: black' # Light Red
-        return styles
+    # Reorder columns to put option_label first
+    # We need to construct a robust column list.
+    base_cols = ['option_label', 'option_price', 'time_value_per_month', 'new_cost_basis', 'locked_in_profit', 'locked_in_profit_pct']
+    # Add others to end if they exist
+    cols_to_show = base_cols + [c for c in display_df.columns if c not in base_cols and c in column_config and column_config[c] is not None]
+    
+    # Filter columns for display
+    # page_display_dataframe takes the whole DF and uses config to hide/show. 
+    # But to enforce order, we might need to pass a subset DF.
+    # However, page_display_dataframe adds 'TradingView' etc links. 
+    # Let's just rely on config hiding and hope for decent default order or select columns explicitly.
+    display_df_ordered = display_df[cols_to_show].copy() # This enforces order!
+    
+    # We must ensure 'symbol' is present for the links generation in page_display_dataframe
+    if 'symbol' not in display_df_ordered.columns:
+        display_df_ordered['symbol'] = display_df['symbol']
 
-    # Use page_display_dataframe for consistent link behavior, OR stick to st.dataframe for custom styling.
-    # page_display_dataframe inside handles some styling too (red negative numbers).
-    # Since we fixed the "Page not recognized" error, let's use it!
-    # But wait, page_display_dataframe applies its own styles which might conflict or be overwritten.
-    # It returns a styled object if we look at the code? No, it calls st.dataframe at the end.
-    
-    # We will pass the dataframe to page_display_dataframe. 
-    # NOTE: page_display_dataframe does NOT allow passing custom row-based styling easily unless we modify it further.
-    # It applies alternating row colors.
-    
-    # Let's try to use it as is first. The user asked for "Green = locked-in profit positiv".
-    # page_display_dataframe colors negative numbers RED automatically.
-    # It does NOT color positive numbers Green.
-    
-    # I will stick to page_display_dataframe for now to ensure links are working (TradingView, Claude).
-    # If the user insists on Green background, I might need to enhance page_display_dataframe or bypass it.
-    # Given the previous "Page not recognized" fix, let's use it.
-    
-    page_display_dataframe(display_df, page='position_insurance', symbol_column='symbol', column_config=column_config)
+    page_display_dataframe(display_df_ordered, page='position_insurance', symbol_column='symbol', column_config=column_config)
