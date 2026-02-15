@@ -4,19 +4,16 @@ import pandas as pd
 from config import SYMBOLS_EXCHANGE, TABLE_TECHNICAL_INDICATORS
 from src.database import get_postgres_engine, insert_into_table, truncate_table
 from tradingview_ta import Interval, get_multiple_analysis
-from config_utils import get_filtered_symbols_with_logging
+from typing import Dict
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-def scrape_and_save_price_and_technical_indicators():
-    # Get symbols with new configuration system
-    symbols = get_filtered_symbols_with_logging("Technical Analysis Scraping")
-    # Ermittle Exchanges für alle Symbole
-    symbol_exchange_pairs = [(symbol, SYMBOLS_EXCHANGE[symbol]) for symbol in symbols]
-    # Erstelle die Liste für index_filters
-    underlying_symbols = [f"{exchange}:{symbol}" for symbol, exchange in symbol_exchange_pairs]
+def scrape_and_save_price_and_technical_indicators(stocks_with_exchange: Dict[str, str]):
+    # todo massive exchange bezeichnung mit tradingview bezeichnungen mappen
+
+    underlying_symbols = [f"{exchange}:{symbol}" for symbol, exchange in stocks_with_exchange.items()]
 
     results = []
     analysis = {}  # als Dictionary initialisieren

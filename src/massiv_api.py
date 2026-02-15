@@ -1,19 +1,62 @@
-from src.database import insert_into_table_bulk
+from src.database import insert_into_table, insert_into_table_bulk, select_into_dataframe
 import logging
 import pandas as pd
 import asyncio
 import aiohttp
 from typing import Union, List
 from tqdm import tqdm
-from config import MASSIVE_API_KEY, TABLE_OPTION_DATA_MASSIVE
-from config_utils import get_filtered_symbols_with_logging
-from src.database import get_postgres_engine, insert_into_table, truncate_table
+from config import MASSIVE_API_KEY, TABLE_OPTION_DATA_MASSIVE, TABLE_STOCK_SYMBOLS_MASSIVE
+from src.database import get_postgres_engine, truncate_table
 from src.decorator_log_function import log_function
 from src.logger_config import setup_logging
 from src.stock_volatility import calculate_and_store_stock_implied_volatility
 from src.util import executed_as_github_action
 
 logger = logging.getLogger(__name__)
+
+# DEBUG FUNKTION
+async def __get_tickers_by_market_ticker_root_test(market, session):
+    url = "https://api.massive.com/v3/reference/tickers"
+    params = {
+        "market": market,
+        "active": "true",
+        "order": "asc",
+        "limit": 1000,
+        "sort": "ticker",
+        "apiKey": MASSIVE_API_KEY
+    }
+
+    tickers = []
+    tickers_root = []
+    page = 1
+
+    while url:
+        async with session.get(url, params=params) as response:
+            data = await response.json()
+
+            if data.get('status') != 'OK':
+                break
+
+            results = data.get('results', [])
+
+            for ticker_data in results:
+                ticker = ticker_data.get('ticker')
+                ticker_root = ticker_data.get('ticker_root')
+
+                if ticker:
+                    tickers.append(ticker)
+                    tickers_root.append(ticker_root)
+
+            next_url = data.get('next_url')
+            if next_url:
+                url = next_url
+                params = {
+                    "apiKey": MASSIVE_API_KEY}
+                page += 1
+            else:
+                url = None
+
+    return tickers
 
 async def __get_tickers_by_market(market, session):
     url = "https://api.massive.com/v3/reference/tickers"
@@ -54,6 +97,46 @@ async def __get_tickers_by_market(market, session):
 
     return tickers
 
+async def __get_tickers_with_exchange_by_market(session):
+    url = "https://api.massive.com/v3/reference/tickers"
+    params = {
+        "market": "stocks",
+        "active": "true",
+        "order": "asc",
+        "limit": 1000,
+        "sort": "ticker",
+        "apiKey": MASSIVE_API_KEY
+    }
+
+    tickers = {}
+    page = 1
+
+    while url:
+        async with session.get(url, params=params) as response:
+            data = await response.json()
+
+            if data.get('status') != 'OK':
+                break
+
+            results = data.get('results', [])
+
+            for ticker_data in results:
+                ticker = ticker_data.get('ticker')
+                primary_exchange = ticker_data.get('primary_exchange')
+                if ticker:
+                    tickers[ticker] = primary_exchange
+
+            next_url = data.get('next_url')
+            if next_url:
+                url = next_url
+                params = {
+                    "apiKey": MASSIVE_API_KEY}
+                page += 1
+            else:
+                url = None
+
+    return tickers
+
 @log_function
 async def get_all_stocks_and_indices():
     connector = aiohttp.TCPConnector(limit=20)
@@ -63,15 +146,24 @@ async def get_all_stocks_and_indices():
         # Beide Markets parallel abfragen
         stocks_task = __get_tickers_by_market("stocks", session)
         indices_task = __get_tickers_by_market("indices", session)
+        stocks_with_exchange_task = __get_tickers_with_exchange_by_market(session)
 
-        stocks, indices = await asyncio.gather(stocks_task, indices_task)
+        stocks, indices, stocks_with_exchange = await asyncio.gather(stocks_task, indices_task, stocks_with_exchange_task)
+
+        # DEBUG
+        # test = __get_tickers_by_market_ticker_root_test("stocks", session)
+        # stocks = await asyncio.gather(test)
+
+    # DEBUG
+    #return stocks
 
     all_tickers = stocks + indices
 
     return {
         "all": all_tickers,
         "stocks": stocks,
-        "indices": indices
+        "indices": indices,
+        "stocks_with_exchange": stocks_with_exchange
     }
 
 async def __get_all_option_chains_for_ticker(ticker, session, limit=250):
@@ -298,9 +390,7 @@ def get_option_chains_df(tickers: Union[List[str], str] = "auto", limit=250) -> 
     df = __option_chains_to_dataframe(option_chains)
     return df
 
-def load_option_chains():
-    symbols = get_filtered_symbols_with_logging("MassiveAPI")
-    # symbols = asyncio.run(get_active_tickers_with_options())
+def load_option_chains(symbols):
     logger.info(f"Loading for {len(symbols)} symbols option data from Massive API")
 
     conn = get_postgres_engine().raw_connection()
@@ -331,68 +421,87 @@ def load_option_chains():
     finally:
         conn.close()
     logger.info(f"Total options collected and saved from Massive API: {total_options}")
-    
+
     calculate_and_store_stock_implied_volatility()
 
-def load_option_chains_backup():
-    symbols = get_filtered_symbols_with_logging("MassiveAPI")
-    # symbols = asyncio.run(get_active_tickers_with_options())
-    logger.info(f"Loading for {len(symbols)} symbols option data from Massive API")
 
-    raw_connection = get_postgres_engine().raw_connection()
-    try:
-        truncate_table(raw_connection, TABLE_OPTION_DATA_MASSIVE)
+def get_symbols(include: str | None = None) -> list | dict[str, list]:
+    """
+    Returns a list or dictionary of stock symbols, indices, and symbols with options.
+    Optionally, you can specify which list to return.
 
-        # load batches of option chains for symbols
-        batch_size = 500
-        total_options = 0
-        symbol_batches = [symbols[i:i + batch_size] for i in range(0, len(symbols), batch_size)]
-        batch = 1
-        for symbol_batch in symbol_batches:
-            if len(symbols) > batch_size:
-                logger.info(f"({batch}/{len(symbol_batches)}) Fetching Massive API option data for batch of {len(symbol_batch)} symbols...")
-                batch += 1
-            df = get_option_chains_df(tickers=symbol_batch)
+    :param include: Optional string specifying which symbol list to return.
+                    Possible values: "all", "stocks", "indices", "options", "stocks_with_exchange"
+                    If None, returns a dictionary with all lists.
+                    "stocks_with_exchange" is special it is a dict with key = symbol and value the exchange.
+    :return: List or dictionary with keys: "all", "stocks", "indices", "options", "stocks_with_exchange"
+    """
 
-
-            insert_into_table_bulk(
-                raw_connection,
-                table_name=TABLE_OPTION_DATA_MASSIVE,
-                dataframe=df,
-                if_exists="append"
-            )
-
-            total_options += len(df)
-    except Exception as e:
-        logger.error(f"[PostgreSQL] Error executing SQL: \n{e}")
-        raise e
-    finally:
-        raw_connection.close()
+    logger.info("Loading symbols from database...")
+    symbols = select_into_dataframe(f'SELECT symbol FROM "{TABLE_STOCK_SYMBOLS_MASSIVE}"').squeeze().tolist()
+    if len(symbols) == 0:
+        load_symbols()
+        symbols = select_into_dataframe(f'SELECT symbol FROM "{TABLE_STOCK_SYMBOLS_MASSIVE}"').squeeze().tolist()
     
-    # with get_postgres_engine().begin() as connection:
-    #     truncate_table(connection, TABLE_OPTION_DATA_MASSIVE)
+    option_symbols = select_into_dataframe(f'SELECT symbol FROM "{TABLE_STOCK_SYMBOLS_MASSIVE}" WHERE has_options = true').squeeze().tolist()
+    symbols_exchange = select_into_dataframe(f"""
+                                             SELECT 
+                                                symbol,
+                                                CASE 
+                                                    WHEN exchange_mic = 'XNAS' THEN 'NASDAQ'
+                                                    WHEN exchange_mic = 'XNYS' OR exchange_mic = 'ARCX' THEN 'NYSE'
+                                                    WHEN exchange_mic = 'XASE' THEN 'AMEX'
+                                                    ELSE exchange_mic
+                                                END AS exchange
+                                             FROM "{TABLE_STOCK_SYMBOLS_MASSIVE}"
+                                             """)
 
-    #     # load batches of option chains for symbols
-    #     batch_size = 500
-    #     total_options = 0
-    #     symbol_batches = [symbols[i:i + batch_size] for i in range(0, len(symbols), batch_size)]
-    #     batch = 1
-    #     for symbol_batch in symbol_batches:
-    #         if len(symbols) > batch_size:
-    #             logger.info(f"({batch}/{len(symbol_batches)}) Fetching Massive API option data for batch of {len(symbol_batch)} symbols...")
-    #             batch += 1
-    #         df = get_option_chains_df(tickers=symbol_batch)
+    symbols_exchange.set_index('symbol').to_dict()
 
-    #         insert_into_table(
-    #             connection,
-    #             table_name=TABLE_OPTION_DATA_MASSIVE,
-    #             dataframe=df,
-    #             if_exists="append"
-    #         )
+    logger.info(f"Loaded {len(symbols)} stock symbols, {len(option_symbols)} symbols with options and exchange info for {len(symbols_exchange)} symbols from the database.")
 
-    #         total_options += len(df)
+    result = {
+        "all": symbols,
+        "stocks": symbols,
+        "indices": [], # not needed currently
+        "options": option_symbols,
+        "stocks_with_exchange": symbols_exchange
+    }
 
-    logger.info(f"Total options collected and saved from Massive API: {total_options}")
+    if include is not None:
+        return sorted(list(set(result[include])))
+    return result
+
+def load_symbols():
+    """
+    Returns a list or dictionary of stock symbols, indices, and symbols with options.
+    Optionally, you can specify which list to return.
+
+    :param include: Optional string specifying which symbol list to return.
+                    Possible values: "all", "stocks", "indices", "options", "stocks_with_exchange"
+                    If None, returns a dictionary with all lists.
+                    "stocks_with_exchange" is special it is a dict with key = symbol and value the exchange.
+    :return: List or dictionary with keys: "all", "stocks", "indices", "options", "stocks_with_exchange"
+    """
+    logger.info("Loading symbols from Massive API...")
+
+    all_symbols_stock_indices = asyncio.run(get_all_stocks_and_indices())
+    # symbols_stocks = all_symbols_stock_indices["stocks"]
+    # symbols_indices = all_symbols_stock_indices["indices"]
+    stocks_with_exchange = all_symbols_stock_indices["stocks_with_exchange"]
+    symbols_with_options = asyncio.run(get_active_tickers_with_options())
+
+    df = pd.DataFrame(stocks_with_exchange.items(), columns=["symbol", "exchange_mic"])
+    df["has_options"] = df["symbol"].apply(lambda x: x in symbols_with_options)
+    with get_postgres_engine().begin() as connection:
+        truncate_table(connection, TABLE_STOCK_SYMBOLS_MASSIVE)
+        insert_into_table(
+            connection,
+            table_name= TABLE_STOCK_SYMBOLS_MASSIVE,
+            dataframe=df,
+            if_exists="append"
+        )
+    logger.info(f"Loaded {len(df)} stock symbols with exchange and options info into the database.")
 
 if __name__ == "__main__":
     # logging not needed when run from main
@@ -400,9 +509,13 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     logger.info("Start Massiv API test")
 
-    all_tickers = asyncio.run(get_all_stocks_and_indices())
-    tickers_with_options = asyncio.run(get_active_tickers_with_options())
-    df = get_option_chains_df(tickers=tickers_with_options)
+    #symbols = get_symbols("all")
+
+    a =  asyncio.run(get_all_stocks_and_indices())
+
+    #all_tickers = asyncio.run(get_all_stocks_and_indices())
+    # tickers_with_options = asyncio.run(get_active_tickers_with_options())
+    # df = get_option_chains_df(tickers=tickers_with_options)
     pass
 
 

@@ -1,7 +1,8 @@
 name: Deploy SKULD Staging to Home Server
 
 on:
-  workflow_dispatch:
+  push:
+    branches: [ testsystem ]
 
 
 jobs:

@@ -24,7 +24,11 @@ def load_asset_profile():
         sector = asset_profile_data.get('sector')
         country = asset_profile_data.get('country')
 
+        price_data = symbol_data.get('price', {})
+        name = price_data.get('shortName', symbol)  # Fallback to symbol if name is not available
+
         asset_profiles[symbol] = {
+            'name': name, 
             'long_business_summary': long_business_summary,
             'industry': industry,
             'sector': sector,

@@ -473,6 +473,16 @@
 		"Summary_yield" FLOAT,
 		"Summary_totalAssets" FLOAT,
 		"Summary_navPrice" FLOAT,
+		"ReceiptsfromGovernmentGrants" double precision,
+		"DividendsPaidDirect" double precision,
+		"DividendsReceivedDirect" double precision,
+		"Summary_openInterest" double precision,
+		"Summary_ytdReturn" double precision,
+		"KeyStats_lastCapGain" double precision,
+		"KeyStats_morningStarRiskRating" double precision,
+		"KeyStats_morningStarOverallRating" double precision,
+		"KeyStats_annualReportExpenseRatio" double precision,
+		"KeyStats_annualHoldingsTurnover" double precision,
         PRIMARY KEY(snapshot_date, "symbol")
     );
     

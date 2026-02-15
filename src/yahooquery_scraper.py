@@ -5,7 +5,6 @@ import time
 import threading
 import pandas as pd
 from yahooquery import Ticker
-from config_utils import get_filtered_symbols_with_logging
 from src.util import Singleton
 from datetime import datetime
 
@@ -19,14 +18,15 @@ MODULES = 'calendarEvents summaryDetail financialData earningsTrend defaultKeySt
 
 @Singleton
 class YahooQueryScraper:
-    def __init__(self):
-        self.symbols = get_filtered_symbols_with_logging("YahooQueryScraper")
-        # Symbole in 100er-Pakete aufteilen
-        self.batch_size = 100
+    def __init__(self, symbols):
+        self.symbols = symbols
+        # Symbole in 2000er-Pakete aufteilen
+        self.batch_size = 2000
         self.retries = 5
         self.symbol_batches = [self.symbols[i:i + self.batch_size] for i in range(0, len(self.symbols), self.batch_size)]
         logger.info(f"Initializing {len(self.symbol_batches)} ticker batches with batch size {self.batch_size} for YahooQueryScraper - total symbols: {len(self.symbols)}")
         # asynchronous=True, max_workers=2, is not possible because of the high number of symbols and the rate limit
+        # validate=True
         self.ticker_batches = [Ticker(symbol_batch, progress=True) for symbol_batch in self.symbol_batches]
         
         self._module_data_cache = None
@@ -63,7 +63,7 @@ class YahooQueryScraper:
                         logger.error(" ! " * 80)
                         logger.error("RETRY LIMIT REACHED")
                         logger.error(" ! " * 80)
-                    # time.sleep(1)
+                        raise Exception("RETRY LIMIT REACHED")
 
                 if all_data is None:
                     logger.warning("WARNING: No module data found for any symbols")
@@ -83,8 +83,10 @@ class YahooQueryScraper:
             all_data = [] 
             batch = 1
             logger.info(f"Loading for {len(self.symbols)} symbols all financial data from Yahoo Finance")
-            for ticker_batch in self.ticker_batches:
-                logger.info(f"({batch}/{len(self.ticker_batches)}) Batch")
+            lokal_ticker_batches = [Ticker(symbol_batch, progress=True, asynchronous=True) for symbol_batch in self.symbol_batches]
+        
+            for ticker_batch in lokal_ticker_batches:
+                logger.info(f"({batch}/{len(lokal_ticker_batches)}) Batch")
                 batch += 1
                 for attempt in range(self.retries):
                     try:
@@ -109,7 +111,7 @@ class YahooQueryScraper:
                     logger.error(" ! " * 80)
                     logger.error("RETRY LIMIT REACHED")
                     logger.error(" ! " * 80)
-                # time.sleep(1)
+                    raise Exception("RETRY LIMIT REACHED")
 
             if all_data is None:
                 logger.warning("WARNING: No financial data found for any symbols")
@@ -118,57 +120,9 @@ class YahooQueryScraper:
             
             logger.info(f"{len(df)} financial data entries")
             df.info(memory_usage='deep')
+
             return df
 
-    def get_modules(self, force_refresh=False):
-        data = self._load_module_data(force_refresh)
-        return data
-
-    def get_modules_cache_timestamp(self):
-        return self._module_data_cache_timestamp
-    
-    def get_all_financial_data(self, force_refresh=False):
-        data = self._load_all_financial_data(force_refresh)
-        return data
-    
-    def get_option_chain(self):
-        logger.info(f"Loading for {len(self.symbols)} symbols option chain from Yahoo Finance")
-        
-        found_data = False
-        batch = 1
-        for ticker_batch in self.ticker_batches:
-            logger.info(f"({batch}/{len(self.ticker_batches)}) Batch")
-            batch += 1
-            for attempt in range(self.retries):
-                try:
-                    if len(self.symbols) > self.batch_size:
-                        logger.info(f"Fetching Yahoo option chain for batch of up to {self.batch_size} symbols...")
-                    df = ticker_batch.option_chain
-                    if df is not None and not df.empty:
-                        # symbol expiration_date and option-type from index to column
-                        df = df.reset_index()
-                        found_data = True
-                        logger.info(f"SUCCESS: {len(df)} options found")
-                        yield df
-                    else:
-                        logger.warning(f"WARNING: No option data available")
-                        
-                except Exception as e:
-                    logger.error(f"ERROR: Error fetching options - {str(e)}")
-                    logger.error(f"{attempt} failed -> Retry after 10s")
-                    time.sleep(10)
-                else: 
-                    # Success - exit the retry loop
-                    break
-            else:
-                logger.error(" ! " * 80)
-                logger.error("RETRY LIMIT REACHED")
-                logger.error(" ! " * 80)
-            # time.sleep(1)
-
-        if not found_data:
-            logger.warning("WARNING: No option data found for any symbols")
-    
     def get_historical_prices(self, period="1d"):
         found_data = False
         batch = 1
@@ -188,18 +142,30 @@ class YahooQueryScraper:
                         yield df
                     else:
                         logger.warning(f"WARNING: No historical prices available")
-                        
+
                 except Exception as e:
                     logger.error(f"ERROR: Error fetching historical prices - {str(e)}")
                     logger.error(f"{attempt} failed -> Retry after 10s")
                     time.sleep(10)
-                else: 
+                else:
                     # Success - exit the retry loop
                     break
             else:
                 logger.error(" ! " * 80)
                 logger.error("RETRY LIMIT REACHED")
                 logger.error(" ! " * 80)
+                raise Exception("RETRY LIMIT REACHED")
+
+    def get_modules(self, force_refresh=False):
+        data = self._load_module_data(force_refresh)
+        return data
+
+    def get_modules_cache_timestamp(self):
+        return self._module_data_cache_timestamp
+    
+    def get_all_financial_data(self, force_refresh=False):
+        data = self._load_all_financial_data(force_refresh)
+        return data
 
     def validate_module_data(self, module_data):
         symbols_to_be_deleted = []

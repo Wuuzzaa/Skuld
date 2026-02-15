@@ -1,58 +1,122 @@
-DROP VIEW IF EXISTS "DividendData" CASCADE;
-CREATE VIEW "DividendData" AS
-WITH CleanedData AS (
-    -- Schritt 1: Ausreißer entfernen. 
-    -- Wir nehmen nur Dividenden an, die in einem "normalen" Bereich liegen (z.B. < 2.00$ pro Payout für MO).
-    -- Alternativ: Filtern gegen den Median, falls deine DB das unterstützt.
-    SELECT 
-        symbol,
-        EXTRACT(YEAR FROM SNAPSHOT_DATE) as div_year,
-        dividends
-    FROM "StockPricesYahooHistoryDaily"
-    WHERE dividends > 0 
-      AND dividends < 5 -- Filtert die 21.90 und 51.06 Ausreißer aus deinem Bild
-),
-YearlySums AS (
-    -- Schritt 2: Jährliche Summe bilden
-    SELECT 
-        symbol,
-        div_year,
-        SUM(dividends) as annual_div
-    FROM CleanedData
-    GROUP BY symbol, div_year
-),
-GrowthCheck AS (
-    -- Schritt 3: Vergleich mit dem Vorjahr
-    SELECT 
-        symbol,
-        div_year,
-        annual_div,
-        LAG(annual_div) OVER (PARTITION BY symbol ORDER BY div_year) as prev_year_div,
-        CASE WHEN annual_div > LAG(annual_div) OVER (PARTITION BY symbol ORDER BY div_year) THEN 1 ELSE 0 END as is_increase
-    FROM YearlySums
-),
-Streaks AS (
-    -- Schritt 4: Nur die Jahre zählen, die Teil der aktuellen ununterbrochenen Kette sind
-    -- (Das ist ein vereinfachter Ansatz: Wir zählen alle Jahre seit dem letzten 'Drop')
-    SELECT 
-        symbol,
-        COUNT(*) as years_of_growth
-    FROM GrowthCheck
-    WHERE div_year > (
-        SELECT COALESCE(MAX(div_year), 0) 
-        FROM GrowthCheck gc2 
-        WHERE gc2.symbol = GrowthCheck.symbol AND gc2.is_increase = 0
-    )
-    GROUP BY symbol
-)
--- Finale Kategorisierung
-SELECT 
-    symbol,
-    years_of_growth,
-    CASE 
-        WHEN years_of_growth >= 25 THEN 'Dividend Champion'
-        WHEN years_of_growth >= 10 THEN 'Dividend Contender'
-        WHEN years_of_growth >= 5  THEN 'Dividend Challenger'
-        ELSE 'None'
-    END as status
-FROM Streaks;
+DROP MATERIALIZED VIEW IF EXISTS "DividendData" CASCADE;
+
+CREATE MATERIALIZED VIEW "DividendData" AS
+WITH
+	MEDIANDIVIDEND AS (
+		SELECT
+			SYMBOL,
+			EXTRACT(
+				YEAR
+				FROM
+					SNAPSHOT_DATE
+			) AS DIV_YEAR,
+			PERCENTILE_CONT(0.5) WITHIN GROUP (
+				ORDER BY
+					DIVIDENDS
+			) AS MEDIAN_DIVIDEND
+		FROM
+			"StockPricesYahooHistoryDaily"
+		WHERE
+			DIVIDENDS > 0
+		GROUP BY
+			SYMBOL,
+			DIV_YEAR
+	),
+	CLEANEDDATA AS (
+		-- Schritt 1: Ausreißer entfernen. 
+		-- Filtern gegen den Median -> Dividende darf nicht mehr als 25% vom Median abweichen
+		SELECT
+			A.SYMBOL,
+			EXTRACT(
+				YEAR
+				FROM
+					A.SNAPSHOT_DATE
+			) AS DIV_YEAR,
+			A.DIVIDENDS
+		FROM
+			"StockPricesYahooHistoryDaily" AS A
+			INNER JOIN MEDIANDIVIDEND AS B ON A.SYMBOL = B.SYMBOL
+			AND EXTRACT(
+				YEAR
+				FROM
+					SNAPSHOT_DATE
+			) = B.DIV_YEAR
+		WHERE
+			DIVIDENDS > 0
+			AND ABS(
+				(
+					(DIVIDENDS - MEDIAN_DIVIDEND)::NUMERIC / NULLIF(MEDIAN_DIVIDEND, 0)
+				) * 100
+			) < 25
+	),
+	YEARLYSUMS AS (
+		-- Schritt 2: Jährliche Summe bilden
+		SELECT
+			SYMBOL,
+			DIV_YEAR,
+			AVG(DIVIDENDS) AS ANNUAL_AVG_DIV
+		FROM
+			CLEANEDDATA
+		GROUP BY
+			SYMBOL,
+			DIV_YEAR
+	),
+	GROWTHCHECK AS (
+		-- Schritt 3: Vergleich mit dem Vorjahr
+		SELECT
+			SYMBOL,
+			DIV_YEAR,
+			ANNUAL_AVG_DIV,
+			LAG(ANNUAL_AVG_DIV) OVER (
+				PARTITION BY
+					SYMBOL
+				ORDER BY
+					DIV_YEAR
+			) AS PREV_YEAR_DIV,
+			CASE
+				WHEN ANNUAL_AVG_DIV > LAG(ANNUAL_AVG_DIV) OVER (
+					PARTITION BY
+						SYMBOL
+					ORDER BY
+						DIV_YEAR
+				) THEN 1
+				ELSE 0
+			END AS IS_INCREASE
+		FROM
+			YEARLYSUMS
+	),
+	STREAKS AS (
+		-- Schritt 4: Nur die Jahre zählen, die Teil der aktuellen ununterbrochenen Kette sind
+		-- (Das ist ein vereinfachter Ansatz: Wir zählen alle Jahre seit dem letzten 'Drop')
+		SELECT
+			SYMBOL,
+			COUNT(*) AS YEARS_OF_GROWTH
+		FROM
+			GROWTHCHECK
+		WHERE
+			DIV_YEAR > (
+				SELECT
+					COALESCE(MAX(DIV_YEAR), 0)
+				FROM
+					GROWTHCHECK GC2
+				WHERE
+					GC2.SYMBOL = GROWTHCHECK.SYMBOL
+					AND GC2.IS_INCREASE = 0
+			)
+		GROUP BY
+			SYMBOL
+	)
+	-- Finale Kategorisierung
+SELECT
+	symbol,
+	years_of_growth,
+	CASE
+		WHEN YEARS_OF_GROWTH >= 25 THEN 'Dividend Champion'
+		WHEN YEARS_OF_GROWTH >= 10 THEN 'Dividend Contender'
+		WHEN YEARS_OF_GROWTH >= 5 THEN 'Dividend Challenger'
+		ELSE 'None'
+	END AS status
+FROM
+	STREAKS;
+
+CREATE UNIQUE INDEX idx_dividend_symbol ON "DividendData" (symbol);

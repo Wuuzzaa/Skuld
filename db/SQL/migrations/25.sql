@@ -1,3 +1,4 @@
+DROP TABLE IF EXISTS "StockAssetProfilesYahoo";
 CREATE TABLE IF NOT EXISTS "StockAssetProfilesYahoo"
 (
     symbol TEXT PRIMARY KEY,

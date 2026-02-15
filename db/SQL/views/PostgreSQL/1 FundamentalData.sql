@@ -517,6 +517,7 @@ SELECT
 	b."Classification",
 
 	-- StockAssetProfilesYahoo
+	c.name,
 	c.industry,
 	c.sector,
 	c.country,

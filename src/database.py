@@ -391,9 +391,10 @@ def _run_migrations_for_engine(engine):
                 raise e
         if label == "PostgreSQL" and last_migration_version == 22:
             load_historical_prices()
+            #todo kann das hier raus? sonst müssen die symbols übergeben werden an die migrationen
         if label == "PostgreSQL" and last_migration_version == 23:
             calculate_and_store_stock_implied_volatility_history()
-            
+
         with connection.begin():
             if pending_migrations:
                 last_migration_version = int(pending_migrations[-1].split(".")[0])
@@ -961,8 +962,8 @@ def calculate_and_store_stock_implied_volatility_history():
     with get_postgres_engine().begin() as connection:
         # Insert the new data into the target table
         insert_into_table(
-            connection, 
-            f"{TABLE_STOCK_IMPLIED_VOLATILITY_MASSIVE}HistoryDaily", 
-            df, 
+            connection,
+            f"{TABLE_STOCK_IMPLIED_VOLATILITY_MASSIVE}HistoryDaily",
+            df,
             if_exists="append"
         )
