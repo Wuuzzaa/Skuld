@@ -677,7 +677,7 @@ SELECT
 	END as expected_move
 FROM 
    "OptionData" AS a
-JOIN 
+LEFT OUTER JOIN 
     "FundamentalData" as b
 ON a.symbol = b.symbol
 LEFT OUTER JOIN 
