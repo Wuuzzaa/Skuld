@@ -14,6 +14,50 @@ from src.util import executed_as_github_action
 
 logger = logging.getLogger(__name__)
 
+# DEBUG FUNKTION
+async def __get_tickers_by_market_ticker_root_test(market, session):
+    url = "https://api.massive.com/v3/reference/tickers"
+    params = {
+        "market": market,
+        "active": "true",
+        "order": "asc",
+        "limit": 1000,
+        "sort": "ticker",
+        "apiKey": MASSIVE_API_KEY
+    }
+
+    tickers = []
+    tickers_root = []
+    page = 1
+
+    while url:
+        async with session.get(url, params=params) as response:
+            data = await response.json()
+
+            if data.get('status') != 'OK':
+                break
+
+            results = data.get('results', [])
+
+            for ticker_data in results:
+                ticker = ticker_data.get('ticker')
+                ticker_root = ticker_data.get('ticker_root')
+
+                if ticker:
+                    tickers.append(ticker)
+                    tickers_root.append(ticker_root)
+
+            next_url = data.get('next_url')
+            if next_url:
+                url = next_url
+                params = {
+                    "apiKey": MASSIVE_API_KEY}
+                page += 1
+            else:
+                url = None
+
+    return tickers
+
 async def __get_tickers_by_market(market, session):
     url = "https://api.massive.com/v3/reference/tickers"
     params = {
@@ -105,6 +149,13 @@ async def get_all_stocks_and_indices():
         stocks_with_exchange_task = __get_tickers_with_exchange_by_market(session)
 
         stocks, indices, stocks_with_exchange = await asyncio.gather(stocks_task, indices_task, stocks_with_exchange_task)
+
+        # DEBUG
+        # test = __get_tickers_by_market_ticker_root_test("stocks", session)
+        # stocks = await asyncio.gather(test)
+
+    # DEBUG
+    #return stocks
 
     all_tickers = stocks + indices
 
@@ -458,9 +509,11 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     logger.info("Start Massiv API test")
 
-    symbols = get_symbols("all")
+    #symbols = get_symbols("all")
 
-    all_tickers = asyncio.run(get_all_stocks_and_indices())
+    a =  asyncio.run(get_all_stocks_and_indices())
+
+    #all_tickers = asyncio.run(get_all_stocks_and_indices())
     # tickers_with_options = asyncio.run(get_active_tickers_with_options())
     # df = get_option_chains_df(tickers=tickers_with_options)
     pass
