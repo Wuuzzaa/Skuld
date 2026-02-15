@@ -49,8 +49,7 @@ if 'last_filter_key' not in st.session_state or st.session_state['last_filter_ke
                 ]
                 
                 # Apply days filter
-                if min_days != 90:
-                    df = df[df['days_to_expiration'] >= min_days]
+                df = df[df['days_to_expiration'] >= min_days]
                 
                 # Limit results
                 df = df.head(max_results)
@@ -144,6 +143,6 @@ with st.expander("Strategy Information"):
     - Strike > Stock Price * 1.2 (OTM puts)
     - Extrinsic value > 0
     - Option open interest > 0
-    - Days to expiration > 90
+    - Days to expiration > User Selection (default 90)
     - Top 3 options per symbol by ROI
     """)

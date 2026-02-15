@@ -43,16 +43,16 @@ FROM
                                         SELECT
                                             *,
                                             ROUND(extrinsic_value * number_of_stocks + 3.5, 2) as max_loss_total,
-                                            CAST(ceil(extrinsic_value / "Current-Div") as Integer) as dividends_to_break_even,
-                                            ROUND(CAST(dividends_to_expiration * "Current-Div" AS NUMERIC), 2) * number_of_stocks AS dividend_sum_to_expiration
+                                            CAST(ceil(extrinsic_value / NULLIF("Current-Div" / 4.0, 0)) as Integer) as dividends_to_break_even,
+                                            ROUND(CAST("Current-Div" * (days_to_expiration / 365.0) AS NUMERIC), 2) * number_of_stocks AS dividend_sum_to_expiration
                                         FROM
                                             (
                                                 SELECT
                                                     100 as number_of_stocks,
                                                     symbol,
-                                                    "Company",
-                                                    "Sector",
-                                                    "Industry",
+                                                    name AS "Company",
+                                                    sector AS "Sector",
+                                                    industry AS "Industry",
                                                     expiration_date,
                                                     days_to_expiration,
                                                     open_interest,
@@ -74,17 +74,15 @@ FROM
                                                     "Fair-Value",
                                                     earnings_date,
                                                     days_to_earnings,
-                                                    "No-Years",
-                                                    "Classification",
-                                                    "Payouts/-Year",
-                                                    "Current-Div",
-                                                    CAST(
-                                                        ROUND(("Payouts/-Year" * (days_to_expiration / 365.0))) AS INTEGER
-                                                    ) AS dividends_to_expiration
+                                                    dividend_growth_years AS "No-Years",
+                                                    dividend_growth_status AS "Classification",
+                                                    4 AS "Payouts/-Year",
+                                                    "Summary_dividendRate" AS "Current-Div",
+                                                    CAST(FLOOR(days_to_expiration / 91.25) AS INTEGER) AS dividends_to_expiration
                                                 FROM
                                                     "OptionDataMerged"
                                                 WHERE
-                                                    has_fundamental_data_dividend_radar = true
+                                                    "Summary_dividendRate" > 0
                                                     and contract_type = 'put'
                                                     and strike > live_stock_price * 1.2
                                             ) AS sub_1
@@ -94,7 +92,6 @@ FROM
                 WHERE
                     extrinsic_value > 0
                     and open_interest > 0
-                    and days_to_expiration > 90
             ) AS sub_5
     ) AS sub_6
 WHERE
