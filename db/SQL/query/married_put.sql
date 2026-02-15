@@ -84,7 +84,7 @@ FROM
                                                 WHERE
                                                     "Summary_dividendRate" > 0
                                                     and contract_type = 'put'
-                                                    and strike > live_stock_price * 1.2
+                                                    and strike_price > live_stock_price * 1.2
                                             ) AS sub_1
                                     ) AS sub_2
                             ) AS SUB_3
