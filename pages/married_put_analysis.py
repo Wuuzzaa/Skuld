@@ -62,7 +62,7 @@ if 'last_filter_key' not in st.session_state or st.session_state['last_filter_ke
 
                 # Apply Status Filter
                 if selected_statuses:
-                     # 'Classification' is the column name in the DF (aliased from dividend_growth_status)
+                     # 'Classification' is the column name in the DF (aliased from dividend_classification)
                     df = df[df['Classification'].isin(selected_statuses)]
                 
                 # Limit results

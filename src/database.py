@@ -682,7 +682,10 @@ def drop_all_views(engine):
     with engine.begin() as connection:
         for view in views:
             try:
-                connection.execute(text(f'DROP VIEW IF EXISTS "{view}" CASCADE'))
+                try:
+                    connection.execute(text(f'DROP VIEW IF EXISTS "{view}" CASCADE'))
+                except Exception as e:
+                    connection.execute(text(f'DROP MATERIALIZED VIEW IF EXISTS "{view}" CASCADE'))
                 logger.info(f"{label} Dropped view {view}.")
             except Exception as e:
                 logger.error(f"{label} Error dropping view {view}: \n{e}")
