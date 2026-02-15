@@ -546,6 +546,12 @@ SELECT
 	b."Summary_yield", 
 	b."Summary_totalAssets", 
 	b."Summary_navPrice",
+	-- StockAssetProfilesYahoo
+	b.name,
+	b.industry,
+	b.sector,
+	b.country,
+	b.long_business_summary,
 
     -- Stock Data
 	c.live_stock_price,
@@ -560,6 +566,9 @@ SELECT
     c.iv_percentile,
 	-- StockVolatility
 	c.historical_volatility_30d,
+	-- DividendData
+	c.dividend_growth_years,
+	c.dividend_growth_status,
 
     -- Technical Indicators
     d."Recommend.Other", 
@@ -668,7 +677,7 @@ SELECT
 	END as expected_move
 FROM 
    "OptionData" AS a
-JOIN 
+LEFT OUTER JOIN 
     "FundamentalData" as b
 ON a.symbol = b.symbol
 LEFT OUTER JOIN 

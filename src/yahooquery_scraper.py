@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # https://yahooquery.dpguthrie.com/guide/ticker/modules/
-MODULES = 'calendarEvents summaryDetail financialData earningsTrend defaultKeyStatistics price'
+MODULES = 'calendarEvents summaryDetail financialData earningsTrend defaultKeyStatistics price assetProfile'
 
 @Singleton
 class YahooQueryScraper:
