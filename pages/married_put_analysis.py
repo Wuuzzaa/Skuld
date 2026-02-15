@@ -21,17 +21,23 @@ with col1:
     max_results = st.number_input("Max Results", min_value=10, max_value=1000, value=50, step=10)
 
 with col2:
-    min_roi = st.number_input("Min ROI % (annualized)", min_value=0.0, max_value=100.0, value=0.0, step=1.0)
+    min_roi = st.number_input("Min ROI %", min_value=0.0, max_value=100.0, value=0.0, step=1.0)
 
 with col3:
-    max_roi = st.number_input("Max ROI % (annualized)", min_value=0.0, max_value=100.0, value=7.0, step=1.0)
+    max_roi = st.number_input("Max ROI %", min_value=0.0, max_value=100.0, value=7.0, step=1.0)
 
 with col4:
     days_range = st.slider("Days to Expiration", min_value=30, max_value=720, value=(30, 500), step=30)
 
+# Row 2 for Status Filter
+st.write("---")
+all_statuses = ["Dividend Champion", "Dividend Contender", "Dividend Challenger", "Dividend Achiever", "Dividend King", "Dividend Aristocrat"]
+default_statuses = ["Dividend Champion", "Dividend Contender", "Dividend Challenger"]
+selected_statuses = st.multiselect("Dividend Growth Status", options=all_statuses, default=default_statuses)
+
 # Auto-load data on page load or when filters change
 # Using session state to track if data needs to be reloaded
-filter_key = f"{max_results}_{min_roi}_{max_roi}_{days_range}"
+filter_key = f"{max_results}_{min_roi}_{max_roi}_{days_range}_{selected_statuses}"
 if 'last_filter_key' not in st.session_state or st.session_state['last_filter_key'] != filter_key:
     st.session_state['last_filter_key'] = filter_key
     
@@ -53,6 +59,11 @@ if 'last_filter_key' not in st.session_state or st.session_state['last_filter_ke
                     (df['days_to_expiration'] >= days_range[0]) & 
                     (df['days_to_expiration'] <= days_range[1])
                 ]
+
+                # Apply Status Filter
+                if selected_statuses:
+                     # 'Classification' is the column name in the DF (aliased from dividend_growth_status)
+                    df = df[df['Classification'].isin(selected_statuses)]
                 
                 # Limit results
                 df = df.head(max_results)
@@ -147,5 +158,6 @@ with st.expander("Strategy Information"):
     - Extrinsic value > 0
     - Option open interest > 0
     - Days to expiration > User Selection (Range)
+    - Dividend Status matching selection
     - Top 3 options per symbol by ROI
     """)
