@@ -20,12 +20,13 @@ MODULES = 'calendarEvents summaryDetail financialData earningsTrend defaultKeySt
 class YahooQueryScraper:
     def __init__(self, symbols):
         self.symbols = symbols
-        # Symbole in 100er-Pakete aufteilen
-        self.batch_size = 100
+        # Symbole in 2000er-Pakete aufteilen
+        self.batch_size = 2000
         self.retries = 5
         self.symbol_batches = [self.symbols[i:i + self.batch_size] for i in range(0, len(self.symbols), self.batch_size)]
         logger.info(f"Initializing {len(self.symbol_batches)} ticker batches with batch size {self.batch_size} for YahooQueryScraper - total symbols: {len(self.symbols)}")
         # asynchronous=True, max_workers=2, is not possible because of the high number of symbols and the rate limit
+        # validate=True
         self.ticker_batches = [Ticker(symbol_batch, progress=True) for symbol_batch in self.symbol_batches]
         
         self._module_data_cache = None
@@ -62,7 +63,7 @@ class YahooQueryScraper:
                         logger.error(" ! " * 80)
                         logger.error("RETRY LIMIT REACHED")
                         logger.error(" ! " * 80)
-                    # time.sleep(1)
+                        raise Exception("RETRY LIMIT REACHED")
 
                 if all_data is None:
                     logger.warning("WARNING: No module data found for any symbols")
@@ -82,8 +83,10 @@ class YahooQueryScraper:
             all_data = [] 
             batch = 1
             logger.info(f"Loading for {len(self.symbols)} symbols all financial data from Yahoo Finance")
-            for ticker_batch in self.ticker_batches:
-                logger.info(f"({batch}/{len(self.ticker_batches)}) Batch")
+            lokal_ticker_batches = [Ticker(symbol_batch, progress=True, asynchronous=True) for symbol_batch in self.symbol_batches]
+        
+            for ticker_batch in lokal_ticker_batches:
+                logger.info(f"({batch}/{len(lokal_ticker_batches)}) Batch")
                 batch += 1
                 for attempt in range(self.retries):
                     try:
@@ -108,7 +111,7 @@ class YahooQueryScraper:
                     logger.error(" ! " * 80)
                     logger.error("RETRY LIMIT REACHED")
                     logger.error(" ! " * 80)
-                # time.sleep(1)
+                    raise Exception("RETRY LIMIT REACHED")
 
             if all_data is None:
                 logger.warning("WARNING: No financial data found for any symbols")
@@ -117,6 +120,7 @@ class YahooQueryScraper:
             
             logger.info(f"{len(df)} financial data entries")
             df.info(memory_usage='deep')
+
             return df
 
     def get_historical_prices(self, period="1d"):
@@ -150,6 +154,7 @@ class YahooQueryScraper:
                 logger.error(" ! " * 80)
                 logger.error("RETRY LIMIT REACHED")
                 logger.error(" ! " * 80)
+                raise Exception("RETRY LIMIT REACHED")
 
     def get_modules(self, force_refresh=False):
         data = self._load_module_data(force_refresh)
