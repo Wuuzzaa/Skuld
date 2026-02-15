@@ -27,11 +27,11 @@ with col3:
     max_roi = st.number_input("Max ROI % (annualized)", min_value=0.0, max_value=100.0, value=7.0, step=1.0)
 
 with col4:
-    min_days = st.number_input("Min Days to Expiration", min_value=30, max_value=500, value=90, step=10)
+    days_range = st.slider("Days to Expiration", min_value=30, max_value=720, value=(30, 500), step=30)
 
 # Auto-load data on page load or when filters change
 # Using session state to track if data needs to be reloaded
-filter_key = f"{max_results}_{min_roi}_{max_roi}_{min_days}"
+filter_key = f"{max_results}_{min_roi}_{max_roi}_{days_range}"
 if 'last_filter_key' not in st.session_state or st.session_state['last_filter_key'] != filter_key:
     st.session_state['last_filter_key'] = filter_key
     
@@ -49,7 +49,10 @@ if 'last_filter_key' not in st.session_state or st.session_state['last_filter_ke
                 ]
                 
                 # Apply days filter
-                df = df[df['days_to_expiration'] >= min_days]
+                df = df[
+                    (df['days_to_expiration'] >= days_range[0]) & 
+                    (df['days_to_expiration'] <= days_range[1])
+                ]
                 
                 # Limit results
                 df = df.head(max_results)
@@ -143,6 +146,6 @@ with st.expander("Strategy Information"):
     - Strike > Stock Price * 1.2 (OTM puts)
     - Extrinsic value > 0
     - Option open interest > 0
-    - Days to expiration > User Selection (default 90)
+    - Days to expiration > User Selection (Range)
     - Top 3 options per symbol by ROI
     """)
