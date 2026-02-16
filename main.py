@@ -2,7 +2,7 @@ import time
 import logging
 import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from src.massiv_api import get_symbols
+from src.massiv_api import get_symbols, get_symbols_with_exchange
 from src.live_stock_price_collector import fetch_current_prices
 from src.logger_config import setup_logging
 from src.database import run_migrations
@@ -64,8 +64,9 @@ def main(args):
                 ("Fetch Current Stock Day Prices", load_stock_prices, (symbols["stocks"],)),
             ]
         elif args.mode == "stock_data_daily":
+            symbols_with_exchange = get_symbols_with_exchange()
             parallel_tasks = [
-                ("Price & Technical Indicators", scrape_and_save_price_and_technical_indicators, (symbols["stocks_with_exchange"],)),
+                ("Price & Technical Indicators", scrape_and_save_price_and_technical_indicators, (symbols_with_exchange,)),
             ]
         elif args.mode == "option_data":
             parallel_tasks = [
