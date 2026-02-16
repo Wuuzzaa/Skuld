@@ -106,7 +106,7 @@ $RestoreCmd = @"
 
 # Fix argument formatting by piping the script content over SSH to bash
 # This avoids issues with quotes getting stripped or misinterpreted by SSH argument parsing
-$RestoreCmd | ssh -i $TestKey $TestUser@$TestHost "bash -s"
+$RestoreCmd -replace "`r", "" | ssh -i $TestKey $TestUser@$TestHost "bash -s"
 if ($LASTEXITCODE -ne 0) { Write-Error "Failed to restore on test server. Check container name ($TestContainer)."; exit 1 }
 
 Write-Progress -Activity $Activity -Status "Migration Completed!" -PercentComplete 100 -Completed
