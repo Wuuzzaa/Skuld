@@ -151,7 +151,7 @@ jobs:
             until [ "$n" -ge 5 ]
             do
                echo "Pull Attempt $((n+1))/5..."
-               docker compose -f docker-compose.yml -f docker-compose.staging.yml pull && break
+               docker compose -f docker-compose.yml -f docker-compose.testing.yml pull && break
                n=$((n+1))
                echo "⚠️ Pull failed, retrying in 10s..."
                sleep 10
@@ -165,7 +165,7 @@ jobs:
             echo "=== Starting Staging Stack ==="
             # Start services using the pre-built image, include Staging overrides (Traefik)
             # --no-build ensures we use the image built in previous step
-            docker compose -f docker-compose.yml -f docker-compose.staging.yml up -d --no-build --remove-orphans
+            docker compose -f docker-compose.yml -f docker-compose.testing.yml up -d --no-build --remove-orphans
             
             echo "=== Cleaning up build cache ==="
             docker builder prune -f
