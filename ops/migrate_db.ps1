@@ -113,3 +113,8 @@ Write-Progress -Activity $Activity -Status "Migration Completed!" -PercentComple
 Write-Host ""
 Write-Host "=== Migration Completed Successfully! ==="
 Write-Host "You may need to restart the Test Application."
+
+# 4. Cleanup Local Dump
+Write-Host "4. Cleaning up local dump file..."
+Remove-Item $LocalDumpFile -ErrorAction SilentlyContinue
+Write-Host "   Cleanup complete."
