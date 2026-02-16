@@ -27,7 +27,7 @@ WITH BaseData AS (
         earnings_date,
         days_to_earnings,
         dividend_growth_years AS "No-Years",
-        dividend_growth_status AS "Classification",
+        dividend_classification AS "Classification",
         4 AS "Payouts/-Year",
         "Summary_dividendRate" AS "Current-Div",
         CAST(FLOOR(days_to_expiration / 91.25) AS INTEGER) AS dividends_to_expiration

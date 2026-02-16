@@ -21,7 +21,7 @@ SELECT
 
 	-- DividendData
 	f.years_of_growth as dividend_growth_years,
-	f.status as dividend_growth_status
+	f.classification as dividend_classification
 FROM
 	"StockPricesYahoo" AS A
 	LEFT OUTER JOIN (
@@ -37,4 +37,4 @@ FROM
 	LEFT OUTER JOIN "AnalystPriceTargets" AS C ON A.SYMBOL = C.SYMBOL
 	LEFT OUTER JOIN "StockImpliedVolatilityMassive" AS d ON a.symbol = d.symbol
 	LEFT OUTER JOIN "StockVolatility" AS E ON A.SYMBOL = E.SYMBOL
-	LEFT OUTER JOIN "DividendData" AS F ON A.SYMBOL = F.SYMBOL;
+	LEFT OUTER JOIN "DividendDataYahoo" AS F ON A.SYMBOL = F.SYMBOL;

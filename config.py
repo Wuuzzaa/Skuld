@@ -55,6 +55,7 @@ TABLE_STOCK_PRICES_YAHOO = 'StockPricesYahoo'
 TABLE_STOCK_IMPLIED_VOLATILITY_MASSIVE = 'StockImpliedVolatilityMassive'
 TABLE_STOCK_SYMBOLS_MASSIVE = 'StockSymbolsMassive'
 TABLE_STOCK_ASSET_PROFILES_YAHOO = 'StockAssetProfilesYahoo'
+TABLE_DIVIDEND_DATA_YAHOO = 'DividendDataYahoo'
 
 # History enabled tables
 HISTORY_ENABLED_TABLES = [

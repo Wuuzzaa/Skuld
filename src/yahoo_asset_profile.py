@@ -2,10 +2,9 @@ import logging
 import sys
 import os
 import pandas as pd
-from config import TABLE_EARNING_DATES, TABLE_STOCK_ASSET_PROFILES_YAHOO
+from config import TABLE_STOCK_ASSET_PROFILES_YAHOO
 from src.database import get_postgres_engine, insert_into_table, truncate_table
 from src.yahooquery_scraper import YahooQueryScraper
-from datetime import datetime
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
