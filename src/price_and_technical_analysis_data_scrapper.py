@@ -20,15 +20,18 @@ def scrape_and_save_price_and_technical_indicators(stocks_with_exchange):
     analysis = {}  # als Dictionary initialisieren
 
     # Unterteile underlying_symbols in 500er-Pakete (API Limit)
-    batch_size = 1
+    batch_size = 100
     symbol_batches = [underlying_symbols[i:i + batch_size] for i in range(0, len(underlying_symbols), batch_size)]
+    batch = 1
     for symbol_batch in symbol_batches:
+        logger.info(f"Fetching technical analysis for batch ({batch}/{len(symbol_batches)}) of {len(symbol_batch)} symbols...")
         try:
             analysis_symbol_batch = get_multiple_analysis(screener="america", interval=Interval.INTERVAL_1_HOUR, symbols=symbol_batch)
         except Exception as e:
             logger.error(f"Error fetching technical analysis for batch {symbol_batch}: {e}")
             raise e
         analysis.update(analysis_symbol_batch)  # analysis_symbol_batch muss ein dict sein
+        batch += 1
 
     # Use the exchange from SYMBOLS_EXCHANGE mapping
     for symbol_ in analysis:
@@ -51,7 +54,7 @@ def scrape_and_save_price_and_technical_indicators(stocks_with_exchange):
             results.append(indicators)
 
         except Exception as e:
-            print(f"Error with symbol: {symbol}: {e}")  
+            logger.error(f"Error with symbol: {symbol}: {e}")  
 
     # make a dataframe from the results
     df = pd.DataFrame(results)
