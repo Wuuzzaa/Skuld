@@ -668,11 +668,11 @@ SELECT
 	d.recommendation_sell_amount,
 
 	-- Additional calculated fields
-	ROUND((c.analyst_mean_target - d.close)::numeric,2) as "target-close$",
-	ROUND((ROUND((c.analyst_mean_target - d.close)::numeric,2) / d.close * 100.0)::numeric, 2) as "target-close%",
+	ROUND((c.analyst_mean_target - c.live_stock_price)::numeric,2) as "target-close$",
+	ROUND((ROUND((c.analyst_mean_target - c.live_stock_price)::numeric,2) / c.live_stock_price * 100.0)::numeric, 2) as "target-close%",
     CASE
 		WHEN a.days_to_expiration >= 0 THEN
-			ROUND((d.close * a.implied_volatility * sqrt(a.days_to_expiration / 365.0))::numeric, 2)
+			ROUND((c.live_stock_price * a.implied_volatility * sqrt(a.days_to_expiration / 365.0))::numeric, 2)
 		ELSE NULL
 	END as expected_move
 FROM 
