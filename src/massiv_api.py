@@ -464,11 +464,13 @@ def get_symbols_with_exchange():
                                                 symbol,
                                                 CASE 
                                                     WHEN exchange_mic = 'XNAS' THEN 'NASDAQ'
-                                                    WHEN exchange_mic = 'XNYS' OR exchange_mic = 'ARCX' THEN 'NYSE'
+                                                    WHEN exchange_mic = 'XNYS' THEN 'NYSE'
+                                                    WHEN exchange_mic = 'ARCX' THEN 'AMEX'
                                                     WHEN exchange_mic = 'XASE' THEN 'AMEX'
                                                     ELSE exchange_mic
                                                 END AS exchange
                                              FROM "{TABLE_STOCK_SYMBOLS_MASSIVE}"
+                                             WHERE symbol IN (SELECT symbol FROM "TechnicalIndicatorsMasterData" where from_date < '2026-02-16')
                                              """)
 
     logger.info(f"Loaded {len(symbols_exchange)} symbols with exchange from the database.")
