@@ -23,3 +23,4 @@ def calculate_dividend_classification():
             dataframe=dividend_data,
             if_exists="append"
         )
+    logger.info(f"Saved dividend classification data to database - rows: {len(dividend_data)}")

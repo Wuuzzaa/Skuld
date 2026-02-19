@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 from config import TABLE_FUNDAMENTAL_DATA_YAHOO, TABLE_STOCK_PRICES_YAHOO
-from src.database import get_postgres_engine, insert_into_table, truncate_table
+from src.database import get_postgres_engine, insert_into_table, insert_into_table_bulk, truncate_table
 from src.yahooquery_scraper import YahooQueryScraper
 
 # Add parent directory to path for imports
@@ -161,6 +161,51 @@ def load_stock_prices(symbols):
                         if_exists="append"
                     )
 
+def load_historical_prices_(symbols):
+    yahoo_query = YahooQueryScraper.instance(symbols)
+    for df in yahoo_query.get_historical_prices(period='26y'):
+        if df is not None and not df.empty:
+            # rename date column to snapshot_date for consistency
+            if 'date' in df.columns:
+                df = df.rename(columns={'date': 'snapshot_date'})
+            with get_postgres_engine().begin() as connection:
+                insert_into_table(
+                    connection, 
+                    f"{TABLE_STOCK_PRICES_YAHOO}HistoryDaily", 
+                    df, 
+                    if_exists="append"
+                )
+
+def load_historical_prices(symbols):
+    logger.info("Fetching historical stock prices (high, low, close) using YahooQueryScraper...")
+    table_name = f"{TABLE_STOCK_PRICES_YAHOO}HistoryDaily"
+    yahoo_query = YahooQueryScraper.instance(symbols)
+    total_rows = 0
+    conn = get_postgres_engine().raw_connection()
+    try:
+        truncate_table(conn, table_name)
+
+        batch = 1
+        for df in yahoo_query.get_historical_prices(period='26y'):
+            logger.info(f"Batch {batch} - fetched {len(df) if df is not None else 0} historical price entries")
+            if df is not None and not df.empty:
+                # rename date column to snapshot_date for consistency
+                df = df.rename(columns={'date': 'snapshot_date'})
+                # df = df.astype({'volume':'int'})
+                df['volume'] = df['volume'].fillna(0).astype(int)
+                insert_into_table_bulk(
+                    conn, 
+                    table_name, 
+                    df, 
+                    if_exists="append"
+                )
+                total_rows += len(df)
+            batch += 1
+
+        conn.commit()
+    finally:
+        conn.close()
+    logger.info(f"Total historical price entries loaded: {total_rows}")
 
 if __name__ == "__main__":
 
