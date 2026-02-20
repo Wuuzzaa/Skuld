@@ -25,10 +25,6 @@ class YahooQueryScraper:
         self.retries = 5
         self.symbol_batches = [self.symbols[i:i + self.batch_size] for i in range(0, len(self.symbols), self.batch_size)]
         logger.info(f"Initializing {len(self.symbol_batches)} ticker batches with batch size {self.batch_size} for YahooQueryScraper - total symbols: {len(self.symbols)}")
-        # asynchronous=True, max_workers=2, is not possible because of the high number of symbols and the rate limit
-        # validate=True
-        self.ticker_batches = [Ticker(symbol_batch, progress=True) for symbol_batch in self.symbol_batches]
-        
         self._module_data_cache = None
         self.module_data_lock = threading.Lock()
         self._module_data_cache_timestamp = None
@@ -42,9 +38,11 @@ class YahooQueryScraper:
             all_data = {}
             if self._module_data_cache is None or force_refresh:
                 logger.info(f"Loading for {len(self.symbols)} symbols module data from Yahoo Finance - modules: {MODULES}")
+                 # asynchronous=True, max_workers=2, is not possible because of the high number of symbols and the rate limit
+                lokal_ticker_batches = [Ticker(symbol_batch, progress=True) for symbol_batch in self.symbol_batches]
                 batch = 1
-                for ticker_batch in self.ticker_batches:
-                    logger.info(f"({batch}/{len(self.ticker_batches)}) Batch")
+                for ticker_batch in lokal_ticker_batches:
+                    logger.info(f"({batch}/{len(lokal_ticker_batches)}) Batch")
                     batch += 1
                     for attempt in range(self.retries):
                         try:
@@ -124,10 +122,11 @@ class YahooQueryScraper:
             return df
 
     def get_historical_prices(self, period="1d"):
-        found_data = False
+        # , max_workers=2
+        lokal_ticker_batches = [Ticker(symbol_batch, progress=True, asynchronous=True) for symbol_batch in self.symbol_batches]
         batch = 1
-        for ticker_batch in self.ticker_batches:
-            logger.info(f"({batch}/{len(self.ticker_batches)}) Batch")
+        for ticker_batch in lokal_ticker_batches:
+            logger.info(f"({batch}/{len(lokal_ticker_batches)}) Batch")
             batch += 1
             for attempt in range(self.retries):
                 try:

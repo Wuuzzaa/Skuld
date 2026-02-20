@@ -2,16 +2,17 @@ import time
 import logging
 import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from src.massiv_api import get_symbols
+from src.massiv_api import get_symbols, get_symbols_with_exchange
 from src.live_stock_price_collector import fetch_current_prices
 from src.logger_config import setup_logging
 from src.database import run_migrations
 from src.massiv_api import load_option_chains
 from src.price_and_technical_analysis_data_scrapper import scrape_and_save_price_and_technical_indicators
+from src.stock_volatility import calculate_and_store_stock_implied_volatility_history
 from src.yahoo_asset_profile import load_asset_profile
 from src.yahoo_dividens import calculate_dividend_classification
 from src.yahooquery_earning_dates import scrape_earning_dates
-from src.yahooquery_financials import generate_fundamental_data, load_stock_prices
+from src.yahooquery_financials import generate_fundamental_data, load_historical_prices, load_stock_prices
 from src.yfinance_analyst_price_targets import scrape_yahoo_finance_analyst_price_targets
 from config import *
 from src.historization import run_historization_pipeline
@@ -64,13 +65,20 @@ def main(args):
                 ("Fetch Current Stock Day Prices", load_stock_prices, (symbols["stocks"],)),
             ]
         elif args.mode == "stock_data_daily":
+            symbols_with_exchange = get_symbols_with_exchange()
             parallel_tasks = [
-                ("Price & Technical Indicators", scrape_and_save_price_and_technical_indicators, (symbols["stocks_with_exchange"],)),
+                ("Price & Technical Indicators", scrape_and_save_price_and_technical_indicators, (symbols_with_exchange,)),
             ]
         elif args.mode == "option_data":
             parallel_tasks = [
                 ("Massive Option Chains", load_option_chains, (symbols["options"],)),
             ]
+        elif args.mode == "historical_prices":
+            parallel_tasks = [
+            ]
+            # synchronous sequential needed
+            load_historical_prices(symbols["stocks"])
+            calculate_and_store_stock_implied_volatility_history()
         elif args.mode == "historization":
             pass
         else:
@@ -166,6 +174,7 @@ if __name__ == "__main__":
                             "marked_start_mid_end",
                             "stock_data_daily",
                             "option_data",
+                            "historical_prices",
                             "historization"
                         ],
                         help="Mode for data collection")

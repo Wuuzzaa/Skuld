@@ -253,7 +253,6 @@ def select_into_dataframe_pg(query: str = None, sql_file_path: str = None, param
     """
     df = None
   
-    # Execute on PostgreSQL (Side-by-side test)
     try:
         if sql_file_path is not None and os.path.isfile(sql_file_path):
             with open(sql_file_path, 'r') as f:
@@ -389,11 +388,9 @@ def _run_migrations_for_engine(engine):
             except Exception as e:
                 logger.error(f"[{label}] Error applying migration {migration_file}: \n{e}")
                 raise e
-        if label == "PostgreSQL" and last_migration_version == 22:
-            load_historical_prices()
-            #todo kann das hier raus? sonst müssen die symbols übergeben werden an die migrationen
+            
         if label == "PostgreSQL" and last_migration_version == 23:
-            calculate_and_store_stock_implied_volatility_history()
+            calculate_and_store_stock_implied_volatility_history_migration()
 
         with connection.begin():
             if pending_migrations:
@@ -943,23 +940,8 @@ def recover_history():
             conn.rollback()
             logger.error(f"Error inserting new date: {e}")
             raise e
-        
-def load_historical_prices():
-    yahoo_query = YahooQueryScraper.instance()
-    for df in yahoo_query.get_historical_prices(period='26y'):
-        if df is not None and not df.empty:
-            # rename date column to snapshot_date for consistency
-            if 'date' in df.columns:
-                df = df.rename(columns={'date': 'snapshot_date'})
-            with get_postgres_engine().begin() as connection:
-                insert_into_table(
-                    connection, 
-                    f"{TABLE_STOCK_PRICES_YAHOO}HistoryDaily", 
-                    df, 
-                    if_exists="append"
-                )
 
-def calculate_and_store_stock_implied_volatility_history():
+def calculate_and_store_stock_implied_volatility_history_migration():
     df = select_into_dataframe(sql_file_path = "db/SQL/query/implied_volatility_history.sql")
 
     with get_postgres_engine().begin() as connection:

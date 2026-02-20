@@ -1,3 +1,4 @@
+import logging
 import sys
 import os
 import pandas as pd
@@ -9,23 +10,30 @@ from typing import Dict
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+logger = logging.getLogger(__name__)
 
-def scrape_and_save_price_and_technical_indicators(stocks_with_exchange: Dict[str, str]):
-    # todo massive exchange bezeichnung mit tradingview bezeichnungen mappen
-
-    underlying_symbols = [f"{exchange}:{symbol}" for symbol, exchange in stocks_with_exchange.items()]
+def scrape_and_save_price_and_technical_indicators(stocks_with_exchange):
+    
+    underlying_symbols = [f"{stock['exchange']}:{stock['symbol']}" for index, stock in stocks_with_exchange.iterrows()]
 
     results = []
     analysis = {}  # als Dictionary initialisieren
 
     # Unterteile underlying_symbols in 500er-Pakete (API Limit)
-    batch_size = 500
+    batch_size = 100
     symbol_batches = [underlying_symbols[i:i + batch_size] for i in range(0, len(underlying_symbols), batch_size)]
+    batch = 1
     for symbol_batch in symbol_batches:
-        analysis_symbol_batch = get_multiple_analysis(screener="america", interval=Interval.INTERVAL_1_HOUR, symbols=symbol_batch)
+        logger.info(f"Fetching technical analysis for batch ({batch}/{len(symbol_batches)}) of {len(symbol_batch)} symbols...")
+        try:
+            analysis_symbol_batch = get_multiple_analysis(screener="america", interval=Interval.INTERVAL_1_HOUR, symbols=symbol_batch)
+        except Exception as e:
+            logger.error(f"Error fetching technical analysis for batch {symbol_batch}: {e}")
+            raise e
         analysis.update(analysis_symbol_batch)  # analysis_symbol_batch muss ein dict sein
+        batch += 1
 
-    # Use the exchange from SYMBOLS_EXCHANGE mapping (from Excel file)
+    # Use the exchange from SYMBOLS_EXCHANGE mapping
     for symbol_ in analysis:
         exchange = symbol_.split(":")[0]
         symbol = symbol_.split(":")[1]
@@ -46,7 +54,7 @@ def scrape_and_save_price_and_technical_indicators(stocks_with_exchange: Dict[st
             results.append(indicators)
 
         except Exception as e:
-            print(f"Error with symbol: {symbol}: {e}")  
+            logger.error(f"Error with symbol: {symbol}: {e}")  
 
     # make a dataframe from the results
     df = pd.DataFrame(results)

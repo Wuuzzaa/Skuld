@@ -8,7 +8,7 @@ WITH FilteredOptions AS (
         abs(greeks_delta) AS delta,
         implied_volatility AS iv,
         greeks_theta AS theta,
-        close,
+        LIVE_STOCK_PRICE AS close,
         earnings_date,
         days_to_expiration,
         days_to_earnings,

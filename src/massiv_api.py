@@ -444,33 +444,37 @@ def get_symbols(include: str | None = None) -> list | dict[str, list]:
         symbols = select_into_dataframe(f'SELECT symbol FROM "{TABLE_STOCK_SYMBOLS_MASSIVE}"').squeeze().tolist()
     
     option_symbols = select_into_dataframe(f'SELECT symbol FROM "{TABLE_STOCK_SYMBOLS_MASSIVE}" WHERE has_options = true').squeeze().tolist()
-    symbols_exchange = select_into_dataframe(f"""
-                                             SELECT 
-                                                symbol,
-                                                CASE 
-                                                    WHEN exchange_mic = 'XNAS' THEN 'NASDAQ'
-                                                    WHEN exchange_mic = 'XNYS' OR exchange_mic = 'ARCX' THEN 'NYSE'
-                                                    WHEN exchange_mic = 'XASE' THEN 'AMEX'
-                                                    ELSE exchange_mic
-                                                END AS exchange
-                                             FROM "{TABLE_STOCK_SYMBOLS_MASSIVE}"
-                                             """)
 
-    symbols_exchange.set_index('symbol').to_dict()
-
-    logger.info(f"Loaded {len(symbols)} stock symbols, {len(option_symbols)} symbols with options and exchange info for {len(symbols_exchange)} symbols from the database.")
+    logger.info(f"Loaded {len(symbols)} stock symbols, {len(option_symbols)} symbols with options from the database.")
 
     result = {
         "all": symbols,
         "stocks": symbols,
         "indices": [], # not needed currently
-        "options": option_symbols,
-        "stocks_with_exchange": symbols_exchange
+        "options": option_symbols
     }
 
     if include is not None:
         return sorted(list(set(result[include])))
     return result
+
+def get_symbols_with_exchange():
+    symbols_exchange = select_into_dataframe(f"""
+                                             SELECT 
+                                                symbol,
+                                                CASE 
+                                                    WHEN exchange_mic = 'XNAS' THEN 'NASDAQ'
+                                                    WHEN exchange_mic = 'XNYS' THEN 'NYSE'
+                                                    WHEN exchange_mic = 'ARCX' THEN 'AMEX'
+                                                    WHEN exchange_mic = 'XASE' THEN 'AMEX'
+                                                    ELSE exchange_mic
+                                                END AS exchange
+                                             FROM "{TABLE_STOCK_SYMBOLS_MASSIVE}"
+                                             WHERE symbol IN (SELECT symbol FROM "TechnicalIndicatorsMasterData" where from_date < '2026-02-16')
+                                             """)
+
+    logger.info(f"Loaded {len(symbols_exchange)} symbols with exchange from the database.")
+    return symbols_exchange
 
 def load_symbols():
     """
