@@ -1,0 +1,109 @@
+version: '3.8'
+
+services:
+  # Traefik Reverse Proxy for Staging
+  # (Production usually has this running externally, but Staging uses a self-contained one)
+  traefik:
+    image: traefik:v2.11
+    container_name: traefik_staging
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.forwardedHeaders.insecure=true"
+      # - "--entrypoints.websecure.address=:443"  <-- DISABLED to prevent HTTPS confusion
+      # - "--entrypoints.websecure.forwardedHeaders.insecure=true"
+    environment:
+      - DOCKER_API_VERSION=1.44
+    ports:
+      - "80:80"
+      - "8080:8080"
+      # - "443:443" <-- DISABLED
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    networks:
+      - web
+    restart: unless-stopped
+
+  # Explicitly disable TLS for Staging routers (since we use HTTP entrypoint)
+  skuld-frontend:
+    labels:
+      # Define a dedicated Staging Router with higher priority to override the base one
+      # We skip the 'enable=false' trick because it's prone to failure
+      # Define a dedicated Staging Router by overriding the base 'skuld' router
+      - "traefik.http.routers.skuld.rule=Host(`test.skuld-options.com`)"
+      - "traefik.http.routers.skuld.entrypoints=web"
+      
+      # Ensure middleware is attached (overriding base if needed)
+      # We chain 'force-https' BEFORE 'authelia' so Authelia sees the correct proto
+      - "traefik.http.routers.skuld.middlewares=force-https,authelia"
+
+      # Explicitly disable TLS on this router just in case
+      - "traefik.http.routers.skuld.tls=false"
+
+      # Networking Fixes
+      - "traefik.docker.network=web"
+      
+      # Middleware: Force HTTPS Scheme (Fix for Cloudflare Tunnel -> HTTP Traefik)
+      - "traefik.http.middlewares.force-https.headers.customrequestheaders.X-Forwarded-Proto=https"
+
+      # Override Authelia Middleware to allow HTTP scheme check bypass
+      # We tell Authelia to redirect back to HTTPS (public URL)
+      - "traefik.http.middlewares.authelia.forwardauth.address=http://authelia:9091/api/verify?rd=https://${AUTH_DOMAIN}/"
+      - "traefik.http.middlewares.authelia.forwardauth.trustForwardHeader=true"
+
+  authelia:
+    labels:
+      # --- SECURE ROUTER (Port 443) - DISABLED for Tunnel
+      # Updates the existing 'authelia' router from base config
+      # Update 'authelia' router from base to use HTTP
+      - "traefik.http.routers.authelia.rule=Host(`${AUTH_DOMAIN}`)"
+      - "traefik.http.routers.authelia.entrypoints=web"
+      - "traefik.http.routers.authelia.tls=false"
+      
+      - "traefik.docker.network=web"
+      
+    environment:
+      # Allow HTTP cookies for non-HTTPS staging environment
+      - AUTHELIA_SESSION_COOKIES_0_DOMAIN=skuld-options.com
+      - AUTHELIA_SESSION_COOKIES_0_SECURE=false
+      # Use a different session name to avoid conflict with production
+      - AUTHELIA_SESSION_NAME=authelia_session_staging
+
+  # Staging Database (Self-contained)
+  postgres:
+    image: postgres:15-alpine
+    container_name: skuld_staging_db
+    env_file:
+      - .env
+    # Add alias to ensure resolution on default network or specific networks
+    networks:
+      postgres_setup_default:
+        aliases:
+          - postgres
+      web:
+    volumes:
+      - staging_db_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d Skuld"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # PgAdmin for Staging (Localhost Binding Only via Tunnel)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: skuld_staging_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@skuld.local}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+    ports:
+      - "127.0.0.1:5053:80"
+    networks:
+      - postgres_setup_default
+    restart: unless-stopped
+
+volumes:
+  staging_db_data:

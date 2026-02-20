@@ -1,0 +1,174 @@
+name: Deploy SKULD Staging to Home Server
+
+on:
+  push:
+    branches: [ testsystem ]
+
+
+jobs:
+  deploy-staging:
+    runs-on: self-hosted
+    env:
+      # Define Staging Domains here to be used in steps
+      DOMAIN_NAME: test.skuld-options.com
+      AUTH_DOMAIN: auth-test.skuld-options.com # Adjusted to match existing DNS record
+      
+      # Increase timeouts for Docker operations to handle network flakiness
+      COMPOSE_HTTP_TIMEOUT: "300"
+      DOCKER_CLIENT_TIMEOUT: "300"
+
+    steps:
+      - name: Fix Permissions (Pre-Checkout)
+        run: |
+          echo "=== Fixing Workspace Permissions ==="
+          # The runner might not have permission to delete files created by Docker containers (root).
+          # We check if the workspace directory exists and has files.
+          if [ -d . ]; then
+             echo "Fixing ownership of $(pwd)..."
+             # Use a lightweight container to chown the current directory to the runner's user ID
+             # $(id -u):$(id -g) returns the current user's UID:GID
+             docker run --rm -v "$(pwd):/clean" alpine chown -R $(id -u):$(id -g) /clean || true
+          fi
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create .env file for Staging
+        run: |
+          echo "=== Creating .env file ==="
+          # Use the domains defined in workflow env or defaults
+          echo "DOMAIN_NAME=${{ env.DOMAIN_NAME }}" > .env
+          echo "AUTH_DOMAIN=${{ env.AUTH_DOMAIN }}" >> .env
+          
+          # Traefik Configuration (Staging = HTTP / No Cert Resolver)
+          echo "TRAEFIK_ENTRYPOINT=web" >> .env
+          echo "TRAEFIK_CERTRESOLVER_LABEL=traefik.enable=true" >> .env
+          # Used in docker-compose.yml for middleware redirect
+          echo "AUTH_SCHEME=http" >> .env
+          
+          # Secrets mapping - Using repository secrets. 
+           # Ensure these secrets are set for the repo or create Environment-specific secrets in GitHub.
+          echo "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" >> .env
+          # Use Staging Channel ID
+          echo "TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID_STAGING }}" >> .env
+          # Set Environment Name for Message Prefix
+          echo "SKULD_ENV=Staging" >> .env
+          echo "MASSIVE_API_KEY=${{ secrets.MASSIVE_API_KEY }}" >> .env
+          echo "MASSIVE_API_KEY_FLAT_FILES=${{ secrets.MASSIVE_API_KEY_FLAT_FILES }}" >> .env
+          
+          # Staging uses the internal self-contained DB (Service Name: postgres)
+          echo "POSTGRES_HOST=postgres" >> .env
+          echo "POSTGRES_DB=Skuld" >> .env
+          echo "POSTGRES_USER=admin" >> .env
+          echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env
+          echo "POSTGRES_PORT=5432" >> .env
+          
+          # If you have specific Staging secrets, consider using GitHub Environments (e.g., 'staging') 
+          # and ${{ secrets.STAGING_POSTGRES_PASSWORD }} etc.
+
+      - name: Setup Authelia for Staging
+        run: |
+          echo "=== Creating Authelia configuration ==="
+          mkdir -p authelia
+          
+          echo "${{ secrets.AUTHELIA_JWT_SECRET }}" > authelia/jwt_secret
+          echo "${{ secrets.AUTHELIA_SESSION_SECRET }}" > authelia/session_secret
+          echo "${{ secrets.AUTHELIA_STORAGE_ENCRYPTION_KEY }}" > authelia/storage_encryption_key
+          
+          # Using the same hash secret for simplicity, or add a specific one for staging
+          AUTHELIA_HASH='${{ secrets.AUTHELIA_PASSWORD_HASH }}'
+          
+          echo "users:" > authelia/users_database.yml
+          echo "  admin:" >> authelia/users_database.yml
+          echo "    displayname: \"Staging Admin\"" >> authelia/users_database.yml
+          echo "    password: \"$AUTHELIA_HASH\"" >> authelia/users_database.yml
+          echo "    email: admin@staging.skuld.com" >> authelia/users_database.yml
+          echo "    groups:" >> authelia/users_database.yml
+          echo "      - admins" >> authelia/users_database.yml
+          echo "      - dev" >> authelia/users_database.yml
+
+      - name: Adjust Authelia Config for Staging
+        run: |
+          # Replace Prod domain with Staging domain in Authelia config
+          # This ensures the access control rules match the Staging URL
+          sed -i "s/app.skuld-options.com/${{ env.DOMAIN_NAME }}/g" authelia/configuration.yml
+          
+          # Optional: Adjust cookie domain if you want isolation
+          # sed -i "s/domain: 'skuld-options.com'/domain: 'test.skuld-options.com'/g" authelia/configuration.yml
+
+      - name: Clean up old resources (Safe Mode)
+        run: |
+            echo "=== Safe Cleanup (Keeping Volumes) ==="
+            # This cleans stopped containers, unused networks, and dangling images.
+            # It also cleans unused images (not just dangling) because of -a.
+            # CRITICAL: Do NOT use --volumes here.
+            # We removed -a to keep cached images (like postgres, traefik) and only remove dangling ones.
+            docker system prune -f || true
+
+      - name: Ensure External Networks Exist
+        run: |
+          echo "=== Checking External Networks ==="
+          # Check and create 'web' network (traefik usually)
+          if ! docker network inspect web >/dev/null 2>&1; then
+            echo "Creating network 'web'..."
+            docker network create web
+          else
+            echo "Network 'web' exists."
+          fi
+          
+          # Check and create 'postgres_setup_default' network (database)
+          if ! docker network inspect postgres_setup_default >/dev/null 2>&1; then
+            echo "Creating network 'postgres_setup_default'..."
+            docker network create postgres_setup_default
+          else
+            echo "Network 'postgres_setup_default' exists."
+          fi
+
+      - name: Deploy with Docker Compose
+        run: |
+            echo "=== Stopping current stack (if running) ==="
+            # Removes containers and networks, but PRESERVES volumes.
+            docker compose down --remove-orphans || true
+            
+            echo "=== Ensuring financial_data.db file structure ==="
+            # Fix for Docker creating a directory instead of file if it doesn't exist
+            if [ -d "financial_data.db" ]; then
+              echo "⚠️  financial_data.db is a directory, removing and recreating as file..."
+              rm -rf financial_data.db
+              touch financial_data.db
+            elif [ ! -f "financial_data.db" ]; then
+              echo "📝 Creating new financial_data.db..."
+              touch financial_data.db
+            fi
+            
+            echo "=== Building Image Explicitly (Avoiding Parallel Build Race) ==="
+            # Build image once to prevent race condition when multiple services share the same build context
+            docker build -t skuld-app-image .
+
+            echo "=== Pulling images with retry (5 Attempts) ==="
+            # Network is flaky, so we retry the pull operation multiple times
+            n=0
+            until [ "$n" -ge 5 ]
+            do
+               echo "Pull Attempt $((n+1))/5..."
+               docker compose -f docker-compose.yml -f docker-compose.testing.yml pull && break
+               n=$((n+1))
+               echo "⚠️ Pull failed, retrying in 10s..."
+               sleep 10
+            done
+            
+            if [ "$n" -ge 5 ]; then
+               echo "❌ Failed to pull images after 5 attempts."
+               exit 1
+            fi
+
+            echo "=== Starting Staging Stack ==="
+            # Start services using the pre-built image, include Staging overrides (Traefik)
+            # --no-build ensures we use the image built in previous step
+            docker compose -f docker-compose.yml -f docker-compose.testing.yml up -d --no-build --remove-orphans
+            
+            echo "=== Cleaning up build cache ==="
+            docker builder prune -f
+            
+            echo "=== New Container Status ==="
+            docker compose ps
