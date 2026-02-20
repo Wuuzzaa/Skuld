@@ -21,6 +21,7 @@ use_local_data = "--local" in sys.argv
 # Layout
 st.set_page_config(layout="wide")
 
+
 # Titel
 st.title("SKULD - Option Viewer")
 
@@ -31,6 +32,7 @@ marrieds = st.Page("pages/married_put_analysis.py", title="Married Puts")
 multifactor_swingtrading = st.Page('pages/multifactor_swingtrading.py', title="Multifactor Swingtrading")
 expected_value = st.Page('pages/expected_value.py', title="Expected Value")
 data_logs = st.Page("pages/data_change_logs.py", title="Data Logs")
+symbolpage = st.Page("pages/symbolpage.py", title="Symbol Page")
 
 # Set up navigation
 page = st.navigation(
@@ -40,7 +42,8 @@ page = st.navigation(
         marrieds,
         multifactor_swingtrading,
         expected_value,
-        data_logs
+        data_logs,
+        symbolpage
     ]
 )
 
