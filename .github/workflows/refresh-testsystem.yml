@@ -1,0 +1,338 @@
+name: "\U0001F504 Refresh Testsystem"
+
+# ============================================================================
+# Combined workflow to refresh the staging/test environment:
+#   1. Deploy code from any branch to the test server
+#   2. Sync the production database (Hetzner) directly to the test server
+#
+# Runs on the self-hosted runner (Home Server), so it has direct Docker access.
+# For DB sync, it uses the DEPLOY_SSH_KEY secret to SSH into Hetzner.
+# ============================================================================
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_code:
+        description: "\U0001F680 Deploy code to Staging"
+        type: boolean
+        default: true
+      branch:
+        description: "\U0001F33F Branch to deploy (only used if 'Deploy code' is enabled)"
+        type: string
+        default: "master"
+      sync_database:
+        description: "\U0001F5C4️ Sync database from Production (Hetzner) to Staging"
+        type: boolean
+        default: false
+
+jobs:
+  validate-inputs:
+    runs-on: self-hosted
+    steps:
+      - name: Validate at least one action is selected
+        run: |
+          if [ "${{ inputs.deploy_code }}" != "true" ] && [ "${{ inputs.sync_database }}" != "true" ]; then
+            echo "❌ ERROR: You must select at least one action (Deploy code and/or Sync database)."
+            exit 1
+          fi
+          echo "=== Refresh Testsystem ==="
+          echo "Deploy code:   ${{ inputs.deploy_code }} (Branch: ${{ inputs.branch }})"
+          echo "Sync database: ${{ inputs.sync_database }}"
+
+  # =====================================================================
+  # PHASE 1: CODE DEPLOYMENT
+  # Checks out the selected branch and deploys it via Docker Compose.
+  # Based on the existing deploy-testsystem.yml logic.
+  # =====================================================================
+  deploy-code:
+    if: ${{ inputs.deploy_code }}
+    needs: validate-inputs
+    runs-on: self-hosted
+    env:
+      DOMAIN_NAME: test.skuld-options.com
+      AUTH_DOMAIN: auth-test.skuld-options.com
+      COMPOSE_HTTP_TIMEOUT: "300"
+      DOCKER_CLIENT_TIMEOUT: "300"
+
+    steps:
+      - name: Fix Permissions (Pre-Checkout)
+        run: |
+          echo "=== Fixing Workspace Permissions ==="
+          if [ -d . ]; then
+             echo "Fixing ownership of $(pwd)..."
+             docker run --rm -v "$(pwd):/clean" alpine chown -R $(id -u):$(id -g) /clean || true
+          fi
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+          fetch-depth: 0  # Full history for version info
+
+      - name: Get version info
+        id: version
+        run: |
+          COUNT=$(git rev-list --count HEAD)
+          HASH=$(git rev-parse --short HEAD)
+          DATE=$(git log -1 --format=%cd --date=format:'%Y-%m-%d %H:%M')
+          BRANCH="${{ inputs.branch }}"
+          echo "VERSION=${COUNT}-${HASH} [${BRANCH}] (${DATE})" >> $GITHUB_OUTPUT
+          echo "📌 Version: ${COUNT}-${HASH} [${BRANCH}] (${DATE})"
+
+      - name: Create .env file for Staging
+        run: |
+          echo "=== Creating .env file ==="
+          echo "DOMAIN_NAME=${{ env.DOMAIN_NAME }}" > .env
+          echo "AUTH_DOMAIN=${{ env.AUTH_DOMAIN }}" >> .env
+
+          # Traefik Configuration (Staging = HTTP / No Cert Resolver)
+          echo "TRAEFIK_ENTRYPOINT=web" >> .env
+          echo "TRAEFIK_CERTRESOLVER_LABEL=traefik.enable=true" >> .env
+          echo "AUTH_SCHEME=http" >> .env
+
+          # Secrets
+          echo "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" >> .env
+          echo "TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID_STAGING }}" >> .env
+          echo "SKULD_ENV=Staging" >> .env
+          echo "MASSIVE_API_KEY=${{ secrets.MASSIVE_API_KEY }}" >> .env
+          echo "MASSIVE_API_KEY_FLAT_FILES=${{ secrets.MASSIVE_API_KEY_FLAT_FILES }}" >> .env
+
+          # Database (Staging uses self-contained Postgres)
+          echo "POSTGRES_HOST=postgres" >> .env
+          echo "POSTGRES_DB=Skuld" >> .env
+          echo "POSTGRES_USER=admin" >> .env
+          echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env
+          echo "POSTGRES_PORT=5432" >> .env
+
+          # Version
+          echo "SKULD_VERSION=${{ steps.version.outputs.VERSION }}" >> .env
+
+      - name: Setup Authelia for Staging
+        run: |
+          echo "=== Creating Authelia configuration ==="
+          mkdir -p authelia
+
+          echo "${{ secrets.AUTHELIA_JWT_SECRET }}" > authelia/jwt_secret
+          echo "${{ secrets.AUTHELIA_SESSION_SECRET }}" > authelia/session_secret
+          echo "${{ secrets.AUTHELIA_STORAGE_ENCRYPTION_KEY }}" > authelia/storage_encryption_key
+
+          AUTHELIA_HASH='${{ secrets.AUTHELIA_PASSWORD_HASH }}'
+
+          echo "users:" > authelia/users_database.yml
+          echo "  admin:" >> authelia/users_database.yml
+          echo "    displayname: \"Staging Admin\"" >> authelia/users_database.yml
+          echo "    password: \"$AUTHELIA_HASH\"" >> authelia/users_database.yml
+          echo "    email: admin@staging.skuld.com" >> authelia/users_database.yml
+          echo "    groups:" >> authelia/users_database.yml
+          echo "      - admins" >> authelia/users_database.yml
+          echo "      - dev" >> authelia/users_database.yml
+
+      - name: Adjust Authelia Config for Staging
+        run: |
+          sed -i "s/app.skuld-options.com/${{ env.DOMAIN_NAME }}/g" authelia/configuration.yml
+
+      - name: Clean up old resources (Safe Mode)
+        run: |
+          echo "=== Safe Cleanup (Keeping Volumes) ==="
+          docker system prune -f || true
+
+      - name: Ensure External Networks Exist
+        run: |
+          echo "=== Checking External Networks ==="
+          if ! docker network inspect web >/dev/null 2>&1; then
+            echo "Creating network 'web'..."
+            docker network create web
+          else
+            echo "Network 'web' exists."
+          fi
+
+          if ! docker network inspect postgres_setup_default >/dev/null 2>&1; then
+            echo "Creating network 'postgres_setup_default'..."
+            docker network create postgres_setup_default
+          else
+            echo "Network 'postgres_setup_default' exists."
+          fi
+
+      - name: Deploy with Docker Compose
+        run: |
+          echo "=== Stopping current stack (if running) ==="
+          docker compose down --remove-orphans || true
+
+          echo "=== Ensuring financial_data.db file structure ==="
+          if [ -d "financial_data.db" ]; then
+            echo "⚠️  financial_data.db is a directory, removing and recreating as file..."
+            rm -rf financial_data.db
+            touch financial_data.db
+          elif [ ! -f "financial_data.db" ]; then
+            echo "📝 Creating new financial_data.db..."
+            touch financial_data.db
+          fi
+
+          echo "=== Building Image ==="
+          docker build -t skuld-app-image .
+
+          echo "=== Pulling images with retry (5 Attempts) ==="
+          n=0
+          until [ "$n" -ge 5 ]
+          do
+             echo "Pull Attempt $((n+1))/5..."
+             docker compose -f docker-compose.yml -f docker-compose.testing.yml pull && break
+             n=$((n+1))
+             echo "⚠️ Pull failed, retrying in 10s..."
+             sleep 10
+          done
+
+          if [ "$n" -ge 5 ]; then
+             echo "❌ Failed to pull images after 5 attempts."
+             exit 1
+          fi
+
+          echo "=== Starting Staging Stack ==="
+          docker compose -f docker-compose.yml -f docker-compose.testing.yml up -d --no-build --remove-orphans
+
+          echo "=== Cleaning up build cache ==="
+          docker builder prune -f
+
+          echo "=== New Container Status ==="
+          docker compose -f docker-compose.yml -f docker-compose.testing.yml ps
+
+  # =====================================================================
+  # PHASE 2: DATABASE SYNC
+  # Downloads the latest backup from Hetzner (Production) and restores
+  # it into the staging Postgres container.
+  # Runs AFTER code deploy (if both selected) to ensure containers exist.
+  # =====================================================================
+  sync-database:
+    needs: [validate-inputs, deploy-code]
+    # Run even if deploy-code was skipped (when only DB sync is selected)
+    # But fail if deploy-code actually failed
+    if: ${{ inputs.sync_database && (needs.deploy-code.result == 'success' || needs.deploy-code.result == 'skipped') }}
+    runs-on: self-hosted
+    env:
+      STAGING_DB_CONTAINER: skuld_staging_db
+      STAGING_DB_NAME: Skuld
+      STAGING_DB_USER: admin
+      DUMP_PATH: /tmp/skuld_restore.sql.gz
+
+    steps:
+      - name: Setup SSH for Hetzner Access
+        run: |
+          echo "=== Setting up SSH key for Hetzner access ==="
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/hetzner_key
+          chmod 600 ~/.ssh/hetzner_key
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Verify Staging DB Container is Running
+        run: |
+          echo "=== Checking staging database container ==="
+          if ! docker ps --format '{{.Names}}' | grep -q "^${{ env.STAGING_DB_CONTAINER }}$"; then
+            echo "❌ Container ${{ env.STAGING_DB_CONTAINER }} is not running!"
+            echo ""
+            echo "Available containers:"
+            docker ps --format 'table {{.Names}}\t{{.Status}}'
+            echo ""
+            echo "💡 Hint: Run this workflow with 'Deploy code' enabled first to start the stack."
+            exit 1
+          fi
+          echo "✅ Container ${{ env.STAGING_DB_CONTAINER }} is running."
+
+      - name: Find and Download Latest Backup from Hetzner
+        run: |
+          echo "=== Finding latest backup on Production ==="
+
+          LATEST=$(ssh -i ~/.ssh/hetzner_key -o StrictHostKeyChecking=no \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "ls -t ~/backups/postgres/skuld_*.sql.gz 2>/dev/null | head -n 1")
+
+          if [ -z "$LATEST" ]; then
+            echo "❌ No backup found on Production server!"
+            echo "Expected location: ~/backups/postgres/skuld_*.sql.gz"
+            exit 1
+          fi
+
+          echo "📦 Found: $LATEST"
+          
+          # Get file size for info
+          SIZE=$(ssh -i ~/.ssh/hetzner_key -o StrictHostKeyChecking=no \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "du -h '$LATEST' | cut -f1")
+          echo "📏 Size: $SIZE"
+
+          echo "⬇️  Downloading directly to staging server..."
+          scp -i ~/.ssh/hetzner_key -o StrictHostKeyChecking=no \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${LATEST}" \
+            ${{ env.DUMP_PATH }}
+
+          LOCAL_SIZE=$(du -h ${{ env.DUMP_PATH }} | cut -f1)
+          echo "✅ Download complete ($LOCAL_SIZE)"
+
+      - name: Restore Database on Staging
+        run: |
+          echo "=== Restoring Database on Staging ==="
+
+          echo "⏸️  Stopping application services to prevent DB connections..."
+          docker stop skuld-frontend skuld-backend 2>/dev/null || true
+
+          echo "⏳ Waiting for connections to close..."
+          sleep 3
+
+          echo "🗑️  Dropping and recreating database..."
+          echo "DROP DATABASE IF EXISTS \"${{ env.STAGING_DB_NAME }}\"; CREATE DATABASE \"${{ env.STAGING_DB_NAME }}\";" | \
+            docker exec -i ${{ env.STAGING_DB_CONTAINER }} psql -U ${{ env.STAGING_DB_USER }} -d postgres
+
+          echo "📥 Restoring data (this may take a while)..."
+          zcat ${{ env.DUMP_PATH }} | \
+            docker exec -i ${{ env.STAGING_DB_CONTAINER }} psql -U ${{ env.STAGING_DB_USER }} -d ${{ env.STAGING_DB_NAME }} 2>&1 | \
+            tail -5
+
+          echo "▶️  Restarting application services..."
+          docker start skuld-frontend skuld-backend 2>/dev/null || true
+
+          echo "✅ Database restore complete!"
+
+      - name: Verify Database
+        run: |
+          echo "=== Quick Database Verification ==="
+          echo "Table count:"
+          docker exec ${{ env.STAGING_DB_CONTAINER }} psql -U ${{ env.STAGING_DB_USER }} -d ${{ env.STAGING_DB_NAME }} \
+            -c "SELECT count(*) as table_count FROM information_schema.tables WHERE table_schema = 'public';"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          echo "=== Cleaning up ==="
+          rm -f ~/.ssh/hetzner_key
+          rm -f ${{ env.DUMP_PATH }}
+          echo "✅ Cleanup done."
+
+  # =====================================================================
+  # SUMMARY
+  # =====================================================================
+  summary:
+    needs: [validate-inputs, deploy-code, sync-database]
+    if: always()
+    runs-on: self-hosted
+    steps:
+      - name: Print Summary
+        run: |
+          echo "========================================="
+          echo "  🔄 Refresh Testsystem - Summary"
+          echo "========================================="
+          echo ""
+          echo "Code Deploy:    ${{ inputs.deploy_code && (needs.deploy-code.result || 'skipped') || 'not requested' }}"
+          echo "  Branch:       ${{ inputs.branch }}"
+          echo "Database Sync:  ${{ inputs.sync_database && (needs.sync-database.result || 'skipped') || 'not requested' }}"
+          echo ""
+
+          # Determine overall status
+          FAILED=false
+          if [ "${{ needs.deploy-code.result }}" = "failure" ]; then FAILED=true; fi
+          if [ "${{ needs.sync-database.result }}" = "failure" ]; then FAILED=true; fi
+
+          if [ "$FAILED" = "true" ]; then
+            echo "❌ Some steps failed. Check the logs above."
+            exit 1
+          else
+            echo "✅ All requested operations completed successfully!"
+          fi
