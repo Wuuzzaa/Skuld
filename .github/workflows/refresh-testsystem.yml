@@ -7,6 +7,8 @@ name: "\U0001F504 Refresh Testsystem"
 #
 # Runs on the self-hosted runner (Home Server), so it has direct Docker access.
 # For DB sync, it uses the DEPLOY_SSH_KEY secret to SSH into Hetzner.
+#
+# Progress is reported via GitHub Job Summaries (visible on the workflow run page).
 # ============================================================================
 
 on:
@@ -28,21 +30,34 @@ on:
 jobs:
   validate-inputs:
     runs-on: self-hosted
+    outputs:
+      start_time: ${{ steps.init.outputs.start_time }}
     steps:
-      - name: Validate at least one action is selected
+      - name: Validate & Initialize
+        id: init
         run: |
           if [ "${{ inputs.deploy_code }}" != "true" ] && [ "${{ inputs.sync_database }}" != "true" ]; then
-            echo "❌ ERROR: You must select at least one action (Deploy code and/or Sync database)."
+            echo "## ❌ Validation Failed" >> $GITHUB_STEP_SUMMARY
+            echo "You must select at least one action." >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
-          echo "=== Refresh Testsystem ==="
-          echo "Deploy code:   ${{ inputs.deploy_code }} (Branch: ${{ inputs.branch }})"
-          echo "Sync database: ${{ inputs.sync_database }}"
+
+          echo "start_time=$(date +%s)" >> $GITHUB_OUTPUT
+
+          # --- Job Summary: Header ---
+          echo "## 🔄 Refresh Testsystem" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Setting | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Deploy Code** | \`${{ inputs.deploy_code }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Branch** | \`${{ inputs.branch }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Sync Database** | \`${{ inputs.sync_database }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Triggered by** | \`${{ github.actor }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Started at** | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
 
   # =====================================================================
   # PHASE 1: CODE DEPLOYMENT
-  # Checks out the selected branch and deploys it via Docker Compose.
-  # Based on the existing deploy-testsystem.yml logic.
   # =====================================================================
   deploy-code:
     if: ${{ inputs.deploy_code }}
@@ -55,19 +70,25 @@ jobs:
       DOCKER_CLIENT_TIMEOUT: "300"
 
     steps:
+      - name: "📋 Summary: Deploy started"
+        run: |
+          echo "## 🚀 Phase 1: Code Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Step | Status | Details |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|---------|" >> $GITHUB_STEP_SUMMARY
+
       - name: Fix Permissions (Pre-Checkout)
         run: |
-          echo "=== Fixing Workspace Permissions ==="
           if [ -d . ]; then
-             echo "Fixing ownership of $(pwd)..."
              docker run --rm -v "$(pwd):/clean" alpine chown -R $(id -u):$(id -g) /clean || true
           fi
+          echo "| 🔧 Fix Permissions | ✅ Done | — |" >> $GITHUB_STEP_SUMMARY
 
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.branch }}
-          fetch-depth: 0  # Full history for version info
+          fetch-depth: 0
 
       - name: Get version info
         id: version
@@ -76,49 +97,39 @@ jobs:
           HASH=$(git rev-parse --short HEAD)
           DATE=$(git log -1 --format=%cd --date=format:'%Y-%m-%d %H:%M')
           BRANCH="${{ inputs.branch }}"
-          echo "VERSION=${COUNT}-${HASH} [${BRANCH}] (${DATE})" >> $GITHUB_OUTPUT
-          echo "📌 Version: ${COUNT}-${HASH} [${BRANCH}] (${DATE})"
+          VERSION="${COUNT}-${HASH} [${BRANCH}] (${DATE})"
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+          echo "| 📋 Checkout | ✅ Done | \`${VERSION}\` |" >> $GITHUB_STEP_SUMMARY
 
       - name: Create .env file for Staging
         run: |
-          echo "=== Creating .env file ==="
           echo "DOMAIN_NAME=${{ env.DOMAIN_NAME }}" > .env
           echo "AUTH_DOMAIN=${{ env.AUTH_DOMAIN }}" >> .env
-
-          # Traefik Configuration (Staging = HTTP / No Cert Resolver)
           echo "TRAEFIK_ENTRYPOINT=web" >> .env
           echo "TRAEFIK_CERTRESOLVER_LABEL_SKULD=traefik.enable=true" >> .env
           echo "TRAEFIK_CERTRESOLVER_LABEL_AUTHELIA=traefik.enable=true" >> .env
           echo "AUTH_SCHEME=http" >> .env
-
-          # Secrets
           echo "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" >> .env
           echo "TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID_STAGING }}" >> .env
           echo "SKULD_ENV=Staging" >> .env
           echo "MASSIVE_API_KEY=${{ secrets.MASSIVE_API_KEY }}" >> .env
           echo "MASSIVE_API_KEY_FLAT_FILES=${{ secrets.MASSIVE_API_KEY_FLAT_FILES }}" >> .env
-
-          # Database (Staging uses self-contained Postgres)
           echo "POSTGRES_HOST=postgres" >> .env
           echo "POSTGRES_DB=Skuld" >> .env
           echo "POSTGRES_USER=admin" >> .env
           echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env
           echo "POSTGRES_PORT=5432" >> .env
-
-          # Version
           echo "SKULD_VERSION=${{ steps.version.outputs.VERSION }}" >> .env
+          echo "| ⚙️ Create .env | ✅ Done | Staging config |" >> $GITHUB_STEP_SUMMARY
 
       - name: Setup Authelia for Staging
         run: |
-          echo "=== Creating Authelia configuration ==="
           mkdir -p authelia
-
           echo "${{ secrets.AUTHELIA_JWT_SECRET }}" > authelia/jwt_secret
           echo "${{ secrets.AUTHELIA_SESSION_SECRET }}" > authelia/session_secret
           echo "${{ secrets.AUTHELIA_STORAGE_ENCRYPTION_KEY }}" > authelia/storage_encryption_key
 
           AUTHELIA_HASH='${{ secrets.AUTHELIA_PASSWORD_HASH }}'
-
           echo "users:" > authelia/users_database.yml
           echo "  admin:" >> authelia/users_database.yml
           echo "    displayname: \"Staging Admin\"" >> authelia/users_database.yml
@@ -128,85 +139,73 @@ jobs:
           echo "      - admins" >> authelia/users_database.yml
           echo "      - dev" >> authelia/users_database.yml
 
-      - name: Adjust Authelia Config for Staging
-        run: |
           sed -i "s/app.skuld-options.com/${{ env.DOMAIN_NAME }}/g" authelia/configuration.yml
+          echo "| 🔐 Setup Authelia | ✅ Done | — |" >> $GITHUB_STEP_SUMMARY
 
-      - name: Clean up old resources (Safe Mode)
+      - name: Clean up & Ensure Networks
         run: |
-          echo "=== Safe Cleanup (Keeping Volumes) ==="
           docker system prune -f || true
 
-      - name: Ensure External Networks Exist
-        run: |
-          echo "=== Checking External Networks ==="
-          if ! docker network inspect web >/dev/null 2>&1; then
-            echo "Creating network 'web'..."
-            docker network create web
-          else
-            echo "Network 'web' exists."
-          fi
+          for NET in web postgres_setup_default; do
+            if ! docker network inspect $NET >/dev/null 2>&1; then
+              docker network create $NET
+            fi
+          done
+          echo "| 🧹 Cleanup & Networks | ✅ Done | — |" >> $GITHUB_STEP_SUMMARY
 
-          if ! docker network inspect postgres_setup_default >/dev/null 2>&1; then
-            echo "Creating network 'postgres_setup_default'..."
-            docker network create postgres_setup_default
-          else
-            echo "Network 'postgres_setup_default' exists."
-          fi
-
-      - name: Deploy with Docker Compose
+      - name: "🐳 Docker Build & Deploy"
         run: |
-          echo "=== Stopping current stack (if running) ==="
           docker compose down --remove-orphans || true
 
-          echo "=== Ensuring financial_data.db file structure ==="
           if [ -d "financial_data.db" ]; then
-            echo "⚠️  financial_data.db is a directory, removing and recreating as file..."
-            rm -rf financial_data.db
-            touch financial_data.db
+            rm -rf financial_data.db && touch financial_data.db
           elif [ ! -f "financial_data.db" ]; then
-            echo "📝 Creating new financial_data.db..."
             touch financial_data.db
           fi
 
-          echo "=== Building Image ==="
+          # --- Build ---
+          BUILD_START=$(date +%s)
           docker build -t skuld-app-image .
+          BUILD_DURATION=$(( $(date +%s) - BUILD_START ))
+          echo "| 🐳 Docker Build | ✅ Done | ${BUILD_DURATION}s |" >> $GITHUB_STEP_SUMMARY
 
-          echo "=== Pulling images with retry (5 Attempts) ==="
+          # --- Pull ---
+          PULL_START=$(date +%s)
           n=0
-          until [ "$n" -ge 5 ]
-          do
-             echo "Pull Attempt $((n+1))/5..."
+          until [ "$n" -ge 5 ]; do
              docker compose -f docker-compose.yml -f docker-compose.testing.yml pull && break
              n=$((n+1))
-             echo "⚠️ Pull failed, retrying in 10s..."
              sleep 10
           done
-
           if [ "$n" -ge 5 ]; then
-             echo "❌ Failed to pull images after 5 attempts."
+             echo "| 📥 Pull Images | ❌ Failed | After 5 attempts |" >> $GITHUB_STEP_SUMMARY
              exit 1
           fi
+          PULL_DURATION=$(( $(date +%s) - PULL_START ))
+          echo "| 📥 Pull Images | ✅ Done | ${PULL_DURATION}s |" >> $GITHUB_STEP_SUMMARY
 
-          echo "=== Starting Staging Stack ==="
+          # --- Start ---
           docker compose -f docker-compose.yml -f docker-compose.testing.yml up -d --no-build --remove-orphans
-
-          echo "=== Cleaning up build cache ==="
           docker builder prune -f
+          echo "| ▶️ Start Stack | ✅ Done | — |" >> $GITHUB_STEP_SUMMARY
 
-          echo "=== New Container Status ==="
-          docker compose -f docker-compose.yml -f docker-compose.testing.yml ps
+      - name: "📋 Summary: Container Status"
+        if: always()
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "<details><summary>🐳 Container Status after Deploy</summary>" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          docker compose -f docker-compose.yml -f docker-compose.testing.yml ps 2>/dev/null || docker ps
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "</details>" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
 
   # =====================================================================
   # PHASE 2: DATABASE SYNC
-  # Downloads the latest backup from Hetzner (Production) and restores
-  # it into the staging Postgres container.
-  # Runs AFTER code deploy (if both selected) to ensure containers exist.
   # =====================================================================
   sync-database:
     needs: [validate-inputs, deploy-code]
-    # Run even if deploy-code was skipped (when only DB sync is selected)
-    # But fail if deploy-code actually failed
     if: ${{ inputs.sync_database && (needs.deploy-code.result == 'success' || needs.deploy-code.result == 'skipped') }}
     runs-on: self-hosted
     env:
@@ -216,124 +215,163 @@ jobs:
       DUMP_PATH: /tmp/skuld_restore.sql.gz
 
     steps:
+      - name: "📋 Summary: DB Sync started"
+        run: |
+          echo "## 🗄️ Phase 2: Database Sync" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Step | Status | Details |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|---------|" >> $GITHUB_STEP_SUMMARY
+
       - name: Setup SSH for Hetzner Access
         run: |
-          echo "=== Setting up SSH key for Hetzner access ==="
           mkdir -p ~/.ssh
           echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/hetzner_key
           chmod 600 ~/.ssh/hetzner_key
           ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+          echo "| 🔑 SSH Setup | ✅ Done | — |" >> $GITHUB_STEP_SUMMARY
 
-      - name: Verify Staging DB Container is Running
+      - name: Verify Staging DB Container
         run: |
-          echo "=== Checking staging database container ==="
           if ! docker ps --format '{{.Names}}' | grep -q "^${{ env.STAGING_DB_CONTAINER }}$"; then
-            echo "❌ Container ${{ env.STAGING_DB_CONTAINER }} is not running!"
-            echo ""
-            echo "Available containers:"
-            docker ps --format 'table {{.Names}}\t{{.Status}}'
-            echo ""
-            echo "💡 Hint: Run this workflow with 'Deploy code' enabled first to start the stack."
+            echo "| 🔍 Verify DB Container | ❌ Not running | Deploy code first! |" >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
-          echo "✅ Container ${{ env.STAGING_DB_CONTAINER }} is running."
+          echo "| 🔍 Verify DB Container | ✅ Running | \`${{ env.STAGING_DB_CONTAINER }}\` |" >> $GITHUB_STEP_SUMMARY
 
-      - name: Find and Download Latest Backup from Hetzner
+      - name: "⬇️ Download Backup from Hetzner"
+        id: download
         run: |
-          echo "=== Finding latest backup on Production ==="
+          DL_START=$(date +%s)
 
           LATEST=$(ssh -i ~/.ssh/hetzner_key -o StrictHostKeyChecking=no \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
             "ls -t ~/backups/postgres/skuld_*.sql.gz 2>/dev/null | head -n 1")
 
           if [ -z "$LATEST" ]; then
-            echo "❌ No backup found on Production server!"
-            echo "Expected location: ~/backups/postgres/skuld_*.sql.gz"
+            echo "| ⬇️ Download Backup | ❌ Failed | No backup found |" >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
 
-          echo "📦 Found: $LATEST"
-          
-          # Get file size for info
-          SIZE=$(ssh -i ~/.ssh/hetzner_key -o StrictHostKeyChecking=no \
+          FILENAME=$(basename "$LATEST")
+
+          REMOTE_SIZE=$(ssh -i ~/.ssh/hetzner_key -o StrictHostKeyChecking=no \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
             "du -h '$LATEST' | cut -f1")
-          echo "📏 Size: $SIZE"
 
-          echo "⬇️  Downloading directly to staging server..."
           scp -i ~/.ssh/hetzner_key -o StrictHostKeyChecking=no \
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${LATEST}" \
             ${{ env.DUMP_PATH }}
 
+          DL_DURATION=$(( $(date +%s) - DL_START ))
           LOCAL_SIZE=$(du -h ${{ env.DUMP_PATH }} | cut -f1)
-          echo "✅ Download complete ($LOCAL_SIZE)"
 
-      - name: Restore Database on Staging
+          echo "backup_file=$FILENAME" >> $GITHUB_OUTPUT
+          echo "backup_size=$LOCAL_SIZE" >> $GITHUB_OUTPUT
+
+          echo "| ⬇️ Download Backup | ✅ Done | \`${FILENAME}\` (${LOCAL_SIZE}, ${DL_DURATION}s) |" >> $GITHUB_STEP_SUMMARY
+
+      - name: "🔄 Restore Database"
         run: |
-          echo "=== Restoring Database on Staging ==="
+          RESTORE_START=$(date +%s)
 
-          echo "⏸️  Stopping application services to prevent DB connections..."
           docker stop skuld-frontend skuld-backend 2>/dev/null || true
-
-          echo "⏳ Waiting for connections to close..."
           sleep 3
 
-          echo "🗑️  Dropping and recreating database..."
           echo "DROP DATABASE IF EXISTS \"${{ env.STAGING_DB_NAME }}\"; CREATE DATABASE \"${{ env.STAGING_DB_NAME }}\";" | \
             docker exec -i ${{ env.STAGING_DB_CONTAINER }} psql -U ${{ env.STAGING_DB_USER }} -d postgres
 
-          echo "📥 Restoring data (this may take a while)..."
           zcat ${{ env.DUMP_PATH }} | \
             docker exec -i ${{ env.STAGING_DB_CONTAINER }} psql -U ${{ env.STAGING_DB_USER }} -d ${{ env.STAGING_DB_NAME }} 2>&1 | \
             tail -5
 
-          echo "▶️  Restarting application services..."
           docker start skuld-frontend skuld-backend 2>/dev/null || true
 
-          echo "✅ Database restore complete!"
+          RESTORE_DURATION=$(( $(date +%s) - RESTORE_START ))
+          echo "| 🔄 Restore Database | ✅ Done | ${RESTORE_DURATION}s |" >> $GITHUB_STEP_SUMMARY
 
-      - name: Verify Database
+      - name: "✅ Verify Database"
         run: |
-          echo "=== Quick Database Verification ==="
-          echo "Table count:"
+          TABLE_COUNT=$(docker exec ${{ env.STAGING_DB_CONTAINER }} psql -U ${{ env.STAGING_DB_USER }} -d ${{ env.STAGING_DB_NAME }} \
+            -t -c "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public';" | tr -d ' ')
+
+          echo "| ✅ Verify Database | ✅ Done | ${TABLE_COUNT} tables |" >> $GITHUB_STEP_SUMMARY
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "<details><summary>📊 Top 15 Tables by Size</summary>" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
           docker exec ${{ env.STAGING_DB_CONTAINER }} psql -U ${{ env.STAGING_DB_USER }} -d ${{ env.STAGING_DB_NAME }} \
-            -c "SELECT count(*) as table_count FROM information_schema.tables WHERE table_schema = 'public';"
+            -c "SELECT tablename, pg_size_pretty(pg_total_relation_size(quote_ident(tablename)::regclass)) as size FROM pg_tables WHERE schemaname = 'public' ORDER BY pg_total_relation_size(quote_ident(tablename)::regclass) DESC LIMIT 15;"
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "</details>" >> $GITHUB_STEP_SUMMARY
 
       - name: Cleanup
         if: always()
         run: |
-          echo "=== Cleaning up ==="
           rm -f ~/.ssh/hetzner_key
           rm -f ${{ env.DUMP_PATH }}
-          echo "✅ Cleanup done."
 
   # =====================================================================
-  # SUMMARY
+  # FINAL SUMMARY
   # =====================================================================
   summary:
     needs: [validate-inputs, deploy-code, sync-database]
     if: always()
     runs-on: self-hosted
     steps:
-      - name: Print Summary
+      - name: "📋 Final Summary"
         run: |
-          echo "========================================="
-          echo "  🔄 Refresh Testsystem - Summary"
-          echo "========================================="
-          echo ""
-          echo "Code Deploy:    ${{ inputs.deploy_code && (needs.deploy-code.result || 'skipped') || 'not requested' }}"
-          echo "  Branch:       ${{ inputs.branch }}"
-          echo "Database Sync:  ${{ inputs.sync_database && (needs.sync-database.result || 'skipped') || 'not requested' }}"
-          echo ""
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "## 📊 Final Result" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Phase | Result |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
 
-          # Determine overall status
+          # Code Deploy status
+          if [ "${{ inputs.deploy_code }}" = "true" ]; then
+            case "${{ needs.deploy-code.result }}" in
+              success)  echo "| 🚀 Code Deploy (\`${{ inputs.branch }}\`) | ✅ Success |" >> $GITHUB_STEP_SUMMARY ;;
+              failure)  echo "| 🚀 Code Deploy (\`${{ inputs.branch }}\`) | ❌ Failed |" >> $GITHUB_STEP_SUMMARY ;;
+              skipped)  echo "| 🚀 Code Deploy | ⏭️ Skipped |" >> $GITHUB_STEP_SUMMARY ;;
+              *)        echo "| 🚀 Code Deploy | ⚠️ ${{ needs.deploy-code.result }} |" >> $GITHUB_STEP_SUMMARY ;;
+            esac
+          else
+            echo "| 🚀 Code Deploy | ➖ Not requested |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # DB Sync status
+          if [ "${{ inputs.sync_database }}" = "true" ]; then
+            case "${{ needs.sync-database.result }}" in
+              success)  echo "| 🗄️ Database Sync | ✅ Success |" >> $GITHUB_STEP_SUMMARY ;;
+              failure)  echo "| 🗄️ Database Sync | ❌ Failed |" >> $GITHUB_STEP_SUMMARY ;;
+              skipped)  echo "| 🗄️ Database Sync | ⏭️ Skipped |" >> $GITHUB_STEP_SUMMARY ;;
+              *)        echo "| 🗄️ Database Sync | ⚠️ ${{ needs.sync-database.result }} |" >> $GITHUB_STEP_SUMMARY ;;
+            esac
+          else
+            echo "| 🗄️ Database Sync | ➖ Not requested |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Duration
+          START=${{ needs.validate-inputs.outputs.start_time }}
+          if [ -n "$START" ]; then
+            DURATION=$(( $(date +%s) - START ))
+            MINUTES=$(( DURATION / 60 ))
+            SECONDS=$(( DURATION % 60 ))
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "⏱️ **Total duration:** ${MINUTES}m ${SECONDS}s" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Fail if any phase failed
           FAILED=false
           if [ "${{ needs.deploy-code.result }}" = "failure" ]; then FAILED=true; fi
           if [ "${{ needs.sync-database.result }}" = "failure" ]; then FAILED=true; fi
 
           if [ "$FAILED" = "true" ]; then
-            echo "❌ Some steps failed. Check the logs above."
+            echo "> ❌ **Some steps failed.** Check the logs above for details." >> $GITHUB_STEP_SUMMARY
             exit 1
           else
-            echo "✅ All requested operations completed successfully!"
+            echo "> ✅ **All requested operations completed successfully!**" >> $GITHUB_STEP_SUMMARY
           fi
