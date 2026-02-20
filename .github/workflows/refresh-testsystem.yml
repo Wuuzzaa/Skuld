@@ -87,7 +87,8 @@ jobs:
 
           # Traefik Configuration (Staging = HTTP / No Cert Resolver)
           echo "TRAEFIK_ENTRYPOINT=web" >> .env
-          echo "TRAEFIK_CERTRESOLVER_LABEL=traefik.enable=true" >> .env
+          echo "TRAEFIK_CERTRESOLVER_LABEL_SKULD=traefik.enable=true" >> .env
+          echo "TRAEFIK_CERTRESOLVER_LABEL_AUTHELIA=traefik.enable=true" >> .env
           echo "AUTH_SCHEME=http" >> .env
 
           # Secrets

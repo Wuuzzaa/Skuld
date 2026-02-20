@@ -26,7 +26,7 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.authelia.rule=Host(`${AUTH_DOMAIN}`)"
       - "traefik.http.routers.authelia.entrypoints=${TRAEFIK_ENTRYPOINT}"
-      - "${TRAEFIK_CERTRESOLVER_LABEL}"
+      - "${TRAEFIK_CERTRESOLVER_LABEL_AUTHELIA}"
       - "traefik.http.services.authelia.loadbalancer.server.port=9091"
     
     healthcheck:
@@ -75,7 +75,7 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.skuld.rule=Host(`${DOMAIN_NAME}`)"
       - "traefik.http.routers.skuld.entrypoints=${TRAEFIK_ENTRYPOINT}"
-      - "${TRAEFIK_CERTRESOLVER_LABEL}"
+      - "${TRAEFIK_CERTRESOLVER_LABEL_SKULD}"
       - "traefik.http.services.skuld.loadbalancer.server.port=8501"
       
       # Authelia ForwardAuth Middleware
