@@ -243,9 +243,10 @@ jobs:
         run: |
           DL_START=$(date +%s)
 
+          SSH_OPTS="-i ~/.ssh/hetzner_key -o StrictHostKeyChecking=no -o ConnectTimeout=15 -o ServerAliveInterval=30 -o ServerAliveCountMax=3"
+
           echo "🔍 Finding latest backup on Hetzner..."
-          LATEST=$(ssh -i ~/.ssh/hetzner_key -o StrictHostKeyChecking=no \
-            -o ConnectTimeout=10 -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
+          LATEST=$(ssh $SSH_OPTS \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
             "ls -t ~/backups/postgres/skuld_*.sql.gz 2>/dev/null | head -n 1")
 
@@ -257,43 +258,83 @@ jobs:
           FILENAME=$(basename "$LATEST")
 
           # Get exact file size for progress calculation
-          REMOTE_BYTES=$(ssh -i ~/.ssh/hetzner_key -o StrictHostKeyChecking=no \
+          REMOTE_BYTES=$(ssh $SSH_OPTS \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
             "stat -c%s '$LATEST'")
           REMOTE_SIZE_HR=$(numfmt --to=iec-i --suffix=B $REMOTE_BYTES 2>/dev/null || echo "${REMOTE_BYTES} bytes")
 
           echo "📦 Backup: $FILENAME ($REMOTE_SIZE_HR)"
-          echo "⬇️  Starting download with rsync (supports resume + progress)..."
 
-          # Remove any leftover partial download
-          rm -f ${{ env.DUMP_PATH }}
+          # ---------------------------------------------------------------
+          # rsync download with auto-retry and resume on SSH disconnect
+          #
+          # Flags:
+          #   --progress    : show per-file transfer progress
+          #   --partial     : keep partial file on interrupt (enables resume)
+          #   --timeout=120 : abort if no data received for 120s
+          #   --append-verify : resume from where it left off + checksum verify
+          #
+          # Retry logic:
+          #   Up to 5 attempts with 15s wait between retries.
+          #   rsync + --partial + --append-verify means each retry continues
+          #   where the last one stopped instead of re-downloading from scratch.
+          # ---------------------------------------------------------------
+          MAX_RETRIES=5
+          ATTEMPT=0
+          RSYNC_EXIT=1
 
-          # Use rsync with progress, partial file support, and SSH keepalive
-          # --progress: shows per-file progress
-          # --partial: keep partial files for resume on retry
-          # --timeout=120: abort if no data received for 120s
-          # ServerAliveInterval: SSH keepalive every 30s
-          rsync -avz --progress --partial --timeout=120 \
-            -e "ssh -i ~/.ssh/hetzner_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o ServerAliveInterval=30 -o ServerAliveCountMax=3" \
-            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${LATEST}" \
-            ${{ env.DUMP_PATH }} 2>&1 | \
-            while IFS= read -r line; do
-              # rsync outputs progress lines like "  1,234,567  42%   5.67MB/s    0:01:23"
-              # Print all lines but throttle progress updates
-              if echo "$line" | grep -qE '^\s+[0-9,]+\s+[0-9]+%'; then
-                # Only print every ~10th progress line to avoid log spam
-                PCT=$(echo "$line" | grep -oE '[0-9]+%' | head -1)
-                echo "📥 $line"
-              else
-                echo "$line"
+          while [ $ATTEMPT -lt $MAX_RETRIES ] && [ $RSYNC_EXIT -ne 0 ]; do
+            ATTEMPT=$((ATTEMPT + 1))
+
+            if [ $ATTEMPT -eq 1 ]; then
+              echo "⬇️  Starting download (attempt ${ATTEMPT}/${MAX_RETRIES})..."
+              # First attempt: clean start
+              rm -f ${{ env.DUMP_PATH }}
+            else
+              PARTIAL_SIZE="0"
+              if [ -f "${{ env.DUMP_PATH }}" ]; then
+                PARTIAL_SIZE=$(du -h "${{ env.DUMP_PATH }}" | cut -f1)
               fi
-            done
+              echo ""
+              echo "🔄 Retry ${ATTEMPT}/${MAX_RETRIES} (resuming from ${PARTIAL_SIZE})..."
+            fi
 
-          RSYNC_EXIT=${PIPESTATUS[0]}
+            rsync --progress --partial --append-verify --timeout=120 \
+              -e "ssh $SSH_OPTS" \
+              "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${LATEST}" \
+              ${{ env.DUMP_PATH }} 2>&1 | \
+              while IFS= read -r line; do
+                # rsync progress lines: "  1,234,567  42%   5.67MB/s    0:01:23"
+                if echo "$line" | grep -qE '[0-9]+%'; then
+                  echo "📥 $line"
+                elif [ -n "$line" ]; then
+                  echo "$line"
+                fi
+              done
+
+            RSYNC_EXIT=${PIPESTATUS[0]}
+
+            if [ $RSYNC_EXIT -ne 0 ]; then
+              echo "⚠️  rsync exited with code ${RSYNC_EXIT}"
+              if [ $ATTEMPT -lt $MAX_RETRIES ]; then
+                echo "   Waiting 15s before retry..."
+                sleep 15
+              fi
+            fi
+          done
+
           if [ $RSYNC_EXIT -ne 0 ]; then
             echo ""
-            echo "❌ rsync failed with exit code: ${RSYNC_EXIT}"
-            echo "| ⬇️ Download Backup | ❌ Failed | rsync exit code: ${RSYNC_EXIT} |" >> $GITHUB_STEP_SUMMARY
+            echo "❌ rsync failed after ${MAX_RETRIES} attempts (last exit code: ${RSYNC_EXIT})"
+            echo "| ⬇️ Download Backup | ❌ Failed | rsync failed after ${MAX_RETRIES} retries |" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+          # Verify downloaded file size matches remote
+          LOCAL_BYTES=$(stat -c%s "${{ env.DUMP_PATH }}" 2>/dev/null || echo "0")
+          if [ "$LOCAL_BYTES" -ne "$REMOTE_BYTES" ]; then
+            echo "⚠️  Size mismatch! Local: ${LOCAL_BYTES} vs Remote: ${REMOTE_BYTES}"
+            echo "| ⬇️ Download Backup | ❌ Failed | Size mismatch |" >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
 
@@ -302,13 +343,11 @@ jobs:
           DL_MIN=$(( DL_DURATION / 60 ))
           DL_SEC=$(( DL_DURATION % 60 ))
 
-          # Calculate average speed
-          LOCAL_BYTES=$(stat -c%s "${{ env.DUMP_PATH }}" 2>/dev/null || echo "0")
           if [ "$DL_DURATION" -gt 0 ] && [ "$LOCAL_BYTES" -gt 0 ]; then
             AVG_SPEED=$(( LOCAL_BYTES / DL_DURATION ))
             AVG_SPEED_HR=$(numfmt --to=iec-i --suffix=B/s $AVG_SPEED 2>/dev/null || echo "")
             echo ""
-            echo "✅ Download complete: ${LOCAL_SIZE} in ${DL_MIN}m ${DL_SEC}s (avg: ${AVG_SPEED_HR})"
+            echo "✅ Download complete: ${LOCAL_SIZE} in ${DL_MIN}m ${DL_SEC}s (avg: ${AVG_SPEED_HR}, ${ATTEMPT} attempt(s))"
           else
             echo ""
             echo "✅ Download complete: ${LOCAL_SIZE} in ${DL_MIN}m ${DL_SEC}s"
@@ -317,7 +356,7 @@ jobs:
           echo "backup_file=$FILENAME" >> $GITHUB_OUTPUT
           echo "backup_size=$LOCAL_SIZE" >> $GITHUB_OUTPUT
 
-          echo "| ⬇️ Download Backup | ✅ Done | \`${FILENAME}\` (${LOCAL_SIZE}, ${DL_MIN}m ${DL_SEC}s) |" >> $GITHUB_STEP_SUMMARY
+          echo "| ⬇️ Download Backup | ✅ Done | \`${FILENAME}\` (${LOCAL_SIZE}, ${DL_MIN}m ${DL_SEC}s, ${ATTEMPT} attempt(s)) |" >> $GITHUB_STEP_SUMMARY
 
       - name: "🔄 Restore Database"
         run: |
