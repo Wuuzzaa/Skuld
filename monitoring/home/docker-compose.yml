@@ -15,6 +15,7 @@ services:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.forwardedHeaders.insecure=true"
     ports:
       - "81:80" # Cloudflared will connect to this port (changed from 80 to avoid collision)
     volumes:
