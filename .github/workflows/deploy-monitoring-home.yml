@@ -1,0 +1,52 @@
+name: Deploy Monitoring (Home Server)
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - 'monitoring/home/**'
+
+jobs:
+  deploy-home:
+    # Use the self-hosted runner on the Home Server
+    runs-on: self-hosted
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy Home Monitoring
+        run: |
+          set -euo pipefail
+          
+          # 1. Ensure target directory exists
+          echo "=== Setting up directory ==="
+          mkdir -p /opt/monitoring-home || sudo mkdir -p /opt/monitoring-home && sudo chown -R $USER:$USER /opt/monitoring-home
+          
+          # 2. Copy the monitoring/home contents to the deployment directory
+          echo "=== Copying files ==="
+          cp -r monitoring/home/* /opt/monitoring-home/
+          cd /opt/monitoring-home
+          
+          # 3. Create Authelia secrets
+          echo "=== Creating Authelia secrets ==="
+          mkdir -p authelia
+          echo "${{ secrets.AUTHELIA_JWT_SECRET }}" > authelia/jwt_secret
+          echo "${{ secrets.AUTHELIA_SESSION_SECRET }}" > authelia/session_secret
+          echo "${{ secrets.AUTHELIA_STORAGE_ENCRYPTION_KEY }}" > authelia/storage_encryption_key
+          
+          # 4. Create Authelia basic config
+          AUTHELIA_HASH='${{ secrets.AUTHELIA_PASSWORD_HASH }}'
+          cat <<EOF > authelia/users_database.yml
+          users:
+            admin:
+              displayname: "Admin"
+              password: "$AUTHELIA_HASH"
+              email: admin@skuld.com
+              groups:
+                - admins
+          EOF
+          
+          # 5. Start Docker Compose
+          echo "=== Starting containers ==="
+          docker compose pull
+          docker compose up -d --remove-orphans

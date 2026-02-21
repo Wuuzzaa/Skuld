@@ -1,0 +1,9 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'hetzner-node'
+    # This IP will be the WireGuard IP of the Hetzner Server
+    # We will need to update this once the WireGuard tunnel is established
+    static_configs:
+      - targets: ['10.13.13.1:9100']
