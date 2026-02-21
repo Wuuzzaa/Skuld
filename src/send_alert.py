@@ -36,13 +36,13 @@ def send_telegram_message(title, message):
         title = f"[{env_name}] {title}"
 
     # Format the message
-    full_message = f"{emoji} *{title}*\n\n{message}"
+    full_message = f"{emoji} <b>{title}</b>\n\n{message}"
     
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     payload = {
         "chat_id": chat_id,
         "text": full_message,
-        "parse_mode": "Markdown"
+        "parse_mode": "HTML"
     }
 
     try:
