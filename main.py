@@ -18,7 +18,7 @@ from config import *
 from src.historization import run_historization_pipeline
 from src.pipeline_monitor import PipelineMonitor
 
-setup_logging(component="data_collector", log_level=logging.INFO, console_output=True)
+setup_logging(component="data_collector", log_level=logging.DEBUG, console_output=True)
 logger = logging.getLogger(__name__)
 logger.info("data_collector")
 
@@ -76,9 +76,7 @@ def main(args):
         elif args.mode == "historical_prices":
             parallel_tasks = [
             ]
-            # synchronous sequential needed
             load_historical_prices(symbols["stocks"])
-            calculate_and_store_stock_implied_volatility_history()
         elif args.mode == "historization":
             pass
         else:

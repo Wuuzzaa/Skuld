@@ -1,3 +1,4 @@
 CREATE TABLE "DbVersion" (
-	version INT
+	version INT,
+	view_hash TEXT
 );
