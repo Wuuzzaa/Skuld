@@ -24,7 +24,7 @@ services:
   # 2. Authelia (Authentication)
   # --------------------------------------------------------------------------
   authelia:
-    image: authelia/authelia:4.37
+    image: authelia/authelia:latest
     container_name: monitoring-authelia
     restart: unless-stopped
     volumes:
