@@ -299,20 +299,32 @@ jobs:
               echo "🔄 Retry ${ATTEMPT}/${MAX_RETRIES} (resuming from ${PARTIAL_SIZE})..."
             fi
 
-            rsync --progress --partial --append-verify --timeout=120 \
+            # Run rsync in background, monitor file-size progress in foreground.
+            # rsync --progress uses \r which doesn't produce visible output in
+            # non-TTY CI environments, so we track size ourselves instead.
+            rsync --partial --append-verify --timeout=120 \
               -e "ssh $SSH_OPTS" \
               "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${LATEST}" \
-              ${{ env.DUMP_PATH }} 2>&1 | \
-              while IFS= read -r line; do
-                # rsync progress lines: "  1,234,567  42%   5.67MB/s    0:01:23"
-                if echo "$line" | grep -qE '[0-9]+%'; then
-                  echo "📥 $line"
-                elif [ -n "$line" ]; then
-                  echo "$line"
-                fi
-              done
+              ${{ env.DUMP_PATH }} > /dev/null 2>&1 &
+            RSYNC_PID=$!
 
-            RSYNC_EXIT=${PIPESTATUS[0]}
+            # Print progress every 10s while rsync is running
+            LAST_PCT=-1
+            while kill -0 $RSYNC_PID 2>/dev/null; do
+              if [ -f "${{ env.DUMP_PATH }}" ]; then
+                CUR=$(stat -c%s "${{ env.DUMP_PATH }}" 2>/dev/null || echo 0)
+                PCT=$((CUR * 100 / REMOTE_BYTES))
+                CUR_HR=$(numfmt --to=iec-i --suffix=B $CUR 2>/dev/null || echo "${CUR}")
+                if [ "$PCT" -ne "$LAST_PCT" ]; then
+                  echo "📥 ${CUR_HR} / ${REMOTE_SIZE_HR}  (${PCT}%)"
+                  LAST_PCT=$PCT
+                fi
+              fi
+              sleep 10
+            done
+
+            wait $RSYNC_PID
+            RSYNC_EXIT=$?
 
             if [ $RSYNC_EXIT -ne 0 ]; then
               echo "⚠️  rsync exited with code ${RSYNC_EXIT}"
