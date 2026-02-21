@@ -115,6 +115,47 @@ jobs:
             echo "=== Current images ==="
             mysudo docker images | grep skuld || echo "No skuld images"
             
+            # ── Safe Deploy: wait for running jobs ──────────────────────
+            echo "=== Checking for running jobs in skuld-backend ==="
+            TELEGRAM_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
+            TELEGRAM_CHAT="${{ secrets.TELEGRAM_CHAT_ID }}"
+            MAX_WAIT=3600   # max 60 minutes
+            POLL_INTERVAL=30
+            WAITED=0
+            NOTIFIED=0
+
+            send_telegram() {
+              local msg="$1"
+              curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
+                -d chat_id="${TELEGRAM_CHAT}" \
+                -d text="${msg}" \
+                -d parse_mode=HTML >/dev/null 2>&1 || true
+            }
+
+            while mysudo docker exec skuld-backend pgrep -f "python.*main\.py" >/dev/null 2>&1; do
+              if [ "$NOTIFIED" -eq 0 ]; then
+                echo "⏳ main.py is running – waiting for job to finish before deploy..."
+                send_telegram "⏳ <b>Deploy triggered</b> but <code>main.py</code> is still running in skuld-backend. Waiting for the job to finish before rebuilding containers..."
+                NOTIFIED=1
+              fi
+
+              if [ "$WAITED" -ge "$MAX_WAIT" ]; then
+                echo "⚠️ Timeout after ${MAX_WAIT}s – proceeding with deploy anyway"
+                send_telegram "⚠️ <b>Deploy timeout</b>: waited ${MAX_WAIT}s for main.py to finish. Proceeding with deploy now."
+                break
+              fi
+
+              sleep $POLL_INTERVAL
+              WAITED=$((WAITED + POLL_INTERVAL))
+              echo "   … still waiting (${WAITED}s / ${MAX_WAIT}s)"
+            done
+
+            if [ "$NOTIFIED" -eq 1 ] && [ "$WAITED" -lt "$MAX_WAIT" ]; then
+              echo "✅ Job finished after ${WAITED}s – proceeding with deploy"
+              send_telegram "✅ <b>Job finished</b> after ${WAITED}s. Starting deploy now..."
+            fi
+            # ────────────────────────────────────────────────────────────
+            
             echo "=== Stopping old container ==="
             # Explicitly stop old container names if they exist (migration to split services)
             mysudo docker stop skuld-streamlit || true
