@@ -1,27 +1,18 @@
 {
-  "__inputs": [
-    {
-      "name": "DS_PROMETHEUS",
-      "label": "Prometheus",
-      "description": "",
-      "type": "datasource",
-      "pluginId": "prometheus",
-      "pluginName": "Prometheus"
-    }
-  ],
+  "__inputs": [],
   "__elements": {},
   "__requires": [
     {
       "type": "panel",
       "id": "bargauge",
       "name": "Bar gauge",
-      "version": ""
+      "version": "Prometheus"
     },
     {
       "type": "panel",
       "id": "gauge",
       "name": "Gauge",
-      "version": ""
+      "version": "Prometheus"
     },
     {
       "type": "grafana",
@@ -39,13 +30,13 @@
       "type": "panel",
       "id": "stat",
       "name": "Stat",
-      "version": ""
+      "version": "Prometheus"
     },
     {
       "type": "panel",
       "id": "timeseries",
       "name": "Time series",
-      "version": ""
+      "version": "Prometheus"
     }
   ],
   "annotations": {
@@ -176,7 +167,7 @@
           "calcs": [
             "lastNotNull"
           ],
-          "fields": "",
+          "fields": "Prometheus",
           "values": false
         },
         "showUnfilled": true,
@@ -298,7 +289,7 @@
           "calcs": [
             "lastNotNull"
           ],
-          "fields": "",
+          "fields": "Prometheus",
           "values": false
         },
         "showThresholdLabels": false,
@@ -317,7 +308,7 @@
           "hide": false,
           "instant": true,
           "intervalFactor": 1,
-          "legendFormat": "",
+          "legendFormat": "Prometheus",
           "range": false,
           "refId": "A",
           "step": 240
@@ -386,7 +377,7 @@
           "calcs": [
             "lastNotNull"
           ],
-          "fields": "",
+          "fields": "Prometheus",
           "values": false
         },
         "showThresholdLabels": false,
@@ -465,7 +456,7 @@
           "calcs": [
             "lastNotNull"
           ],
-          "fields": "",
+          "fields": "Prometheus",
           "values": false
         },
         "showThresholdLabels": false,
@@ -569,7 +560,7 @@
           "calcs": [
             "lastNotNull"
           ],
-          "fields": "",
+          "fields": "Prometheus",
           "values": false
         },
         "showThresholdLabels": false,
@@ -655,7 +646,7 @@
           "calcs": [
             "lastNotNull"
           ],
-          "fields": "",
+          "fields": "Prometheus",
           "values": false
         },
         "showThresholdLabels": false,
@@ -739,7 +730,7 @@
           "calcs": [
             "lastNotNull"
           ],
-          "fields": "",
+          "fields": "Prometheus",
           "values": false
         },
         "textMode": "auto"
@@ -822,7 +813,7 @@
           "calcs": [
             "lastNotNull"
           ],
-          "fields": "",
+          "fields": "Prometheus",
           "values": false
         },
         "textMode": "auto"
@@ -909,7 +900,7 @@
           "calcs": [
             "lastNotNull"
           ],
-          "fields": "",
+          "fields": "Prometheus",
           "values": false
         },
         "textMode": "auto"
@@ -994,7 +985,7 @@
           "calcs": [
             "lastNotNull"
           ],
-          "fields": "",
+          "fields": "Prometheus",
           "values": false
         },
         "textMode": "auto"
@@ -1077,7 +1068,7 @@
           "calcs": [
             "lastNotNull"
           ],
-          "fields": "",
+          "fields": "Prometheus",
           "values": false
         },
         "textMode": "auto"
@@ -1142,7 +1133,7 @@
           "custom": {
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "Prometheus",
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
@@ -1424,7 +1415,7 @@
           "custom": {
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "Prometheus",
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
@@ -1942,7 +1933,7 @@
           "custom": {
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "Prometheus",
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
@@ -2410,7 +2401,7 @@
           "custom": {
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "Prometheus",
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
@@ -2515,7 +2506,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "",
+          "description": "Prometheus",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2727,7 +2718,7 @@
               "editorMode": "code",
               "expr": "sum(irate(node_cpu_seconds_total{instance=\"$node\",job=\"$job\", mode=\"system\"}[$__rate_interval])) / scalar(count(count(node_cpu_seconds_total{instance=\"$node\",job=\"$job\"}) by (cpu)))",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "System - Processes executing in kernel mode",
               "range": true,
@@ -2842,7 +2833,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "",
+          "description": "Prometheus",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3537,7 +3528,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "",
+          "description": "Prometheus",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3640,7 +3631,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "",
+          "description": "Prometheus",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -4080,7 +4071,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "",
+          "description": "Prometheus",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -4311,7 +4302,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "",
+          "description": "Prometheus",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -4429,7 +4420,7 @@
               "expr": "irate(node_disk_io_time_seconds_total{instance=\"$node\",job=\"$job\",device=~\"$diskdevices\"} [$__rate_interval])",
               "format": "time_series",
               "hide": false,
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "{{device}}",
               "refId": "A",
@@ -6578,7 +6569,7 @@
               },
               "expr": "node_memory_ShmemHugePages_bytes{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "ShmemHugePages - Memory used by shared memory (shmem) and tmpfs allocated  with huge pages",
               "refId": "C",
@@ -6591,7 +6582,7 @@
               },
               "expr": "node_memory_ShmemPmdMapped_bytes{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "ShmemPmdMapped - Amount of shared (shmem/tmpfs) memory backed by huge pages",
               "refId": "D",
@@ -8519,7 +8510,7 @@
               },
               "expr": "node_memory_Percpu_bytes{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "PerCPU - Per CPU memory allocated dynamically by loadable modules",
               "refId": "B",
@@ -9684,7 +9675,7 @@
               },
               "expr": "node_memory_DirectMap2M_bytes{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "DirectMap2M - Amount of pages mapped as this size",
               "refId": "B",
@@ -9697,7 +9688,7 @@
               },
               "expr": "node_memory_DirectMap4k_bytes{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "DirectMap4K - Amount of pages mapped as this size",
               "refId": "C",
@@ -11526,7 +11517,7 @@
               },
               "expr": "irate(node_vmstat_oom_kill{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "oom killer invocations ",
               "refId": "A",
@@ -11568,7 +11559,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "",
+          "description": "Prometheus",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -11673,7 +11664,7 @@
               "expr": "node_timex_estimated_error_seconds{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
               "hide": false,
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "Estimated error in seconds",
               "refId": "A",
@@ -11687,7 +11678,7 @@
               "expr": "node_timex_offset_seconds{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
               "hide": false,
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "Time offset in between local system and reference clock",
               "refId": "B",
@@ -11701,7 +11692,7 @@
               "expr": "node_timex_maxerror_seconds{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
               "hide": false,
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "Maximum error in seconds",
               "refId": "C",
@@ -11716,7 +11707,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "",
+          "description": "Prometheus",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -11804,7 +11795,7 @@
               },
               "expr": "node_timex_loop_time_constant{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "Phase-locked loop time adjust",
               "refId": "A",
@@ -11819,7 +11810,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "",
+          "description": "Prometheus",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -11923,7 +11914,7 @@
               },
               "expr": "node_timex_sync_status{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "Is clock synchronized to a reliable server (1 = yes, 0 = no)",
               "refId": "A",
@@ -11936,7 +11927,7 @@
               },
               "expr": "node_timex_frequency_adjustment_ratio{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "Local clock frequency adjustment",
               "refId": "B",
@@ -11951,7 +11942,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "",
+          "description": "Prometheus",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -12039,7 +12030,7 @@
               },
               "expr": "node_timex_tick_seconds{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "Seconds between clock ticks",
               "refId": "A",
@@ -12052,7 +12043,7 @@
               },
               "expr": "node_timex_tai_offset_seconds{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "International Atomic Time (TAI) offset",
               "refId": "B",
@@ -12297,7 +12288,7 @@
               },
               "expr": "node_processes_state{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "{{ state }}",
               "refId": "A",
@@ -12516,7 +12507,7 @@
               },
               "expr": "irate(process_virtual_memory_bytes{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "hide": false,
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "Processes virtual memory size in bytes",
               "refId": "A",
@@ -12529,7 +12520,7 @@
               },
               "expr": "process_resident_memory_max_bytes{instance=\"$node\",job=\"$job\"}",
               "hide": false,
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "Maximum amount of virtual memory available in bytes",
               "refId": "B",
@@ -12542,7 +12533,7 @@
               },
               "expr": "irate(process_virtual_memory_bytes{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "hide": false,
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "Processes virtual memory size in bytes",
               "refId": "C",
@@ -12555,7 +12546,7 @@
               },
               "expr": "irate(process_virtual_memory_max_bytes{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "hide": false,
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "Maximum amount of virtual memory available in bytes",
               "refId": "D",
@@ -12679,7 +12670,7 @@
               },
               "expr": "node_processes_pids{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "Number of PIDs",
               "refId": "A",
@@ -12692,7 +12683,7 @@
               },
               "expr": "node_processes_max_processes{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "PIDs limit",
               "refId": "B",
@@ -12807,7 +12798,7 @@
               },
               "expr": "irate(node_schedstat_running_seconds_total{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "CPU {{ cpu }} - seconds spent running a process",
               "refId": "A",
@@ -12820,7 +12811,7 @@
               },
               "expr": "irate(node_schedstat_waiting_seconds_total{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "CPU {{ cpu }} - seconds spent by processing waiting for this CPU",
               "refId": "B",
@@ -12944,7 +12935,7 @@
               },
               "expr": "node_processes_threads{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "Allocated threads",
               "refId": "A",
@@ -12957,7 +12948,7 @@
               },
               "expr": "node_processes_max_threads{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "Threads limit",
               "refId": "B",
@@ -13248,7 +13239,7 @@
               "custom": {
                 "axisCenteredZero": false,
                 "axisColorMode": "text",
-                "axisLabel": "",
+                "axisLabel": "Prometheus",
                 "axisPlacement": "auto",
                 "barAlignment": 0,
                 "drawStyle": "line",
@@ -13404,7 +13395,7 @@
               "expr": "node_cpu_scaling_frequency_hertz{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
               "hide": false,
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "CPU {{ cpu }}",
               "range": true,
@@ -13420,7 +13411,7 @@
               "expr": "avg(node_cpu_scaling_frequency_max_hertz{instance=\"$node\",job=\"$job\"})",
               "format": "time_series",
               "hide": false,
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "Max",
               "range": true,
@@ -13436,7 +13427,7 @@
               "expr": "avg(node_cpu_scaling_frequency_min_hertz{instance=\"$node\",job=\"$job\"})",
               "format": "time_series",
               "hide": false,
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "Min",
               "range": true,
@@ -13461,7 +13452,7 @@
               "custom": {
                 "axisCenteredZero": false,
                 "axisColorMode": "text",
-                "axisLabel": "",
+                "axisLabel": "Prometheus",
                 "axisPlacement": "auto",
                 "barAlignment": 0,
                 "drawStyle": "line",
@@ -13806,7 +13797,7 @@
               },
               "expr": "irate(node_interrupts_total{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "{{ type }} - {{ info }}",
               "refId": "A",
@@ -13908,7 +13899,7 @@
               },
               "expr": "irate(node_schedstat_timeslices_total{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "CPU {{ cpu }}",
               "refId": "A",
@@ -14112,7 +14103,7 @@
               },
               "expr": "irate(process_cpu_seconds_total{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "Time spent",
               "refId": "A",
@@ -14234,7 +14225,7 @@
                 "uid": "${datasource}"
               },
               "expr": "process_max_fds{instance=\"$node\",job=\"$job\"}",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "Maximum open file descriptors",
               "refId": "A",
@@ -14246,7 +14237,7 @@
                 "uid": "${datasource}"
               },
               "expr": "process_open_fds{instance=\"$node\",job=\"$job\"}",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "Open file descriptors",
               "refId": "B",
@@ -14415,7 +14406,7 @@
               },
               "expr": "node_hwmon_temp_celsius{instance=\"$node\",job=\"$job\"} * on(chip) group_left(chip_name) node_hwmon_chip_names{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "{{ chip_name }} {{ sensor }} temp",
               "refId": "A",
@@ -14429,7 +14420,7 @@
               "expr": "node_hwmon_temp_crit_alarm_celsius{instance=\"$node\",job=\"$job\"} * on(chip) group_left(chip_name) node_hwmon_chip_names{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
               "hide": true,
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "{{ chip_name }} {{ sensor }} Critical Alarm",
               "refId": "B",
@@ -14442,7 +14433,7 @@
               },
               "expr": "node_hwmon_temp_crit_celsius{instance=\"$node\",job=\"$job\"} * on(chip) group_left(chip_name) node_hwmon_chip_names{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "{{ chip_name }} {{ sensor }} Critical",
               "refId": "C",
@@ -14456,7 +14447,7 @@
               "expr": "node_hwmon_temp_crit_hyst_celsius{instance=\"$node\",job=\"$job\"} * on(chip) group_left(chip_name) node_hwmon_chip_names{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
               "hide": true,
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "{{ chip_name }} {{ sensor }} Critical Historical",
               "refId": "D",
@@ -14470,7 +14461,7 @@
               "expr": "node_hwmon_temp_max_celsius{instance=\"$node\",job=\"$job\"} * on(chip) group_left(chip_name) node_hwmon_chip_names{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
               "hide": true,
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "{{ chip_name }} {{ sensor }} Max",
               "refId": "E",
@@ -14593,7 +14584,7 @@
               "expr": "node_cooling_device_cur_state{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
               "hide": false,
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "Current {{ name }} in {{ type }}",
               "refId": "A",
@@ -14606,7 +14597,7 @@
               },
               "expr": "node_cooling_device_max_state{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "Max {{ name }} in {{ type }}",
               "refId": "B",
@@ -14709,7 +14700,7 @@
               "expr": "node_power_supply_online{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
               "hide": false,
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "{{ power_supply }} online",
               "refId": "A",
@@ -14839,7 +14830,7 @@
               },
               "expr": "irate(node_systemd_socket_accepted_connections_total{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "{{ name }} Connections",
               "refId": "A",
@@ -15017,7 +15008,7 @@
               },
               "expr": "node_systemd_units{instance=\"$node\",job=\"$job\",state=\"activating\"}",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "Activating",
               "refId": "A",
@@ -15030,7 +15021,7 @@
               },
               "expr": "node_systemd_units{instance=\"$node\",job=\"$job\",state=\"active\"}",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "Active",
               "refId": "B",
@@ -15043,7 +15034,7 @@
               },
               "expr": "node_systemd_units{instance=\"$node\",job=\"$job\",state=\"deactivating\"}",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "Deactivating",
               "refId": "C",
@@ -15056,7 +15047,7 @@
               },
               "expr": "node_systemd_units{instance=\"$node\",job=\"$job\",state=\"failed\"}",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "Failed",
               "refId": "D",
@@ -15069,7 +15060,7 @@
               },
               "expr": "node_systemd_units{instance=\"$node\",job=\"$job\",state=\"inactive\"}",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "Inactive",
               "refId": "E",
@@ -16364,7 +16355,7 @@
               },
               "expr": "irate(node_disk_read_time_seconds_total{instance=\"$node\",job=\"$job\"}[$__rate_interval]) / irate(node_disk_reads_completed_total{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "hide": false,
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 4,
               "legendFormat": "{{device}} - Read wait time avg",
               "refId": "A",
@@ -16377,7 +16368,7 @@
               },
               "expr": "irate(node_disk_write_time_seconds_total{instance=\"$node\",job=\"$job\"}[$__rate_interval]) / irate(node_disk_writes_completed_total{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "hide": false,
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "{{device}} - Write wait time avg",
               "refId": "B",
@@ -16781,7 +16772,7 @@
                 "uid": "${datasource}"
               },
               "expr": "irate(node_disk_io_time_weighted_seconds_total{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 4,
               "legendFormat": "{{device}}",
               "refId": "A",
@@ -17610,7 +17601,7 @@
                 "uid": "${datasource}"
               },
               "expr": "irate(node_disk_io_time_seconds_total{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 4,
               "legendFormat": "{{device}} - IO",
               "refId": "A",
@@ -17622,7 +17613,7 @@
                 "uid": "${datasource}"
               },
               "expr": "irate(node_disk_discard_time_seconds_total{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 4,
               "legendFormat": "{{device}} - discard",
               "refId": "B",
@@ -18026,7 +18017,7 @@
                 "uid": "${datasource}"
               },
               "expr": "node_disk_io_now{instance=\"$node\",job=\"$job\"}",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 4,
               "legendFormat": "{{device}} - IO now",
               "refId": "A",
@@ -18041,7 +18032,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "",
+          "description": "Prometheus",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -18429,7 +18420,7 @@
                 "uid": "${datasource}"
               },
               "expr": "irate(node_disk_discards_completed_total{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 4,
               "legendFormat": "{{device}} - Discards completed",
               "refId": "A",
@@ -18441,7 +18432,7 @@
                 "uid": "${datasource}"
               },
               "expr": "irate(node_disk_discards_merged_total{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "{{device}} - Discards merged",
               "refId": "B",
@@ -18483,7 +18474,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "",
+          "description": "Prometheus",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -18575,7 +18566,7 @@
               "hide": false,
               "intervalFactor": 1,
               "legendFormat": "{{mountpoint}} - Available",
-              "metric": "",
+              "metric": "Prometheus",
               "refId": "A",
               "step": 240
             },
@@ -18614,7 +18605,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "",
+          "description": "Prometheus",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -18718,7 +18709,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "",
+          "description": "Prometheus",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -18833,7 +18824,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "",
+          "description": "Prometheus",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -18937,7 +18928,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "",
+          "description": "Prometheus",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -19055,7 +19046,7 @@
               },
               "expr": "node_filesystem_device_error{instance=\"$node\",job=\"$job\",device!~'rootfs',fstype!~'tmpfs'}",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "{{mountpoint}} - Device error",
               "refId": "B",
@@ -19258,7 +19249,7 @@
               },
               "expr": "irate(node_network_receive_packets_total{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "{{device}} - Receive",
               "refId": "A",
@@ -19271,7 +19262,7 @@
               },
               "expr": "irate(node_network_transmit_packets_total{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "{{device}} - Transmit",
               "refId": "B",
@@ -20888,7 +20879,7 @@
               },
               "expr": "irate(node_softnet_processed_total{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "CPU {{cpu}} - Processed",
               "refId": "A",
@@ -20901,7 +20892,7 @@
               },
               "expr": "irate(node_softnet_dropped_total{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "CPU {{cpu}} - Dropped",
               "refId": "B",
@@ -21004,7 +20995,7 @@
               },
               "expr": "irate(node_softnet_times_squeezed_total{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "CPU {{cpu}} - Squeezed",
               "refId": "A",
@@ -21248,7 +21239,7 @@
               },
               "expr": "node_sockstat_TCP_alloc{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "TCP_alloc - Allocated sockets",
               "refId": "A",
@@ -21261,7 +21252,7 @@
               },
               "expr": "node_sockstat_TCP_inuse{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "TCP_inuse - Tcp sockets currently in use",
               "refId": "B",
@@ -21275,7 +21266,7 @@
               "expr": "node_sockstat_TCP_mem{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
               "hide": true,
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "TCP_mem - Used memory for tcp",
               "refId": "C",
@@ -21288,7 +21279,7 @@
               },
               "expr": "node_sockstat_TCP_orphan{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "TCP_orphan - Orphan sockets",
               "refId": "D",
@@ -21301,7 +21292,7 @@
               },
               "expr": "node_sockstat_TCP_tw{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "TCP_tw - Sockets waiting close",
               "refId": "E",
@@ -21405,7 +21396,7 @@
               },
               "expr": "node_sockstat_UDPLITE_inuse{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "UDPLITE_inuse - Udplite sockets currently in use",
               "refId": "A",
@@ -21418,7 +21409,7 @@
               },
               "expr": "node_sockstat_UDP_inuse{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "UDP_inuse - Udp sockets currently in use",
               "refId": "B",
@@ -21431,7 +21422,7 @@
               },
               "expr": "node_sockstat_UDP_mem{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "UDP_mem - Used memory for udp",
               "refId": "C",
@@ -21535,7 +21526,7 @@
               },
               "expr": "node_sockstat_FRAG_inuse{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "FRAG_inuse - Frag sockets currently in use",
               "refId": "A",
@@ -21548,7 +21539,7 @@
               },
               "expr": "node_sockstat_RAW_inuse{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "RAW_inuse - Raw sockets currently in use",
               "refId": "C",
@@ -21652,7 +21643,7 @@
               },
               "expr": "node_sockstat_TCP_mem_bytes{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "mem_bytes - TCP sockets in that state",
               "refId": "A",
@@ -21665,7 +21656,7 @@
               },
               "expr": "node_sockstat_UDP_mem_bytes{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "mem_bytes - UDP sockets in that state",
               "refId": "B",
@@ -21677,7 +21668,7 @@
                 "uid": "${datasource}"
               },
               "expr": "node_sockstat_FRAG_memory{instance=\"$node\",job=\"$job\"}",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "FRAG_memory - Used memory for frag",
               "refId": "C"
@@ -21780,7 +21771,7 @@
               },
               "expr": "node_sockstat_sockets_used{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "Sockets_used - Sockets currently in use",
               "refId": "A",
@@ -21924,7 +21915,7 @@
               },
               "expr": "irate(node_netstat_IpExt_InOctets{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "InOctets - Received octets",
               "refId": "A",
@@ -22041,7 +22032,7 @@
               },
               "expr": "irate(node_netstat_Ip_Forwarding{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "Forwarding - IP forwarding",
               "refId": "A",
@@ -22157,7 +22148,7 @@
               },
               "expr": "irate(node_netstat_Icmp_InMsgs{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "InMsgs -  Messages which the entity received. Note that this counter includes all those counted by icmpInErrors",
               "refId": "A",
@@ -22170,7 +22161,7 @@
               },
               "expr": "irate(node_netstat_Icmp_OutMsgs{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "OutMsgs - Messages which this entity attempted to send. Note that this counter includes all those counted by icmpOutErrors",
               "refId": "B",
@@ -22286,7 +22277,7 @@
               },
               "expr": "irate(node_netstat_Icmp_InErrors{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "InErrors - Messages which the entity received but determined as having ICMP-specific errors (bad ICMP checksums, bad length, etc.)",
               "refId": "A",
@@ -22414,7 +22405,7 @@
               },
               "expr": "irate(node_netstat_Udp_InDatagrams{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "InDatagrams - Datagrams received",
               "refId": "A",
@@ -22427,7 +22418,7 @@
               },
               "expr": "irate(node_netstat_Udp_OutDatagrams{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "OutDatagrams - Datagrams sent",
               "refId": "B",
@@ -22530,7 +22521,7 @@
               },
               "expr": "irate(node_netstat_Udp_InErrors{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "InErrors - UDP Datagrams that could not be delivered to an application",
               "refId": "A",
@@ -22543,7 +22534,7 @@
               },
               "expr": "irate(node_netstat_Udp_NoPorts{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "NoPorts - UDP Datagrams received on a port with no listener",
               "refId": "B",
@@ -22555,7 +22546,7 @@
                 "uid": "${datasource}"
               },
               "expr": "irate(node_netstat_UdpLite_InErrors{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
-              "interval": "",
+              "interval": "Prometheus",
               "legendFormat": "InErrors Lite - UDPLite Datagrams that could not be delivered to an application",
               "refId": "C"
             },
@@ -22566,7 +22557,7 @@
               },
               "expr": "irate(node_netstat_Udp_RcvbufErrors{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "RcvbufErrors - UDP buffer errors received",
               "refId": "D",
@@ -22579,7 +22570,7 @@
               },
               "expr": "irate(node_netstat_Udp_SndbufErrors{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "SndbufErrors - UDP buffer errors send",
               "refId": "E",
@@ -22708,7 +22699,7 @@
               "expr": "irate(node_netstat_Tcp_InSegs{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "format": "time_series",
               "instant": false,
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "InSegs - Segments received, including those received in error. This count includes segments received on currently established connections",
               "refId": "A",
@@ -22721,7 +22712,7 @@
               },
               "expr": "irate(node_netstat_Tcp_OutSegs{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "OutSegs - Segments sent, including those on current connections but excluding those containing only retransmitted octets",
               "refId": "B",
@@ -22736,7 +22727,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "",
+          "description": "Prometheus",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -22827,7 +22818,7 @@
               "expr": "irate(node_netstat_TcpExt_ListenOverflows{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "format": "time_series",
               "hide": false,
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "ListenOverflows - Times the listen queue of a socket overflowed",
               "refId": "A",
@@ -22841,7 +22832,7 @@
               "expr": "irate(node_netstat_TcpExt_ListenDrops{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "format": "time_series",
               "hide": false,
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "ListenDrops - SYNs to LISTEN sockets ignored",
               "refId": "B",
@@ -22854,7 +22845,7 @@
               },
               "expr": "irate(node_netstat_TcpExt_TCPSynRetrans{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "TCPSynRetrans - SYN-SYN/ACK retransmits to break down retransmissions in SYN, fast/timeout retransmits",
               "refId": "C",
@@ -22866,7 +22857,7 @@
                 "uid": "${datasource}"
               },
               "expr": "irate(node_netstat_Tcp_RetransSegs{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
-              "interval": "",
+              "interval": "Prometheus",
               "legendFormat": "RetransSegs - Segments retransmitted - that is, the number of TCP segments transmitted containing one or more previously transmitted octets",
               "refId": "D"
             },
@@ -22876,7 +22867,7 @@
                 "uid": "${datasource}"
               },
               "expr": "irate(node_netstat_Tcp_InErrs{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
-              "interval": "",
+              "interval": "Prometheus",
               "legendFormat": "InErrs - Segments received in error (e.g., bad TCP checksums)",
               "refId": "E"
             },
@@ -22886,7 +22877,7 @@
                 "uid": "${datasource}"
               },
               "expr": "irate(node_netstat_Tcp_OutRsts{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
-              "interval": "",
+              "interval": "Prometheus",
               "legendFormat": "OutRsts - Segments sent with RST flag",
               "refId": "F"
             },
@@ -22898,7 +22889,7 @@
               "editorMode": "code",
               "expr": "irate(node_netstat_TcpExt_TCPRcvQDrop{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "hide": false,
-              "interval": "",
+              "interval": "Prometheus",
               "legendFormat": "TCPRcvQDrop - Packets meant to be queued in rcv queue but dropped because socket rcvbuf limit hit",
               "range": true,
               "refId": "G"
@@ -22911,7 +22902,7 @@
               "editorMode": "code",
               "expr": "irate(node_netstat_TcpExt_TCPOFOQueue{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "hide": false,
-              "interval": "",
+              "interval": "Prometheus",
               "legendFormat": "TCPOFOQueue - TCP layer receives an out of order packet and has enough memory to queue it",
               "range": true,
               "refId": "H"
@@ -23035,7 +23026,7 @@
               "expr": "node_netstat_Tcp_CurrEstab{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
               "hide": false,
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "CurrEstab - TCP connections for which the current state is either ESTABLISHED or CLOSE- WAIT",
               "refId": "A",
@@ -23049,7 +23040,7 @@
               "expr": "node_netstat_Tcp_MaxConn{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
               "hide": false,
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "MaxConn - Limit on the total number of TCP connections the entity can support (Dynamic is \"-1\")",
               "refId": "B",
@@ -23064,7 +23055,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "",
+          "description": "Prometheus",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -23167,7 +23158,7 @@
               "expr": "irate(node_netstat_TcpExt_SyncookiesFailed{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "format": "time_series",
               "hide": false,
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "SyncookiesFailed - Invalid SYN cookies received",
               "refId": "A",
@@ -23181,7 +23172,7 @@
               "expr": "irate(node_netstat_TcpExt_SyncookiesRecv{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "format": "time_series",
               "hide": false,
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "SyncookiesRecv - SYN cookies received",
               "refId": "B",
@@ -23195,7 +23186,7 @@
               "expr": "irate(node_netstat_TcpExt_SyncookiesSent{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "format": "time_series",
               "hide": false,
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "SyncookiesSent - SYN cookies sent",
               "refId": "C",
@@ -23299,7 +23290,7 @@
               },
               "expr": "irate(node_netstat_Tcp_ActiveOpens{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "ActiveOpens - TCP connections that have made a direct transition to the SYN-SENT state from the CLOSED state",
               "refId": "A",
@@ -23312,7 +23303,7 @@
               },
               "expr": "irate(node_netstat_Tcp_PassiveOpens{instance=\"$node\",job=\"$job\"}[$__rate_interval])",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "PassiveOpens - TCP connections that have made a direct transition to the SYN-RCVD state from the LISTEN state",
               "refId": "B",
@@ -23414,7 +23405,7 @@
               "editorMode": "code",
               "expr": "node_tcp_connection_states{state=\"established\",instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "established - TCP sockets in established state",
               "range": true,
@@ -23430,7 +23421,7 @@
               "expr": "node_tcp_connection_states{state=\"fin_wait2\",instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
               "hide": false,
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "fin_wait2 - TCP sockets in fin_wait2 state",
               "range": true,
@@ -23446,7 +23437,7 @@
               "expr": "node_tcp_connection_states{state=\"listen\",instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
               "hide": false,
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "listen - TCP sockets in listen state",
               "range": true,
@@ -23462,7 +23453,7 @@
               "expr": "node_tcp_connection_states{state=\"time_wait\",instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
               "hide": false,
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "time_wait - TCP sockets in time_wait state",
               "range": true,
@@ -23505,7 +23496,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "",
+          "description": "Prometheus",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -23594,7 +23585,7 @@
               "expr": "node_scrape_collector_duration_seconds{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
               "hide": false,
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "{{collector}} - Scrape duration",
               "refId": "A",
@@ -23609,7 +23600,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "",
+          "description": "Prometheus",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -23721,7 +23712,7 @@
               "expr": "node_scrape_collector_success{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
               "hide": false,
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "{{collector}} - Scrape success",
               "refId": "A",
@@ -23735,7 +23726,7 @@
               "expr": "node_textfile_scrape_error{instance=\"$node\",job=\"$job\"}",
               "format": "time_series",
               "hide": false,
-              "interval": "",
+              "interval": "Prometheus",
               "intervalFactor": 1,
               "legendFormat": "{{collector}} - Scrape textfile error (1 = true)",
               "refId": "B",
@@ -23781,9 +23772,9 @@
         "name": "datasource",
         "options": [],
         "query": "prometheus",
-        "queryValue": "",
+        "queryValue": "Prometheus",
         "refresh": 1,
-        "regex": "",
+        "regex": "Prometheus",
         "skipUrlSync": false,
         "type": "datasource"
       },
@@ -23793,7 +23784,7 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "",
+        "definition": "Prometheus",
         "hide": 0,
         "includeAll": false,
         "label": "Job",
@@ -23805,11 +23796,11 @@
           "refId": "Prometheus-job-Variable-Query"
         },
         "refresh": 1,
-        "regex": "",
+        "regex": "Prometheus",
         "skipUrlSync": false,
         "sort": 1,
-        "tagValuesQuery": "",
-        "tagsQuery": "",
+        "tagValuesQuery": "Prometheus",
+        "tagsQuery": "Prometheus",
         "type": "query",
         "useTags": false
       },
@@ -23831,11 +23822,11 @@
           "refId": "Prometheus-node-Variable-Query"
         },
         "refresh": 1,
-        "regex": "",
+        "regex": "Prometheus",
         "skipUrlSync": false,
         "sort": 1,
-        "tagValuesQuery": "",
-        "tagsQuery": "",
+        "tagValuesQuery": "Prometheus",
+        "tagsQuery": "Prometheus",
         "type": "query",
         "useTags": false
       },
@@ -23895,5 +23886,5 @@
   "title": "Node Exporter Full",
   "uid": "rYdddlPWk",
   "version": 92,
-  "weekStart": ""
+  "weekStart": "Prometheus"
 }
