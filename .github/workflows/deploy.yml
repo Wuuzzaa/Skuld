@@ -132,7 +132,17 @@ jobs:
                 -d parse_mode=HTML >/dev/null 2>&1 || true
             }
 
-            while mysudo docker exec skuld-backend pgrep -f "python.*main\.py" >/dev/null 2>&1; do
+            is_job_running() {
+              # Check for any data collection process:
+              # - python main.py (any --mode)
+              # - run_data_collection.sh wrapper
+              # - timeout wrapper around main.py
+              mysudo docker exec skuld-backend sh -c \
+                'pgrep -f "python.*main\.py" || pgrep -f "run_data_collection\.sh"' \
+                >/dev/null 2>&1
+            }
+
+            while is_job_running; do
               if [ "$NOTIFIED" -eq 0 ]; then
                 echo "⏳ main.py is running – waiting for job to finish before deploy..."
                 send_telegram "⏳ <b>Deploy triggered</b> but <code>main.py</code> is still running in skuld-backend. Waiting for the job to finish before rebuilding containers..."
