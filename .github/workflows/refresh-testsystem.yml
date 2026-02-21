@@ -308,17 +308,40 @@ jobs:
               ${{ env.DUMP_PATH }} > /dev/null 2>&1 &
             RSYNC_PID=$!
 
-            # Print progress every 10s while rsync is running
+            # Print progress + speed every 10s while rsync is running
             LAST_PCT=-1
+            PREV_BYTES=0
+            PREV_TIME=$(date +%s)
             while kill -0 $RSYNC_PID 2>/dev/null; do
               if [ -f "${{ env.DUMP_PATH }}" ]; then
                 CUR=$(stat -c%s "${{ env.DUMP_PATH }}" 2>/dev/null || echo 0)
+                NOW=$(date +%s)
                 PCT=$((CUR * 100 / REMOTE_BYTES))
                 CUR_HR=$(numfmt --to=iec-i --suffix=B $CUR 2>/dev/null || echo "${CUR}")
-                if [ "$PCT" -ne "$LAST_PCT" ]; then
+
+                # Calculate speed since last check
+                ELAPSED=$((NOW - PREV_TIME))
+                if [ "$ELAPSED" -gt 0 ] && [ "$CUR" -gt "$PREV_BYTES" ]; then
+                  SPEED=$(( (CUR - PREV_BYTES) / ELAPSED ))
+                  SPEED_HR=$(numfmt --to=iec-i --suffix=B/s $SPEED 2>/dev/null || echo "${SPEED} B/s")
+                  # ETA calculation
+                  REMAINING=$((REMOTE_BYTES - CUR))
+                  if [ "$SPEED" -gt 0 ]; then
+                    ETA_SECS=$((REMAINING / SPEED))
+                    ETA_MIN=$((ETA_SECS / 60))
+                    ETA_SEC=$((ETA_SECS % 60))
+                    ETA_STR="${ETA_MIN}m ${ETA_SEC}s"
+                  else
+                    ETA_STR="--"
+                  fi
+                  echo "📥 ${CUR_HR} / ${REMOTE_SIZE_HR}  (${PCT}%)  ⚡ ${SPEED_HR}  ETA: ${ETA_STR}"
+                elif [ "$PCT" -ne "$LAST_PCT" ]; then
                   echo "📥 ${CUR_HR} / ${REMOTE_SIZE_HR}  (${PCT}%)"
-                  LAST_PCT=$PCT
                 fi
+
+                PREV_BYTES=$CUR
+                PREV_TIME=$NOW
+                LAST_PCT=$PCT
               fi
               sleep 10
             done
