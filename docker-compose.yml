@@ -21,6 +21,15 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+        reservations:
+          cpus: '0.05'
+          memory: 64M
     
     labels:
       - "traefik.enable=true"
@@ -122,8 +131,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.5'
-          memory: 3000M
+          cpus: '1.0'
+          memory: 2500M
         reservations:
           cpus: '0.25'
           memory: 512M

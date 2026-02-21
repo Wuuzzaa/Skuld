@@ -43,10 +43,12 @@ echo "Timestamp,RSS_MB" > "$MONITOR_LOG"
 ) &
 MONITOR_PID=$!
 
-# Run data collection with timeout
+# Run data collection with timeout and reduced CPU/IO priority
+# nice -n 10: lower CPU scheduling priority (default=0, max=19)
+# ionice -c 2 -n 6: best-effort IO class with lower priority (0=highest, 7=lowest)
 cd /app/Skuld
 echo "$(date): Starting data collection (${MODE})..." >> "$LOGFILE"
-timeout 18000 /usr/local/bin/python main.py --mode "$MODE" >> "$LOGFILE" 2>&1
+timeout 18000 nice -n 10 ionice -c 2 -n 6 /usr/local/bin/python main.py --mode "$MODE" >> "$LOGFILE" 2>&1
 EXIT_CODE=$?
 
 # Stop Memory Monitor
