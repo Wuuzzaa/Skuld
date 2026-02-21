@@ -8,7 +8,6 @@ from src.logger_config import setup_logging
 from src.database import run_migrations
 from src.massiv_api import load_option_chains
 from src.price_and_technical_analysis_data_scrapper import scrape_and_save_price_and_technical_indicators
-from src.stock_volatility import calculate_and_store_stock_implied_volatility_history
 from src.yahoo_asset_profile import load_asset_profile
 from src.yahoo_dividens import calculate_dividend_classification
 from src.yahooquery_earning_dates import scrape_earning_dates
@@ -58,6 +57,7 @@ def main(args):
                 ("Earning Dates", scrape_earning_dates, (symbols["stocks"],)),
                 ("Yahoo Query Fundamentals", generate_fundamental_data, (symbols["stocks"],)),
                 ("Yahoo Dividends", calculate_dividend_classification, ()),
+                ("Yahoo Asset Profiles", load_asset_profile, (symbols["stocks"],)),
                 #todo task für symbole anpassen
             ]
         elif args.mode == "marked_start_mid_end":

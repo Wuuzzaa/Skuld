@@ -476,9 +476,9 @@ SELECT
 	a."Summary_navPrice",
 
 	-- FundamentalDataDividendRadar
-	b."Company", 
+	c.name AS "Company", 
 	b."FV", 
-	b."Sector", 
+	c.sector AS "Sector", 
 	b."No-Years", 
 	b."Price", 
 	b."Div-Yield", 
@@ -513,16 +513,15 @@ SELECT
 	b."P/BV", 
 	b."PEG", 
 	b."New-Member", 
-	b."Industry", 
+	c.industry AS "Industry", 
 	b."Classification",
 
 	-- StockAssetProfilesYahoo
-	c.name,
-	c.industry,
-	c.sector,
-	c.country,
-	c.long_business_summary
-
+	c.name AS company_name,
+	c.industry AS company_industry,
+	c.sector AS company_sector,
+	c.country AS company_country,
+	c.long_business_summary AS company_long_business_summary
 FROM 
     "FundamentalDataYahoo" as a
 LEFT OUTER JOIN 

@@ -15,6 +15,8 @@ SELECT
     d.iv_high,
     d.iv_rank,
     d.iv_percentile,
+	-- days of options data available
+	CAST(CURRENT_DATE - g.from_date AS INTEGER) AS days_of_options_data,
 
 	-- StockVolatility
 	e.historical_volatility_30d,
@@ -37,4 +39,7 @@ FROM
 	LEFT OUTER JOIN "AnalystPriceTargets" AS C ON A.SYMBOL = C.SYMBOL
 	LEFT OUTER JOIN "StockImpliedVolatilityMassive" AS d ON a.symbol = d.symbol
 	LEFT OUTER JOIN "StockVolatility" AS E ON A.SYMBOL = E.SYMBOL
-	LEFT OUTER JOIN "DividendDataYahoo" AS F ON A.SYMBOL = F.SYMBOL;
+	LEFT OUTER JOIN "DividendDataYahoo" AS F ON A.SYMBOL = F.SYMBOL
+	LEFT OUTER JOIN (
+		SELECT symbol, MIN(from_date) AS from_date FROM "OptionDataMassiveMasterData" GROUP BY symbol
+	) AS G ON A.SYMBOL = G.SYMBOL;

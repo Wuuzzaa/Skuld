@@ -10,9 +10,9 @@ from src.yahooquery_scraper import YahooQueryScraper
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 logger = logging.getLogger(__name__)
 
-def load_asset_profile():
+def load_asset_profile(symbols):
     logger.info("Loading Yahoo Asset Profiles")
-    yahoo_query = YahooQueryScraper.instance()
+    yahoo_query = YahooQueryScraper.instance(symbols)
     data = yahoo_query.get_modules()
 
     asset_profiles = {}

@@ -20,8 +20,8 @@ MODULES = 'calendarEvents summaryDetail financialData earningsTrend defaultKeySt
 class YahooQueryScraper:
     def __init__(self, symbols):
         self.symbols = symbols
-        # Symbole in 2000er-Pakete aufteilen
-        self.batch_size = 2000
+        # Symbole in 200er-Pakete aufteilen
+        self.batch_size = 200
         self.retries = 5
         self.symbol_batches = [self.symbols[i:i + self.batch_size] for i in range(0, len(self.symbols), self.batch_size)]
         logger.info(f"Initializing {len(self.symbol_batches)} ticker batches with batch size {self.batch_size} for YahooQueryScraper - total symbols: {len(self.symbols)}")
