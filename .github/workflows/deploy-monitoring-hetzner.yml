@@ -3,6 +3,9 @@ name: Deploy Monitoring (Hetzner Server)
 on:
   push:
     branches: [ master ]
+    paths:
+      - 'monitoring/hetzner/**'
+      - '.github/workflows/deploy-monitoring-hetzner.yml'
 
 jobs:
   deploy-hetzner:

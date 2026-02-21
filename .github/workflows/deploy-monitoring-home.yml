@@ -3,6 +3,9 @@ name: Deploy Monitoring (Home Server)
 on:
   push:
     branches: [ master ]
+    paths:
+      - 'monitoring/home/**'
+      - '.github/workflows/deploy-monitoring-home.yml'
 
 jobs:
   deploy-home:
