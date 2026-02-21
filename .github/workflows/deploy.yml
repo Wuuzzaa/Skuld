@@ -22,7 +22,7 @@ jobs:
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
-            "echo '${{ secrets.DEPLOY_PASSWORD }}' | sudo -S docker system prune -af --volumes || true && echo '${{ secrets.DEPLOY_PASSWORD }}' | sudo -S chown -R ${{ secrets.DEPLOY_USER }} /opt/skuld"
+            "echo '${{ secrets.DEPLOY_PASSWORD }}' | sudo -S docker system prune -af || true && echo '${{ secrets.DEPLOY_PASSWORD }}' | sudo -S chown -R ${{ secrets.DEPLOY_USER }} /opt/skuld"
 
       - name: Sync files to server (Production deployment)
         run: |
@@ -167,11 +167,11 @@ jobs:
             # ────────────────────────────────────────────────────────────
             
             echo "=== Stopping old container ==="
-            # Explicitly stop old container names if they exist (migration to split services)
-            mysudo docker stop skuld-streamlit || true
-            mysudo docker rm skuld-streamlit || true
-            mysudo docker stop authelia || true
-            mysudo docker rm authelia || true
+            # Force-remove any leftover containers (handles restart policies & orphans)
+            mysudo docker rm -f skuld-streamlit 2>/dev/null || true
+            mysudo docker rm -f skuld-frontend 2>/dev/null || true
+            mysudo docker rm -f skuld-backend 2>/dev/null || true
+            mysudo docker rm -f authelia 2>/dev/null || true
             mysudo docker compose down --remove-orphans
             
             echo "=== Ensuring financial_data.db is a file ==="
