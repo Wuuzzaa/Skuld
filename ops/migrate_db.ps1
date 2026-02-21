@@ -90,7 +90,7 @@ Write-Progress -Activity $Activity -Status "3. Restoring on Test Server..." -Per
 Write-Host "3. Restoring on Test Server..."
 $RestoreCmd = @"
     echo 'Stopping interfering services...'
-    docker stop skuld-app || true 
+    docker stop skuld-frontend skuld-backend || true 
     
     echo 'Dropping and Recreating Database...'
     # Use explicit pipe to psql connecting to default 'postgres' db
@@ -102,6 +102,9 @@ $RestoreCmd = @"
     
     echo 'Cleaning up dump...'
     rm /tmp/$LocalDumpFile
+
+    echo 'Restarting services...'
+    docker start skuld-frontend skuld-backend || true
 "@
 
 # Fix argument formatting by piping the script content over SSH to bash

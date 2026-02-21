@@ -14,7 +14,7 @@ services:
       - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:80"
     ports:
-      - "80:80" # Cloudflared will connect to this port
+      - "81:80" # Cloudflared will connect to this port (changed from 80 to avoid collision)
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
     networks:

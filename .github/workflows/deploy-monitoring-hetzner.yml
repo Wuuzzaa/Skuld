@@ -3,8 +3,6 @@ name: Deploy Monitoring (Hetzner Server)
 on:
   push:
     branches: [ master ]
-    paths:
-      - 'monitoring/hetzner/**'
 
 jobs:
   deploy-hetzner:
