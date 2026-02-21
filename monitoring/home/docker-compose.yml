@@ -93,10 +93,9 @@ services:
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus-data:/prometheus
-    # Does not need to be exposed to Traefik, Grafana connects internally
-    networks:
-      - monitoring-net
-      - wireguard-net
+    network_mode: "service:wireguard-client"
+    depends_on:
+      - wireguard-client
 
   # --------------------------------------------------------------------------
   # 5. WireGuard Client (Tunnel to Hetzner)
@@ -118,6 +117,7 @@ services:
     sysctls:
       - net.ipv4.conf.all.src_valid_mark=1
     networks:
+      - monitoring-net
       - wireguard-net
 
 volumes:
