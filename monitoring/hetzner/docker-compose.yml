@@ -50,8 +50,9 @@ services:
       - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
     # We DO NOT expose any ports here!
     # It will only be accessible from within the monitoring-agent-net
-    networks:
-      - monitoring-agent-net
+    network_mode: "service:wireguard-server"
+    depends_on:
+      - wireguard-server
 
 networks:
   monitoring-agent-net:
