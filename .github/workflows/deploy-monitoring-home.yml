@@ -18,14 +18,14 @@ jobs:
         run: |
           set -euo pipefail
           
-          # 1. Ensure target directory exists
+          # 1. Ensure target directory exists (in user home to avoid sudo)
           echo "=== Setting up directory ==="
-          mkdir -p /opt/monitoring-home || sudo mkdir -p /opt/monitoring-home && sudo chown -R $USER:$USER /opt/monitoring-home
+          mkdir -p ~/monitoring-home
           
           # 2. Copy the monitoring/home contents to the deployment directory
           echo "=== Copying files ==="
-          cp -r monitoring/home/* /opt/monitoring-home/
-          cd /opt/monitoring-home
+          cp -r monitoring/home/* ~/monitoring-home/
+          cd ~/monitoring-home
           
           # 3. Create Authelia secrets
           echo "=== Creating Authelia secrets ==="

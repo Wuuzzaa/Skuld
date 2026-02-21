@@ -17,6 +17,12 @@ jobs:
           echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
 
+      - name: Prepare remote directory
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "echo '${{ secrets.DEPLOY_PASSWORD }}' | sudo -S mkdir -p /opt/monitoring-hetzner && echo '${{ secrets.DEPLOY_PASSWORD }}' | sudo -S chown -R ${{ secrets.DEPLOY_USER }} /opt/monitoring-hetzner"
+
       - name: Sync files to Hetzner server
         run: |
           rsync -avz --delete \
