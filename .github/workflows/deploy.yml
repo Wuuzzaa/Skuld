@@ -116,10 +116,12 @@ jobs:
             mysudo docker images | grep skuld || echo "No skuld images"
             
             echo "=== Stopping old container ==="
-            # Explicitly stop old container name if it exists (migration to split services)
+            # Explicitly stop old container names if they exist (migration to split services)
             mysudo docker stop skuld-streamlit || true
             mysudo docker rm skuld-streamlit || true
-            mysudo docker compose down
+            mysudo docker stop authelia || true
+            mysudo docker rm authelia || true
+            mysudo docker compose down --remove-orphans
             
             echo "=== Ensuring financial_data.db is a file ==="
             if [ -d "financial_data.db" ]; then
