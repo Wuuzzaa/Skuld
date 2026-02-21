@@ -25,6 +25,13 @@ logger.info("data_collector")
 def main(args):
     pipeline = None
     logger.info(f"Mode: {args.mode}")
+
+    if args.mode == "only_run_migrations":
+        logger.info("#" * 80)
+        logger.info(f"Database migrations done. Exit main")
+        logger.info("#" * 80)
+        return 0
+
     try:
         # Initialize Pipeline Monitor with the specific mode
         pipeline = PipelineMonitor(mode=args.mode)
@@ -173,7 +180,8 @@ if __name__ == "__main__":
                             "stock_data_daily",
                             "option_data",
                             "historical_prices",
-                            "historization"
+                            "historization",
+                            "only_run_migrations"
                         ],
                         help="Mode for data collection")
     parser.add_argument("--env", type=str, required=False, default=None,
