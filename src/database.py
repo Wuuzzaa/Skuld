@@ -8,7 +8,7 @@ from typing import Literal
 from sqlalchemy import create_engine, text, inspect
 from config import HISTORY_ENABLED_TABLES, PATH_DATABASE_FILE, SSH_PKEY_PATH, SSH_HOST, SSH_USER, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_PORT, POSTGRES_HOST, TABLE_STOCK_IMPLIED_VOLATILITY_MASSIVE, TABLE_STOCK_PRICES_YAHOO
 import numpy as np
-from src.yahooquery_scraper import YahooQueryScraper
+import hashlib
 
 # logging
 logger = logging.getLogger(__name__)
@@ -346,7 +346,8 @@ def _run_migrations_for_engine(engine):
         migrations_path = "db/SQL/migrations/"
         if not os.path.exists(migrations_path):
             logger.info(f"[{label}] Migrations directory not found at {migrations_path}. Skipping migrations.")
-            _recreate_views_for_engine(engine)
+            _recreate_views_connection(connection)
+            connection.commit()  # Ensure any pending transactions are committed before
             return
             
         migration_files = [f for f in os.listdir(migrations_path) if re.match(r"\d+\.sql", f)]
@@ -356,7 +357,8 @@ def _run_migrations_for_engine(engine):
 
         if not pending_migrations:
             logger.info(f"[{label}] Database is up to date.")
-            _recreate_views_for_engine(engine)
+            _recreate_views_connection(connection)
+            connection.commit()  # Ensure any pending transactions are committed before
             return
 
         if label == "PostgreSQL":
@@ -398,8 +400,8 @@ def _run_migrations_for_engine(engine):
                 connection.execute(text(f'UPDATE "DbVersion" SET version = {last_migration_version}'))
                 logger.info(f"[{label}] Database version updated to {last_migration_version}.")
     
-    # Recreate views after migrations
-    _recreate_views_for_engine(engine)
+        # Recreate views after migrations
+        _recreate_views_connection(connection)
     logger.info(f"[{label}] Migration completed in {round(time.time() - start,2)}s")
 
 
@@ -430,52 +432,178 @@ def _recreate_views_for_engine(engine):
 
     
     if label == "PostgreSQL":
-        view_paths = ["db/SQL/views/PostgreSQL/"]
+        view_path = "db/SQL/views/PostgreSQL/"
     else:
-        view_paths = ["db/SQL/views/create_view/"]
-    for views_path in view_paths:
-        if not os.path.exists(views_path):
-            logger.info(f"[{label}] Views directory not found at {views_path}. Skipping view recreation.")
-            return
+        view_path = "db/SQL/views/create_view/"
 
-        view_files = [f for f in os.listdir(views_path) if f.endswith(".sql")]
-        view_files.sort()
+    if not os.path.exists(view_path):
+        logger.info(f"[{label}] Views directory not found at {view_path}. Skipping view recreation.")
+        return
+
+    view_files = [f for f in os.listdir(view_path) if f.endswith(".sql")]
+    view_files.sort()
+
+    pending_views = view_files.copy()
     
-        pending_views = view_files.copy()
-        
+    hash_value = calculate_view_hash(view_path, view_files)
+    db_hash_value = get_db_view_hash(engine)
+
+    if db_hash_value == hash_value:
+        logger.info(f"[{label}] Views are up to date. Skipping recreation.")
+        return
+    
+    with engine.connect() as connection:
+        while pending_views:
+            progress_made = False
+            failed_views = []
+            
+            for view_file in pending_views:
+                try:
+                    with open(os.path.join(view_path, view_file), "r") as f:
+                        sql_script = f.read()
+                    
+                    statements = [s.strip() for s in sql_script.split(';') if s.strip()]
+                    
+                    with connection.begin():
+                        for statement in statements:
+                            connection.execute(text(statement))
+                    
+                    progress_made = True
+                except Exception as e:
+                    logger.error(f"[{label}] Failed to create view {view_file}: \n{e}")
+                    failed_views.append(view_file)
+            
+            if not progress_made and failed_views:
+                logger.error(f"[{label}] Error: Could not create the following views due to potential circular dependencies or errors: {failed_views}")
+                break
+            
+            pending_views = failed_views
+    
+    if not pending_views:
+        logger.info(f"[{label}] All views recreated successfully in {round(time.time() - start, 2)}s.")
         with engine.connect() as connection:
-            while pending_views:
-                progress_made = False
-                failed_views = []
-                
-                for view_file in pending_views:
-                    try:
-                        with open(os.path.join(views_path, view_file), "r") as f:
-                            sql_script = f.read()
-                        
-                        statements = [s.strip() for s in sql_script.split(';') if s.strip()]
-                        
-                        with connection.begin():
-                            for statement in statements:
-                                connection.execute(text(statement))
-                        
-                        progress_made = True
-                    except Exception as e:
-                        logger.error(f"[{label}] Failed to create view {view_file}: \n{e}")
-                        failed_views.append(view_file)
-                
-                if not progress_made and failed_views:
-                    logger.error(f"[{label}] Error: Could not create the following views due to potential circular dependencies or errors: {failed_views}")
-                    break
-                
-                pending_views = failed_views
+            execute_sql(connection, f'UPDATE "DbVersion" SET view_hash = {hash_value}', "DbVersion", "UPDATE", "Update view hash after recreation")
+    else:
+        logger.info(f"[{label}] View recreation finished with errors in {round(time.time() - start, 2)}s.")
+        with engine.connect() as connection:
+            execute_sql(connection, f'UPDATE "DbVersion" SET view_hash = NULL', "DbVersion", "UPDATE", "Update view hash after recreation")
+        raise Exception(f"Failed to recreate some views in {label}: {pending_views}")
 
-        if not pending_views:
-            logger.info(f"[{label}] All views recreated successfully in {round(time.time() - start, 2)}s.")
-        else:
-            logger.info(f"[{label}] View recreation finished with errors in {round(time.time() - start, 2)}s.")
-            raise Exception(f"Failed to recreate some views in {label}: {pending_views}")
+def _recreate_views_connection(connection):
+    """
+    Internal helper to recreate views on a specific engine.
+    """
+    if 'postgresql' in str(connection.engine.url):
+        label = "PostgreSQL"
+    if 'sqlite' in str(connection.engine.url):
+        label = "SQLite"
+    logger.info(f"[{label}] Recreating views...")
+    start = time.time()
 
+    
+    if label == "PostgreSQL":
+        view_path = "db/SQL/views/PostgreSQL/"
+    else:
+        view_path = "db/SQL/views/create_view/"
+
+    if not os.path.exists(view_path):
+        logger.info(f"[{label}] Views directory not found at {view_path}. Skipping view recreation.")
+        return
+
+    view_files = [f for f in os.listdir(view_path) if f.endswith(".sql")]
+    view_files.sort()
+
+    pending_views = view_files.copy()
+    
+    hash_value = calculate_view_hash(view_path, view_files)
+    db_hash_value = get_db_view_hash_conn(connection)
+
+    if db_hash_value == hash_value:
+        logger.info(f"[{label}] Views are up to date. Skipping recreation.")
+        return
+    
+    while pending_views:
+        progress_made = False
+        failed_views = []
+        
+        for view_file in pending_views:
+            try:
+                with open(os.path.join(view_path, view_file), "r") as f:
+                    sql_script = f.read()
+                
+                statements = [s.strip() for s in sql_script.split(';') if s.strip()]
+                
+                with connection.begin():
+                    for statement in statements:
+                        connection.execute(text(statement))
+                
+                progress_made = True
+            except Exception as e:
+                logger.error(f"[{label}] Failed to create view {view_file}: \n{e}")
+                failed_views.append(view_file)
+        
+        if not progress_made and failed_views:
+            logger.error(f"[{label}] Error: Could not create the following views due to potential circular dependencies or errors: {failed_views}")
+            break
+        
+        pending_views = failed_views
+    
+    if not pending_views:
+        logger.info(f"[{label}] All views recreated successfully in {round(time.time() - start, 2)}s.")
+        execute_sql(connection, f'UPDATE "DbVersion" SET view_hash = \'{hash_value}\'', "DbVersion", "UPDATE", "Update view hash after recreation")
+    else:
+        logger.info(f"[{label}] View recreation finished with errors in {round(time.time() - start, 2)}s.")
+        execute_sql(connection, f'UPDATE "DbVersion" SET view_hash = NULL', "DbVersion", "UPDATE", "Update view hash after recreation")
+        raise Exception(f"Failed to recreate some views in {label}: {pending_views}")
+
+def calculate_view_hash2(views_path, view_files):
+    concatinated_string = ""
+    for view_file in sorted(view_files):
+        try:
+            with open(os.path.join(views_path, view_file), "r") as f:
+                sql_script = f.read()
+                concatinated_string = concatinated_string + sql_script
+        except Exception as e:
+            logger.error(f"Error reading view file {views_path}: \n{e}")
+            raise e
+    return hash(concatinated_string)
+
+def calculate_view_hash(views_path, view_files):
+    hasher = hashlib.sha256()
+    
+    # Sorting ensures the order of concatenation is always the same
+    for view_file in sorted(view_files):
+        try:
+            file_path = os.path.join(views_path, view_file)
+            
+            # Using newline='' and then encoding ensures 
+            # all platforms hash the same string.
+            with open(file_path, "r", encoding="utf-8", newline='') as f:
+                content = f.read().replace('\r\n', '\n') 
+                hasher.update(content.encode("utf-8"))
+                
+        except Exception as e:
+            logger.error(f"Error reading view file {view_file}: \n{e}")
+            raise e
+            
+    hash_value = hasher.hexdigest()
+    logger.info(f"Calculated view hash: {hash_value}")
+    return hash_value
+
+def get_db_view_hash(engine):
+    with engine.connect() as connection:
+        with connection.begin():
+            result = connection.execute(text('SELECT view_hash FROM "DbVersion"')).fetchone()
+            current_view_hash = result[0] if result else None
+        logger.info(f"Current database view hash: {current_view_hash}")
+    return current_view_hash
+
+def get_db_view_hash_conn(connection):
+    with connection.begin():
+        result = connection.execute(text('SELECT view_hash FROM "DbVersion"')).fetchone()
+        current_view_hash = result[0] if result else None
+    logger.info(f"Current database view hash: {current_view_hash}")
+    return current_view_hash
 
 def recreate_views():
     """

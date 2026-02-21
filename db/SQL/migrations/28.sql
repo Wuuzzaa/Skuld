@@ -1,0 +1,1 @@
+ALTER TABLE "DbVersion" ADD COLUMN "view_hash" TEXT;
