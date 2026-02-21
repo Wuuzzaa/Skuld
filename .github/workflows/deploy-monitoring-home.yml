@@ -22,19 +22,19 @@ jobs:
           
           # 2. Copy the monitoring/home contents to the deployment directory
           echo "=== Copying files ==="
-          cp -r monitoring/home/* ~/monitoring-home/
+          sudo cp -r monitoring/home/* ~/monitoring-home/
           cd ~/monitoring-home
           
           # 3. Create Authelia secrets
           echo "=== Creating Authelia secrets ==="
-          mkdir -p authelia
-          echo "${{ secrets.AUTHELIA_JWT_SECRET }}" > authelia/jwt_secret
-          echo "${{ secrets.AUTHELIA_SESSION_SECRET }}" > authelia/session_secret
-          echo "${{ secrets.AUTHELIA_STORAGE_ENCRYPTION_KEY }}" > authelia/storage_encryption_key
+          sudo mkdir -p authelia
+          echo "${{ secrets.AUTHELIA_JWT_SECRET }}" | sudo tee authelia/jwt_secret >/dev/null
+          echo "${{ secrets.AUTHELIA_SESSION_SECRET }}" | sudo tee authelia/session_secret >/dev/null
+          echo "${{ secrets.AUTHELIA_STORAGE_ENCRYPTION_KEY }}" | sudo tee authelia/storage_encryption_key >/dev/null
           
           # 4. Create Authelia basic config
           AUTHELIA_HASH='${{ secrets.AUTHELIA_PASSWORD_HASH }}'
-          cat <<EOF > authelia/users_database.yml
+          cat <<EOF | sudo tee authelia/users_database.yml >/dev/null
           users:
             admin:
               displayname: "Admin"
