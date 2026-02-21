@@ -37,13 +37,13 @@ services:
       - AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE=/config/storage_encryption_key
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.authelia.rule=Host(`auth-monitoring.skuld-options.com`)"
-      - "traefik.http.routers.authelia.entrypoints=web"
-      - "traefik.http.services.authelia.loadbalancer.server.port=9091"
+      - "traefik.http.routers.monitoring-authelia.rule=Host(`auth-monitoring.skuld-options.com`)"
+      - "traefik.http.routers.monitoring-authelia.entrypoints=web"
+      - "traefik.http.services.monitoring-authelia.loadbalancer.server.port=9091"
       # Middleware for other services to use
-      - "traefik.http.middlewares.authelia-auth.forwardauth.address=http://monitoring-authelia:9091/api/verify?rd=https://auth-monitoring.skuld-options.com"
-      - "traefik.http.middlewares.authelia-auth.forwardauth.trustForwardHeader=true"
-      - "traefik.http.middlewares.authelia-auth.forwardauth.authResponseHeaders=Remote-User,Remote-Groups,Remote-Name,Remote-Email"
+      - "traefik.http.middlewares.monitoring-authelia-auth.forwardauth.address=http://monitoring-authelia:9091/api/verify?rd=https://auth-monitoring.skuld-options.com"
+      - "traefik.http.middlewares.monitoring-authelia-auth.forwardauth.trustForwardHeader=true"
+      - "traefik.http.middlewares.monitoring-authelia-auth.forwardauth.authResponseHeaders=Remote-User,Remote-Groups,Remote-Name,Remote-Email"
     networks:
       - monitoring-net
 
@@ -67,10 +67,10 @@ services:
       - GF_SERVER_ROOT_URL=https://monitoring.skuld-options.com
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.grafana.rule=Host(`monitoring.skuld-options.com`)"
-      - "traefik.http.routers.grafana.entrypoints=web"
-      - "traefik.http.routers.grafana.middlewares=authelia-auth"
-      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+      - "traefik.http.routers.monitoring-grafana.rule=Host(`monitoring.skuld-options.com`)"
+      - "traefik.http.routers.monitoring-grafana.entrypoints=web"
+      - "traefik.http.routers.monitoring-grafana.middlewares=monitoring-authelia-auth"
+      - "traefik.http.services.monitoring-grafana.loadbalancer.server.port=3000"
     networks:
       - monitoring-net
 
