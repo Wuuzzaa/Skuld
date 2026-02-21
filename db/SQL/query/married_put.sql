@@ -2,9 +2,9 @@ WITH BaseData AS (
     SELECT
         100 as number_of_stocks,
         symbol,
-        name AS "Company",
-        sector AS "Sector",
-        industry AS "Industry",
+        company_name AS "Company",
+        company_sector AS "Sector",
+        company_industry AS "Industry",
         expiration_date,
         days_to_expiration,
         open_interest,

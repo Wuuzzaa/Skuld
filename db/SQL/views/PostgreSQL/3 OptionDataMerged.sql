@@ -37,10 +37,7 @@ SELECT
     a.strike_stock_price_difference_ptc,
 
     -- Fundamental Data
-	b."Company", 
-	b."FV", 
-	b."Sector", 
-	c.dividend_growth_years AS "No-Years", 
+	b."FV",  
 	b."Price", 
 	b."Div-Yield", 
 	b."5Y-Avg-Yield", 
@@ -74,8 +71,6 @@ SELECT
 	b."P/BV", 
 	b."PEG", 
 	b."New-Member", 
-	b."Industry", 
-	c.dividend_classification AS "Classification",
     b."asOfDate", 
 	b."periodType", 
 	b."currencyCode", 
@@ -564,11 +559,13 @@ SELECT
     c.iv_high,
     c.iv_rank,
     c.iv_percentile,
+	c.days_of_options_data_history,
 	-- StockVolatility
 	c.historical_volatility_30d,
 	-- DividendData
 	c.dividend_growth_years,
 	c.dividend_classification,
+	c.days_of_stock_prices_history,
 
     -- Technical Indicators
     d."Recommend.Other", 
@@ -601,7 +598,6 @@ SELECT
 	d."BBPower", 
 	d."Rec.UO", 
 	d."UO", 
-	d.close, 
 	d."EMA5", 
 	d."SMA5", 
 	d."EMA10", 

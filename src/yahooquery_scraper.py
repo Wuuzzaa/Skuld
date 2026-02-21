@@ -20,11 +20,7 @@ MODULES = 'calendarEvents summaryDetail financialData earningsTrend defaultKeySt
 class YahooQueryScraper:
     def __init__(self, symbols):
         self.symbols = symbols
-        # Symbole in 200er-Pakete aufteilen
-        self.batch_size = 200
         self.retries = 5
-        self.symbol_batches = [self.symbols[i:i + self.batch_size] for i in range(0, len(self.symbols), self.batch_size)]
-        logger.info(f"Initializing {len(self.symbol_batches)} ticker batches with batch size {self.batch_size} for YahooQueryScraper - total symbols: {len(self.symbols)}")
         self._module_data_cache = None
         self.module_data_lock = threading.Lock()
         self._module_data_cache_timestamp = None
@@ -38,16 +34,20 @@ class YahooQueryScraper:
             all_data = {}
             if self._module_data_cache is None or force_refresh:
                 logger.info(f"Loading for {len(self.symbols)} symbols module data from Yahoo Finance - modules: {MODULES}")
+                # Symbole in 2000er-Pakete aufteilen
+                local_batch_size = 2000
+                local_symbol_batches = [self.symbols[i:i + local_batch_size] for i in range(0, len(self.symbols), local_batch_size)]
+                logger.info(f"Initializing {len(local_symbol_batches)} ticker batches with batch size {local_batch_size} for YahooQueryScraper - total symbols: {len(self.symbols)}")
                  # asynchronous=True, max_workers=2, is not possible because of the high number of symbols and the rate limit
-                lokal_ticker_batches = [Ticker(symbol_batch, progress=True) for symbol_batch in self.symbol_batches]
+                local_ticker_batches = [Ticker(symbol_batch, progress=True) for symbol_batch in local_symbol_batches]
                 batch = 1
-                for ticker_batch in lokal_ticker_batches:
-                    logger.info(f"({batch}/{len(lokal_ticker_batches)}) Batch")
+                for ticker_batch in local_ticker_batches:
+                    logger.info(f"({batch}/{len(local_ticker_batches)}) Batch")
                     batch += 1
                     for attempt in range(self.retries):
                         try:
-                            if len(self.symbols) > self.batch_size:
-                                logger.info(f"Fetching Yahoo module data for batch of up to {self.batch_size} symbols...")
+                            if len(self.symbols) > local_batch_size:
+                                logger.info(f"Fetching Yahoo module data for batch of up to {local_batch_size} symbols...")
                             data = ticker_batch.get_modules(MODULES)
                             all_data.update(data)
                         except Exception as e:
@@ -81,15 +81,19 @@ class YahooQueryScraper:
             all_data = [] 
             batch = 1
             logger.info(f"Loading for {len(self.symbols)} symbols all financial data from Yahoo Finance")
-            lokal_ticker_batches = [Ticker(symbol_batch, progress=True, asynchronous=True) for symbol_batch in self.symbol_batches]
+            # Symbole in 2000er-Pakete aufteilen
+            local_batch_size = 2000
+            local_symbol_batches = [self.symbols[i:i + local_batch_size] for i in range(0, len(self.symbols), local_batch_size)]
+            logger.info(f"Initializing {len(local_symbol_batches)} ticker batches with batch size {local_batch_size} for YahooQueryScraper - total symbols: {len(self.symbols)}")
+            local_ticker_batches = [Ticker(symbol_batch, progress=True, asynchronous=True) for symbol_batch in local_symbol_batches]
         
-            for ticker_batch in lokal_ticker_batches:
-                logger.info(f"({batch}/{len(lokal_ticker_batches)}) Batch")
+            for ticker_batch in local_ticker_batches:
+                logger.info(f"({batch}/{len(local_ticker_batches)}) Batch")
                 batch += 1
                 for attempt in range(self.retries):
                     try:
-                        if len(self.symbols) > self.batch_size:
-                            logger.info(f"Fetching Yahoo all financial data for batch of up to {self.batch_size} symbols...")
+                        if len(self.symbols) > local_batch_size:
+                            logger.info(f"Fetching Yahoo all financial data for batch of up to {local_batch_size} symbols...")
                         df = ticker_batch.all_financial_data()
                         df.reset_index(inplace=True)
                         if df is not None and not df.empty:
@@ -123,15 +127,19 @@ class YahooQueryScraper:
 
     def get_historical_prices(self, period="1d"):
         # , max_workers=2
-        lokal_ticker_batches = [Ticker(symbol_batch, progress=True, asynchronous=True) for symbol_batch in self.symbol_batches]
+        # Symbole in 2000er-Pakete aufteilen
+        local_batch_size = 200
+        local_symbol_batches = [self.symbols[i:i + local_batch_size] for i in range(0, len(self.symbols), local_batch_size)]
+        logger.info(f"Initializing {len(local_symbol_batches)} ticker batches with batch size {local_batch_size} for YahooQueryScraper - total symbols: {len(self.symbols)}")
+        local_ticker_batches = [Ticker(symbol_batch, progress=True, asynchronous=True) for symbol_batch in local_symbol_batches]
         batch = 1
-        for ticker_batch in lokal_ticker_batches:
-            logger.info(f"({batch}/{len(lokal_ticker_batches)}) Batch")
+        for ticker_batch in local_ticker_batches:
+            logger.info(f"({batch}/{len(local_ticker_batches)}) Batch")
             batch += 1
             for attempt in range(self.retries):
                 try:
-                    if len(self.symbols) > self.batch_size:
-                        logger.info(f"Fetching Yahoo historical data for batch of up to {self.batch_size} symbols...")
+                    if len(self.symbols) > local_batch_size:
+                        logger.info(f"Fetching Yahoo historical data for batch of up to {local_batch_size} symbols...")
                     df = ticker_batch.history(period=period, interval='1d')
                     if df is not None and not df.empty:
                         # symbol expiration_date and option-type from index to column

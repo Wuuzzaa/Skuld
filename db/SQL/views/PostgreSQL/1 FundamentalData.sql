@@ -476,9 +476,7 @@ SELECT
 	a."Summary_navPrice",
 
 	-- FundamentalDataDividendRadar
-	c.name AS "Company", 
 	b."FV", 
-	c.sector AS "Sector", 
 	b."No-Years", 
 	b."Price", 
 	b."Div-Yield", 
@@ -512,9 +510,7 @@ SELECT
 	b."P/E", 
 	b."P/BV", 
 	b."PEG", 
-	b."New-Member", 
-	c.industry AS "Industry", 
-	b."Classification",
+	b."New-Member",
 
 	-- StockAssetProfilesYahoo
 	c.name AS company_name,

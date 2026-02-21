@@ -1,6 +1,6 @@
 SELECT DISTINCT
     symbol,
-    close,
+    live_stock_price as close,
     analyst_mean_target,
     recommendation,
     "Recommend.All",

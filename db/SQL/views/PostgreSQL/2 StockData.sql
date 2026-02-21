@@ -16,14 +16,15 @@ SELECT
     d.iv_rank,
     d.iv_percentile,
 	-- days of options data available
-	CAST(CURRENT_DATE - g.from_date AS INTEGER) AS days_of_options_data,
+	CAST(CURRENT_DATE - g.from_date AS INTEGER) AS days_of_options_data_history,
 
 	-- StockVolatility
 	e.historical_volatility_30d,
 
 	-- DividendData
 	f.years_of_growth as dividend_growth_years,
-	f.classification as dividend_classification
+	f.classification as dividend_classification,
+	CAST(CURRENT_DATE - h.from_date AS INTEGER) AS days_of_stock_prices_history
 FROM
 	"StockPricesYahoo" AS A
 	LEFT OUTER JOIN (
@@ -42,4 +43,7 @@ FROM
 	LEFT OUTER JOIN "DividendDataYahoo" AS F ON A.SYMBOL = F.SYMBOL
 	LEFT OUTER JOIN (
 		SELECT symbol, MIN(from_date) AS from_date FROM "OptionDataMassiveMasterData" GROUP BY symbol
-	) AS G ON A.SYMBOL = G.SYMBOL;
+	) AS G ON A.SYMBOL = G.SYMBOL
+	LEFT OUTER JOIN (
+		SELECT symbol, MIN(from_date) AS from_date FROM "StockPricesYahooMasterData" GROUP BY symbol
+	) AS H ON A.SYMBOL = H.SYMBOL;
