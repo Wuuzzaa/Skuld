@@ -163,6 +163,19 @@ with st.expander("Configuration and Filters", expanded=True):
         )
 
     with col12:
+        max_sell_iv = st.number_input(
+            "Max sell iv",
+            min_value=0.0,
+            value=0.9,
+            step=0.05,
+            format="%.2f"
+        )
+
+    # fourth row
+    #col13, col14, col15, col16 = st.columns(4)
+    col13 = st.columns(1)[0] # [0] because TypeError: 'list' object does not support the context manager protocol when only one column is used access the element directly
+
+    with col13:
         st.checkbox(
             "Show only spreads with no earnings till expiration",
             key="show_only_spreads_with_no_earnings_till_expiration"
@@ -212,6 +225,9 @@ if st.session_state.show_only_spreads_with_no_earnings_till_expiration:
     ]
 # min_sell_iv
 filtered_df = filtered_df[filtered_df['sell_iv'] >= min_sell_iv]
+
+# max_sell_iv
+filtered_df = filtered_df[filtered_df['sell_iv'] <= max_sell_iv]
 
 # After the filters reset the index to ensure the zebra style works on the dataframe
 filtered_df.reset_index(drop=True, inplace=True)
