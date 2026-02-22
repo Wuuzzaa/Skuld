@@ -33,7 +33,8 @@ class YahooQueryScraper:
 
     def _load_module_data(self, symbols=None, modules=None, ignore_cache=False):
         # if MAX_WORKERS == 1:
-        #     ignore_cache = True
+        if modules:
+            ignore_cache = True
         if not modules:
             modules = MODULES
         if not symbols:

@@ -31,16 +31,18 @@ def generate_fundamental_data(symbols):
     # Method 1: Get ALL financial data using all_financial_data (200+ columns)
     logger.info("Fetching comprehensive financial data using all_financial_data()...")
     yahoo_query = YahooQueryScraper.instance(symbols)
-    local_batch_size = 2000
+    local_batch_size = 500
     local_symbol_batches = [symbols[i:i + local_batch_size] for i in range(0, len(symbols), local_batch_size)]
     
     batch = 1
     with get_postgres_engine().begin() as connection:
         truncate_table(connection, TABLE_FUNDAMENTAL_DATA_YAHOO)
         for symbol_batch in local_symbol_batches:
+            df_all_financial = None
+            data = None
+            logger.info(f"Batch {batch}/{len(local_symbol_batches)} symbols {len(symbol_batch)}")
             df_all_financial = yahoo_query.get_all_financial_data(symbols=symbol_batch)
-            logger.info(f"Batch {batch}/{len(local_symbol_batches)} symbols {len(symbol_batch)} rows {len(df_all_financial)}")
-            data = yahoo_query.get_modules(symbols=symbol_batch, modules='financialData defaultKeyStatistics earningsTrend summaryDetail')
+            data = yahoo_query.get_modules(symbols=symbol_batch, modules='financialData defaultKeyStatistics earningsTrend summaryDetail', ignore_cache=True)
 
             if df_all_financial is not None and not df_all_financial.empty:
                 # Get latest data per symbol

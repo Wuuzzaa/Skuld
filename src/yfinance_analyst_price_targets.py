@@ -17,7 +17,7 @@ def scrape_yahoo_finance_analyst_price_targets(symbols):
     print("#" * 80)
 
     yahoo_query = YahooQueryScraper.instance(symbols)
-    data = yahoo_query.get_modules()
+    data = yahoo_query.get_modules(modules='financialData')
 
     results = []
 
