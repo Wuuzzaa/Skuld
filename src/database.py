@@ -388,8 +388,12 @@ def _run_migrations_for_engine(engine):
                         
                 logger.info(f"[{label}] Migration {migration_file} applied successfully.")
             except Exception as e:
-                logger.error(f"[{label}] Error applying migration {migration_file}: \n{e}")
-                raise e
+                error_msg = str(e).lower()
+                if "duplicate column name" in error_msg or "already exists" in error_msg:
+                    logger.warning(f"[{label}] Column already exists in migration {migration_file}, skipping error: {e}")
+                else:
+                    logger.error(f"[{label}] Error applying migration {migration_file}: \n{e}")
+                    raise e
             
         if label == "PostgreSQL" and last_migration_version == 23:
             calculate_and_store_stock_implied_volatility_history_migration()
