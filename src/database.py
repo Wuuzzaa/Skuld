@@ -384,7 +384,12 @@ def _run_migrations_for_engine(engine):
                     for statement in statements:
                         if label == "PostgreSQL":
                             statement = mapping_sqlite_to_postgres(statement)
-                        connection.execute(text(statement))
+                        try:
+                            connection.execute(text(statement))
+                        except Exception as e:
+                            logger.error(f"[{label}] Error applying migration {migration_file}: \n{e}")
+                            if not 'duplicate column' in e:
+                                raise e
                         
                 logger.info(f"[{label}] Migration {migration_file} applied successfully.")
             except Exception as e:

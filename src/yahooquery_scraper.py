@@ -6,6 +6,7 @@ import time
 import threading
 import pandas as pd
 from yahooquery import Ticker
+from config import MAX_WORKERS
 from src.util import Singleton, log_memory_usage
 from datetime import datetime
 
@@ -30,14 +31,20 @@ class YahooQueryScraper:
 
         logger.info('YahooQueryScraper created')
 
-    def _load_module_data(self, force_refresh=False):
+    def _load_module_data(self, symbols=None, modules=None, ignore_cache=False):
+        # if MAX_WORKERS == 1:
+        #     ignore_cache = True
+        if not modules:
+            modules = MODULES
+        if not symbols:
+            symbols = self.symbols
         with self.module_data_lock:
             all_data = {}
-            if self._module_data_cache is None or force_refresh:
-                logger.info(f"Loading for {len(self.symbols)} symbols module data from Yahoo Finance - modules: {MODULES}")
+            if self._module_data_cache is None:
+                logger.info(f"Loading for {len(symbols)} symbols module data from Yahoo Finance - modules: {modules}")
                 # Symbole in 2000er-Pakete aufteilen
                 local_batch_size = 2000
-                local_symbol_batches = [self.symbols[i:i + local_batch_size] for i in range(0, len(self.symbols), local_batch_size)]
+                local_symbol_batches = [symbols[i:i + local_batch_size] for i in range(0, len(symbols), local_batch_size)]
                 logger.info(f"Initializing {len(local_symbol_batches)} ticker batches with batch size {local_batch_size} for YahooQueryScraper - total symbols: {len(self.symbols)}")
                  # asynchronous=True, max_workers=2, is not possible because of the high number of symbols and the rate limit
                 local_ticker_batches = [Ticker(symbol_batch, progress=True) for symbol_batch in local_symbol_batches]
@@ -47,9 +54,9 @@ class YahooQueryScraper:
                     batch += 1
                     for attempt in range(self.retries):
                         try:
-                            if len(self.symbols) > local_batch_size:
+                            if len(symbols) > local_batch_size:
                                 logger.info(f"Fetching Yahoo module data for batch of up to {local_batch_size} symbols...")
-                            data = ticker_batch.get_modules(MODULES)
+                            data = ticker_batch.get_modules(modules)
                             all_data.update(data)
                         except Exception as e:
                             logger.error(f"ERROR: Error fetching module data - {str(e)}")
@@ -67,24 +74,30 @@ class YahooQueryScraper:
                 if all_data is None:
                     logger.warning("WARNING: No module data found for any symbols")
                     return
-                self._module_data_cache_timestamp = datetime.now()
                 self.validate_module_data(all_data)
-                self._module_data_cache = all_data
+                if not ignore_cache:
+                    self._module_data_cache_timestamp = datetime.now()
+                    self._module_data_cache = all_data
             else:
-                logger.info(f"Using cached Yahoo Fiance module data - symbols: {len(self.symbols)} modules: {MODULES}")
+                logger.info(f"Using cached Yahoo Fiance module data - symbols: {len(symbols)} modules: {modules}")
                 logger.info(f"Cache age: {int((datetime.now() - self._module_data_cache_timestamp).total_seconds())} seconds")
             
-            logger.info(f"{len(self._module_data_cache)} symbols with module data")
-            return self._module_data_cache
+            if ignore_cache:
+                return all_data
+            else:
+                logger.info(f"{len(self._module_data_cache)} symbols with module data")
+                return self._module_data_cache
     
-    def _load_all_financial_data(self, force_refresh=False):
+    def _load_all_financial_data(self, symbols=None):
+        if not symbols:
+            symbols = self.symbols
         with self.all_financial_data_lock:
             all_data = [] 
             batch = 1
-            logger.info(f"Loading for {len(self.symbols)} symbols all financial data from Yahoo Finance")
+            logger.info(f"Loading for {len(symbols)} symbols all financial data from Yahoo Finance")
             # Symbole in 2000er-Pakete aufteilen
             local_batch_size = 2000
-            local_symbol_batches = [self.symbols[i:i + local_batch_size] for i in range(0, len(self.symbols), local_batch_size)]
+            local_symbol_batches = [symbols[i:i + local_batch_size] for i in range(0, len(symbols), local_batch_size)]
             logger.info(f"Initializing {len(local_symbol_batches)} ticker batches with batch size {local_batch_size} for YahooQueryScraper - total symbols: {len(self.symbols)}")
             local_ticker_batches = [Ticker(symbol_batch, progress=True, asynchronous=True) for symbol_batch in local_symbol_batches]
         
@@ -93,7 +106,7 @@ class YahooQueryScraper:
                 batch += 1
                 for attempt in range(self.retries):
                     try:
-                        if len(self.symbols) > local_batch_size:
+                        if len(symbols) > local_batch_size:
                             logger.info(f"Fetching Yahoo all financial data for batch of up to {local_batch_size} symbols...")
                         df = ticker_batch.all_financial_data()
                         df.reset_index(inplace=True)
@@ -167,15 +180,15 @@ class YahooQueryScraper:
                 logger.error(" ! " * 80)
                 raise Exception("RETRY LIMIT REACHED")
 
-    def get_modules(self, force_refresh=False):
-        data = self._load_module_data(force_refresh)
+    def get_modules(self, symbols=None, modules=None):
+        data = self._load_module_data(symbols=symbols, modules=modules)
         return data
 
     def get_modules_cache_timestamp(self):
         return self._module_data_cache_timestamp
     
-    def get_all_financial_data(self, force_refresh=False):
-        data = self._load_all_financial_data(force_refresh)
+    def get_all_financial_data(self, symbols=None):
+        data = self._load_all_financial_data(symbols=symbols)
         return data
 
     def validate_module_data(self, module_data):
