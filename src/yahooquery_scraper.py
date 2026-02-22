@@ -31,10 +31,12 @@ class YahooQueryScraper:
 
         logger.info('YahooQueryScraper created')
 
-    def _load_module_data(self, symbols=None, modules=None, ignore_cache=False):
+    def _load_module_data(self, symbols=None, modules=None):
         # if MAX_WORKERS == 1:
         if modules:
             ignore_cache = True
+        else:
+            ignore_cache=False
         if not modules:
             modules = MODULES
         if not symbols:

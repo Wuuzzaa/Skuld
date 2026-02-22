@@ -42,7 +42,7 @@ def generate_fundamental_data(symbols):
             data = None
             logger.info(f"Batch {batch}/{len(local_symbol_batches)} symbols {len(symbol_batch)}")
             df_all_financial = yahoo_query.get_all_financial_data(symbols=symbol_batch)
-            data = yahoo_query.get_modules(symbols=symbol_batch, modules='financialData defaultKeyStatistics earningsTrend summaryDetail', ignore_cache=True)
+            data = yahoo_query.get_modules(symbols=symbol_batch, modules='financialData defaultKeyStatistics earningsTrend summaryDetail')
 
             if df_all_financial is not None and not df_all_financial.empty:
                 # Get latest data per symbol
