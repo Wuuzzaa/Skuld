@@ -411,17 +411,11 @@ jobs:
           echo "📥 Restoring from dump (${DUMP_SIZE_HR} compressed)..."
           echo "   This may take several minutes depending on database size."
 
-          # Restore with line-count progress (print every 50000 lines processed)
-          LINES=0
+          # Restore directly without line counting.
+          # pg_dump uses COPY commands which don't output line-by-line progress,
+          # so line counting doesn't work well and can buffer/block.
           zcat ${{ env.DUMP_PATH }} | \
-            docker exec -i ${{ env.STAGING_DB_CONTAINER }} psql -U ${{ env.STAGING_DB_USER }} -d ${{ env.STAGING_DB_NAME }} 2>&1 | \
-            while IFS= read -r line; do
-              LINES=$((LINES + 1))
-              if [ $((LINES % 50000)) -eq 0 ]; then
-                ELAPSED=$(( $(date +%s) - RESTORE_START ))
-                echo "   📊 Processed ${LINES} SQL statements (${ELAPSED}s elapsed)..."
-              fi
-            done
+            docker exec -i ${{ env.STAGING_DB_CONTAINER }} psql -U ${{ env.STAGING_DB_USER }} -d ${{ env.STAGING_DB_NAME }}
 
           echo "▶️ Restarting application services..."
           docker start skuld-frontend skuld-backend 2>/dev/null || true
