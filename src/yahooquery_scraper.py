@@ -1,3 +1,4 @@
+import gc
 import logging
 import sys
 import os
@@ -5,7 +6,7 @@ import time
 import threading
 import pandas as pd
 from yahooquery import Ticker
-from src.util import Singleton
+from src.util import Singleton, log_memory_usage
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -97,10 +98,13 @@ class YahooQueryScraper:
                         df = ticker_batch.all_financial_data()
                         df.reset_index(inplace=True)
                         if df is not None and not df.empty:
+                            df_mem_mb = df.memory_usage(deep=True).sum() / 1024 / 1024
                             all_data.append(df)
-                            logger.info(f"SUCCESS: {len(df)} financial data found")
+                            total_rows = sum(len(d) for d in all_data)
+                            logger.info(f"SUCCESS: {len(df)} rows fetched (DataFrame: {df_mem_mb:.1f} MB) | Total accumulated: {total_rows} rows")
+                            log_memory_usage(f"[MEM] After all_financial_data batch {batch-1}/{len(local_ticker_batches)}: ")
                         else:
-                            logger.warning(f"WARNING: No option data available")
+                            logger.warning(f"WARNING: No financial data available")
                     except Exception as e:
                         # e.g. Failed to perform, curl: (28) Operation timed out after 30002 milliseconds with 0 bytes received. See https://curl.se/libcurl/c/libcurl-errors.html first for more details.
                         logger.error(f"ERROR: Error fetching all financial data - {str(e)}")
