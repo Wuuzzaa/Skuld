@@ -137,12 +137,11 @@ with st.expander("Configuration and Filters", expanded=True):
     col9, col10, col11, col12 = st.columns(4)
 
     with col9:
-        min_max_profit = st.number_input(
-            "Min Max Profit",
-            min_value=0.0,
-            value=80.0,
-            step=1.0,
-            format="%.2f"
+        min_day_volume = st.number_input(
+            "Min dayvolume",
+            min_value=0,
+            value=80,
+            step=1
         )
 
     with col10:
@@ -172,13 +171,40 @@ with st.expander("Configuration and Filters", expanded=True):
         )
 
     # fourth row
-    #col13, col14, col15, col16 = st.columns(4)
-    col13 = st.columns(1)[0] # [0] because TypeError: 'list' object does not support the context manager protocol when only one column is used access the element directly
+    col13, col14, col15, col16 = st.columns(4)
+    #col13 = st.columns(1)[0] # [0] because TypeError: 'list' object does not support the context manager protocol when only one column is used access the element directly
 
     with col13:
         st.checkbox(
             "Show only spreads with no earnings till expiration",
             key="show_only_spreads_with_no_earnings_till_expiration"
+        )
+
+    with col14:
+        min_max_profit = st.number_input(
+            "Min Max Profit",
+            min_value=0.0,
+            value=80.0,
+            step=1.0,
+            format="%.2f"
+        )
+
+    with col15:
+        min_iv_rank = st.number_input(
+            "Min iv rank",
+            min_value=0.0,
+            value=0.0,
+            step=0.05,
+            format="%.2f"
+        )
+
+    with col16:
+        min_iv_percentile = st.number_input(
+            "Min iv percentile",
+            min_value=0.0,
+            value=0.0,
+            step=0.05,
+            format="%.2f"
         )
 
 # calculate the spread values with a loading indicator
@@ -188,7 +214,10 @@ with st.spinner("Calculating spreads..."):
         "option_type": option_type,
         "delta_target": delta_target,
         "min_open_interest": min_open_interest,
-        "spread_width": spread_width
+        "spread_width": spread_width,
+        "min_day_volume": min_day_volume,
+        "min_iv_rank": min_iv_rank,
+        "min_iv_percentile": min_iv_percentile
     }
 
     logging.debug(f"params: {params}")
