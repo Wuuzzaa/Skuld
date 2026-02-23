@@ -13,6 +13,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # ── Telegram: Deploy Notification (self-contained, safe to remove) ──
+      - name: Notify deploy started via Telegram
+        if: always()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          ACTOR="${{ github.actor }}"
+          BRANCH="${{ github.ref_name }}"
+          COMMIT_MSG=$(git log -1 --format='%s')
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          REPO="${{ github.repository }}"
+          TEXT="🚀 <b>[Production] Deploy gestartet</b>%0A%0A👤 <b>${ACTOR}</b> hat eine neue Version auf <code>${BRANCH}</code> gepusht.%0A📝 <code>${SHORT_SHA}</code>: ${COMMIT_MSG}%0A📦 ${REPO}"
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d text="${TEXT}" \
+            -d parse_mode=HTML >/dev/null 2>&1 || true
+      # ── End Telegram Notification ───────────────────────────────────────
+
       - name: Setup SSH Key
         run: |
           mkdir -p ~/.ssh
