@@ -60,7 +60,6 @@ WITH
 			"StockImpliedVolatilityMassiveHistoryDaily"
 		WHERE
 			SNAPSHOT_DATE > CURRENT_DATE - INTERVAL '1 year'
-			--AND SNAPSHOT_DATE <> '2026-02-06'
 	),
 	IV_STATS AS (
 		SELECT
@@ -69,8 +68,6 @@ WITH
 			MIN(CURRENT_IV) AS CURRENT_IV,
 			MAX(GREATEST(IV, CURRENT_IV)) AS IV_HIGH,
 			MIN(LEAST(IV, CURRENT_IV)) AS IV_LOW,
-			MIN(DATE) AS FROM_DATE,
-			CURRENT_DATE AS TO_DATE,
 			-- Für Percentile benötigen wir die Verteilung (CUME_DIST gibt den Prozentsatz der Werte <= aktuellem Wert an)
 			CUME_DIST(CURRENT_IV) WITHIN GROUP (
 				ORDER BY
@@ -81,14 +78,15 @@ WITH
 					IV
 			) AS IV_PERCENTILE_RANK
 		FROM
-			DAILY_IV AS A
-			INNER JOIN (
+			(
 				SELECT
 					SYMBOL,
 					IV AS CURRENT_IV
 				FROM
 					CURRENT_IV
-			) AS B ON A.SYMBOL = B.SYMBOL
+			) AS A 
+			LEFT OUTER JOIN DAILY_IV AS B
+			ON A.SYMBOL = B.SYMBOL
 		GROUP BY
 			A.SYMBOL,
 			CURRENT_IV

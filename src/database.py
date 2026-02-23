@@ -384,7 +384,12 @@ def _run_migrations_for_engine(engine):
                     for statement in statements:
                         if label == "PostgreSQL":
                             statement = mapping_sqlite_to_postgres(statement)
-                        connection.execute(text(statement))
+                        try:
+                            connection.execute(text(statement))
+                        except Exception as e:
+                            logger.error(f"[{label}] Error applying migration {migration_file}: \n{e}")
+                            if not 'duplicate column' in e:
+                                raise e
                         
                 logger.info(f"[{label}] Migration {migration_file} applied successfully.")
             except Exception as e:
@@ -522,6 +527,7 @@ def _recreate_views_connection(connection):
         logger.info(f"[{label}] Views are up to date. Skipping recreation.")
         return
     
+    drop_all_views(connection.engine)
     while pending_views:
         progress_made = False
         failed_views = []
@@ -795,26 +801,37 @@ def column_exists(engine, table_name, column_name, schema=None):
 
 def drop_all_views(engine):
     """
-    Drops all views in database.
+    Drops all standard and materialized views in a PostgreSQL or SQLite database.
     """
-    if 'postgresql' in str(engine.url):
-        label = "PostgreSQL"
-    if 'sqlite' in str(engine.url):
-        label = "SQLite    "
-
+    label = "PostgreSQL" if 'postgresql' in str(engine.url) else "SQLite    "
     inspector = inspect(engine)
+    
+    # 1. Get standard views
     views = inspector.get_view_names()
+    
+    # 2. Get materialized views (Postgres specific)
+    m_views = []
+    if 'postgresql' in str(engine.url):
+        # SQLAlchemy 1.4/2.0+ has this method
+        if hasattr(inspector, 'get_materialized_view_names'):
+            m_views = inspector.get_materialized_view_names()
+    
     with engine.begin() as connection:
+        # Drop standard views
         for view in views:
             try:
-                try:
-                    connection.execute(text(f'DROP VIEW IF EXISTS "{view}" CASCADE'))
-                except Exception as e:
-                    connection.execute(text(f'DROP MATERIALIZED VIEW IF EXISTS "{view}" CASCADE'))
-                logger.info(f"{label} Dropped view {view}.")
+                connection.execute(text(f'DROP VIEW IF EXISTS "{view}" CASCADE'))
+                logger.info(f"{label} Dropped view: {view}")
             except Exception as e:
-                logger.error(f"{label} Error dropping view {view}: \n{e}")
-                raise e
+                logger.error(f"{label} Error dropping view {view}: {e}")
+
+        # Drop materialized views
+        for m_view in m_views:
+            try:
+                connection.execute(text(f'DROP MATERIALIZED VIEW IF EXISTS "{m_view}" CASCADE'))
+                logger.info(f"{label} Dropped materialized view: {m_view}")
+            except Exception as e:
+                logger.error(f"{label} Error dropping materialized view {m_view}: {e}")
     
 def change_column_data_types(conn, table):
     if 'OptionDataMassive' in table:

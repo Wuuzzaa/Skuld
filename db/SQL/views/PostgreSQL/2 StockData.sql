@@ -22,8 +22,11 @@ SELECT
 	e.historical_volatility_30d,
 
 	-- DividendData
-	f.years_of_growth as dividend_growth_years,
-	f.classification as dividend_classification,
+	f.dividend_growth_years,
+	f.dividend_classification,
+	f.LAST_DIVIDEND,
+    f.LAST_DIVIDEND_DATE,
+	f.NO_DIVIDEND_PAYOUTS_LAST_YEAR,
 	CAST(CURRENT_DATE - h.from_date AS INTEGER) AS days_of_stock_prices_history
 FROM
 	"StockPricesYahoo" AS A
@@ -40,7 +43,7 @@ FROM
 	LEFT OUTER JOIN "AnalystPriceTargets" AS C ON A.SYMBOL = C.SYMBOL
 	LEFT OUTER JOIN "StockImpliedVolatilityMassive" AS d ON a.symbol = d.symbol
 	LEFT OUTER JOIN "StockVolatility" AS E ON A.SYMBOL = E.SYMBOL
-	LEFT OUTER JOIN "DividendDataYahoo" AS F ON A.SYMBOL = F.SYMBOL
+	LEFT OUTER JOIN "DividendData" AS F ON A.SYMBOL = F.SYMBOL
 	LEFT OUTER JOIN (
 		SELECT symbol, MIN(from_date) AS from_date FROM "OptionDataMassiveMasterData" GROUP BY symbol
 	) AS G ON A.SYMBOL = G.SYMBOL

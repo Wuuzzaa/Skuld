@@ -12,7 +12,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 def scrape_earning_dates(symbols):
     earnings_dates = {}
     yahoo_query = YahooQueryScraper.instance(symbols)
-    data = yahoo_query.get_modules()
+    data = yahoo_query.get_modules(modules='calendarEvents')
 
     for symbol, symbol_data in data.items():
         calendar_data = symbol_data.get('calendarEvents')
