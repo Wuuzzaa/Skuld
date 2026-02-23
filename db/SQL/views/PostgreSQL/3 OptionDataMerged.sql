@@ -565,6 +565,9 @@ SELECT
 	-- DividendData
 	c.dividend_growth_years,
 	c.dividend_classification,
+	c.LAST_DIVIDEND,
+    c.LAST_DIVIDEND_DATE,
+	c.NO_DIVIDEND_PAYOUTS_LAST_YEAR,
 	c.days_of_stock_prices_history,
 
     -- Technical Indicators
