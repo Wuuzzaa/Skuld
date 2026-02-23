@@ -8,6 +8,7 @@ from src.logger_config import setup_logging
 from src.database import run_migrations
 from src.massiv_api import load_option_chains
 from src.price_and_technical_analysis_data_scrapper import scrape_and_save_price_and_technical_indicators
+from src.stock_volatility import calculate_and_store_stock_implied_volatility_history
 from src.yahoo_asset_profile import load_asset_profile
 from src.yahoo_dividens import calculate_dividend_classification
 from src.yahooquery_earning_dates import scrape_earning_dates
@@ -74,9 +75,11 @@ def main(args):
                 ("Massive Option Chains", load_option_chains, (symbols["options"],)),
             ]
         elif args.mode == "historical_prices":
-            parallel_tasks = [
-            ]
+            parallel_tasks = []
             load_historical_prices(symbols["stocks"])
+        elif args.mode == "historical_iv":
+            parallel_tasks = []
+            calculate_and_store_stock_implied_volatility_history()
         elif args.mode == "historization":
             pass
         else:
@@ -173,6 +176,7 @@ if __name__ == "__main__":
                             "stock_data_daily",
                             "option_data",
                             "historical_prices",
+                            "historical_iv",
                             "historization"
                         ],
                         help="Mode for data collection")

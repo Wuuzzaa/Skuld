@@ -14,6 +14,10 @@ WITH
 						FROM
 							"OptionDataMassiveHistoryDaily" AS A
 							JOIN "OptionDataMassiveMasterData" AS B ON A.OPTION_OSI = B.OPTION_OSI
+							WHERE NOT EXISTS (
+								SELECT 1 FROM "StockImpliedVolatilityMassiveHistoryDaily" AS C
+								WHERE C.symbol = B.SYMBOL
+							)
 					),
 					BESTEXPIRATIONS AS (
 						-- Step 1: Find the single expiration date closest to 45 days for every symbol
