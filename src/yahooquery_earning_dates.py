@@ -15,7 +15,7 @@ def scrape_earning_dates(symbols):
     data = yahoo_query.get_modules(modules='calendarEvents')
 
     for symbol, symbol_data in data.items():
-        calendar_data = symbol_data.get('calendarEvents')
+        calendar_data = symbol_data.get('calendarEvents',symbol_data)
 
         try:
             raw_date = calendar_data['earnings']['earningsDate'][0][:10]  # e.g. '2025-07-30'

@@ -17,14 +17,14 @@ def load_asset_profile(symbols):
 
     asset_profiles = {}
     for symbol, symbol_data in data.items():
-        asset_profile_data = symbol_data.get('assetProfile', {})
+        asset_profile_data = symbol_data.get('assetProfile', symbol_data)
         long_business_summary = asset_profile_data.get('longBusinessSummary')
         industry = asset_profile_data.get('industry')
         sector = asset_profile_data.get('sector')
         country = asset_profile_data.get('country')
 
         price_data = symbol_data.get('price', {})
-        name = price_data.get('shortName', symbol)  # Fallback to symbol if name is not available
+        name = price_data.get('shortName')  # Fallback to symbol if name is not available
 
         asset_profiles[symbol] = {
             'name': name, 

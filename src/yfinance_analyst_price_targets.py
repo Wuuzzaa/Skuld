@@ -22,7 +22,7 @@ def scrape_yahoo_finance_analyst_price_targets(symbols):
     results = []
 
     for symbol, symbol_data in data.items():
-        financial_data = symbol_data.get('financialData')
+        financial_data = symbol_data.get('financialData',symbol_data)
 
         # Get mean or set None if the yahoo finance has no data.
         try:

@@ -31,15 +31,7 @@ FROM
 			"StockPricesYahooHistoryDaily"
 		WHERE
 			DIVIDENDS > 0
-			AND EXTRACT(
-				YEAR
-				FROM
-					SNAPSHOT_DATE
-			) = EXTRACT(
-				YEAR
-				FROM
-					CURRENT_DATE - INTERVAL '1 year'
-			)
+			AND SNAPSHOT_DATE > CURRENT_DATE - INTERVAL '1 year'
 		GROUP BY
 			SYMBOL
 	) AS C ON A.SYMBOL = C.SYMBOL
