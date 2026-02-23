@@ -6,6 +6,7 @@ from src.massiv_api import get_symbols, get_symbols_with_exchange
 from src.live_stock_price_collector import fetch_current_prices
 from src.logger_config import setup_logging
 from src.database import run_migrations
+from src.send_alert import send_telegram_message
 from src.massiv_api import load_option_chains
 from src.price_and_technical_analysis_data_scrapper import scrape_and_save_price_and_technical_indicators
 from src.stock_volatility import calculate_and_store_stock_implied_volatility_history
@@ -29,8 +30,24 @@ def main(args):
 
     if args.mode == "only_run_migrations":
         logger.info("#" * 80)
-        logger.info(f"Database migrations done. Exit main")
+        logger.info("Running database migrations only...")
         logger.info("#" * 80)
+        try:
+            run_migrations()
+            logger.info("#" * 80)
+            logger.info("Database migrations done. Exit main")
+            logger.info("#" * 80)
+            send_telegram_message(
+                "Info - DB Migrations",
+                "✅ Database migrations completed successfully on container start."
+            )
+        except Exception as e:
+            logger.error(f"Database migrations failed: {e}", exc_info=True)
+            send_telegram_message(
+                "Alert - DB Migrations Failed",
+                f"❌ Database migrations failed on container start.\n\n<b>Error:</b>\n<code>{e}</code>"
+            )
+            raise
         return 0
 
     try:
