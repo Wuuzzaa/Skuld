@@ -4,7 +4,7 @@ import pathlib
 import time
 from sqlalchemy import text
 from config import HISTORY_ENABLED_TABLES, HISTORY_ENABLED_VIEWS
-from src.database import column_exists, drop_all_views, get_database_engine, execute_sql, get_postgres_engine, get_table_key_and_data_columns, mapping_sqlite_to_postgres, pg_migrate_week_to_ISO_week, recreate_views, run_migrations, select_into_dataframe, table_exists, view_exists
+from src.database import column_exists, drop_all_views, get_columns, get_database_engine, execute_sql, get_postgres_engine, get_table_key_and_data_columns, mapping_sqlite_to_postgres, pg_migrate_week_to_ISO_week, recreate_views, run_migrations, select_into_dataframe, table_exists, view_exists
 from src.decorator_log_function import log_function
 from src.data_aging import DataAgingService, get_history_select_statement, is_weekend, is_classified_for_master_data
 from src.util import executed_as_github_action
@@ -192,25 +192,6 @@ def delete_postgres_history(source_table):
                 except Exception as e:
                     logger.error(f"Error during execution on SQLite: {e}")   
 
-def _get_columns(table_name):
-    """
-    Retrieves the column details for a given table using pragma_table_info.
-    Returns a list of dicts: [{'name': 'col1', 'type': 'TEXT'}, ...]
-    """
-    logger.info(f"Fetching columns for {table_name}")
-
-    with get_postgres_engine().begin() as connection:
-        try:
-            query = text(f"SELECT DISTINCT column_name AS name, data_type AS type FROM information_schema.columns WHERE table_name = '{table_name}'")
-            result = connection.execute(query).fetchall()
-            columns = [{"name": row[0], "type": row[1]} for row in result]
-            # logger.info(f"Found columns: {columns}")
-            return columns
-        except Exception as e:
-            logger.error(f"Error fetching columns for {table_name}: {e}")
-            return []
-
-
 def _create_history_tables_and_view_if_not_exist(source_table: str):
     """
     Creates the history tables if they do not exist.
@@ -280,7 +261,7 @@ def _create_missing_columns_in_history_tables(source_table: str):
 
     logger.info(f"Checking for missing columns in history tables for {source_table}")
     history_tables = [f"{source_table}HistoryDaily", f"{source_table}HistoryWeekly", f"{source_table}HistoryMonthly", f"{source_table}MasterData"]
-    source_columns = _get_columns(source_table)
+    source_columns = get_columns(source_table)
 
     pg_engine = get_postgres_engine()
     if not pg_engine:
@@ -288,7 +269,7 @@ def _create_missing_columns_in_history_tables(source_table: str):
         return
 
     for history_table in history_tables:
-        history_columns = _get_columns(history_table)
+        history_columns = get_columns(history_table)
         missing_columns = [col for col in source_columns if col['name'] not in [hc['name'] for hc in history_columns]]
         
         for col in missing_columns:

@@ -1,6 +1,9 @@
 -- version 1
 -- create tables
 -- db/SQL/tables/create_table/*
+CREATE TABLE "DbVersion" (
+	version INT
+);
 CREATE TABLE "AnalystPriceTargets" (
 	symbol TEXT, 
 	analyst_mean_target FLOAT

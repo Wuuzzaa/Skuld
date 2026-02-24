@@ -4,7 +4,7 @@
         year INT NOT NULL,
         month INT NOT NULL,
         "symbol" TEXT,
-        "years_of_growth" smallint,
+        "years_of_growth" SMALLINT,
 		"classification" TEXT,
         PRIMARY KEY(year, month, "symbol")
     );

@@ -3,7 +3,7 @@
     CREATE TABLE IF NOT EXISTS "DividendDataYahooHistoryDaily" (
         snapshot_date DATE NOT NULL,
         "symbol" TEXT,
-        "years_of_growth" smallint,
+        "years_of_growth" SMALLINT,
 		"classification" TEXT,
         PRIMARY KEY(snapshot_date, "symbol")
     );

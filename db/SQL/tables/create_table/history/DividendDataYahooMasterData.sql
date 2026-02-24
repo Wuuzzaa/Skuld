@@ -4,7 +4,7 @@
         from_date DATE NOT NULL,
         to_date DATE NOT NULL,
         "symbol" TEXT,
-        "years_of_growth" smallint,
+        "years_of_growth" SMALLINT,
 		"classification" TEXT,
         PRIMARY KEY("symbol")
     );

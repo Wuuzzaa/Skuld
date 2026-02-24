@@ -4,7 +4,7 @@
         isoyear INT NOT NULL,
         week INT NOT NULL,
         "symbol" TEXT,
-        "analyst_mean_target" FLOAT,
+        "analyst_mean_target" DOUBLE PRECISION,
         PRIMARY KEY(isoyear, week, "symbol")
     );
     

@@ -4,11 +4,11 @@
         isoyear INT NOT NULL,
         week INT NOT NULL,
         "symbol" TEXT,
-        "iv" double precision,
-		"iv_low" double precision,
-		"iv_high" double precision,
-		"iv_rank" double precision,
-		"iv_percentile" double precision,
+        "iv" DOUBLE PRECISION,
+		"iv_low" DOUBLE PRECISION,
+		"iv_high" DOUBLE PRECISION,
+		"iv_rank" DOUBLE PRECISION,
+		"iv_percentile" DOUBLE PRECISION,
         PRIMARY KEY(isoyear, week, "symbol")
     );
     

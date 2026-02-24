@@ -3,7 +3,7 @@
     CREATE TABLE IF NOT EXISTS "AnalystPriceTargetsHistoryDaily" (
         snapshot_date DATE NOT NULL,
         "symbol" TEXT,
-        "analyst_mean_target" FLOAT,
+        "analyst_mean_target" DOUBLE PRECISION,
         PRIMARY KEY(snapshot_date, "symbol")
     );
     

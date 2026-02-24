@@ -4,7 +4,7 @@
         from_date DATE NOT NULL,
         to_date DATE NOT NULL,
         "symbol" TEXT,
-        "analyst_mean_target" FLOAT,
+        "analyst_mean_target" DOUBLE PRECISION,
         PRIMARY KEY("symbol")
     );
     

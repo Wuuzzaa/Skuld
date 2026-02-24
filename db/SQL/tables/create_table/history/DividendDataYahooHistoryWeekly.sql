@@ -4,7 +4,7 @@
         isoyear INT NOT NULL,
         week INT NOT NULL,
         "symbol" TEXT,
-        "years_of_growth" smallint,
+        "years_of_growth" SMALLINT,
 		"classification" TEXT,
         PRIMARY KEY(isoyear, week, "symbol")
     );

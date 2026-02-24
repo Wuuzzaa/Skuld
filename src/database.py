@@ -21,6 +21,7 @@ def get_database_engine():
     """
     Creates and returns a SQLAlchemy engine for the SQLite database.
     """
+    raise Exception("SQLite not supported")
     # return create_engine(f'sqlite:///{PATH_DATABASE_FILE}')
     return create_engine(f'sqlite:///{str(PATH_DATABASE_FILE.absolute())}')
 
@@ -288,27 +289,46 @@ def get_table_key_and_data_columns(table_name):
     Returns:
     - tuple: A tuple containing two lists: (key_columns, data_columns).
     """
-    query = text("""
-        SELECT
-            p.name AS column_name,
-            p.type AS column_type,
-            p.pk AS pk
-        FROM
-            sqlite_schema AS m,
-            pragma_table_info(m.name) AS p
-        WHERE
-            m.type = 'table'
-            AND m.name = :table_name
-    """)
     
-    engine = get_database_engine()
-    with engine.connect() as connection:
-        result = connection.execute(query, {"table_name": table_name}).fetchall()
-    
-    key_columns = [{"name": row.column_name, "type": row.column_type} for row in result if row.pk > 0]
-    data_columns = [{"name": row.column_name, "type": row.column_type} for row in result if row.pk == 0]
+    columns = get_columns(table_name)
+
+    key_columns = [{"name": row["name"], "type": row["type"]} for row in columns if row["is_key"] == True]
+    data_columns = [{"name": row["name"], "type": row["type"]} for row in columns if row["is_key"] == False]
     
     return key_columns, data_columns
+
+def get_columns(table_name):
+    """
+    Retrieves the column details for a given table using pragma_table_info.
+    Returns a list of dicts: [{'name': 'col1', 'type': 'TEXT'}, ...]
+    """
+    logger.info(f"Fetching columns for {table_name}")
+
+    with get_postgres_engine().begin() as connection:
+        try:
+            query = text(f"""
+                         SELECT 
+                            cols.column_name, 
+                            UPPER(cols.data_type) AS data_type,
+                            CASE 
+                                WHEN kcu.column_name IS NOT NULL THEN true 
+                                ELSE false 
+                            END AS is_key
+                        FROM information_schema.columns cols
+                        LEFT JOIN information_schema.key_column_usage kcu 
+                            ON cols.table_name = kcu.table_name 
+                            AND cols.column_name = kcu.column_name
+                            AND cols.table_schema = kcu.table_schema
+                        WHERE cols.table_name = '{table_name}'
+                        ORDER BY cols.ordinal_position;
+                         """)
+            result = connection.execute(query).fetchall()
+            columns = [{"name": row.column_name, "type": row.data_type, "is_key": row.is_key} for row in result]
+            # logger.info(f"Found columns: {columns}")
+            return columns
+        except Exception as e:
+            logger.error(f"Error fetching columns for {table_name}: {e}")
+            return []
 
 def _run_migrations_for_engine(engine):
     """
@@ -414,8 +434,8 @@ def run_migrations():
     """
     Runs the database migration system on both SQLite and PostgreSQL.
     """
-    # SQLite
-    _run_migrations_for_engine(get_database_engine())
+    # # SQLite
+    # _run_migrations_for_engine(get_database_engine())
     
     # PostgreSQL
     pg_engine = get_postgres_engine()
@@ -628,10 +648,10 @@ def table_exists(table_name: str) -> bool:
     Checks if a table exists in the database.
     Returns True only if it exists in ALL active databases (SQLite and Postgres).
     """
-    # Check SQLite
-    engine = get_database_engine()
-    inspector = inspect(engine)
-    exists_sqlite = inspector.has_table(table_name)
+    # # Check SQLite
+    # engine = get_database_engine()
+    # inspector = inspect(engine)
+    # exists_sqlite = inspector.has_table(table_name)
     
     # Check Postgres
     exists_pg = True
@@ -647,17 +667,17 @@ def table_exists(table_name: str) -> bool:
         # But for 'side by side' test, we want to try to create if missing.
         exists_pg = False
 
-    return exists_sqlite and exists_pg
+    return exists_pg
 
 def view_exists(view_name: str) -> bool:
     """
     Checks if a view exists in the database.
     Returns True only if it exists in ALL active databases.
     """
-    # Check SQLite
-    engine = get_database_engine()
-    inspector = inspect(engine)
-    exists_sqlite = view_name in inspector.get_view_names()
+    # # Check SQLite
+    # engine = get_database_engine()
+    # inspector = inspect(engine)
+    # exists_sqlite = view_name in inspector.get_view_names()
 
     # Check Postgres
     exists_pg = True
@@ -670,7 +690,7 @@ def view_exists(view_name: str) -> bool:
         logger.error(f"[PostgreSQL] Error checking view existence {view_name}: \n{e}")
         exists_pg = False
 
-    return exists_sqlite and exists_pg
+    return exists_pg
 
 def pg_migrations():
     sql_script = """
@@ -970,7 +990,7 @@ def create_from_to_date_columns(conn, master_data_table):
             raise e
 
 def recover_history():
-    sqlite_engine = get_database_engine()
+    # sqlite_engine = get_database_engine()
     pg_engine = get_postgres_engine()
 
     for table in HISTORY_ENABLED_TABLES:
@@ -982,7 +1002,7 @@ def recover_history():
         backup_table = f"{daily_table}Backup"
         select_all = f'select * from "{daily_table}"'
         logger.info(f"Select all data from {daily_table}")
-        df = pd.read_sql(text(str(select_all)), sqlite_engine)
+        # df = pd.read_sql(text(str(select_all)), sqlite_engine)
         logger.info(f"Size: {table} - {len(df)}")
 
         try:
