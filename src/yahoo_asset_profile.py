@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 def load_asset_profile(symbols):
     logger.info("Loading Yahoo Asset Profiles")
     yahoo_query = YahooQueryScraper.instance(symbols)
-    data = yahoo_query.get_modules(modules='assetProfile')
+    data = yahoo_query.get_modules(modules='assetProfile price')
 
     asset_profiles = {}
     for symbol, symbol_data in data.items():
@@ -23,7 +23,7 @@ def load_asset_profile(symbols):
         sector = asset_profile_data.get('sector')
         country = asset_profile_data.get('country')
 
-        price_data = symbol_data.get('price', {})
+        price_data = symbol_data.get('price', symbol_data)
         name = price_data.get('shortName')  # Fallback to symbol if name is not available
 
         asset_profiles[symbol] = {
