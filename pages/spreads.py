@@ -192,19 +192,19 @@ with st.expander("Configuration and Filters", expanded=True):
     with col15:
         min_iv_rank = st.number_input(
             "Min iv rank",
-            min_value=0.0,
-            value=0.0,
-            step=0.05,
-            format="%.2f"
+            min_value=0,
+            max_value=100,
+            value=0,
+            step=1
         )
 
     with col16:
         min_iv_percentile = st.number_input(
             "Min iv percentile",
-            min_value=0.0,
-            value=0.0,
-            step=0.05,
-            format="%.2f"
+            min_value=0,
+            max_value=100,
+            value=0,
+            step=1
         )
 
 # calculate the spread values with a loading indicator
@@ -252,6 +252,13 @@ if st.session_state.show_only_spreads_with_no_earnings_till_expiration:
                 (filtered_df['earnings_date'] < expiration_date_ts)
         )
     ]
+
+    # Konvertiere die 'earnings_date'-Spalte in ein datetime-Objekt
+    filtered_df['earnings_date'] = pd.to_datetime(filtered_df['earnings_date'])
+
+    # Formatiere die 'earnings_date'-Spalte im gewünschten Format
+    filtered_df['earnings_date'] = filtered_df['earnings_date'].dt.strftime('%d.%m.%Y')
+
 # min_sell_iv
 filtered_df = filtered_df[filtered_df['sell_iv'] >= min_sell_iv]
 
