@@ -16,7 +16,7 @@ WITH FilteredOptions AS (
         expected_move,
         ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY abs(greeks_delta) DESC) AS row_num,
         analyst_mean_target,
-        NULL AS recommendation,
+        -- NULL AS recommendation, -- replace later with own recommendation based on technical indicators
         day_volume,
         company_industry,
         company_sector,
@@ -52,7 +52,7 @@ SelectedSellOptions AS (
         option_open_interest AS sell_open_interest,
         expected_move AS sell_expected_move,
         analyst_mean_target,
-        recommendation,
+        -- recommendation, -- replace later with own recommendation based on technical indicators
         day_volume AS sell_day_volume,
         company_industry,
         company_sector,
@@ -76,7 +76,7 @@ SELECT
     sell.days_to_expiration,
     sell.days_to_earnings,
     sell.analyst_mean_target,
-    sell.recommendation,
+    -- sell.recommendation, -- replace later with own recommendation based on technical indicators
     sell.company_industry,
     sell.company_sector,
     sell.historical_volatility_30d,
