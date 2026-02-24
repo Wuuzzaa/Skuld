@@ -259,7 +259,7 @@ def get_page_spreads(df: pd.DataFrame) -> pd.DataFrame:
             'earnings_warning',
             'close',
             'analyst_mean_target',
-            'recommendation',
+            # 'recommendation', #todo replace later with own recommendation based on technical indicators
             "company_industry",
             "company_sector",
             "historical_volatility_30d",
