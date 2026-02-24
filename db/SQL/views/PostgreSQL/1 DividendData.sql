@@ -19,6 +19,7 @@ FROM
 			"StockPricesYahooHistoryDaily"
 		WHERE
 			DIVIDENDS > 0
+			AND SNAPSHOT_DATE > CURRENT_DATE - INTERVAL '1 year'
 		ORDER BY
 			SYMBOL,
 			SNAPSHOT_DATE DESC

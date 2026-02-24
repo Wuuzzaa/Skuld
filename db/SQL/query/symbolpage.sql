@@ -1,24 +1,26 @@
-SELECT DISTINCT
-    symbol,
-    company_name,
-    company_industry,
-	company_sector,
-	company_country,
-    ROUND(live_stock_price::numeric, 2) AS live_stock_price,
-    ROUND(LAST_DIVIDEND::numeric, 2) AS LAST_DIVIDEND,
-    LAST_DIVIDEND_DATE,
-    NO_DIVIDEND_PAYOUTS_LAST_YEAR,
-    dividend_classification,
-    dividend_growth_years,
-    ROUND(iv::numeric * 100, 2) AS iv,
-    ROUND(iv_low::numeric * 100, 2) AS iv_low,
-    ROUND(iv_high::numeric * 100, 2) AS iv_high,
-    ROUND(iv_rank::numeric, 2) AS iv_rank,
-    ROUND(iv_percentile::numeric, 2) AS iv_percentile,
-    days_of_options_data_history,
-    ROUND(historical_volatility_30d::numeric * 100, 2) AS historical_volatility_30d,
-    ROUND("KeyStats_beta"::numeric, 2) AS Beta,
-    earnings_date,
-    analyst_mean_target
-FROM "OptionDataMerged"
-WHERE symbol = :symbol;
+SELECT
+	SYMBOL,
+	COMPANY_NAME,
+	COMPANY_INDUSTRY,
+	COMPANY_SECTOR,
+	COMPANY_COUNTRY,
+	ROUND(LIVE_STOCK_PRICE::NUMERIC, 2) AS LIVE_STOCK_PRICE,
+	ANALYST_MEAN_TARGET,
+	ROUND(IV::NUMERIC * 100, 2) AS IV,
+	ROUND(HISTORICAL_VOLATILITY_30D::NUMERIC * 100, 2) AS HISTORICAL_VOLATILITY_30D,
+	ROUND(IV_LOW::NUMERIC * 100, 2) AS IV_LOW,
+	ROUND(IV_HIGH::NUMERIC * 100, 2) AS IV_HIGH,
+	ROUND(IV_RANK::NUMERIC, 2) AS IV_RANK,
+	ROUND(IV_PERCENTILE::NUMERIC, 2) AS IV_PERCENTILE,
+	DAYS_OF_OPTIONS_DATA_HISTORY,
+	EARNINGS_DATE,
+	ROUND(LAST_DIVIDEND::NUMERIC, 2) AS LAST_DIVIDEND,
+	LAST_DIVIDEND_DATE,
+	NO_DIVIDEND_PAYOUTS_LAST_YEAR,
+	DIVIDEND_CLASSIFICATION,
+	DIVIDEND_GROWTH_YEARS,
+	ROUND("KeyStats_beta"::NUMERIC, 2) AS BETA
+FROM
+	"StockData"
+WHERE
+	SYMBOL = :symbol;

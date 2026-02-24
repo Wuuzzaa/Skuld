@@ -225,8 +225,6 @@ def _create_history_tables_and_view_if_not_exist(source_table: str):
     
     table = source_table
   
-    _create_missing_columns_in_history_tables(source_table)
-
     daily_history_table_name, create_daily_table_sql = _get_daily_history_table_name_create_statement(table)
     # write sql to file "{daily_history_table_name}.sql" to db/SQL/tables/create_table/history/
     with open(f"{path_sql_create_table_statements}/{daily_history_table_name}.sql", "w") as f:
@@ -259,6 +257,8 @@ def _create_history_tables_and_view_if_not_exist(source_table: str):
         with pg_engine.begin() as connection:
             execute_sql(connection, create_master_data_table_sql, master_data_table_name, "CREATE TABLE")
         
+    _create_missing_columns_in_history_tables(source_table)
+    
     history_view_name = f"{table}History"
     if not view_exists(history_view_name) or True:
         path_sql_create_view_statements = pathlib.Path("db/SQL/views/create_view/history/table_views")
