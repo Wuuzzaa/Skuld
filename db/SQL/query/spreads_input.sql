@@ -16,7 +16,7 @@ WITH FilteredOptions AS (
         expected_move,
         ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY abs(greeks_delta) DESC) AS row_num,
         analyst_mean_target,
-        recommendation,
+        NULL AS recommendation,
         day_volume,
         company_industry,
         company_sector,
