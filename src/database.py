@@ -1087,7 +1087,7 @@ def recover_history():
             raise e
 
 def calculate_and_store_stock_implied_volatility_history_migration():
-    df = select_into_dataframe(sql_file_path = "db/SQL/query/implied_volatility_history.sql")
+    df = select_into_dataframe(sql_file_path = "db/SQL/query/calculate_implied_volatility_history.sql")
 
     with get_postgres_engine().begin() as connection:
         # Insert the new data into the target table

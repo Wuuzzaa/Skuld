@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 def calculate_and_store_stock_implied_volatility():
     logger.info("Calculating and storing stock implied volatility...")
 
-    df = select_into_dataframe(sql_file_path = "db/SQL/query/implied_volatility.sql")
+    df = select_into_dataframe(sql_file_path = "db/SQL/query/calculate_implied_volatility.sql")
 
     with get_postgres_engine().begin() as connection:
         # Truncate the target table before inserting new data
@@ -25,7 +25,7 @@ def calculate_and_store_stock_implied_volatility():
         )
 
 def calculate_and_store_stock_implied_volatility_history():
-    sql_file_path = "db/SQL/query/implied_volatility_history.sql"
+    sql_file_path = "db/SQL/query/calculate_implied_volatility_history.sql"
     logger.info("Calculating and storing stock implied volatility history using SQL file: " + sql_file_path)
     vola_history_table_name = f"{TABLE_STOCK_IMPLIED_VOLATILITY_MASSIVE}HistoryDaily"
     try:
