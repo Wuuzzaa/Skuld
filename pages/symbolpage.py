@@ -27,3 +27,10 @@ df = select_into_dataframe(sql_file_path=sql_file_path, params=params)
 
 # show final dataframe
 page_display_dataframe(df, symbol_column='symbol')
+
+# show iv history
+st.subheader("IV History")
+sql_file_path_iv = PATH_DATABASE_QUERY_FOLDER / 'iv_history_symbolpage.sql'
+df_iv = select_into_dataframe(sql_file_path=sql_file_path_iv, params=params)
+
+page_display_dataframe(df_iv, symbol_column='symbol')
