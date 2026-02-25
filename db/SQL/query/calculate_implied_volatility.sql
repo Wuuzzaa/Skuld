@@ -64,19 +64,12 @@ WITH
 	IV_STATS AS (
 		SELECT
 			A.SYMBOL,
-			-- Average, High und Low über 1 Jahr
+			-- High und Low über 1 Jahr
 			MIN(CURRENT_IV) AS CURRENT_IV,
 			MAX(GREATEST(IV, CURRENT_IV)) AS IV_HIGH,
 			MIN(LEAST(IV, CURRENT_IV)) AS IV_LOW,
-			-- Für Percentile benötigen wir die Verteilung (CUME_DIST gibt den Prozentsatz der Werte <= aktuellem Wert an)
-			CUME_DIST(CURRENT_IV) WITHIN GROUP (
-				ORDER BY
-					IV
-			) AS IV_PERCENTILE_VAL,
-			PERCENT_RANK(CURRENT_IV) WITHIN GROUP (
-				ORDER BY
-					IV
-			) AS IV_PERCENTILE_RANK
+			SUM(CASE WHEN IV < CURRENT_IV THEN 1 ELSE 0 END) AS days_with_lower_iv,
+			COUNT(*) AS trading_days
 		FROM
 			(
 				SELECT
@@ -102,6 +95,6 @@ SELECT
 		ELSE ((current_iv - iv_low) / (iv_high - iv_low)) * 100
 	END AS iv_rank,
 	-- IV Percentile: Wie viel Prozent der Tage im letzten Jahr waren niedriger als heute?
-	iv_percentile_val * 100 AS iv_percentile
+	(days_with_lower_iv::float/trading_days) * 100 AS iv_percentile
 FROM
 	iv_stats;
