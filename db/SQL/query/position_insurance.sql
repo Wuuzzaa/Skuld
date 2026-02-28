@@ -10,7 +10,7 @@ SELECT
     open_interest,
     -- Stock data from merged view
     live_stock_price, 
-    close AS stock_close, -- Fallback if live price is null
+    live_stock_price AS stock_close, -- Fallback if live price is null
     days_to_expiration
 FROM
     "OptionDataMerged"
