@@ -22,7 +22,7 @@ def _add_claude_analysis_link(df: pd.DataFrame, page=None) -> pd.DataFrame:
         df['Claude'] = df.apply(_create_claude_prompt_default, axis=1)
     elif page == 'spreads':
         df['Claude'] = df.apply(_create_claude_prompt_page_spreads, axis=1)
-    elif page in ('position_insurance', 'smart_finder', 'smart_finder_full', 'call_income_simulator'):
+    elif page in ('position_insurance', 'smart_finder', 'smart_finder_full', 'call_income_simulator', 'married_put_finder'):
         df['Claude'] = df.apply(_create_claude_prompt_default, axis=1)
     else:
         raise ValueError('Page not recognized')

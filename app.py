@@ -34,6 +34,7 @@ expected_value = st.Page('pages/expected_value.py', title="Expected Value")
 position_insurance = st.Page('pages/position_insurance_tool.py', title="Position Insurance Tool")
 smart_finder = st.Page('pages/smart_finder.py', title="Smart Finder")
 call_income_simulator = st.Page('pages/call_income_simulator.py', title="Call Income Simulator")
+married_put_finder = st.Page('pages/married_put_finder.py', title="Married Put Finder")
 data_logs = st.Page("pages/data_change_logs.py", title="Data Logs")
 symbolpage = st.Page("pages/symbolpage.py", title="Symbol Page")
 
@@ -46,6 +47,7 @@ page = st.navigation(
         position_insurance,
         smart_finder,
         call_income_simulator,
+        married_put_finder,
         multifactor_swingtrading,
         expected_value,
         data_logs,
