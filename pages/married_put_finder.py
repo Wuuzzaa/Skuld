@@ -129,7 +129,8 @@ if st.session_state["mpf_puts_df"] is not None:
     if calls_df is not None and not calls_df.empty:
         calls_df = calls_df.copy()
         calls_df["expiration_date"] = pd.to_datetime(calls_df["expiration_date"])
-        calls_df = calls_df[calls_df["strike_price"] >= current_price].copy()
+        # Note: strike filtering (call_strike >= put_strike) is done in the
+        # calculation engine, so we keep all OTM calls here for the dropdown.
         if not calls_df.empty:
             call_month_opts = get_month_options_with_dte(calls_df)
 
@@ -374,6 +375,14 @@ Positiv = garantierter Mindestgewinn bei Ausübung.
 
 **% Assnd w/ Put** – Wie % Assnd, aber berücksichtigt den
 Restwert des Puts falls Put-Strike > Call-Strike.
+
+---
+
+**Collar-Kombinationslogik:**
+- Für jeden Put werden **alle** Calls mit Strike ≥ Put-Strike kombiniert
+- **Same-Strike-Collar** (Put 170 + Call 170): Max. Locked-In Profit, aber Cap beim selben Strike
+- **Wide Collar** (Put 140 + Call 150): Weniger Locked-In Profit, aber mehr Upside bis zum Call-Strike
+- Unterschied zwischen % Assnd und % Assnd w/ Put zeigt den zusätzlichen Wert durch den Put-Restwert
 
 **Farbcodierung:** 🔵 Put-Daten | 🟢 Call-Daten | 🟠 Metriken | 🟣 Profit
             """)

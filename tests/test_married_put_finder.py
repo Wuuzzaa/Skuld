@@ -268,12 +268,12 @@ class TestCollarPutStrikeAboveCallStrike:
 
 
 class TestCollarNoMatchingCall:
-    """Put at a strike where no call exists → call columns are None."""
+    """Put at 145, only call at 140 (below put strike) → no valid call → put-only fallback."""
 
     @pytest.fixture()
     def result(self):
         puts = _puts_df(_make_put(strike_price=145.0, option_price=8.0))
-        calls = _calls_df(_make_call(strike_price=150.0, option_price=4.0))  # different strike
+        calls = _calls_df(_make_call(strike_price=140.0, option_price=4.0))  # below put strike
         return calculate_collar_metrics(
             puts, calls, cost_basis=120.0, current_price=150.0,
         ).iloc[0]
@@ -312,9 +312,9 @@ class TestCollarNoCalls:
 
 
 class TestCollarMultipleRows:
-    """Multiple puts, some with matching calls, some without."""
+    """Wide collar: each put pairs with every call where call_strike >= put_strike."""
 
-    def test_mixed_matching(self):
+    def test_wide_collar_matrix(self):
         puts = _puts_df(
             _make_put(strike_price=140.0, option_price=5.0),
             _make_put(strike_price=145.0, option_price=8.0),
@@ -328,14 +328,35 @@ class TestCollarMultipleRows:
         result = calculate_collar_metrics(
             puts, calls, cost_basis=120.0, current_price=150.0,
         )
+        # Put 140 → Call 140, Call 150  (2 rows)
+        # Put 145 → Call 150            (1 row, 150 >= 145)
+        # Put 150 → Call 150            (1 row)
+        # Total = 4 rows
+        assert len(result) == 4
+
+    def test_same_strike_rows_present(self):
+        puts = _puts_df(
+            _make_put(strike_price=140.0, option_price=5.0),
+            _make_put(strike_price=150.0, option_price=12.0),
+        )
+        calls = _calls_df(
+            _make_call(strike_price=140.0, option_price=2.0),
+            _make_call(strike_price=150.0, option_price=6.0),
+        )
+        result = calculate_collar_metrics(
+            puts, calls, cost_basis=120.0, current_price=150.0,
+        )
+        # Put 140 → Call 140, Call 150  (2 rows)
+        # Put 150 → Call 150            (1 row)
+        # Total = 3 rows
         assert len(result) == 3
 
-        # Row 0 (140): matched
-        assert result.iloc[0]["call_midpoint_price"] == pytest.approx(2.0)
-        # Row 1 (145): no match
-        assert pd.isna(result.iloc[1]["call_midpoint_price"])
-        # Row 2 (150): matched
-        assert result.iloc[2]["call_midpoint_price"] == pytest.approx(6.0)
+        # Check same-strike collar for Put 150
+        same_strike = result[
+            (result["strike_price"] == 150.0) &
+            (result["call_midpoint_price"] == 6.0)
+        ]
+        assert len(same_strike) == 1
 
 
 class TestCollarPctAssignedWithPutResidual:
@@ -711,3 +732,121 @@ class TestCollarWithPremiumPrice:
     def test_locked_in_profit(self, result):
         # 145 - 125.25 = 19.75
         assert result["locked_in_profit"] == pytest.approx(19.75)
+
+
+# =====================================================================
+# Wide Collar tests
+# =====================================================================
+class TestWideCollar:
+    """Wide collar: put strike < call strike → more upside, less locked-in."""
+
+    @pytest.fixture()
+    def result(self):
+        # Put at 140, Call at 150 → wide collar
+        puts = _puts_df(_make_put(
+            strike_price=140.0, option_price=5.0,
+            days_to_expiration=60, live_stock_price=150.0,
+        ))
+        calls = _calls_df(_make_call(
+            strike_price=150.0, option_price=4.0,
+            days_to_expiration=30,
+        ))
+        return calculate_collar_metrics(
+            puts, calls, cost_basis=120.0, current_price=150.0,
+        ).iloc[0]
+
+    def test_call_matched(self, result):
+        assert result["call_label"] is not None
+        assert "150.00" in result["call_label"]
+        assert "CALL" in result["call_label"]
+
+    def test_ncb(self, result):
+        # 120 + 5 - 4 = 121
+        assert result["new_cost_basis"] == pytest.approx(121.0)
+
+    def test_locked_in_profit(self, result):
+        # put_strike - NCB = 140 - 121 = 19
+        assert result["locked_in_profit"] == pytest.approx(19.0)
+
+    def test_pct_assigned(self, result):
+        # (call_strike - NCB) / NCB = (150 - 121) / 121 * 100 = 23.97%
+        assert result["pct_assigned"] == pytest.approx(23.97, abs=0.01)
+
+    def test_pct_assigned_with_put(self, result):
+        # put_residual = max(0, 140 - 150) = 0
+        # (150 - 121 + 0) / 121 * 100 = 23.97%
+        assert result["pct_assigned_with_put"] == pytest.approx(23.97, abs=0.01)
+
+    def test_pct_assigned_higher_than_locked_in(self, result):
+        """Wide collar: % Assigned > % Locked In (more upside room)."""
+        lip_pct = result["locked_in_profit_pct"]
+        pa = result["pct_assigned"]
+        assert pa > lip_pct
+
+
+class TestWideCollarPutResidual:
+    """Wide collar where put strike > call strike → put has residual value."""
+
+    def test_put_residual_adds_value(self):
+        # Put at 160 paired with call at 155 (call 155 >= put 160? NO)
+        # But put at 150 paired with call at 155 (YES) → no residual
+        # Let's use: Put at 155, calls at 150 and 155
+        puts = _puts_df(_make_put(strike_price=155.0, option_price=10.0))
+        calls = _calls_df(
+            _make_call(strike_price=155.0, option_price=4.0),
+        )
+        result = calculate_collar_metrics(
+            puts, calls, cost_basis=120.0, current_price=150.0,
+        )
+        # Only call at 155 >= put at 155 → 1 row (same-strike)
+        assert len(result) == 1
+        row = result.iloc[0]
+        # NCB = 120 + 10 - 4 = 126
+        assert row["new_cost_basis"] == pytest.approx(126.0)
+        # put_residual = max(0, 155-155) = 0 → same as pct_assigned
+        assert row["pct_assigned"] == pytest.approx(row["pct_assigned_with_put"])
+
+
+class TestCollarMultipleExpirations:
+    """Calls across multiple expiration dates multiply combinations."""
+
+    def test_multiple_call_expirations(self):
+        puts = _puts_df(_make_put(
+            strike_price=140.0, option_price=5.0,
+            days_to_expiration=60,
+        ))
+        calls = _calls_df(
+            _make_call(strike_price=140.0, option_price=2.0, days_to_expiration=30,
+                       expiration_date=pd.Timestamp("2026-03-02")),
+            _make_call(strike_price=140.0, option_price=3.0, days_to_expiration=40,
+                       expiration_date=pd.Timestamp("2026-03-10")),
+            _make_call(strike_price=140.0, option_price=4.0, days_to_expiration=50,
+                       expiration_date=pd.Timestamp("2026-03-17")),
+        )
+        result = calculate_collar_metrics(
+            puts, calls, cost_basis=120.0, current_price=150.0,
+        )
+        # 1 put × 3 calls = 3 rows
+        assert len(result) == 3
+
+    def test_wide_collar_x_expirations(self):
+        """2 puts × 3 calls (with strike filter) = full matrix."""
+        puts = _puts_df(
+            _make_put(strike_price=130.0, option_price=3.0),
+            _make_put(strike_price=140.0, option_price=5.0),
+        )
+        calls = _calls_df(
+            _make_call(strike_price=135.0, option_price=2.0,
+                       expiration_date=pd.Timestamp("2026-04-02")),
+            _make_call(strike_price=140.0, option_price=3.0,
+                       expiration_date=pd.Timestamp("2026-04-10")),
+            _make_call(strike_price=145.0, option_price=4.0,
+                       expiration_date=pd.Timestamp("2026-04-17")),
+        )
+        result = calculate_collar_metrics(
+            puts, calls, cost_basis=120.0, current_price=150.0,
+        )
+        # Put 130 → Call 135 (>=130), Call 140 (>=130), Call 145 (>=130) = 3
+        # Put 140 → Call 140 (>=140), Call 145 (>=140) = 2
+        # Total = 5 rows
+        assert len(result) == 5

@@ -5,8 +5,10 @@ Provides PowerOptions-style metrics for the RadioActive Trading method:
   • Put-only view  (Buy Put Month selected, Sell Call Month = None)
   • Collar view    (Buy Put Month + Sell Call Month selected)
 
-Auto-pairs each put with the call at the **same strike** in the chosen
-call month.  If no exact match exists, the call columns stay empty.
+For collar mode, each put is paired with **every** call whose strike is
+≥ the put strike (same-strike collar + wide collar).  When calls span
+multiple expiration dates the combinations are multiplied across all
+dates, giving the full PowerOptions-style matrix.
 
 Uses ``premium_option_price`` (midpoint) from ``OptionDataMerged`` when
 available; falls back to ``option_price`` (day_close) otherwise.
@@ -129,64 +131,65 @@ def calculate_collar_metrics(
     current_price: float,
 ) -> pd.DataFrame:
     """
-    Auto-pair each put with the call at the **same strike** and compute
-    full collar metrics (PowerOptions "Sell Call Month ≠ None" view).
+    Build the full collar combination matrix and compute metrics.
 
-    For puts where no matching call exists, call columns are filled with
-    NaN and the put-only metrics are used.
+    For each put, **every** call with ``call_strike >= put_strike`` is
+    paired (same-strike collar + wide collar).  When calls span multiple
+    expiration dates the combinations are multiplied across all dates —
+    exactly like the PowerOptions output.
 
-    Returned columns (appended):
-        put_label, put_midpoint_price, put_time_value, put_time_value_per_mo
+    Returned columns:
+        put_label, put_midpoint_price, intrinsic_value,
+        put_time_value, put_time_value_per_mo
             – same as calculate_put_only_metrics
         call_label             – e.g. "TSLA 2024 12-JUL 240.00 CALL (7)"
-        call_midpoint_price    – call midpoint price (or NaN)
+        call_midpoint_price    – call midpoint price
         new_cost_basis         – cost_basis + put_midpoint − call_midpoint
         locked_in_profit       – put_strike − new_cost_basis
         locked_in_profit_pct   – locked_in_profit / new_cost_basis × 100
-        pct_assigned           – (call_strike − new_cost_basis) / new_cost_basis × 100
+        pct_assigned           – (call_strike − NCB) / NCB × 100
         pct_assigned_with_put  – includes residual put value at call strike
     """
-    # Start with put-only metrics
-    df = calculate_put_only_metrics(puts_df, cost_basis, current_price)
+    # Start with put-only metrics (one row per put)
+    put_metrics = calculate_put_only_metrics(puts_df, cost_basis, current_price)
+
+    if put_metrics.empty:
+        return put_metrics
 
     if calls_df is None or calls_df.empty:
         # No calls → add empty call columns for consistent schema
         for col in ("call_label", "call_midpoint_price", "pct_assigned", "pct_assigned_with_put"):
-            df[col] = None
-        return df
+            put_metrics[col] = None
+        return put_metrics
 
-    # Build call lookup keyed by strike_price → row (first match per strike)
+    # Prepare calls with midpoint
     calls = calls_df.copy()
     calls["expiration_date"] = pd.to_datetime(calls["expiration_date"])
-    # Compute midpoint for calls
-    call_mid = _midpoint_price(calls)
-    calls["_mid"] = call_mid
+    calls["_mid"] = _midpoint_price(calls)
 
-    call_lookup: dict[float, pd.Series] = {}
-    for _, row in calls.iterrows():
-        strike = float(row["strike_price"])
-        if strike not in call_lookup:
-            call_lookup[strike] = row
+    # Build list of result rows
+    rows: list[dict] = []
 
-    call_labels = []
-    call_prices = []
-    ncbs = []
-    lips = []
-    lip_pcts = []
-    pct_a = []
-    pct_awp = []
-
-    for _, put_row in df.iterrows():
+    for _, put_row in put_metrics.iterrows():
         put_strike = float(put_row["strike_price"])
         put_mid = float(put_row["put_midpoint_price"])
 
-        if put_strike in call_lookup:
-            cr = call_lookup[put_strike]
-            cp = float(cr["_mid"])
-            cs = float(cr["strike_price"])
+        # All calls with strike >= put strike (same-strike + wide collar)
+        valid_calls = calls[calls["strike_price"] >= put_strike]
 
-            call_labels.append(_call_label(cr))
-            call_prices.append(cp)
+        if valid_calls.empty:
+            # No valid call → put-only row with empty call columns
+            row_dict = put_row.to_dict()
+            row_dict["call_label"] = None
+            row_dict["call_midpoint_price"] = None
+            row_dict["pct_assigned"] = None
+            row_dict["pct_assigned_with_put"] = None
+            rows.append(row_dict)
+            continue
+
+        for _, call_row in valid_calls.iterrows():
+            cp = float(call_row["_mid"])
+            cs = float(call_row["strike_price"])
 
             ncb = cost_basis + put_mid - cp
             lip = put_strike - ncb
@@ -199,33 +202,17 @@ def calculate_collar_metrics(
             put_residual = max(0.0, put_strike - cs)
             pawp = ((cs - ncb + put_residual) / ncb * 100) if ncb != 0 else 0.0
 
-            ncbs.append(ncb)
-            lips.append(lip)
-            lip_pcts.append(lip_pct)
-            pct_a.append(pa)
-            pct_awp.append(pawp)
-        else:
-            call_labels.append(None)
-            call_prices.append(None)
-            # Keep put-only values
-            ncb = cost_basis + put_mid
-            lip = put_strike - ncb
-            lip_pct = (lip / ncb * 100) if ncb != 0 else 0.0
-            ncbs.append(ncb)
-            lips.append(lip)
-            lip_pcts.append(lip_pct)
-            pct_a.append(None)
-            pct_awp.append(None)
+            row_dict = put_row.to_dict()
+            row_dict["call_label"] = _call_label(call_row)
+            row_dict["call_midpoint_price"] = cp
+            row_dict["new_cost_basis"] = ncb
+            row_dict["locked_in_profit"] = lip
+            row_dict["locked_in_profit_pct"] = lip_pct
+            row_dict["pct_assigned"] = pa
+            row_dict["pct_assigned_with_put"] = pawp
+            rows.append(row_dict)
 
-    df["call_label"] = call_labels
-    df["call_midpoint_price"] = call_prices
-    df["new_cost_basis"] = ncbs
-    df["locked_in_profit"] = lips
-    df["locked_in_profit_pct"] = lip_pcts
-    df["pct_assigned"] = pct_a
-    df["pct_assigned_with_put"] = pct_awp
-
-    return df
+    return pd.DataFrame(rows)
 
 
 def get_month_options(df: pd.DataFrame) -> list[tuple[str, str]]:
