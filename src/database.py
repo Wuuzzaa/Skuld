@@ -8,7 +8,7 @@ from typing import Literal
 from sqlalchemy import create_engine, text, inspect
 from config import HISTORY_ENABLED_TABLES, PATH_DATABASE_FILE, SSH_PKEY_PATH, SSH_HOST, SSH_USER, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_PORT, POSTGRES_HOST, TABLE_STOCK_IMPLIED_VOLATILITY_MASSIVE, TABLE_STOCK_PRICES_YAHOO
 import numpy as np
-from src.yahooquery_scraper import YahooQueryScraper
+import hashlib
 
 # logging
 logger = logging.getLogger(__name__)
@@ -21,6 +21,7 @@ def get_database_engine():
     """
     Creates and returns a SQLAlchemy engine for the SQLite database.
     """
+    raise Exception("SQLite not supported")
     # return create_engine(f'sqlite:///{PATH_DATABASE_FILE}')
     return create_engine(f'sqlite:///{str(PATH_DATABASE_FILE.absolute())}')
 
@@ -253,7 +254,6 @@ def select_into_dataframe_pg(query: str = None, sql_file_path: str = None, param
     """
     df = None
   
-    # Execute on PostgreSQL (Side-by-side test)
     try:
         if sql_file_path is not None and os.path.isfile(sql_file_path):
             with open(sql_file_path, 'r') as f:
@@ -289,27 +289,46 @@ def get_table_key_and_data_columns(table_name):
     Returns:
     - tuple: A tuple containing two lists: (key_columns, data_columns).
     """
-    query = text("""
-        SELECT
-            p.name AS column_name,
-            p.type AS column_type,
-            p.pk AS pk
-        FROM
-            sqlite_schema AS m,
-            pragma_table_info(m.name) AS p
-        WHERE
-            m.type = 'table'
-            AND m.name = :table_name
-    """)
     
-    engine = get_database_engine()
-    with engine.connect() as connection:
-        result = connection.execute(query, {"table_name": table_name}).fetchall()
-    
-    key_columns = [{"name": row.column_name, "type": row.column_type} for row in result if row.pk > 0]
-    data_columns = [{"name": row.column_name, "type": row.column_type} for row in result if row.pk == 0]
+    columns = get_columns(table_name)
+
+    key_columns = [{"name": row["name"], "type": row["type"]} for row in columns if row["is_key"] == True]
+    data_columns = [{"name": row["name"], "type": row["type"]} for row in columns if row["is_key"] == False]
     
     return key_columns, data_columns
+
+def get_columns(table_name):
+    """
+    Retrieves the column details for a given table using pragma_table_info.
+    Returns a list of dicts: [{'name': 'col1', 'type': 'TEXT'}, ...]
+    """
+    logger.info(f"Fetching columns for {table_name}")
+
+    with get_postgres_engine().begin() as connection:
+        try:
+            query = text(f"""
+                         SELECT 
+                            cols.column_name, 
+                            UPPER(cols.data_type) AS data_type,
+                            CASE 
+                                WHEN kcu.column_name IS NOT NULL THEN true 
+                                ELSE false 
+                            END AS is_key
+                        FROM information_schema.columns cols
+                        LEFT JOIN information_schema.key_column_usage kcu 
+                            ON cols.table_name = kcu.table_name 
+                            AND cols.column_name = kcu.column_name
+                            AND cols.table_schema = kcu.table_schema
+                        WHERE cols.table_name = '{table_name}'
+                        ORDER BY cols.ordinal_position;
+                         """)
+            result = connection.execute(query).fetchall()
+            columns = [{"name": row.column_name, "type": row.data_type, "is_key": row.is_key} for row in result]
+            # logger.info(f"Found columns: {columns}")
+            return columns
+        except Exception as e:
+            logger.error(f"Error fetching columns for {table_name}: {e}")
+            return []
 
 def _run_migrations_for_engine(engine):
     """
@@ -347,7 +366,8 @@ def _run_migrations_for_engine(engine):
         migrations_path = "db/SQL/migrations/"
         if not os.path.exists(migrations_path):
             logger.info(f"[{label}] Migrations directory not found at {migrations_path}. Skipping migrations.")
-            _recreate_views_for_engine(engine)
+            _recreate_views_connection(connection)
+            connection.commit()  # Ensure any pending transactions are committed before
             return
             
         migration_files = [f for f in os.listdir(migrations_path) if re.match(r"\d+\.sql", f)]
@@ -357,7 +377,8 @@ def _run_migrations_for_engine(engine):
 
         if not pending_migrations:
             logger.info(f"[{label}] Database is up to date.")
-            _recreate_views_for_engine(engine)
+            _recreate_views_connection(connection)
+            connection.commit()  # Ensure any pending transactions are committed before
             return
 
         if label == "PostgreSQL":
@@ -383,25 +404,29 @@ def _run_migrations_for_engine(engine):
                     for statement in statements:
                         if label == "PostgreSQL":
                             statement = mapping_sqlite_to_postgres(statement)
-                        connection.execute(text(statement))
+                        try:
+                            connection.execute(text(statement))
+                        except Exception as e:
+                            logger.error(f"[{label}] Error applying migration {migration_file}: \n{e}")
+                            if not 'duplicate column' in e:
+                                raise e
                         
                 logger.info(f"[{label}] Migration {migration_file} applied successfully.")
             except Exception as e:
                 logger.error(f"[{label}] Error applying migration {migration_file}: \n{e}")
                 raise e
-        if label == "PostgreSQL" and last_migration_version == 22:
-            load_historical_prices()
-        if label == "PostgreSQL" and last_migration_version == 23:
-            calculate_and_store_stock_implied_volatility_history()
             
+        if label == "PostgreSQL" and last_migration_version == 23:
+            calculate_and_store_stock_implied_volatility_history_migration()
+
         with connection.begin():
             if pending_migrations:
                 last_migration_version = int(pending_migrations[-1].split(".")[0])
                 connection.execute(text(f'UPDATE "DbVersion" SET version = {last_migration_version}'))
                 logger.info(f"[{label}] Database version updated to {last_migration_version}.")
     
-    # Recreate views after migrations
-    _recreate_views_for_engine(engine)
+        # Recreate views after migrations
+        _recreate_views_connection(connection)
     logger.info(f"[{label}] Migration completed in {round(time.time() - start,2)}s")
 
 
@@ -409,8 +434,8 @@ def run_migrations():
     """
     Runs the database migration system on both SQLite and PostgreSQL.
     """
-    # SQLite
-    _run_migrations_for_engine(get_database_engine())
+    # # SQLite
+    # _run_migrations_for_engine(get_database_engine())
     
     # PostgreSQL
     pg_engine = get_postgres_engine()
@@ -432,52 +457,179 @@ def _recreate_views_for_engine(engine):
 
     
     if label == "PostgreSQL":
-        view_paths = ["db/SQL/views/PostgreSQL/"]
+        view_path = "db/SQL/views/PostgreSQL/"
     else:
-        view_paths = ["db/SQL/views/create_view/"]
-    for views_path in view_paths:
-        if not os.path.exists(views_path):
-            logger.info(f"[{label}] Views directory not found at {views_path}. Skipping view recreation.")
-            return
+        view_path = "db/SQL/views/create_view/"
 
-        view_files = [f for f in os.listdir(views_path) if f.endswith(".sql")]
-        view_files.sort()
+    if not os.path.exists(view_path):
+        logger.info(f"[{label}] Views directory not found at {view_path}. Skipping view recreation.")
+        return
+
+    view_files = [f for f in os.listdir(view_path) if f.endswith(".sql")]
+    view_files.sort()
+
+    pending_views = view_files.copy()
     
-        pending_views = view_files.copy()
-        
+    hash_value = calculate_view_hash(view_path, view_files)
+    db_hash_value = get_db_view_hash(engine)
+
+    if db_hash_value == hash_value:
+        logger.info(f"[{label}] Views are up to date. Skipping recreation.")
+        return
+    
+    with engine.connect() as connection:
+        while pending_views:
+            progress_made = False
+            failed_views = []
+            
+            for view_file in pending_views:
+                try:
+                    with open(os.path.join(view_path, view_file), "r") as f:
+                        sql_script = f.read()
+                    
+                    statements = [s.strip() for s in sql_script.split(';') if s.strip()]
+                    
+                    with connection.begin():
+                        for statement in statements:
+                            connection.execute(text(statement))
+                    
+                    progress_made = True
+                except Exception as e:
+                    logger.error(f"[{label}] Failed to create view {view_file}: \n{e}")
+                    failed_views.append(view_file)
+            
+            if not progress_made and failed_views:
+                logger.error(f"[{label}] Error: Could not create the following views due to potential circular dependencies or errors: {failed_views}")
+                break
+            
+            pending_views = failed_views
+    
+    if not pending_views:
+        logger.info(f"[{label}] All views recreated successfully in {round(time.time() - start, 2)}s.")
         with engine.connect() as connection:
-            while pending_views:
-                progress_made = False
-                failed_views = []
-                
-                for view_file in pending_views:
-                    try:
-                        with open(os.path.join(views_path, view_file), "r") as f:
-                            sql_script = f.read()
-                        
-                        statements = [s.strip() for s in sql_script.split(';') if s.strip()]
-                        
-                        with connection.begin():
-                            for statement in statements:
-                                connection.execute(text(statement))
-                        
-                        progress_made = True
-                    except Exception as e:
-                        logger.error(f"[{label}] Failed to create view {view_file}: \n{e}")
-                        failed_views.append(view_file)
-                
-                if not progress_made and failed_views:
-                    logger.error(f"[{label}] Error: Could not create the following views due to potential circular dependencies or errors: {failed_views}")
-                    break
-                
-                pending_views = failed_views
+            execute_sql(connection, f'UPDATE "DbVersion" SET view_hash = {hash_value}', "DbVersion", "UPDATE", "Update view hash after recreation")
+    else:
+        logger.info(f"[{label}] View recreation finished with errors in {round(time.time() - start, 2)}s.")
+        with engine.connect() as connection:
+            execute_sql(connection, f'UPDATE "DbVersion" SET view_hash = NULL', "DbVersion", "UPDATE", "Update view hash after recreation")
+        raise Exception(f"Failed to recreate some views in {label}: {pending_views}")
 
-        if not pending_views:
-            logger.info(f"[{label}] All views recreated successfully in {round(time.time() - start, 2)}s.")
-        else:
-            logger.info(f"[{label}] View recreation finished with errors in {round(time.time() - start, 2)}s.")
-            raise Exception(f"Failed to recreate some views in {label}: {pending_views}")
+def _recreate_views_connection(connection):
+    """
+    Internal helper to recreate views on a specific engine.
+    """
+    if 'postgresql' in str(connection.engine.url):
+        label = "PostgreSQL"
+    if 'sqlite' in str(connection.engine.url):
+        label = "SQLite"
+    logger.info(f"[{label}] Recreating views...")
+    start = time.time()
 
+    
+    if label == "PostgreSQL":
+        view_path = "db/SQL/views/PostgreSQL/"
+    else:
+        view_path = "db/SQL/views/create_view/"
+
+    if not os.path.exists(view_path):
+        logger.info(f"[{label}] Views directory not found at {view_path}. Skipping view recreation.")
+        return
+
+    view_files = [f for f in os.listdir(view_path) if f.endswith(".sql")]
+    view_files.sort()
+
+    pending_views = view_files.copy()
+    
+    hash_value = calculate_view_hash(view_path, view_files)
+    db_hash_value = get_db_view_hash_conn(connection)
+
+    if db_hash_value == hash_value:
+        logger.info(f"[{label}] Views are up to date. Skipping recreation.")
+        return
+    
+    drop_all_views(connection.engine)
+    while pending_views:
+        progress_made = False
+        failed_views = []
+        
+        for view_file in pending_views:
+            try:
+                with open(os.path.join(view_path, view_file), "r") as f:
+                    sql_script = f.read()
+                
+                statements = [s.strip() for s in sql_script.split(';') if s.strip()]
+                
+                with connection.begin():
+                    for statement in statements:
+                        connection.execute(text(statement))
+                
+                progress_made = True
+            except Exception as e:
+                logger.error(f"[{label}] Failed to create view {view_file}: \n{e}")
+                failed_views.append(view_file)
+        
+        if not progress_made and failed_views:
+            logger.error(f"[{label}] Error: Could not create the following views due to potential circular dependencies or errors: {failed_views}")
+            break
+        
+        pending_views = failed_views
+    
+    if not pending_views:
+        logger.info(f"[{label}] All views recreated successfully in {round(time.time() - start, 2)}s.")
+        execute_sql(connection, f'UPDATE "DbVersion" SET view_hash = \'{hash_value}\'', "DbVersion", "UPDATE", "Update view hash after recreation")
+    else:
+        logger.info(f"[{label}] View recreation finished with errors in {round(time.time() - start, 2)}s.")
+        execute_sql(connection, f'UPDATE "DbVersion" SET view_hash = NULL', "DbVersion", "UPDATE", "Update view hash after recreation")
+        raise Exception(f"Failed to recreate some views in {label}: {pending_views}")
+
+def calculate_view_hash2(views_path, view_files):
+    concatinated_string = ""
+    for view_file in sorted(view_files):
+        try:
+            with open(os.path.join(views_path, view_file), "r") as f:
+                sql_script = f.read()
+                concatinated_string = concatinated_string + sql_script
+        except Exception as e:
+            logger.error(f"Error reading view file {views_path}: \n{e}")
+            raise e
+    return hash(concatinated_string)
+
+def calculate_view_hash(views_path, view_files):
+    hasher = hashlib.sha256()
+    
+    # Sorting ensures the order of concatenation is always the same
+    for view_file in sorted(view_files):
+        try:
+            file_path = os.path.join(views_path, view_file)
+            
+            # Using newline='' and then encoding ensures 
+            # all platforms hash the same string.
+            with open(file_path, "r", encoding="utf-8", newline='') as f:
+                content = f.read().replace('\r\n', '\n') 
+                hasher.update(content.encode("utf-8"))
+                
+        except Exception as e:
+            logger.error(f"Error reading view file {view_file}: \n{e}")
+            raise e
+            
+    hash_value = hasher.hexdigest()
+    logger.info(f"Calculated view hash: {hash_value}")
+    return hash_value
+
+def get_db_view_hash(engine):
+    with engine.connect() as connection:
+        with connection.begin():
+            result = connection.execute(text('SELECT view_hash FROM "DbVersion"')).fetchone()
+            current_view_hash = result[0] if result else None
+        logger.info(f"Current database view hash: {current_view_hash}")
+    return current_view_hash
+
+def get_db_view_hash_conn(connection):
+    with connection.begin():
+        result = connection.execute(text('SELECT view_hash FROM "DbVersion"')).fetchone()
+        current_view_hash = result[0] if result else None
+    logger.info(f"Current database view hash: {current_view_hash}")
+    return current_view_hash
 
 def recreate_views():
     """
@@ -496,10 +648,10 @@ def table_exists(table_name: str) -> bool:
     Checks if a table exists in the database.
     Returns True only if it exists in ALL active databases (SQLite and Postgres).
     """
-    # Check SQLite
-    engine = get_database_engine()
-    inspector = inspect(engine)
-    exists_sqlite = inspector.has_table(table_name)
+    # # Check SQLite
+    # engine = get_database_engine()
+    # inspector = inspect(engine)
+    # exists_sqlite = inspector.has_table(table_name)
     
     # Check Postgres
     exists_pg = True
@@ -515,17 +667,17 @@ def table_exists(table_name: str) -> bool:
         # But for 'side by side' test, we want to try to create if missing.
         exists_pg = False
 
-    return exists_sqlite and exists_pg
+    return exists_pg
 
 def view_exists(view_name: str) -> bool:
     """
     Checks if a view exists in the database.
     Returns True only if it exists in ALL active databases.
     """
-    # Check SQLite
-    engine = get_database_engine()
-    inspector = inspect(engine)
-    exists_sqlite = view_name in inspector.get_view_names()
+    # # Check SQLite
+    # engine = get_database_engine()
+    # inspector = inspect(engine)
+    # exists_sqlite = view_name in inspector.get_view_names()
 
     # Check Postgres
     exists_pg = True
@@ -538,7 +690,7 @@ def view_exists(view_name: str) -> bool:
         logger.error(f"[PostgreSQL] Error checking view existence {view_name}: \n{e}")
         exists_pg = False
 
-    return exists_sqlite and exists_pg
+    return exists_pg
 
 def pg_migrations():
     sql_script = """
@@ -669,23 +821,37 @@ def column_exists(engine, table_name, column_name, schema=None):
 
 def drop_all_views(engine):
     """
-    Drops all views in database.
+    Drops all standard and materialized views in a PostgreSQL or SQLite database.
     """
-    if 'postgresql' in str(engine.url):
-        label = "PostgreSQL"
-    if 'sqlite' in str(engine.url):
-        label = "SQLite    "
-
+    label = "PostgreSQL" if 'postgresql' in str(engine.url) else "SQLite    "
     inspector = inspect(engine)
+    
+    # 1. Get standard views
     views = inspector.get_view_names()
+    
+    # 2. Get materialized views (Postgres specific)
+    m_views = []
+    if 'postgresql' in str(engine.url):
+        # SQLAlchemy 1.4/2.0+ has this method
+        if hasattr(inspector, 'get_materialized_view_names'):
+            m_views = inspector.get_materialized_view_names()
+    
     with engine.begin() as connection:
+        # Drop standard views
         for view in views:
             try:
                 connection.execute(text(f'DROP VIEW IF EXISTS "{view}" CASCADE'))
-                logger.info(f"{label} Dropped view {view}.")
+                logger.info(f"{label} Dropped view: {view}")
             except Exception as e:
-                logger.error(f"{label} Error dropping view {view}: \n{e}")
-                raise e
+                logger.error(f"{label} Error dropping view {view}: {e}")
+
+        # Drop materialized views
+        for m_view in m_views:
+            try:
+                connection.execute(text(f'DROP MATERIALIZED VIEW IF EXISTS "{m_view}" CASCADE'))
+                logger.info(f"{label} Dropped materialized view: {m_view}")
+            except Exception as e:
+                logger.error(f"{label} Error dropping materialized view {m_view}: {e}")
     
 def change_column_data_types(conn, table):
     if 'OptionDataMassive' in table:
@@ -824,7 +990,7 @@ def create_from_to_date_columns(conn, master_data_table):
             raise e
 
 def recover_history():
-    sqlite_engine = get_database_engine()
+    # sqlite_engine = get_database_engine()
     pg_engine = get_postgres_engine()
 
     for table in HISTORY_ENABLED_TABLES:
@@ -836,7 +1002,7 @@ def recover_history():
         backup_table = f"{daily_table}Backup"
         select_all = f'select * from "{daily_table}"'
         logger.info(f"Select all data from {daily_table}")
-        df = pd.read_sql(text(str(select_all)), sqlite_engine)
+        # df = pd.read_sql(text(str(select_all)), sqlite_engine)
         logger.info(f"Size: {table} - {len(df)}")
 
         try:
@@ -939,30 +1105,15 @@ def recover_history():
             conn.rollback()
             logger.error(f"Error inserting new date: {e}")
             raise e
-        
-def load_historical_prices():
-    yahoo_query = YahooQueryScraper.instance()
-    for df in yahoo_query.get_historical_prices(period='26y'):
-        if df is not None and not df.empty:
-            # rename date column to snapshot_date for consistency
-            if 'date' in df.columns:
-                df = df.rename(columns={'date': 'snapshot_date'})
-            with get_postgres_engine().begin() as connection:
-                insert_into_table(
-                    connection, 
-                    f"{TABLE_STOCK_PRICES_YAHOO}HistoryDaily", 
-                    df, 
-                    if_exists="append"
-                )
 
-def calculate_and_store_stock_implied_volatility_history():
-    df = select_into_dataframe(sql_file_path = "db/SQL/query/implied_volatility_history.sql")
+def calculate_and_store_stock_implied_volatility_history_migration():
+    df = select_into_dataframe(sql_file_path = "db/SQL/query/calculate_implied_volatility_history.sql")
 
     with get_postgres_engine().begin() as connection:
         # Insert the new data into the target table
         insert_into_table(
-            connection, 
-            f"{TABLE_STOCK_IMPLIED_VOLATILITY_MASSIVE}HistoryDaily", 
-            df, 
+            connection,
+            f"{TABLE_STOCK_IMPLIED_VOLATILITY_MASSIVE}HistoryDaily",
+            df,
             if_exists="append"
         )

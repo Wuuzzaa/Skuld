@@ -15,22 +15,31 @@ services:
       - AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE=/config/storage_encryption_key
       - TZ=Europe/Berlin
     restart: unless-stopped
-    
+
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
-    
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+        reservations:
+          cpus: '0.05'
+          memory: 64M
+
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.authelia.rule=Host(`${AUTH_DOMAIN}`)"
       - "traefik.http.routers.authelia.entrypoints=${TRAEFIK_ENTRYPOINT}"
-      - "${TRAEFIK_CERTRESOLVER_LABEL}"
+      - "${TRAEFIK_CERTRESOLVER_LABEL_AUTHELIA}"
       - "traefik.http.services.authelia.loadbalancer.server.port=9091"
-    
+
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9091/api/health"]
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9091/api/health" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -55,7 +64,7 @@ services:
     networks:
       - web
       - postgres_setup_default
-    
+
     logging:
       driver: "json-file"
       options:
@@ -75,19 +84,19 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.skuld.rule=Host(`${DOMAIN_NAME}`)"
       - "traefik.http.routers.skuld.entrypoints=${TRAEFIK_ENTRYPOINT}"
-      - "${TRAEFIK_CERTRESOLVER_LABEL}"
+      - "${TRAEFIK_CERTRESOLVER_LABEL_SKULD}"
       - "traefik.http.services.skuld.loadbalancer.server.port=8501"
-      
+
       # Authelia ForwardAuth Middleware
       - "traefik.http.middlewares.authelia.forwardauth.address=http://authelia:9091/api/verify?rd=${AUTH_SCHEME}://${AUTH_DOMAIN}/"
       - "traefik.http.middlewares.authelia.forwardauth.trustForwardHeader=true"
       - "traefik.http.middlewares.authelia.forwardauth.authResponseHeaders=Remote-User,Remote-Groups,Remote-Name,Remote-Email"
-      
+
       # Apply Authelia Middleware
       - "traefik.http.routers.skuld.middlewares=authelia"
-    
+
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      test: [ "CMD", "curl", "-f", "http://localhost:8501/_stcore/health" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -112,7 +121,7 @@ services:
     networks:
       - web
       - postgres_setup_default
-    
+
     logging:
       driver: "json-file"
       options:
@@ -122,8 +131,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.5'
-          memory: 3000M
+          cpus: '1.0'
+          # memory: 4000M  # Disabled to allow swap usage instead of OOM-Kill
         reservations:
           cpus: '0.25'
           memory: 512M
@@ -133,6 +142,3 @@ networks:
     external: true
   postgres_setup_default:
     external: true
-
-
-

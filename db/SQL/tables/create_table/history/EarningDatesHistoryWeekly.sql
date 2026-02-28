@@ -5,6 +5,6 @@
         week INT NOT NULL,
         "symbol" TEXT,
         "earnings_date" TEXT,
-        PRIMARY KEY(year, week, "symbol")
+        PRIMARY KEY(isoyear, week, "symbol")
     );
     

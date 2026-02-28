@@ -9,13 +9,13 @@ from datetime import datetime
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-def scrape_earning_dates():
+def scrape_earning_dates(symbols):
     earnings_dates = {}
-    yahoo_query = YahooQueryScraper.instance()
-    data = yahoo_query.get_modules()
+    yahoo_query = YahooQueryScraper.instance(symbols)
+    data = yahoo_query.get_modules(modules='calendarEvents')
 
     for symbol, symbol_data in data.items():
-        calendar_data = symbol_data.get('calendarEvents')
+        calendar_data = symbol_data.get('calendarEvents',symbol_data)
 
         try:
             raw_date = calendar_data['earnings']['earningsDate'][0][:10]  # e.g. '2025-07-30'

@@ -249,15 +249,27 @@ def get_page_spreads(df: pd.DataFrame) -> pd.DataFrame:
     Use this for the Frontend. It calculates the spreads and get rid of not needed columns in the frontend.
     """
     df = calc_spreads(df)
+
     columns = [
+            #############
+            # symbol data
+            #############
             'symbol',
             'earnings_date',
             'earnings_warning',
             'close',
             'analyst_mean_target',
-            'recommendation',
+            # 'recommendation', #todo replace later with own recommendation based on technical indicators
+            "company_industry",
+            "company_sector",
+            "historical_volatility_30d",
+            "iv_rank",
+            "iv_percentile",
             #'days_to_expiration',
             'days_to_earnings',
+            #############
+            # sell option data
+            #############
             'sell_strike',
             'sell_last_option_price',
             'sell_delta',
@@ -266,6 +278,10 @@ def get_page_spreads(df: pd.DataFrame) -> pd.DataFrame:
             #'sell_theta',
             #'sell_open_interest',
             'sell_expected_move',
+            "sell_day_volume",
+            #############
+            # buy option data
+            #############
             'buy_strike',
             'buy_last_option_price',
             'buy_delta',
@@ -273,6 +289,9 @@ def get_page_spreads(df: pd.DataFrame) -> pd.DataFrame:
             #'buy_theta',
             #'buy_open_interest',
             #'buy_expected_move',
+            #############
+            # spread data
+            #############
             #'spread_width',
             'max_profit',
             'bpr',

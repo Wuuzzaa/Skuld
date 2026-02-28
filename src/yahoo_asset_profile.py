@@ -2,29 +2,32 @@ import logging
 import sys
 import os
 import pandas as pd
-from config import TABLE_EARNING_DATES, TABLE_STOCK_ASSET_PROFILES_YAHOO
+from config import TABLE_STOCK_ASSET_PROFILES_YAHOO
 from src.database import get_postgres_engine, insert_into_table, truncate_table
 from src.yahooquery_scraper import YahooQueryScraper
-from datetime import datetime
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 logger = logging.getLogger(__name__)
 
-def load_asset_profile():
+def load_asset_profile(symbols):
     logger.info("Loading Yahoo Asset Profiles")
-    yahoo_query = YahooQueryScraper.instance()
-    data = yahoo_query.get_modules()
+    yahoo_query = YahooQueryScraper.instance(symbols)
+    data = yahoo_query.get_modules(modules='assetProfile price')
 
     asset_profiles = {}
     for symbol, symbol_data in data.items():
-        asset_profile_data = symbol_data.get('assetProfile', {})
+        asset_profile_data = symbol_data.get('assetProfile', symbol_data)
         long_business_summary = asset_profile_data.get('longBusinessSummary')
         industry = asset_profile_data.get('industry')
         sector = asset_profile_data.get('sector')
         country = asset_profile_data.get('country')
 
+        price_data = symbol_data.get('price', symbol_data)
+        name = price_data.get('shortName')  # Fallback to symbol if name is not available
+
         asset_profiles[symbol] = {
+            'name': name, 
             'long_business_summary': long_business_summary,
             'industry': industry,
             'sector': sector,

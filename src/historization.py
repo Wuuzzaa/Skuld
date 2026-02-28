@@ -4,7 +4,7 @@ import pathlib
 import time
 from sqlalchemy import text
 from config import HISTORY_ENABLED_TABLES, HISTORY_ENABLED_VIEWS
-from src.database import column_exists, drop_all_views, get_database_engine, execute_sql, get_postgres_engine, get_table_key_and_data_columns, mapping_sqlite_to_postgres, pg_migrate_week_to_ISO_week, recreate_views, run_migrations, select_into_dataframe, table_exists, view_exists
+from src.database import column_exists, drop_all_views, get_columns, get_database_engine, execute_sql, get_postgres_engine, get_table_key_and_data_columns, mapping_sqlite_to_postgres, pg_migrate_week_to_ISO_week, recreate_views, run_migrations, select_into_dataframe, table_exists, view_exists
 from src.decorator_log_function import log_function
 from src.data_aging import DataAgingService, get_history_select_statement, is_weekend, is_classified_for_master_data
 from src.util import executed_as_github_action
@@ -192,27 +192,6 @@ def delete_postgres_history(source_table):
                 except Exception as e:
                     logger.error(f"Error during execution on SQLite: {e}")   
 
-def _get_columns(table_name):
-    """
-    Retrieves the column details for a given table using pragma_table_info.
-    Returns a list of dicts: [{'name': 'col1', 'type': 'TEXT'}, ...]
-    """
-    logger.info(f"Fetching columns for {table_name}")
-    engine = get_database_engine()
-
-    with engine.begin() as connection:
-        try:
-                # Using pragma_table_info directly
-            query = text(f"SELECT name, type FROM pragma_table_info('{table_name}')")
-            result = connection.execute(query).fetchall()
-            columns = [{"name": row[0], "type": row[1]} for row in result]
-            # logger.info(f"Found columns: {columns}")
-            return columns
-        except Exception as e:
-            logger.error(f"Error fetching columns for {table_name}: {e}")
-            return []
-
-
 def _create_history_tables_and_view_if_not_exist(source_table: str):
     """
     Creates the history tables if they do not exist.
@@ -236,29 +215,31 @@ def _create_history_tables_and_view_if_not_exist(source_table: str):
             execute_sql(connection, create_daily_table_sql, daily_history_table_name, "CREATE TABLE")
     
     weekly_history_table_name, create_weekly_table_sql = _get_weekly_history_table_name_create_statement(table)
+    # write sql to file "{weekly_history_table_name}.sql" to db/SQL/tables/create_table/history/
+    with open(f"{path_sql_create_table_statements}/{weekly_history_table_name}.sql", "w") as f:
+        f.write(create_weekly_table_sql)
     if not table_exists(weekly_history_table_name):
-        # write sql to file "{weekly_history_table_name}.sql" to db/SQL/tables/create_table/history/
-        with open(f"{path_sql_create_table_statements}/{weekly_history_table_name}.sql", "w") as f:
-            f.write(create_weekly_table_sql)
         with pg_engine.begin() as connection:
             execute_sql(connection, create_weekly_table_sql, weekly_history_table_name, "CREATE TABLE")
     
     monthly_history_table_name, create_monthly_table_sql = _get_monthly_history_table_name_create_statement(table)
+    # write sql to file "{monthly_history_table_name}.sql" to db/SQL/tables/create_table/history/
+    with open(f"{path_sql_create_table_statements}/{monthly_history_table_name}.sql", "w") as f:
+        f.write(create_monthly_table_sql)
     if not table_exists(monthly_history_table_name):
-        # write sql to file "{monthly_history_table_name}.sql" to db/SQL/tables/create_table/history/
-        with open(f"{path_sql_create_table_statements}/{monthly_history_table_name}.sql", "w") as f:
-            f.write(create_monthly_table_sql)
         with pg_engine.begin() as connection:
             execute_sql(connection, create_monthly_table_sql, monthly_history_table_name, "CREATE TABLE")
     
     master_data_table_name, create_master_data_table_sql = _get_master_data_table_name_create_statement(table)
+    # write sql to file "{master_data_table_name}.sql" to db/SQL/tables/create_table/history/
+    with open(f"{path_sql_create_table_statements}/{master_data_table_name}.sql", "w") as f:
+        f.write(create_master_data_table_sql)
     if not table_exists(master_data_table_name):
-        # write sql to file "{master_data_table_name}.sql" to db/SQL/tables/create_table/history/
-        with open(f"{path_sql_create_table_statements}/{master_data_table_name}.sql", "w") as f:
-            f.write(create_master_data_table_sql)
         with pg_engine.begin() as connection:
             execute_sql(connection, create_master_data_table_sql, master_data_table_name, "CREATE TABLE")
         
+    _create_missing_columns_in_history_tables(source_table)
+    
     history_view_name = f"{table}History"
     if not view_exists(history_view_name) or True:
         path_sql_create_view_statements = pathlib.Path("db/SQL/views/create_view/history/table_views")
@@ -269,8 +250,36 @@ def _create_history_tables_and_view_if_not_exist(source_table: str):
         with pg_engine.begin() as connection:
             execute_sql(connection, f'DROP VIEW IF EXISTS "{history_view_name}" CASCADE;', history_view_name, "DROP VIEW")
             execute_sql(connection, create_view_sql, history_view_name, "CREATE VIEW")
+    
     logger.info(f"Ensured that {daily_history_table_name}, {weekly_history_table_name}, {monthly_history_table_name}, {master_data_table_name} tables exist.")
             
+
+def _create_missing_columns_in_history_tables(source_table: str):
+    """
+    Checks if there are any missing columns in the history tables compared to the source table and adds them if necessary.
+    """
+
+    logger.info(f"Checking for missing columns in history tables for {source_table}")
+    history_tables = [f"{source_table}HistoryDaily", f"{source_table}HistoryWeekly", f"{source_table}HistoryMonthly", f"{source_table}MasterData"]
+    source_columns = get_columns(source_table)
+
+    pg_engine = get_postgres_engine()
+    if not pg_engine:
+        logger.warning("PostgreSQL engine not configured, skipping history table column synchronization.")
+        return
+
+    for history_table in history_tables:
+        history_columns = get_columns(history_table)
+        missing_columns = [col for col in source_columns if col['name'] not in [hc['name'] for hc in history_columns]]
+        
+        for col in missing_columns:
+            alter_sql = f'ALTER TABLE "{history_table}" ADD COLUMN "{col["name"]}" {col["type"]};'
+            with pg_engine.begin() as connection:
+                try:
+                    execute_sql(connection, alter_sql, history_table, "ALTER TABLE", f"Add missing column {col['name']} to {history_table}")
+                except Exception as e:
+                    logger.error(f"Error adding missing column {col['name']} to {history_table}: {e}")
+                    raise e
 
 def _get_daily_history_table_name_create_statement(table_name: str):
     """

@@ -28,6 +28,9 @@ services:
 
   # Explicitly disable TLS for Staging routers (since we use HTTP entrypoint)
   skuld-frontend:
+    depends_on:
+      postgres:
+        condition: service_healthy
     labels:
       # Define a dedicated Staging Router with higher priority to override the base one
       # We skip the 'enable=false' trick because it's prone to failure

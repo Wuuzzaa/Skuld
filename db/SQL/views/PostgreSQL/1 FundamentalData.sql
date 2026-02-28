@@ -474,60 +474,14 @@ SELECT
 	a."Summary_yield", 
 	a."Summary_totalAssets", 
 	a."Summary_navPrice",
-
-	-- FundamentalDataDividendRadar
-	b."Company", 
-	b."FV", 
-	b."Sector", 
-	b."No-Years", 
-	b."Price", 
-	b."Div-Yield", 
-	b."5Y-Avg-Yield", 
-	b."Current-Div", 
-	b."Payouts/-Year", 
-	b."Annualized", 
-	b."Previous-Div", 
-	b."Ex-Date", 
-	b."Pay-Date", 
-	b."Low", 
-	b."High", 
-	b."DGR-1Y", 
-	b."DGR-3Y", 
-	b."DGR-5Y", 
-	b."DGR-10Y", 
-	b."TTR-1Y", 
-	b."TTR-3Y", 
-	b."Fair-Value", 
-	b."FV-%", 
-	b."Streak-Basis", 
-	b."Chowder-Number", 
-	b."EPS-1Y", 
-	b."Revenue-1Y", 
-	b."NPM", 
-	b."CF/Share", 
-	b."ROE", 
-	b."Current-R", 
-	b."Debt/Capital", 
-	b."ROTC", 
-	b."P/E", 
-	b."P/BV", 
-	b."PEG", 
-	b."New-Member", 
-	b."Industry", 
-	b."Classification",
-
 	-- StockAssetProfilesYahoo
-	c.industry,
-	c.sector,
-	c.country,
-	c.long_business_summary
-
+	c.name AS company_name,
+	c.industry AS company_industry,
+	c.sector AS company_sector,
+	c.country AS company_country,
+	c.long_business_summary AS company_long_business_summary
 FROM 
     "FundamentalDataYahoo" as a
 LEFT OUTER JOIN 
-    "FundamentalDataDividendRadar" AS b
-ON a.symbol = b."Symbol"
-LEFT OUTER JOIN 
 	"StockAssetProfilesYahoo" AS c
-ON a.symbol = c.symbol
-;
+ON a.symbol = c.symbol;

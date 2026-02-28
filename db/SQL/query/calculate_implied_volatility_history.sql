@@ -14,6 +14,10 @@ WITH
 						FROM
 							"OptionDataMassiveHistoryDaily" AS A
 							JOIN "OptionDataMassiveMasterData" AS B ON A.OPTION_OSI = B.OPTION_OSI
+							-- WHERE NOT EXISTS (
+							-- 	SELECT 1 FROM "StockImpliedVolatilityMassiveHistoryDaily" AS C
+							-- 	WHERE C.symbol = B.SYMBOL
+							-- )
 					),
 					BESTEXPIRATIONS AS (
 						-- Step 1: Find the single expiration date closest to 45 days for every symbol
@@ -106,9 +110,9 @@ WITH
 					DAILY_IV D2
 				WHERE
 					D2.SYMBOL = D1.SYMBOL
-					AND D2.DATE <= D1.DATE
+					AND D2.DATE < D1.DATE
 					AND D2.DATE > D1.DATE - INTERVAL '1 year'
-					AND D2.IV <= D1.IV
+					AND D2.IV < D1.IV
 			)::FLOAT / NULLIF(
 				(
 					SELECT
@@ -117,7 +121,7 @@ WITH
 						DAILY_IV D2
 					WHERE
 						D2.SYMBOL = D1.SYMBOL
-						AND D2.DATE <= D1.DATE
+						AND D2.DATE < D1.DATE
 						AND D2.DATE > D1.DATE - INTERVAL '1 year'
 				),
 				0

@@ -1,10 +1,8 @@
 name: Deploy SKULD Staging to Home Server
 
 on:
-  workflow_dispatch:
   push:
-    branches:
-      - position-insurance-tool
+    branches: [ testsystem ]
 
 
 jobs:
@@ -35,6 +33,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # ── Telegram: Deploy Notification (self-contained, safe to remove) ──
+      - name: Notify deploy started via Telegram
+        if: always()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID_STAGING }}
+        run: |
+          ACTOR="${{ github.actor }}"
+          BRANCH="${{ github.ref_name }}"
+          COMMIT_MSG=$(git log -1 --format='%s')
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          REPO="${{ github.repository }}"
+          TEXT="🚀 <b>[Staging] Deploy gestartet</b>%0A%0A👤 <b>${ACTOR}</b> hat eine neue Version auf <code>${BRANCH}</code> gepusht.%0A📝 <code>${SHORT_SHA}</code>: ${COMMIT_MSG}%0A📦 ${REPO}"
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d text="${TEXT}" \
+            -d parse_mode=HTML >/dev/null 2>&1 || true
+      # ── End Telegram Notification ───────────────────────────────────────
+
       - name: Create .env file for Staging
         run: |
           echo "=== Creating .env file ==="
@@ -44,7 +61,8 @@ jobs:
           
           # Traefik Configuration (Staging = HTTP / No Cert Resolver)
           echo "TRAEFIK_ENTRYPOINT=web" >> .env
-          echo "TRAEFIK_CERTRESOLVER_LABEL=traefik.enable=true" >> .env
+          echo "TRAEFIK_CERTRESOLVER_LABEL_SKULD=traefik.enable=true" >> .env
+          echo "TRAEFIK_CERTRESOLVER_LABEL_AUTHELIA=traefik.enable=true" >> .env
           # Used in docker-compose.yml for middleware redirect
           echo "AUTH_SCHEME=http" >> .env
           
@@ -153,7 +171,7 @@ jobs:
             until [ "$n" -ge 5 ]
             do
                echo "Pull Attempt $((n+1))/5..."
-               docker compose -f docker-compose.yml -f docker-compose.staging.yml pull && break
+               docker compose -f docker-compose.yml -f docker-compose.testing.yml pull && break
                n=$((n+1))
                echo "⚠️ Pull failed, retrying in 10s..."
                sleep 10
@@ -167,7 +185,7 @@ jobs:
             echo "=== Starting Staging Stack ==="
             # Start services using the pre-built image, include Staging overrides (Traefik)
             # --no-build ensures we use the image built in previous step
-            docker compose -f docker-compose.yml -f docker-compose.staging.yml up -d --no-build --remove-orphans
+            docker compose -f docker-compose.yml -f docker-compose.testing.yml up -d --no-build --remove-orphans
             
             echo "=== Skipping build cache cleanup to improve speed ==="
             # docker builder prune -f

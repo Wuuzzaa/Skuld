@@ -15,8 +15,8 @@ df = df.rename(
         #"symbol": "Symbol", # let it lowercase
         "close": "Price",
         "analyst_mean_target": "Mean Analyst Target",
-        "recommendation": "Indicators Recommendation",
-        "Recommend.All": "Recommendation strength (-1 to 1)",
+        #"recommendation": "Indicators Recommendation",
+        #"Recommend.All": "Recommendation strength (-1 to 1)",
         "target-close$": "Difference ($) analyst target and price",
         "target-close%": "Difference (%) analyst target and price"
     }

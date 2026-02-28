@@ -2,28 +2,54 @@ import time
 import logging
 import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from src.massiv_api import get_symbols, get_symbols_with_exchange
 from src.live_stock_price_collector import fetch_current_prices
 from src.logger_config import setup_logging
 from src.database import run_migrations
+from src.send_alert import send_telegram_message
 from src.massiv_api import load_option_chains
 from src.price_and_technical_analysis_data_scrapper import scrape_and_save_price_and_technical_indicators
+from src.stock_volatility import calculate_and_store_stock_implied_volatility_history
 from src.yahoo_asset_profile import load_asset_profile
+from src.yahoo_dividens import calculate_dividend_classification
 from src.yahooquery_earning_dates import scrape_earning_dates
-from src.yahooquery_financials import generate_fundamental_data, load_stock_prices
+from src.yahooquery_financials import generate_fundamental_data, load_historical_prices, load_stock_prices
 from src.yfinance_analyst_price_targets import scrape_yahoo_finance_analyst_price_targets
 from config import *
-from src.dividend_radar import process_dividend_data
 from src.historization import run_historization_pipeline
 from src.pipeline_monitor import PipelineMonitor
 
-setup_logging(component="data_collector", log_level=logging.INFO, console_output=True)
+setup_logging(component="data_collector", log_level=logging.DEBUG, console_output=True)
 logger = logging.getLogger(__name__)
-logger.info("Start SKULD")
+logger.info("data_collector")
 
 
 def main(args):
     pipeline = None
     logger.info(f"Mode: {args.mode}")
+
+    if args.mode == "only_run_migrations":
+        logger.info("#" * 80)
+        logger.info("Running database migrations only...")
+        logger.info("#" * 80)
+        try:
+            run_migrations()
+            logger.info("#" * 80)
+            logger.info("Database migrations done. Exit main")
+            logger.info("#" * 80)
+            send_telegram_message(
+                "Info - DB Migrations",
+                "✅ Database migrations completed successfully on container start."
+            )
+        except Exception as e:
+            logger.error(f"Database migrations failed: {e}", exc_info=True)
+            send_telegram_message(
+                "Alert - DB Migrations Failed",
+                f"❌ Database migrations failed on container start.\n\n<b>Error:</b>\n<code>{e}</code>"
+            )
+            raise
+        return 0
+
     try:
         # Initialize Pipeline Monitor with the specific mode
         pipeline = PipelineMonitor(mode=args.mode)
@@ -34,53 +60,50 @@ def main(args):
         run_migrations()
 
         logger.info("#" * 80)
-        logger.info(f"Starting Data Collection Pipeline (Full Parallel Mode)")
-        logger.info(f"Symbol selection mode: {SYMBOL_SELECTION['mode']}")
-
-        enabled_rules = [rule for rule in OPTIONS_COLLECTION_RULES if rule.get("enabled", False)]
-        logger.info(f"[INFO] Enabled collection rules: {len(enabled_rules)}")
-        for rule in enabled_rules:
-            logger.info(f"  - {rule['name']}: {rule['days_range']} days, {rule['frequency']}")
-
-        if SYMBOL_SELECTION.get("use_max_limit", False) and "max_symbols" in SYMBOL_SELECTION:
-            logger.info(f"[INFO] Symbol limit: {SYMBOL_SELECTION['max_symbols']}")
-
+        logger.info(f"Starting Data Collection Pipeline")
         logger.info("#" * 80)
+
+        symbols = get_symbols()
 
         # select the data collection tasks to run
         parallel_tasks = None
         if args.mode == "all":
             parallel_tasks = [
-                ("Massive Option Chains", load_option_chains, ()),
-                ("Yahoo Finance Analyst Price Targets", scrape_yahoo_finance_analyst_price_targets, ()),
-                ("Price & Technical Indicators", scrape_and_save_price_and_technical_indicators, ()),
-                ("Dividend Radar", process_dividend_data, ()),
-                ("Earning Dates", scrape_earning_dates, ()),
-                ("Yahoo Query Fundamentals", generate_fundamental_data, ()),
-                ("Fetch Current Stock Day Prices", load_stock_prices, ()),
-                ("Yahoo Asset Profiles", load_asset_profile, ()),
+                ("Massive Option Chains", load_option_chains, (symbols["options"],)),
+                ("Yahoo Finance Analyst Price Targets", scrape_yahoo_finance_analyst_price_targets, (symbols["stocks"],)),
+                ("Price & Technical Indicators", scrape_and_save_price_and_technical_indicators, (symbols["stocks_with_exchange"],)),
+                ("Earning Dates", scrape_earning_dates, (symbols["stocks"],)),
+                ("Yahoo Query Fundamentals", generate_fundamental_data, (symbols["stocks"],)),
+                ("Fetch Current Stock Prices", fetch_current_prices, (symbols["stocks"],)),
             ]
         elif args.mode == "saturday_night":
             parallel_tasks = [
-                ("Yahoo Finance Analyst Price Targets", scrape_yahoo_finance_analyst_price_targets, ()),
-                ("Dividend Radar", process_dividend_data, ()),
-                ("Earning Dates", scrape_earning_dates, ()),
-                ("Yahoo Query Fundamentals", generate_fundamental_data, ()),
-                ("Yahoo Asset Profiles", load_asset_profile, ()),
+                # ("Yahoo Dividends", calculate_dividend_classification, ()),
+                # ("Yahoo Query Fundamentals", generate_fundamental_data, (symbols["stocks"],)),
+                # ("Yahoo Finance Analyst Price Targets", scrape_yahoo_finance_analyst_price_targets, (symbols["stocks"],)),
+                # ("Earning Dates", scrape_earning_dates, (symbols["stocks"],)),
+                ("Yahoo Asset Profiles", load_asset_profile, (symbols["stocks"],)),
+                #todo task für symbole anpassen
             ]
         elif args.mode == "marked_start_mid_end":
             parallel_tasks = [
-                # ("Fetch Current Stock Prices", fetch_current_prices, ()),
-                ("Fetch Current Stock Day Prices", load_stock_prices, ()),
+                ("Fetch Current Stock Day Prices", load_stock_prices, (symbols["stocks"],)),
             ]
         elif args.mode == "stock_data_daily":
+            symbols_with_exchange = get_symbols_with_exchange()
             parallel_tasks = [
-                ("Price & Technical Indicators", scrape_and_save_price_and_technical_indicators, ()),
+                ("Price & Technical Indicators", scrape_and_save_price_and_technical_indicators, (symbols_with_exchange,)),
             ]
         elif args.mode == "option_data":
             parallel_tasks = [
-                ("Massive Option Chains", load_option_chains, ()),
+                ("Massive Option Chains", load_option_chains, (symbols["options"],)),
             ]
+        elif args.mode == "historical_prices":
+            parallel_tasks = []
+            load_historical_prices(symbols["stocks"])
+        elif args.mode == "historical_iv":
+            parallel_tasks = []
+            calculate_and_store_stock_implied_volatility_history()
         elif args.mode == "historization":
             pass
         else:
@@ -176,7 +199,10 @@ if __name__ == "__main__":
                             "marked_start_mid_end",
                             "stock_data_daily",
                             "option_data",
-                            "historization"
+                            "historical_prices",
+                            "historical_iv",
+                            "historization",
+                            "only_run_migrations"
                         ],
                         help="Mode for data collection")
     parser.add_argument("--env", type=str, required=False, default=None,

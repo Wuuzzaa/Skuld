@@ -9,7 +9,7 @@
 		"close" DOUBLE PRECISION,
 		"volume" BIGINT,
 		"adjclose" DOUBLE PRECISION,
-		"dividends" REAL,
+		"dividends" DOUBLE PRECISION,
 		"splits" DOUBLE PRECISION,
         PRIMARY KEY(snapshot_date, "symbol")
     );

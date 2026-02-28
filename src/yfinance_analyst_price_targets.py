@@ -8,22 +8,22 @@ from src.yahooquery_scraper import YahooQueryScraper
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-def scrape_yahoo_finance_analyst_price_targets():
+def scrape_yahoo_finance_analyst_price_targets(symbols):
+    # https://yahooquery.dpguthrie.com/guide/ticker/modules/
+
     print("#" * 80)
     print("Scraping analyst price targets on Yahoo Finance...")
+    print(f"Scraping symbols on Yahoo Finance...")
     print("#" * 80)
-    
-    # https://yahooquery.dpguthrie.com/guide/ticker/modules/
+
+    yahoo_query = YahooQueryScraper.instance(symbols)
+    data = yahoo_query.get_modules(modules='financialData')
 
     results = []
 
-    # Test mode logic and logging centrally from config
-    print(f"Scraping symbols on Yahoo Finance...")
-    yahoo_query = YahooQueryScraper.instance()
-    data = yahoo_query.get_modules()
-
     for symbol, symbol_data in data.items():
-        financial_data = symbol_data.get('financialData')
+        financial_data = symbol_data.get('financialData',symbol_data)
+
         # Get mean or set None if the yahoo finance has no data.
         try:
             if "targetMeanPrice" in financial_data:
@@ -48,3 +48,7 @@ def scrape_yahoo_finance_analyst_price_targets():
             dataframe=df,
             if_exists="append"
         )
+# debug
+if __name__ == "__main__":
+    symbols = ["AAPL", "GOOGL", "AMZN"]
+    scraper = YahooQueryScraper.instance(symbols)

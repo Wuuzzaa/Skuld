@@ -1,0 +1,132 @@
+version: '3.8'
+
+services:
+  # --------------------------------------------------------------------------
+  # 1. Traefik (Reverse Proxy)
+  # --------------------------------------------------------------------------
+  traefik:
+    image: traefik:v2.11
+    container_name: monitoring-traefik
+    restart: unless-stopped
+    environment:
+      - DOCKER_API_VERSION=1.44
+    command:
+      - "--api.insecure=false"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.forwardedHeaders.insecure=true"
+    ports:
+      - "81:80" # Cloudflared will connect to this port (changed from 80 to avoid collision)
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    networks:
+      - monitoring-net
+
+  # --------------------------------------------------------------------------
+  # 2. Authelia (Authentication)
+  # --------------------------------------------------------------------------
+  authelia:
+    image: authelia/authelia:latest
+    container_name: monitoring-authelia
+    restart: unless-stopped
+    volumes:
+      - ./authelia:/config
+    environment:
+      - AUTHELIA_JWT_SECRET_FILE=/config/jwt_secret
+      - AUTHELIA_SESSION_SECRET_FILE=/config/session_secret
+      - AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE=/config/storage_encryption_key
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.monitoring-authelia.rule=Host(`auth-monitoring.skuld-options.com`)"
+      - "traefik.http.routers.monitoring-authelia.entrypoints=web"
+      - "traefik.http.services.monitoring-authelia.loadbalancer.server.port=9091"
+      # Middleware for other services to use
+      - "traefik.http.middlewares.monitoring-authelia-auth.forwardauth.address=http://monitoring-authelia:9091/api/verify?rd=https://auth-monitoring.skuld-options.com"
+      - "traefik.http.middlewares.monitoring-authelia-auth.forwardauth.trustForwardHeader=true"
+      - "traefik.http.middlewares.monitoring-authelia-auth.forwardauth.authResponseHeaders=Remote-User,Remote-Groups,Remote-Name,Remote-Email"
+    networks:
+      - monitoring-net
+
+  # --------------------------------------------------------------------------
+  # 3. Grafana (Dashboards)
+  # --------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:latest
+    container_name: monitoring-grafana
+    restart: unless-stopped
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      # We will rely on Authelia Auth Proxy for seamless login
+      - GF_AUTH_PROXY_ENABLED=true
+      - GF_AUTH_PROXY_HEADER_NAME=Remote-User
+      - GF_AUTH_PROXY_HEADER_PROPERTY=username
+      - GF_AUTH_PROXY_AUTO_SIGN_UP=true
+      - GF_SERVER_DOMAIN=monitoring.skuld-options.com
+      - GF_SERVER_ROOT_URL=https://monitoring.skuld-options.com
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.monitoring-grafana.rule=Host(`monitoring.skuld-options.com`)"
+      - "traefik.http.routers.monitoring-grafana.entrypoints=web"
+      - "traefik.http.routers.monitoring-grafana.middlewares=monitoring-authelia-auth"
+      - "traefik.http.services.monitoring-grafana.loadbalancer.server.port=3000"
+    networks:
+      - monitoring-net
+
+  # --------------------------------------------------------------------------
+  # 4. Prometheus (Metrics Database)
+  # --------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: monitoring-prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/etc/prometheus/console_libraries"
+      - "--web.console.templates=/etc/prometheus/consoles"
+      - "--storage.tsdb.retention.time=30d" # Keep data for 30 days
+      - "--storage.tsdb.retention.size=5GB" # Max database size 5GB
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    network_mode: "service:wireguard-client"
+    depends_on:
+      - wireguard-client
+
+  # --------------------------------------------------------------------------
+  # 5. WireGuard Client (Tunnel to Hetzner)
+  # --------------------------------------------------------------------------
+  wireguard-client:
+    image: lscr.io/linuxserver/wireguard:latest
+    container_name: monitoring-wireguard-client
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Berlin
+    volumes:
+      - ./wireguard:/config
+      - /lib/modules:/lib/modules:ro # Optional, only if kernel module missing
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+    networks:
+      - monitoring-net
+      - wireguard-net
+
+volumes:
+  grafana-data:
+  prometheus-data:
+
+
+networks:
+  monitoring-net:
+    driver: bridge
+  wireguard-net:
+    driver: bridge

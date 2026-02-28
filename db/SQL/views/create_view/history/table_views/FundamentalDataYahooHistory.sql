@@ -1889,7 +1889,47 @@
 		coalesce(
                 daily."Summary_navPrice",
                 master_data."Summary_navPrice"
-            ) as "Summary_navPrice"
+            ) as "Summary_navPrice",
+		coalesce(
+                daily."ReceiptsfromGovernmentGrants",
+                master_data."ReceiptsfromGovernmentGrants"
+            ) as "ReceiptsfromGovernmentGrants",
+		coalesce(
+                daily."DividendsPaidDirect",
+                master_data."DividendsPaidDirect"
+            ) as "DividendsPaidDirect",
+		coalesce(
+                daily."DividendsReceivedDirect",
+                master_data."DividendsReceivedDirect"
+            ) as "DividendsReceivedDirect",
+		coalesce(
+                daily."Summary_openInterest",
+                master_data."Summary_openInterest"
+            ) as "Summary_openInterest",
+		coalesce(
+                daily."Summary_ytdReturn",
+                master_data."Summary_ytdReturn"
+            ) as "Summary_ytdReturn",
+		coalesce(
+                daily."KeyStats_lastCapGain",
+                master_data."KeyStats_lastCapGain"
+            ) as "KeyStats_lastCapGain",
+		coalesce(
+                daily."KeyStats_morningStarRiskRating",
+                master_data."KeyStats_morningStarRiskRating"
+            ) as "KeyStats_morningStarRiskRating",
+		coalesce(
+                daily."KeyStats_morningStarOverallRating",
+                master_data."KeyStats_morningStarOverallRating"
+            ) as "KeyStats_morningStarOverallRating",
+		coalesce(
+                daily."KeyStats_annualReportExpenseRatio",
+                master_data."KeyStats_annualReportExpenseRatio"
+            ) as "KeyStats_annualReportExpenseRatio",
+		coalesce(
+                daily."KeyStats_annualHoldingsTurnover",
+                master_data."KeyStats_annualHoldingsTurnover"
+            ) as "KeyStats_annualHoldingsTurnover"
     FROM
         "DatesHistory" as dates
         INNER JOIN "FundamentalDataYahooMasterData" as master_data

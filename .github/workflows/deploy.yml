@@ -3,6 +3,8 @@ name: Deploy SKULD Production to Hetzner
 on:
   push:
     branches: [ master ]
+    paths-ignore:
+      - 'monitoring/**'
 
 jobs:
   deploy:
@@ -10,6 +12,25 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      # ── Telegram: Deploy Notification (self-contained, safe to remove) ──
+      - name: Notify deploy started via Telegram
+        if: always()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          ACTOR="${{ github.actor }}"
+          BRANCH="${{ github.ref_name }}"
+          COMMIT_MSG=$(git log -1 --format='%s')
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          REPO="${{ github.repository }}"
+          TEXT="🚀 <b>[Production] Deploy gestartet</b>%0A%0A👤 <b>${ACTOR}</b> hat eine neue Version auf <code>${BRANCH}</code> gepusht.%0A📝 <code>${SHORT_SHA}</code>: ${COMMIT_MSG}%0A📦 ${REPO}"
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d text="${TEXT}" \
+            -d parse_mode=HTML >/dev/null 2>&1 || true
+      # ── End Telegram Notification ───────────────────────────────────────
 
       - name: Setup SSH Key
         run: |
@@ -22,7 +43,7 @@ jobs:
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
-            "echo '${{ secrets.DEPLOY_PASSWORD }}' | sudo -S docker system prune -af --volumes || true && echo '${{ secrets.DEPLOY_PASSWORD }}' | sudo -S chown -R ${{ secrets.DEPLOY_USER }} /opt/skuld"
+            "echo '${{ secrets.DEPLOY_PASSWORD }}' | sudo -S docker system prune -af || true && echo '${{ secrets.DEPLOY_PASSWORD }}' | sudo -S chown -R ${{ secrets.DEPLOY_USER }} /opt/skuld"
 
       - name: Sync files to server (Production deployment)
         run: |
@@ -71,7 +92,8 @@ jobs:
             
             # Traefik Configuration (Prod = HTTPS / LetsEncrypt)
             echo "TRAEFIK_ENTRYPOINT=websecure" >> .env
-            echo "TRAEFIK_CERTRESOLVER_LABEL=traefik.http.routers.skuld.tls.certresolver=letsencrypt" >> .env
+            echo "TRAEFIK_CERTRESOLVER_LABEL_SKULD=traefik.http.routers.skuld.tls.certresolver=letsencrypt" >> .env
+            echo "TRAEFIK_CERTRESOLVER_LABEL_AUTHELIA=traefik.http.routers.authelia.tls.certresolver=letsencrypt" >> .env
             echo "AUTH_SCHEME=https" >> .env
 
             echo "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" >> .env
@@ -114,11 +136,64 @@ jobs:
             echo "=== Current images ==="
             mysudo docker images | grep skuld || echo "No skuld images"
             
+            # ── Safe Deploy: wait for running jobs ──────────────────────
+            echo "=== Checking for running jobs in skuld-backend ==="
+            TELEGRAM_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
+            TELEGRAM_CHAT="${{ secrets.TELEGRAM_CHAT_ID }}"
+            MAX_WAIT=3600   # max 60 minutes
+            POLL_INTERVAL=30
+            WAITED=0
+            NOTIFIED=0
+
+            send_telegram() {
+              local msg="$1"
+              curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
+                -d chat_id="${TELEGRAM_CHAT}" \
+                -d text="${msg}" \
+                -d parse_mode=HTML >/dev/null 2>&1 || true
+            }
+
+            is_job_running() {
+              # Check for any data collection process:
+              # - python main.py (any --mode)
+              # - run_data_collection.sh wrapper
+              # - timeout wrapper around main.py
+              mysudo docker exec skuld-backend sh -c \
+                'pgrep -f "python.*main\.py" || pgrep -f "run_data_collection\.sh"' \
+                >/dev/null 2>&1
+            }
+
+            while is_job_running; do
+              if [ "$NOTIFIED" -eq 0 ]; then
+                echo "⏳ main.py is running – waiting for job to finish before deploy..."
+                send_telegram "⏳ <b>Deploy triggered</b> but <code>main.py</code> is still running in skuld-backend. Waiting for the job to finish before rebuilding containers..."
+                NOTIFIED=1
+              fi
+
+              if [ "$WAITED" -ge "$MAX_WAIT" ]; then
+                echo "⚠️ Timeout after ${MAX_WAIT}s – proceeding with deploy anyway"
+                send_telegram "⚠️ <b>Deploy timeout</b>: waited ${MAX_WAIT}s for main.py to finish. Proceeding with deploy now."
+                break
+              fi
+
+              sleep $POLL_INTERVAL
+              WAITED=$((WAITED + POLL_INTERVAL))
+              echo "   … still waiting (${WAITED}s / ${MAX_WAIT}s)"
+            done
+
+            if [ "$NOTIFIED" -eq 1 ] && [ "$WAITED" -lt "$MAX_WAIT" ]; then
+              echo "✅ Job finished after ${WAITED}s – proceeding with deploy"
+              send_telegram "✅ <b>Job finished</b> after ${WAITED}s. Starting deploy now..."
+            fi
+            # ────────────────────────────────────────────────────────────
+            
             echo "=== Stopping old container ==="
-            # Explicitly stop old container name if it exists (migration to split services)
-            mysudo docker stop skuld-streamlit || true
-            mysudo docker rm skuld-streamlit || true
-            mysudo docker compose down
+            # Force-remove any leftover containers (handles restart policies & orphans)
+            mysudo docker rm -f skuld-streamlit 2>/dev/null || true
+            mysudo docker rm -f skuld-frontend 2>/dev/null || true
+            mysudo docker rm -f skuld-backend 2>/dev/null || true
+            mysudo docker rm -f authelia 2>/dev/null || true
+            mysudo docker compose down --remove-orphans
             
             echo "=== Ensuring financial_data.db is a file ==="
             if [ -d "financial_data.db" ]; then

@@ -21,6 +21,7 @@ use_local_data = "--local" in sys.argv
 # Layout
 st.set_page_config(layout="wide")
 
+
 # Titel
 st.title("SKULD - Option Viewer")
 
@@ -32,6 +33,7 @@ multifactor_swingtrading = st.Page('pages/multifactor_swingtrading.py', title="M
 expected_value = st.Page('pages/expected_value.py', title="Expected Value")
 position_insurance = st.Page('pages/position_insurance_tool.py', title="Position Insurance Tool")
 data_logs = st.Page("pages/data_change_logs.py", title="Data Logs")
+symbolpage = st.Page("pages/symbolpage.py", title="Symbol Page")
 
 # Set up navigation
 page = st.navigation(
@@ -42,7 +44,8 @@ page = st.navigation(
         position_insurance,
         multifactor_swingtrading,
         expected_value,
-        data_logs
+        data_logs,
+        symbolpage
     ]
 )
 

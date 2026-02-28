@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  # --------------------------------------------------------------------------
+  # 1. WireGuard Server (Secure Tunnel Endpoint)
+  # --------------------------------------------------------------------------
+  wireguard-server:
+    image: lscr.io/linuxserver/wireguard:latest
+    container_name: monitoring-wireguard-server
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Berlin
+      - SERVERURL=auto # Auto-detects public IP
+      - SERVERPORT=51820 # The standard WireGuard UDP port
+      - PEERS=1 # We only need one peer (the Home Server)
+      - PEERDNS=auto
+      - INTERNAL_SUBNET=10.13.13.0 # The internal VPN IP range
+      - ALLOWEDIPS=0.0.0.0/0 # Route all traffic through the tunnel
+      - LOG_CONFS=true
+    volumes:
+      - ./wireguard:/config
+      - /lib/modules:/lib/modules:ro # Optional, only if kernel module missing
+    ports:
+      - "51820:51820/udp" # WireGuard requires this UDP port open on Hetzner firewall
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+    networks:
+      - monitoring-agent-net
+
+  # --------------------------------------------------------------------------
+  # 2. Node Exporter (Hardware Metrics)
+  # --------------------------------------------------------------------------
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: monitoring-node-exporter
+    restart: unless-stopped
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    # We DO NOT expose any ports here!
+    # It will only be accessible from within the monitoring-agent-net
+    network_mode: "service:wireguard-server"
+    depends_on:
+      - wireguard-server
+
+networks:
+  monitoring-agent-net:
+    driver: bridge
