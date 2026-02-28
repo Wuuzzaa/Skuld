@@ -22,7 +22,7 @@ logger.debug(f"Start: {os.path.basename(__file__)}")
 pd.set_option('display.max_columns', None)
 pd.set_option('display.width', None)
 
-def __calc_symbol_technical_indicators(symbol, verbose=False):
+def __calc_symbol_technical_indicators(symbol, study, verbose=False):
     logger.debug(f"Calculating Technical Indicators for symbol: {symbol}")
 
     params = {
@@ -32,7 +32,16 @@ def __calc_symbol_technical_indicators(symbol, verbose=False):
     sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'technical_indicators_symbol_ohlcv.sql'
     df = select_into_dataframe(sql_file_path=sql_file_path, params=params)
 
-    skuld_indicators = ta.Study(
+
+    df.ta.study(study, verbose=verbose)
+
+    # Do not use slow as fuck :D
+    #df.ta.study(ta.AllStudy)
+
+    return df
+
+def calc_technical_indicators(verbose):
+    study = ta.Study(
         name="Skuld Indicators",
         cores=0, # Usually faster than multiprocessing
         ta=[
@@ -58,14 +67,7 @@ def __calc_symbol_technical_indicators(symbol, verbose=False):
             {"kind": "rsi", "length": 14},
         ]
     )
-    df.ta.study(skuld_indicators, verbose=verbose)
 
-    # Do not use slow as fuck :D
-    #df.ta.study(ta.AllStudy)
-
-    return df
-
-def calc_technical_indicators(verbose):
     # 1. get all symbols
     sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'get_symbolnames_asc.sql'
     df = select_into_dataframe(sql_file_path=sql_file_path)
@@ -73,7 +75,7 @@ def calc_technical_indicators(verbose):
 
     # 2. calculate the technical indicators for each symbol
     for symbol in tqdm(symbols, desc="calculate the technical indicators for each symbol"):
-        df = __calc_symbol_technical_indicators(symbol=symbol, verbose=verbose)
+        df = __calc_symbol_technical_indicators(symbol=symbol, study=study, verbose=verbose)
 
         # 3. update the database
         # todo
