@@ -20,6 +20,8 @@ st.title("Position Insurance Tool")
 st.markdown("""
 Dieses Tool hilft, bestehende Aktienpositionen mit **Protective Puts** abzusichern.
 Es berechnet den **Locked-in Profit** (garantierten Mindestgewinn) für verschiedene Put-Optionen.
+
+💡 *Zu viele Optionen? Nutze den [Smart Finder](/smart_finder) für automatische Empfehlungen.*
 """)
 
 # Initialize Session State
@@ -212,9 +214,9 @@ if st.session_state['pi_df'] is not None:
             collar_enabled = False
 
         # =====================================================
-        # ROW 2: Filters (Profit Slider + Call-Strike warning)        
+        # ROW 2: Filters
         # =====================================================
-        col_filters_1, col_filters_2 = st.columns([1, 1])
+        col_filters_1, col_filters_2, col_filters_3 = st.columns([1, 1, 1])
         
         with col_filters_1:
             max_profit_pct = df['locked_in_profit_pct'].max()
@@ -231,9 +233,17 @@ if st.session_state['pi_df'] is not None:
             )
         
         with col_filters_2:
+            min_open_interest = st.number_input(
+                "Min. Open Interest",
+                min_value=0,
+                value=0,
+                step=10,
+                help="Nur Optionen mit mindestens diesem Open Interest anzeigen (0 = kein Filter)."
+            )
+        
+        with col_filters_3:
             if collar_enabled and selected_call_strike is not None:
                 st.write("")  # spacing
-                # Warning if call strike < any put strike in filtered data
                 st.caption(f"Gewählter Call: {selected_call_strike:.2f}$ Strike, Prämie {selected_call_price:.2f}$")
 
         # --- Applying Filters ---
@@ -248,6 +258,10 @@ if st.session_state['pi_df'] is not None:
         # 2. Profit Filter
         if min_profit_target > 0:
             display_df = display_df[display_df['locked_in_profit_pct'] >= min_profit_target]
+
+        # 3. Open Interest Filter
+        if min_open_interest > 0:
+            display_df = display_df[display_df['open_interest'] >= min_open_interest]
 
         # --- Calculate Collar Metrics if enabled ---
         if collar_enabled and selected_call_price is not None and selected_call_strike is not None:
@@ -321,7 +335,7 @@ if st.session_state['pi_df'] is not None:
             "annualized_cost": st.column_config.NumberColumn("Kosten p.a. ($)", format="%.2f $"),
             "annualized_cost_pct": st.column_config.NumberColumn("Kosten p.a. (%)", format="%.2f %%"),
             "upside_drag_pct": st.column_config.NumberColumn("Perf.-Drag (%)", format="%.2f %%"),
-            "days_to_expiration": None,
+            "days_to_expiration": st.column_config.NumberColumn("DTE", format="%d"),
             "live_stock_price": None,
             "stock_close": None,
             "greeks_delta": st.column_config.NumberColumn("Delta", format="%.2f"),
@@ -353,6 +367,7 @@ if st.session_state['pi_df'] is not None:
             base_cols = [
                 'option_label',
                 'option_price',
+                'days_to_expiration',
                 'collar_net_cost',
                 'collar_new_cost_basis',
                 'collar_locked_in_profit',
@@ -362,12 +377,14 @@ if st.session_state['pi_df'] is not None:
                 'pct_assigned',
                 'time_value_per_month',
                 'downside_protection_pct',
+                'open_interest',
             ]
         else:
             header_title = f"Married Put Analyse – {header_month}"
             base_cols = [
                 'option_label',
                 'option_price',
+                'days_to_expiration',
                 'insurance_cost_pct',
                 'time_value_per_month',
                 'annualized_cost_pct',
@@ -375,6 +392,7 @@ if st.session_state['pi_df'] is not None:
                 'locked_in_profit',
                 'locked_in_profit_pct',
                 'downside_protection_pct',
+                'open_interest',
             ]
 
         st.markdown(f"### {header_title} ({len(display_df)} Optionen)")
