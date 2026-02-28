@@ -24,6 +24,11 @@ def calculate_position_insurance_metrics(df: pd.DataFrame, cost_basis: float) ->
         - risk (value and %)
         - time_value
         - time_value_per_month
+        - insurance_cost_pct
+        - downside_protection_pct
+        - annualized_cost
+        - annualized_cost_pct
+        - upside_drag_pct
     """
     if df.empty:
         return df
@@ -69,7 +74,38 @@ def calculate_position_insurance_metrics(df: pd.DataFrame, cost_basis: float) ->
         axis=1
     )
     
-    # Unrealized Profit (for reference, though this is usually singular per stock, not per option)
-    # This might be better calculated outside or displayed in the header
-    
+    # 7. Insurance Cost % = (Put Price / Stock Price) * 100
+    #    Shows the cost of insurance as a percentage of the current stock value
+    df['insurance_cost_pct'] = df.apply(
+        lambda row: (row['option_price'] / row['live_stock_price'] * 100) if row['live_stock_price'] > 0 else 0,
+        axis=1
+    )
+
+    # 8. Downside Protection % = ((Stock Price - Strike) / Stock Price) * 100
+    #    How far the stock must fall before the put kicks in.
+    #    Negative values mean the put is already ITM (stronger protection).
+    df['downside_protection_pct'] = df.apply(
+        lambda row: ((row['live_stock_price'] - row['strike_price']) / row['live_stock_price'] * 100) if row['live_stock_price'] > 0 else 0,
+        axis=1
+    )
+
+    # 9. Annualized Cost ($) = (Time Value / DTE) * 365
+    #    Makes time-value costs comparable across different expirations
+    df['annualized_cost'] = df.apply(
+        lambda row: (row['time_value'] / row['days_to_expiration']) * 365 if row['days_to_expiration'] > 0 else 0,
+        axis=1
+    )
+
+    # 10. Annualized Cost % = (Annualized Cost / Stock Price) * 100
+    #     Percentage annual cost relative to stock price
+    df['annualized_cost_pct'] = df.apply(
+        lambda row: (row['annualized_cost'] / row['live_stock_price'] * 100) if row['live_stock_price'] > 0 else 0,
+        axis=1
+    )
+
+    # 11. Upside Drag % = (Put Price / Stock Price) * 100
+    #     Performance drag from the put cost on upside moves
+    #     Same formula as insurance_cost_pct but separate column for semantic clarity in UI
+    df['upside_drag_pct'] = df['insurance_cost_pct']
+
     return df

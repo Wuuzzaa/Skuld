@@ -8,6 +8,7 @@ from src.database import select_into_dataframe
 from src.logger_config import setup_logging
 from src.page_display_dataframe import page_display_dataframe
 from src.position_insurance_calculation import calculate_position_insurance_metrics
+from pages.documentation_text.position_insurance_page_doc import get_position_insurance_documentation
 
 # enable logging
 setup_logging(component="streamlit", log_level=logging.DEBUG, console_output=True)
@@ -197,11 +198,24 @@ if st.session_state['pi_df'] is not None:
                 best_value_idx = candidates['time_value_per_month'].idxmin()
                 best_value_row = candidates.loc[best_value_idx]
         
-        # Display Recommendation
+        # --- Smart Logic: Recommendation (Best Protection) ---
+        best_protection_row = None
+        if not display_df.empty:
+            best_protection_idx = display_df['downside_protection_pct'].idxmin()
+            best_protection_row = display_df.loc[best_protection_idx]
+
+        # Display Recommendations
         if best_value_row is not None:
              st.info(
                 f"💡 **Effizienz-Tipp:** {best_value_row['option_label']} kostet nur **{best_value_row['time_value_per_month']:.2f} $/Monat** Zeitwert "
                 f"und sichert **{best_value_row['locked_in_profit_pct']:.2f}%** Gewinn."
+            )
+
+        if best_protection_row is not None:
+            st.info(
+                f"🛡️ **Bester Schutz:** {best_protection_row['option_label']} – "
+                f"Absicherung ab **{best_protection_row['downside_protection_pct']:.2f}%** "
+                f"unter aktuellem Kurs, kostet **{best_protection_row['annualized_cost_pct']:.2f}% p.a.**"
             )
 
         # Column Config
@@ -215,6 +229,11 @@ if st.session_state['pi_df'] is not None:
             "locked_in_profit_pct": st.column_config.NumberColumn("Locked-in Profit (%)", format="%.2f %%"),
             "risk_pct": st.column_config.NumberColumn("Max Risiko", format="%.2f %%"),
             "time_value_per_month": st.column_config.NumberColumn("Zeitwert/Monat", format="%.2f $"),
+            "insurance_cost_pct": st.column_config.NumberColumn("Versicherung (%)", format="%.2f %%"),
+            "downside_protection_pct": st.column_config.NumberColumn("Absicherungstiefe (%)", format="%.2f %%"),
+            "annualized_cost": st.column_config.NumberColumn("Kosten p.a. ($)", format="%.2f $"),
+            "annualized_cost_pct": st.column_config.NumberColumn("Kosten p.a. (%)", format="%.2f %%"),
+            "upside_drag_pct": st.column_config.NumberColumn("Perf.-Drag (%)", format="%.2f %%"),
             "days_to_expiration": None, # In label
             "live_stock_price": None, # Hide
             "stock_close": None, # Hide
@@ -225,6 +244,9 @@ if st.session_state['pi_df'] is not None:
             "greeks_theta": None,
             "intrinsic_value": None,
             "time_value": None,
+            "annualized_cost": None, # Hidden, shown via annualized_cost_pct
+            "upside_drag_pct": None, # Hidden by default, same as insurance_cost_pct
+            "risk_pct": None, # Hidden, info is in locked_in_profit
             "exp_month_sort": None, # Helper
             "exp_month_display": None # Helper
         }
@@ -233,7 +255,7 @@ if st.session_state['pi_df'] is not None:
         
         # Reorder columns to put option_label first
         # We need to construct a robust column list.
-        base_cols = ['option_label', 'option_price', 'time_value_per_month', 'new_cost_basis', 'locked_in_profit', 'locked_in_profit_pct']
+        base_cols = ['option_label', 'option_price', 'insurance_cost_pct', 'time_value_per_month', 'annualized_cost_pct', 'new_cost_basis', 'locked_in_profit', 'locked_in_profit_pct', 'downside_protection_pct']
         # Add others to end if they exist
         cols_to_show = base_cols + [c for c in display_df.columns if c not in base_cols and c in column_config and column_config[c] is not None]
         
@@ -245,3 +267,7 @@ if st.session_state['pi_df'] is not None:
             display_df_ordered['symbol'] = display_df['symbol']
 
         page_display_dataframe(display_df_ordered, page='position_insurance', symbol_column='symbol', column_config=column_config)
+
+# --- Documentation (always visible at bottom) ---
+with st.expander("📖 Dokumentation – Feldübersicht", expanded=False):
+    st.markdown(get_position_insurance_documentation())
