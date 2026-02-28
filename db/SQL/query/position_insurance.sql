@@ -16,8 +16,9 @@ FROM
     "OptionDataMerged"
 WHERE
     symbol = :symbol
-    AND contract_type = 'put'
+    AND contract_type IN ('put', 'call')
     AND expiration_date >= :today
 ORDER BY
+    contract_type ASC,
     expiration_date ASC,
     strike_price ASC;

@@ -109,3 +109,92 @@ def calculate_position_insurance_metrics(df: pd.DataFrame, cost_basis: float) ->
     df['upside_drag_pct'] = df['insurance_cost_pct']
 
     return df
+
+
+def calculate_collar_metrics(
+    put_df: pd.DataFrame,
+    call_price: float,
+    call_strike: float,
+    cost_basis: float
+) -> pd.DataFrame:
+    """
+    Calculates Collar metrics for a selected Call applied to all Put rows.
+
+    The Collar strategy combines a Protective Put (already calculated) with
+    a Covered Call to offset the put premium. The user selects ONE call
+    (strike + price) which is applied to every put row for comparison.
+
+    Args:
+        put_df: DataFrame with Put options (already enriched with Married-Put metrics
+                via calculate_position_insurance_metrics). Must contain:
+                - strike_price (put strike)
+                - option_price (put price)
+                - live_stock_price
+        call_price: Midpoint price of the selected Call option.
+        call_strike: Strike price of the selected Call option.
+        cost_basis: Original cost basis per share.
+
+    Returns:
+        DataFrame with additional Collar columns:
+        - collar_new_cost_basis
+        - collar_locked_in_profit
+        - collar_locked_in_profit_pct
+        - collar_net_cost
+        - collar_max_profit
+        - collar_max_profit_pct
+        - pct_assigned
+        - pct_assigned_with_put
+    """
+    if put_df.empty:
+        return put_df
+
+    df = put_df.copy()
+
+    # Collar New Cost Basis = Cost Basis + Put Price - Call Price
+    df['collar_new_cost_basis'] = cost_basis + df['option_price'] - call_price
+
+    # Collar Locked-in Profit = Put Strike - Collar New Cost Basis
+    df['collar_locked_in_profit'] = df['strike_price'] - df['collar_new_cost_basis']
+
+    # Collar Locked-in Profit % = (Collar Locked-in Profit / Collar NCB) * 100
+    df['collar_locked_in_profit_pct'] = df.apply(
+        lambda row: (row['collar_locked_in_profit'] / row['collar_new_cost_basis'] * 100)
+        if row['collar_new_cost_basis'] != 0 else 0,
+        axis=1
+    )
+
+    # Collar Net Cost = Put Price - Call Price
+    # Positive = Debit (you pay), Negative = Credit (you receive)
+    df['collar_net_cost'] = df['option_price'] - call_price
+
+    # Collar Max Profit = Call Strike - Collar New Cost Basis
+    # Maximum gain if stock rises to or above the call strike (shares get called away)
+    df['collar_max_profit'] = call_strike - df['collar_new_cost_basis']
+
+    # Collar Max Profit % = (Collar Max Profit / Collar NCB) * 100
+    df['collar_max_profit_pct'] = df.apply(
+        lambda row: (row['collar_max_profit'] / row['collar_new_cost_basis'] * 100)
+        if row['collar_new_cost_basis'] != 0 else 0,
+        axis=1
+    )
+
+    # % Assigned = (Call Strike - Collar NCB) / Collar NCB * 100
+    # Same as collar_max_profit_pct (gain if assigned at call strike)
+    df['pct_assigned'] = df['collar_max_profit_pct']
+
+    # Put Value at Call Strike = max(0, Put Strike - Call Strike)
+    # If put strike > call strike, the put still has value at assignment price
+    df['_put_value_at_call_strike'] = (df['strike_price'] - call_strike).clip(lower=0)
+
+    # % Assigned with Put = (Call Strike - Collar NCB + Put Value at Call Strike) / Collar NCB * 100
+    df['pct_assigned_with_put'] = df.apply(
+        lambda row: ((call_strike - row['collar_new_cost_basis'] + row['_put_value_at_call_strike'])
+                     / row['collar_new_cost_basis'] * 100)
+        if row['collar_new_cost_basis'] != 0 else 0,
+        axis=1
+    )
+
+    # Drop helper column
+    df.drop(columns=['_put_value_at_call_strike'], inplace=True)
+
+    return df

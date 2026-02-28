@@ -124,4 +124,82 @@ Multiply die Kosten × 100 für den tatsächlichen Kontraktpreis.
 
 💡 **Zeitwert verfällt** – Je näher der Verfall, desto schneller verliert der Put an Zeitwert
 (Theta-Verfall). Bei längeren Laufzeiten ist der Zeitwert pro Monat oft günstiger.
+
+---
+
+## 🔗 Collar-Strategie (optional)
+
+### Was ist ein Collar?
+
+Ein **Collar** kombiniert einen Protective Put (Absicherung) mit einem **Covered Call** (Einnahme).
+Du kaufst einen Put UND verkaufst gleichzeitig einen Call auf dieselbe Aktie.
+Die Call-Prämie reduziert die Kosten der Absicherung – im Gegenzug begrenzt du dein Aufwärtspotenzial.
+
+> **Collar = Long Stock + Long Put + Short Call**
+
+### Aktivierung
+
+Wähle im Dropdown **"Sell Call Month"** einen Verfallsmonat für den Call (nicht "None").
+Dann erscheint ein weiteres Dropdown zur Auswahl des Call-Strikes.
+
+### Collar-Metriken
+
+**Netto-Kosten** – Differenz Put-Preis minus Call-Prämie
+```
+Netto-Kosten = Put-Preis - Call-Preis
+```
+*Positiv = Debit (du zahlst). Negativ = Credit (du erhältst Geld). Bei 0 = "Costless Collar".*
+
+**Neuer Einstand (Collar)** – Einstandskurs + Put-Preis - Call-Preis
+```
+Neuer Einstand (Collar) = Einstandskurs + Put-Preis - Call-Preis
+```
+
+**Locked-in Profit (Collar)** – Garantierter Mindestgewinn mit Collar
+```
+Locked-in Profit (Collar) = Put Strike - Neuer Einstand (Collar)
+```
+
+**Max. Gewinn ($)** – Maximaler Gewinn, falls Aktie bis zum Call-Strike steigt (Assignment)
+```
+Max. Gewinn = Call Strike - Neuer Einstand (Collar)
+```
+
+**Max. Gewinn (%)** – Max. Gewinn relativ zum Collar-Einstand
+```
+Max. Gewinn (%) = (Max. Gewinn / Neuer Einstand (Collar)) × 100
+```
+
+**% Assigned** – Rendite bei Assignment (Aktien werden zum Call-Strike abgerufen)
+```
+% Assigned = (Call Strike - Neuer Einstand (Collar)) / Neuer Einstand (Collar) × 100
+```
+
+**% Assigned (mit Put)** – Rendite bei Assignment inkl. Put-Restwert
+```
+Put-Wert bei Call-Strike = max(0, Put Strike - Call Strike)
+% Assigned (mit Put) = (Call Strike - Neuer Einstand + Put-Wert) / Neuer Einstand × 100
+```
+*Relevant wenn Put Strike > Call Strike (seltener Fall).*
+
+### Collar-Beispiel
+
+| Wert | Betrag |
+|---|---|
+| Einstandskurs | 120.00$ |
+| Put Strike / Preis | 145.00$ / 8.00$ |
+| Call Strike / Preis | 160.00$ / 3.50$ |
+| **Netto-Kosten** | **4.50$ (Debit)** |
+| **Neuer Einstand (Collar)** | **124.50$** |
+| **Locked-in Profit** | **20.50$ (16.47%)** |
+| **Max. Gewinn** | **35.50$ (28.51%)** |
+
+### Collar-Hinweise
+
+| Situation | Erklärung |
+|---|---|
+| Netto-Kosten negativ (Credit) | Call-Prämie > Put-Preis – du erhältst Geld für die Absicherung! |
+| Costless Collar (Netto = 0) | Absicherung ohne Zusatzkosten, aber mit begrenztem Upside |
+| Call-Strike < Put-Strike | Unüblich – Warnung wird angezeigt |
+| Call- und Put-Monat unterschiedlich | Möglich (z.B. kurzfristiger Call, langfristiger Put) |
 """
