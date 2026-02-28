@@ -1,11 +1,11 @@
 SELECT
+    symbol,
     snapshot_date,
     open,
     high,
     low,
     close,
-    volume,
-    dividends
+    volume
 FROM "StockPricesYahooHistoryDaily"
-WHERE symbol = :symbol
-ORDER BY snapshot_date ASC ;
+WHERE symbol = ANY(:symbols)
+ORDER BY symbol ASC, snapshot_date ASC ;

@@ -22,64 +22,71 @@ logger.debug(f"Start: {os.path.basename(__file__)}")
 pd.set_option('display.max_columns', None)
 pd.set_option('display.width', None)
 
-def __calc_symbol_technical_indicators(symbol, study, verbose=False):
-    logger.debug(f"Calculating Technical Indicators for symbol: {symbol}")
+SKULD_INDICATORS = ta.Study(
+    name="Skuld Indicators",
+    cores=0,  # Usually faster than multiprocessing
+    ta=[
+        {"kind": "ema", "length": 5},
+        {"kind": "ema", "length": 10},
+        {"kind": "ema", "length": 20},
+        {"kind": "ema", "length": 30},
+        {"kind": "ema", "length": 50},
+        {"kind": "ema", "length": 100},
+        {"kind": "ema", "length": 200},
+        {"kind": "sma", "length": 5},
+        {"kind": "sma", "length": 10},
+        {"kind": "sma", "length": 20},
+        {"kind": "sma", "length": 30},
+        {"kind": "sma", "length": 50},
+        {"kind": "sma", "length": 100},
+        {"kind": "sma", "length": 200},
+        {"kind": "macd"},
+        {"kind": "bbands", "length": 20},
+        {"kind": "atr", "length": 14},
+        {"kind": "adx", "length": 10},
+        {"kind": "stoch", "k": 14, "d": 3, "smooth_k": 1},
+        {"kind": "rsi", "length": 14},
+    ],
+)
 
-    params = {
-        "symbol": symbol,
-    }
 
-    sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'technical_indicators_symbol_ohlcv.sql'
-    df = select_into_dataframe(sql_file_path=sql_file_path, params=params)
+def __calc_symbol_technical_indicators(df: pd.DataFrame, verbose: bool = False) -> pd.DataFrame:
+    if df.empty:
+        return df
 
-
-    df.ta.study(study, verbose=verbose)
-
-    # Do not use slow as fuck :D
-    #df.ta.study(ta.AllStudy)
-
+    df = df.sort_values("snapshot_date", ascending=True, kind="stable")
+    df.ta.study(SKULD_INDICATORS, verbose=verbose)
     return df
 
-def calc_technical_indicators(verbose):
-    study = ta.Study(
-        name="Skuld Indicators",
-        cores=0, # Usually faster than multiprocessing
-        ta=[
-            {"kind": "ema", "length": 5},
-            {"kind": "ema", "length": 10},
-            {"kind": "ema", "length": 20},
-            {"kind": "ema", "length": 30},
-            {"kind": "ema", "length": 50},
-            {"kind": "ema", "length": 100},
-            {"kind": "ema", "length": 200},
-            {"kind": "sma", "length": 5},
-            {"kind": "sma", "length": 10},
-            {"kind": "sma", "length": 20},
-            {"kind": "sma", "length": 30},
-            {"kind": "sma", "length": 50},
-            {"kind": "sma", "length": 100},
-            {"kind": "sma", "length": 200},
-            {"kind": "macd"},
-            {"kind": "bbands", "length": 20},
-            {"kind": "atr", "length": 14},
-            {"kind": "adx", "length": 10},
-            {"kind": "stoch", "k": 14, "d": 3, "smooth_k": 1},
-            {"kind": "rsi", "length": 14},
-        ]
-    )
 
-    # 1. get all symbols
-    sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'get_symbolnames_asc.sql'
-    df = select_into_dataframe(sql_file_path=sql_file_path)
-    symbols = df["symbol"].to_list()
+def _chunked(values: list, chunk_size: int):
+    for i in range(0, len(values), chunk_size):
+        yield values[i:i + chunk_size]
 
-    # 2. calculate the technical indicators for each symbol
-    for symbol in tqdm(symbols, desc="calculate the technical indicators for each symbol"):
-        df = __calc_symbol_technical_indicators(symbol=symbol, study=study, verbose=verbose)
 
-        # 3. update the database
-        # todo
+def calc_technical_indicators(verbose: bool, symbol_batch_size: int = 500):
+    # 1) get all symbols
+    sql_file_path = PATH_DATABASE_QUERY_FOLDER / "get_symbolnames_asc.sql"
+    df_symbols = select_into_dataframe(sql_file_path=sql_file_path)
+    symbols = df_symbols["symbol"].to_list()
 
+    # 2) batchweise OHLCV laden (weniger DB-Roundtrips) und danach pro Symbol berechnen
+    sql_file_path = PATH_DATABASE_QUERY_FOLDER / "technical_indicators_symbol_ohlcv.sql"
+
+    for sym_batch in tqdm(list(_chunked(symbols, symbol_batch_size)), desc="Symbol-Batches"):
+        params = {"symbols": sym_batch}
+        df_batch = select_into_dataframe(sql_file_path=sql_file_path, params=params)
+
+        if df_batch.empty:
+            continue
+
+        # Erwartet: SQL liefert symbol + snapshot_date, sortiert nach symbol, snapshot_date
+        for symbol, df_symbol in df_batch.groupby("symbol", sort=False):
+            logger.debug(f"{symbol}: rows={len(df_symbol)}")
+            df_out = __calc_symbol_technical_indicators(df=df_symbol, verbose=verbose)
+            pass
+            # 3) update the database
+            # todo (kommt später)
 
 
 if __name__ == "__main__":
