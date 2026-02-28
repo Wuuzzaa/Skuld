@@ -5,6 +5,7 @@ SELECT
     contract_type,
     day_close AS last_option_price,
     day_close AS option_price, -- Alias for consistency
+    premium_option_price,
     greeks_delta,
     greeks_theta,
     open_interest,

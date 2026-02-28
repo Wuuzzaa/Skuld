@@ -6,9 +6,12 @@ import numpy as np
 
 from src.married_put_finder import (
     MONTH_MAP,
+    _midpoint_price,
     calculate_collar_metrics,
     calculate_put_only_metrics,
+    filter_strikes_by_moneyness,
     get_month_options,
+    get_month_options_with_dte,
 )
 
 
@@ -472,3 +475,239 @@ class TestPowerOptionsScenarioPG:
         # 11.28 - 11.33 = -0.05 (slightly negative due to data snapshot)
         # In practice this can happen with stale/midpoint data
         assert result["put_time_value"] == pytest.approx(-0.05, abs=0.02)
+
+
+# =====================================================================
+# _midpoint_price
+# =====================================================================
+class TestMidpointPrice:
+    """Tests for the _midpoint_price helper."""
+
+    def test_uses_premium_option_price_when_present(self):
+        df = pd.DataFrame({
+            "option_price": [5.0, 6.0],
+            "premium_option_price": [5.5, 6.5],
+        })
+        result = _midpoint_price(df)
+        assert list(result) == [5.5, 6.5]
+
+    def test_falls_back_to_option_price_when_no_column(self):
+        df = pd.DataFrame({"option_price": [5.0, 6.0]})
+        result = _midpoint_price(df)
+        assert list(result) == [5.0, 6.0]
+
+    def test_fills_nan_with_option_price(self):
+        df = pd.DataFrame({
+            "option_price": [5.0, 6.0],
+            "premium_option_price": [5.5, np.nan],
+        })
+        result = _midpoint_price(df)
+        assert result.iloc[0] == pytest.approx(5.5)
+        assert result.iloc[1] == pytest.approx(6.0)
+
+    def test_all_nan_premium_falls_back(self):
+        df = pd.DataFrame({
+            "option_price": [3.0],
+            "premium_option_price": [np.nan],
+        })
+        result = _midpoint_price(df)
+        assert result.iloc[0] == pytest.approx(3.0)
+
+
+# =====================================================================
+# calculate_put_only_metrics with premium_option_price
+# =====================================================================
+class TestPutOnlyMetricsWithPremiumPrice:
+    """Verify that premium_option_price takes priority over option_price."""
+
+    @pytest.fixture()
+    def result(self):
+        df = pd.DataFrame([{
+            "symbol": "TEST",
+            "strike_price": 145.0,
+            "option_price": 8.0,
+            "premium_option_price": 8.50,
+            "days_to_expiration": 60,
+            "live_stock_price": 150.0,
+            "expiration_date": pd.Timestamp("2026-04-30"),
+            "contract_type": "put",
+            "open_interest": 100,
+        }])
+        return calculate_put_only_metrics(df, cost_basis=120.0, current_price=150.0).iloc[0]
+
+    def test_uses_premium_price(self, result):
+        assert result["put_midpoint_price"] == pytest.approx(8.50)
+
+    def test_new_cost_basis_uses_premium(self, result):
+        # 120 + 8.50 = 128.50
+        assert result["new_cost_basis"] == pytest.approx(128.50)
+
+    def test_locked_in_profit_uses_premium(self, result):
+        # 145 - 128.50 = 16.50
+        assert result["locked_in_profit"] == pytest.approx(16.50)
+
+    def test_time_value_uses_premium(self, result):
+        # OTM → intrinsic = 0, time value = 8.50
+        assert result["put_time_value"] == pytest.approx(8.50)
+
+
+# =====================================================================
+# get_month_options_with_dte
+# =====================================================================
+class TestGetMonthOptionsWithDTE:
+    def test_includes_dte_in_label(self):
+        df = pd.DataFrame({
+            "expiration_date": [
+                pd.Timestamp("2025-10-15"),
+                pd.Timestamp("2025-10-17"),
+            ],
+            "days_to_expiration": [42, 44],
+        })
+        result = get_month_options_with_dte(df)
+        assert len(result) == 1
+        ym, label = result[0]
+        assert ym == "2025-10"
+        assert "Oktober" in label
+        assert "44 DTE" in label  # max DTE
+
+    def test_multiple_months_sorted(self):
+        df = pd.DataFrame({
+            "expiration_date": [
+                pd.Timestamp("2025-12-15"),
+                pd.Timestamp("2025-10-15"),
+            ],
+            "days_to_expiration": [100, 42],
+        })
+        result = get_month_options_with_dte(df)
+        assert len(result) == 2
+        assert result[0][0] == "2025-10"
+        assert result[1][0] == "2025-12"
+        assert "42 DTE" in result[0][1]
+        assert "100 DTE" in result[1][1]
+
+    def test_empty_df(self):
+        df = pd.DataFrame({
+            "expiration_date": pd.Series([], dtype="datetime64[ns]"),
+            "days_to_expiration": pd.Series([], dtype="float64"),
+        })
+        result = get_month_options_with_dte(df)
+        assert result == []
+
+    def test_label_format(self):
+        df = pd.DataFrame({
+            "expiration_date": [pd.Timestamp("2026-01-20")],
+            "days_to_expiration": [180],
+        })
+        result = get_month_options_with_dte(df)
+        ym, label = result[0]
+        assert label == "Januar 2026 (180 DTE)"
+
+
+# =====================================================================
+# filter_strikes_by_moneyness
+# =====================================================================
+class TestFilterStrikesByMoneyness:
+    @pytest.fixture()
+    def df(self):
+        """Option chain with strikes from 90 to 200 (step 10)."""
+        return pd.DataFrame({
+            "strike_price": list(range(90, 210, 10)),
+            "option_price": [1.0] * 12,
+        })
+
+    def test_all_mode_returns_everything(self, df):
+        result = filter_strikes_by_moneyness(df, current_price=150.0, mode="all")
+        assert len(result) == len(df)
+
+    def test_atm_mode(self, df):
+        # current_price=150 → lower=142.5, upper=157.5
+        result = filter_strikes_by_moneyness(df, current_price=150.0, mode="atm")
+        assert set(result["strike_price"].tolist()) == {150.0}
+
+    def test_atm_10_mode(self, df):
+        # current_price=150 → lower=142.5, upper=165
+        result = filter_strikes_by_moneyness(df, current_price=150.0, mode="atm_10")
+        expected = {150.0, 160.0}
+        assert set(result["strike_price"].tolist()) == expected
+
+    def test_atm_20_mode(self, df):
+        # current_price=150 → lower=142.5, upper=180
+        result = filter_strikes_by_moneyness(df, current_price=150.0, mode="atm_20")
+        expected = {150.0, 160.0, 170.0, 180.0}
+        assert set(result["strike_price"].tolist()) == expected
+
+    def test_atm_30_mode(self, df):
+        # current_price=150 → lower=142.5, upper=195
+        result = filter_strikes_by_moneyness(df, current_price=150.0, mode="atm_30")
+        expected = {150.0, 160.0, 170.0, 180.0, 190.0}
+        assert set(result["strike_price"].tolist()) == expected
+
+    def test_empty_df(self):
+        result = filter_strikes_by_moneyness(pd.DataFrame(), current_price=150.0, mode="atm")
+        assert result.empty
+
+    def test_no_matches(self):
+        df = pd.DataFrame({"strike_price": [50.0, 300.0], "option_price": [1.0, 1.0]})
+        result = filter_strikes_by_moneyness(df, current_price=150.0, mode="atm")
+        assert result.empty
+
+    def test_returns_copy(self, df):
+        """Ensure the returned DataFrame is a copy, not a view."""
+        result = filter_strikes_by_moneyness(df, current_price=150.0, mode="atm_20")
+        result["option_price"] = 999.0
+        assert df["option_price"].iloc[0] == 1.0  # original unchanged
+
+    def test_unknown_mode_defaults_to_20pct(self, df):
+        """Unknown mode falls back to 20% via pct_map.get default."""
+        result = filter_strikes_by_moneyness(df, current_price=150.0, mode="unknown")
+        expected = filter_strikes_by_moneyness(df, current_price=150.0, mode="atm_20")
+        assert list(result["strike_price"]) == list(expected["strike_price"])
+
+
+# =====================================================================
+# Collar with premium_option_price
+# =====================================================================
+class TestCollarWithPremiumPrice:
+    """Verify collar calculation uses premium_option_price for both puts and calls."""
+
+    @pytest.fixture()
+    def result(self):
+        puts = pd.DataFrame([{
+            "symbol": "TEST",
+            "strike_price": 145.0,
+            "option_price": 8.0,
+            "premium_option_price": 8.50,
+            "days_to_expiration": 60,
+            "live_stock_price": 150.0,
+            "expiration_date": pd.Timestamp("2026-04-30"),
+            "contract_type": "put",
+            "open_interest": 100,
+        }])
+        calls = pd.DataFrame([{
+            "symbol": "TEST",
+            "strike_price": 145.0,
+            "option_price": 3.0,
+            "premium_option_price": 3.25,
+            "days_to_expiration": 30,
+            "live_stock_price": 150.0,
+            "expiration_date": pd.Timestamp("2026-03-30"),
+            "contract_type": "call",
+            "open_interest": 200,
+        }])
+        return calculate_collar_metrics(
+            puts, calls, cost_basis=120.0, current_price=150.0,
+        ).iloc[0]
+
+    def test_put_uses_premium_price(self, result):
+        assert result["put_midpoint_price"] == pytest.approx(8.50)
+
+    def test_call_uses_premium_price(self, result):
+        assert result["call_midpoint_price"] == pytest.approx(3.25)
+
+    def test_ncb_uses_both_premium_prices(self, result):
+        # 120 + 8.50 - 3.25 = 125.25
+        assert result["new_cost_basis"] == pytest.approx(125.25)
+
+    def test_locked_in_profit(self, result):
+        # 145 - 125.25 = 19.75
+        assert result["locked_in_profit"] == pytest.approx(19.75)

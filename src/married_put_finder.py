@@ -7,11 +7,15 @@ Provides PowerOptions-style metrics for the RadioActive Trading method:
 
 Auto-pairs each put with the call at the **same strike** in the chosen
 call month.  If no exact match exists, the call columns stay empty.
+
+Uses ``premium_option_price`` (midpoint) from ``OptionDataMerged`` when
+available; falls back to ``option_price`` (day_close) otherwise.
 """
 
 import logging
 from datetime import date
 
+import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -25,6 +29,19 @@ MONTH_MAP: dict[int, str] = {
 
 
 # ── helpers ─────────────────────────────────────────────────────────
+
+def _midpoint_price(df: pd.DataFrame) -> pd.Series:
+    """
+    Return the best available price per row.
+
+    Prefer ``premium_option_price`` (true midpoint from the view);
+    fall back to ``option_price`` (day_close alias) when the midpoint
+    column is missing or NaN.
+    """
+    if "premium_option_price" in df.columns:
+        return df["premium_option_price"].fillna(df["option_price"])
+    return df["option_price"]
+
 
 def _put_label(row: pd.Series) -> str:
     """Build a readable put description like 'TSLA 2024 02-AUG 240.00 PUT (28)'."""
@@ -58,12 +75,15 @@ def calculate_put_only_metrics(
 
     Matches the PowerOptions "Sell Call Month = None" view.
 
+    Uses ``premium_option_price`` (midpoint) when available, otherwise
+    ``option_price``.
+
     Returned columns (appended to a copy of *puts_df*):
         put_label              – e.g. "PG 2025 03-OCT 170.00 PUT (42)"
-        put_midpoint_price     – option_price
-        put_time_value         – option_price − max(0, strike − current_price)
+        put_midpoint_price     – premium_option_price (or option_price fallback)
+        put_time_value         – midpoint − max(0, strike − current_price)
         put_time_value_per_mo  – time_value / (DTE / 30)
-        new_cost_basis         – cost_basis + put_price
+        new_cost_basis         – cost_basis + midpoint
         locked_in_profit       – strike − new_cost_basis
         locked_in_profit_pct   – locked_in_profit / new_cost_basis × 100
     """
@@ -73,12 +93,15 @@ def calculate_put_only_metrics(
     df = puts_df.copy()
     df["expiration_date"] = pd.to_datetime(df["expiration_date"])
 
+    # Best available price
+    midprice = _midpoint_price(df)
+
     df["put_label"] = df.apply(_put_label, axis=1)
-    df["put_midpoint_price"] = df["option_price"]
+    df["put_midpoint_price"] = midprice
 
     # Intrinsic & time value
     df["intrinsic_value"] = (df["strike_price"] - current_price).clip(lower=0)
-    df["put_time_value"] = df["option_price"] - df["intrinsic_value"]
+    df["put_time_value"] = midprice - df["intrinsic_value"]
 
     # Time value per month (30-day basis)
     df["put_time_value_per_mo"] = df.apply(
@@ -88,7 +111,7 @@ def calculate_put_only_metrics(
     )
 
     # New cost basis & locked-in profit
-    df["new_cost_basis"] = cost_basis + df["option_price"]
+    df["new_cost_basis"] = cost_basis + midprice
     df["locked_in_profit"] = df["strike_price"] - df["new_cost_basis"]
     df["locked_in_profit_pct"] = df.apply(
         lambda r: (r["locked_in_profit"] / r["new_cost_basis"] * 100)
@@ -116,8 +139,8 @@ def calculate_collar_metrics(
         put_label, put_midpoint_price, put_time_value, put_time_value_per_mo
             – same as calculate_put_only_metrics
         call_label             – e.g. "TSLA 2024 12-JUL 240.00 CALL (7)"
-        call_midpoint_price    – call option_price (or NaN)
-        new_cost_basis         – cost_basis + put_price − call_price
+        call_midpoint_price    – call midpoint price (or NaN)
+        new_cost_basis         – cost_basis + put_midpoint − call_midpoint
         locked_in_profit       – put_strike − new_cost_basis
         locked_in_profit_pct   – locked_in_profit / new_cost_basis × 100
         pct_assigned           – (call_strike − new_cost_basis) / new_cost_basis × 100
@@ -135,6 +158,10 @@ def calculate_collar_metrics(
     # Build call lookup keyed by strike_price → row (first match per strike)
     calls = calls_df.copy()
     calls["expiration_date"] = pd.to_datetime(calls["expiration_date"])
+    # Compute midpoint for calls
+    call_mid = _midpoint_price(calls)
+    calls["_mid"] = call_mid
+
     call_lookup: dict[float, pd.Series] = {}
     for _, row in calls.iterrows():
         strike = float(row["strike_price"])
@@ -151,17 +178,17 @@ def calculate_collar_metrics(
 
     for _, put_row in df.iterrows():
         put_strike = float(put_row["strike_price"])
-        put_price = float(put_row["option_price"])
+        put_mid = float(put_row["put_midpoint_price"])
 
         if put_strike in call_lookup:
             cr = call_lookup[put_strike]
-            cp = float(cr["option_price"])
+            cp = float(cr["_mid"])
             cs = float(cr["strike_price"])
 
             call_labels.append(_call_label(cr))
             call_prices.append(cp)
 
-            ncb = cost_basis + put_price - cp
+            ncb = cost_basis + put_mid - cp
             lip = put_strike - ncb
             lip_pct = (lip / ncb * 100) if ncb != 0 else 0.0
 
@@ -181,7 +208,7 @@ def calculate_collar_metrics(
             call_labels.append(None)
             call_prices.append(None)
             # Keep put-only values
-            ncb = cost_basis + put_price
+            ncb = cost_basis + put_mid
             lip = put_strike - ncb
             lip_pct = (lip / ncb * 100) if ncb != 0 else 0.0
             ncbs.append(ncb)
@@ -218,3 +245,67 @@ def get_month_options(df: pd.DataFrame) -> list[tuple[str, str]]:
         label = f"{ym} ({MONTH_MAP.get(month_int, '')})"
         result.append((ym, label))
     return result
+
+
+def get_month_options_with_dte(df: pd.DataFrame) -> list[tuple[str, str]]:
+    """
+    Like :func:`get_month_options` but appends the typical DTE to the
+    display label.
+
+    Uses the **maximum** DTE within each month (= the monthly expiration).
+
+    Example: [("2025-10", "Oktober 2025 (42 DTE)"), ...]
+    """
+    tmp = df.copy()
+    tmp["expiration_date"] = pd.to_datetime(tmp["expiration_date"])
+    tmp["ym"] = tmp["expiration_date"].apply(lambda x: x.strftime("%Y-%m"))
+
+    # Max DTE per month (= the monthly opex)
+    dte_per_month = tmp.groupby("ym")["days_to_expiration"].max().to_dict()
+
+    unique_months = sorted(tmp["ym"].unique())
+    result = []
+    for ym in unique_months:
+        month_int = int(ym.split("-")[1])
+        year = ym.split("-")[0]
+        dte = int(dte_per_month.get(ym, 0))
+        label = f"{MONTH_MAP.get(month_int, ym)} {year} ({dte} DTE)"
+        result.append((ym, label))
+    return result
+
+
+def filter_strikes_by_moneyness(
+    df: pd.DataFrame,
+    current_price: float,
+    mode: str = "atm_20",
+) -> pd.DataFrame:
+    """
+    Filter option rows by strike range relative to *current_price*.
+
+    Modes:
+        ``"all"``      – no filter
+        ``"atm"``      – ATM only: strike between 95% and 105% of current price
+        ``"atm_10"``   – ATM to 10% over: strike between 95% of price and +10%
+        ``"atm_20"``   – ATM to 20% over: strike between 95% of price and +20%
+        ``"atm_30"``   – ATM to 30% over: strike between 95% of price and +30%
+
+    For **puts**, we want strikes *around and above* the current price
+    (higher strike = more protection / more ITM).
+    """
+    if mode == "all" or df.empty:
+        return df
+
+    pct_map = {
+        "atm": 0.05,
+        "atm_10": 0.10,
+        "atm_20": 0.20,
+        "atm_30": 0.30,
+    }
+    pct = pct_map.get(mode, 0.20)
+
+    lower = current_price * 0.95  # slightly below ATM
+    upper = current_price * (1 + pct)
+
+    return df[
+        (df["strike_price"] >= lower) & (df["strike_price"] <= upper)
+    ].copy()
