@@ -292,10 +292,8 @@ if st.session_state["mpf_puts_df"] is not None:
             st.session_state['collar_cost_basis'] = cost_basis_input
             
             if len(result_df) > 10:
-                st.info(
-                    f"📊 **{len(result_df)} Kombinationen** – zu viele zum Durchscrollen? "
-                    f"→ [Collar Explorer öffnen](/collar_explorer) für die visuelle Analyse"
-                )
+                st.info(f"📊 **{len(result_df)} Kombinationen** – zu viele zum Durchscrollen? Nutze die visuelle Analyse!")
+                st.page_link("pages/collar_explorer.py", label="Zum Collar Explorer wechseln", icon="📈")
 
         # ── Styled dataframe with column contrast ──────────────────
         #    Alternate background colours per column group so the

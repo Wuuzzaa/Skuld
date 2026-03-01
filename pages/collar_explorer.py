@@ -19,7 +19,20 @@ current_price = st.session_state.get('collar_current_price')
 cost_basis = st.session_state.get('collar_cost_basis')
 
 if df is None or df.empty:
-    st.warning("Keine Collar-Daten geladen. Bitte berechne zuerst eine Kombination im [Married Put Finder](/married_put_finder).")
+    st.info("""
+    ### 👋 Willkommen im Collar Explorer!
+    
+    Der Collar Explorer visualisiert alle potenziellen Put+Call-Kombinationen (Collars) als interaktives Chart, 
+    damit du den optimalen Trade-off zwischen Schutz, Kosten und Upside findest.
+    
+    **So startest du:**
+    1. Öffne den **[Married Put Finder](/married_put_finder)**.
+    2. Gib ein Aktiensymbol ein und klicke auf CALCULATE.
+    3. Wähle **sowohl einen "Buy Put Month" als auch einen "Sell Call Month"** aus.
+    4. Klicke auf den Button **"Zum Collar Explorer wechseln"**, der über der Tabelle erscheint.
+    
+    *Deine berechneten Daten werden dann direkt hierher übertragen.*
+    """)
     st.stop()
 
 # --- 2. Explorer-Spalten berechnen ---
