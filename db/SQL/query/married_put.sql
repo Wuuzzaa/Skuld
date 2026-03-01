@@ -70,9 +70,11 @@ RoiData AS (
         (total_investment + minimum_potential_profit) as total_return,
         minimum_potential_profit / NULLIF(total_investment, 0) * 100 as roi_pct,
         round(
-            CAST((minimum_potential_profit / NULLIF(days_to_expiration, 0)) * 365 AS NUMERIC),
+            CAST(
+                ( (minimum_potential_profit / NULLIF(total_investment, 0)) / NULLIF(days_to_expiration, 0) ) * 365 * 100
+            AS NUMERIC),
             2
-        ) as minimum_potential_profit_total_annualized
+        ) as roi_annualized_pct
     FROM
         InvestmentData
 ),
@@ -80,10 +82,9 @@ RankedData AS (
     SELECT
         ROW_NUMBER() OVER (
             PARTITION BY symbol
-            ORDER BY minimum_potential_profit_total_annualized DESC
+            ORDER BY roi_annualized_pct DESC
         ) as symbol_option_rank,
-        *,
-        minimum_potential_profit_total_annualized as roi_annualized_pct -- Alias for consistency with outer query expectations if needed, basically referencing the calculated column
+        *
     FROM
         RoiData
 )

@@ -86,7 +86,9 @@ def page_display_dataframe(
         df: pd.DataFrame,
         page: str | None = None,
         symbol_column: str = 'symbol',
-        column_config: dict | None = None
+        column_config: dict | None = None,
+        on_select: str = "ignore",
+        selection_mode: str = "single-row"
 ):
     """
     Displays DataFrame with TradingView links configured.
@@ -98,6 +100,8 @@ def page_display_dataframe(
         column_config: Optional dictionary of column configurations to merge with TradingView config.
                         These settings have higher priority than the default settings.
         page: String with the name of the page. Used for selecting the optimal prompt.
+        on_select: Behavior when a row is selected (default: "ignore").
+        selection_mode: Selection mode ("single-row" or "multi-row").
     """
     df = _add_tradingview_link(df, symbol_column)
     df = _add_tradingview_superchart_link(df, symbol_column)
@@ -152,10 +156,13 @@ def page_display_dataframe(
     if column_config:
         default_config.update(column_config)
 
-    st.dataframe(
+    event = st.dataframe(
         styled_df,
         column_config=default_config,
         hide_index=True,
         use_container_width=True,
+        on_select=on_select,
+        selection_mode=selection_mode,
         #height="content",
     )
+    return event

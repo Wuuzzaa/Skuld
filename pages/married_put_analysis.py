@@ -103,9 +103,11 @@ if 'married_put_df' in st.session_state and not st.session_state['married_put_df
     available_columns = [col for col in key_columns if col in display_df.columns]
 
     # show final dataframe
-    page_display_dataframe(
+    event = page_display_dataframe(
         df=display_df[available_columns],
         symbol_column='symbol',
+        on_select="rerun",
+        selection_mode="single-row",
         column_config={
             "roi_annualized_pct": st.column_config.NumberColumn(
                 "ROI % (Annual)",
@@ -137,6 +139,45 @@ if 'married_put_df' in st.session_state and not st.session_state['married_put_df
             )
         }
     )
+
+    if event and len(event.selection.rows) > 0:
+        selected_idx = event.selection.rows[0]
+        # Important: use display_df.iloc because the dataframe index might not match the visual index
+        row = display_df.iloc[selected_idx]
+        
+        st.markdown("---")
+        st.subheader(f"🔍 Calculation Details for {row['symbol']}")
+        st.write(f"**Company:** `{row['Company']}` | **Expiration:** `{row['expiration_date']}` ({row['days_to_expiration']} days) | **Strike:** `${row['strike']:.2f}`")
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Stock Price", f"${row['live_stock_price']:.2f}")
+        c2.metric("Put Premium", f"${row['premium_option_price']:.2f}")
+        c3.metric("Extrinsic Value", f"${row.get('extrinsic_value', 0):.2f}")
+        c4.metric("Ann. Dividend", f"${row.get('Current-Div', 0):.2f}")
+
+        st.markdown(f'''
+        #### 🧮 How is this calculated?
+        
+        **1. Total Investment**: `${row['total_investment']:,.2f}`  
+        *Math*: `100 * (Stock Price + Put Premium) + $3.50 (Fees)`  
+        *Calculation*: `100 * (${row['live_stock_price']:.2f} + ${row['premium_option_price']:.2f}) + $3.50 = ${row['total_investment']:,.2f}`
+        
+        **2. Dividend Sum to Expiration**: `${row.get('dividend_sum_to_expiration', 0):,.2f}`  
+        *Math*: `Annual Dividend * (Days to Expiration / 365) * 100`  
+        *Calculation*: `${row.get('Current-Div', 0):.2f} * ({row['days_to_expiration']} / 365) * 100 = ${row.get('dividend_sum_to_expiration', 0):,.2f}`
+        
+        **3. Minimum Potential Profit**: `${row['minimum_potential_profit']:,.2f}`  
+        *Math*: `Dividend Sum - (100 * Extrinsic Value of Put) - $3.50 (Fees)`  
+        *Calculation*: `${row.get('dividend_sum_to_expiration', 0):,.2f} - ${row.get('extrinsic_value', 0) * 100:.2f} - $3.50 = ${row['minimum_potential_profit']:,.2f}`
+        
+        **4. Return on Investment (ROI)**: `{row['roi_pct']:.2f}%`  
+        *Math*: `Minimum Potential Profit / Total Investment * 100`  
+        *Calculation*: `${row['minimum_potential_profit']:,.2f} / ${row['total_investment']:,.2f} * 100 = {row['roi_pct']:.2f}%`
+        
+        **5. Annualized ROI**: `{row['roi_annualized_pct']:.2f}%`  
+        *Math*: `ROI % / (Days to Expiration) * 365`  
+        *Calculation*: `{row['roi_pct']:.2f}% / {row['days_to_expiration']} * 365 = {row['roi_annualized_pct']:.2f}%`
+        ''')
 
 else:
     st.info("No data available")
