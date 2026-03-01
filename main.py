@@ -78,10 +78,10 @@ def main(args):
             ]
         elif args.mode == "saturday_night":
             parallel_tasks = [
-                # ("Yahoo Dividends", calculate_dividend_classification, ()),
-                # ("Yahoo Query Fundamentals", generate_fundamental_data, (symbols["stocks"],)),
-                # ("Yahoo Finance Analyst Price Targets", scrape_yahoo_finance_analyst_price_targets, (symbols["stocks"],)),
-                # ("Earning Dates", scrape_earning_dates, (symbols["stocks"],)),
+                ("Yahoo Dividends", calculate_dividend_classification, ()),
+                ("Yahoo Query Fundamentals", generate_fundamental_data, (symbols["stocks"],)),
+                ("Yahoo Finance Analyst Price Targets", scrape_yahoo_finance_analyst_price_targets, (symbols["stocks"],)),
+                ("Earning Dates", scrape_earning_dates, (symbols["stocks"],)),
                 ("Yahoo Asset Profiles", load_asset_profile, (symbols["stocks"],)),
                 #todo task für symbole anpassen
             ]
