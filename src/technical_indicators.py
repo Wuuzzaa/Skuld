@@ -56,6 +56,9 @@ def __calc_symbol_technical_indicators(df: pd.DataFrame, verbose: bool = False) 
 
     df = df.sort_values("snapshot_date", ascending=True, kind="stable")
     df.ta.study(SKULD_INDICATORS, verbose=verbose)
+
+    # RSL
+    df['RSL'] = df['close'] / df['close'].rolling(window=130).mean()
     return df
 
 
@@ -85,9 +88,7 @@ def calc_technical_indicators(verbose: bool, symbol_batch_size: int = 500):
             logger.debug(f"{symbol}: rows={len(df_symbol)}")
             df_out = __calc_symbol_technical_indicators(df=df_symbol, verbose=verbose)
             pass
-            # 3) update the database
-            # todo (kommt später)
-
+            #todo 3) update the database
 
 if __name__ == "__main__":
     calc_technical_indicators(verbose=False)
