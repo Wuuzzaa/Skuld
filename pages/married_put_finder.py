@@ -355,37 +355,34 @@ if st.session_state["mpf_puts_df"] is not None:
             height=min(800, 40 + 35 * len(display_df)),
         )
 
-        # ── Quick tips (collapsed) ─────────────────────────────────
-        with st.expander("ℹ️ Erklärung", expanded=False):
-            st.markdown("""
-**Put Midpoint Price To Buy** – Midpoint-Preis des Puts (premium_option_price).
+        # ── Dokumentation ──────────────────────────────────────────
+        with st.expander("📖 Dokumentation – Feldübersicht", expanded=False):
+            if not display_df.empty:
+                # Erste Zeile aus result_df nehmen (damit wir alle Rohdaten wie intrinsic_value haben)
+                example_row = result_df.iloc[0]
+                
+                # Collar-Parameter extrahieren
+                c_price = example_row.get("call_midpoint_price", None) if collar_enabled else None
+                c_strike = None
+                if collar_enabled and "call_label" in example_row and pd.notna(example_row["call_label"]):
+                    try:
+                        parts = str(example_row["call_label"]).split()
+                        call_idx = parts.index("CALL")
+                        c_strike = float(parts[call_idx - 1])
+                    except (ValueError, IndexError):
+                        pass
 
-**Put Time Value** – Zeitwert = Midpoint minus innerer Wert.
-Je niedriger, desto effizienter die Versicherung.
-
-**Put Time Value /Mo** – Zeitwert pro 30 Tage.
-Vergleichbar über verschiedene Laufzeiten.
-
-**New Cost Basis** – Einstand + Put-Midpoint (− Call-Midpoint bei Collar).
-
-**Locked In Profit** – Strike − New Cost Basis.
-Positiv = garantierter Mindestgewinn bei Ausübung.
-
-**% Assnd** – Gewinn wenn die Aktie am Call-Strike abgerufen wird.
-
-**% Assnd w/ Put** – Wie % Assnd, aber berücksichtigt den
-Restwert des Puts falls Put-Strike > Call-Strike.
-
----
-
-**Collar-Kombinationslogik:**
-- Für jeden Put werden **alle** Calls mit Strike ≥ Put-Strike kombiniert
-- **Same-Strike-Collar** (Put 170 + Call 170): Max. Locked-In Profit, aber Cap beim selben Strike
-- **Wide Collar** (Put 140 + Call 150): Weniger Locked-In Profit, aber mehr Upside bis zum Call-Strike
-- Unterschied zwischen % Assnd und % Assnd w/ Put zeigt den zusätzlichen Wert durch den Put-Restwert
-
-**Farbcodierung:** 🔵 Put-Daten | 🟢 Call-Daten | 🟠 Metriken | 🟣 Profit
-            """)
+                from src.documentation_renderer import render_documentation
+                doc_md = render_documentation(
+                    example_row=example_row,
+                    current_price=current_price,
+                    cost_basis=cost_basis_input,
+                    collar_enabled=collar_enabled,
+                    call_price=c_price,
+                    call_strike=c_strike
+                )
+                
+                st.markdown(doc_md)
 
 # ── Footer ──────────────────────────────────────────────────────────
 st.divider()
