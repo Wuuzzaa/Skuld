@@ -134,7 +134,7 @@ if st.session_state["mpf_puts_df"] is not None:
         if not calls_df.empty:
             call_month_opts = get_month_options_with_dte(calls_df)
 
-    c_pm, c_cm, c_flt = st.columns([2, 2, 2])
+    c_pm, c_cm, c_flt, c_oi = st.columns([2, 2, 2, 1.5])
     with c_pm:
         put_month_labels = [label for _, label in put_month_opts]
         sel_put_month_label = st.selectbox(
@@ -165,6 +165,15 @@ if st.session_state["mpf_puts_df"] is not None:
             format_func=lambda x: moneyness_options[x],
             index=2,  # default: ATM to +20%
             key="mpf_moneyness",
+        )
+    with c_oi:
+        min_oi_input = st.number_input(
+            "Min. Put OI",
+            min_value=0,
+            value=0,
+            step=10,
+            help="Filtert Puts mit zu geringem Open Interest heraus.",
+            key="mpf_min_oi",
         )
 
     # Resolve selection to sort keys
@@ -199,6 +208,11 @@ if st.session_state["mpf_puts_df"] is not None:
         filtered_puts, current_price, mode=sel_moneyness,
     )
 
+    # Apply OI filter
+    if min_oi_input > 0 and "open_interest" in filtered_puts.columns:
+        filtered_puts["open_interest"] = filtered_puts["open_interest"].fillna(0)
+        filtered_puts = filtered_puts[filtered_puts["open_interest"] >= min_oi_input].copy()
+
     if filtered_puts.empty:
         st.info("Keine Put-Optionen für diese Filter-Kombination gefunden.")
     else:
@@ -227,6 +241,7 @@ if st.session_state["mpf_puts_df"] is not None:
             # Collar view – Put + Call columns
             display_cols = [
                 "put_label",
+                "open_interest",
                 "put_midpoint_price",
                 "put_time_value",
                 "put_time_value_per_mo",
@@ -243,6 +258,7 @@ if st.session_state["mpf_puts_df"] is not None:
             # Put-only view
             display_cols = [
                 "put_label",
+                "open_interest",
                 "put_midpoint_price",
                 "put_time_value",
                 "put_time_value_per_mo",
@@ -267,6 +283,7 @@ if st.session_state["mpf_puts_df"] is not None:
 
         col_styles = {
             "put_label": col_put,
+            "open_interest": col_put,
             "put_midpoint_price": col_put,
             "put_time_value": col_put,
             "put_time_value_per_mo": col_put,
@@ -289,6 +306,7 @@ if st.session_state["mpf_puts_df"] is not None:
 
         # Format numbers
         format_dict = {
+            "open_interest": "{:.0f}",
             "put_midpoint_price": "{:.2f} $",
             "put_time_value": "{:.2f} $",
             "put_time_value_per_mo": "{:.2f} $",
@@ -304,6 +322,7 @@ if st.session_state["mpf_puts_df"] is not None:
         # Rename columns for display (PowerOptions naming)
         rename_map = {
             "put_label": "Put (DTE)",
+            "open_interest": "Put OI",
             "put_midpoint_price": "Put Midpoint Price To Buy",
             "put_time_value": "Put Time Value",
             "put_time_value_per_mo": "Put Time Value /Mo",
@@ -333,7 +352,7 @@ if st.session_state["mpf_puts_df"] is not None:
         styler = styled_df.style.format(renamed_format, na_rep="—")
 
         # Apply column-group background colours
-        put_cols_renamed = [rename_map.get(c, c) for c in ["put_label", "put_midpoint_price", "put_time_value", "put_time_value_per_mo"] if c in cols_present]
+        put_cols_renamed = [rename_map.get(c, c) for c in ["put_label", "open_interest", "put_midpoint_price", "put_time_value", "put_time_value_per_mo"] if c in cols_present]
         call_cols_renamed = [rename_map.get(c, c) for c in ["call_label", "call_midpoint_price"] if c in cols_present]
         metric_cols_renamed = [rename_map.get(c, c) for c in ["new_cost_basis", "pct_assigned", "pct_assigned_with_put"] if c in cols_present]
         profit_cols_renamed = [rename_map.get(c, c) for c in ["locked_in_profit", "locked_in_profit_pct"] if c in cols_present]
