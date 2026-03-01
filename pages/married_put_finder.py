@@ -272,6 +272,30 @@ if st.session_state["mpf_puts_df"] is not None:
         display_df = result_df[cols_present].copy()
 
         st.markdown(f"### {header} ({len(display_df)} Optionen)")
+        
+        # --- Integration Collar Explorer ---
+        if collar_enabled and not result_df.empty:
+            explorer_df = result_df.copy()
+            explorer_df['put_strike'] = explorer_df['strike_price']
+            explorer_df['put_price'] = explorer_df['put_midpoint_price']
+            explorer_df['call_price'] = explorer_df['call_midpoint_price']
+            
+            def _extract_call_strike(cl):
+                if pd.isna(cl): return 0.0
+                parts = str(cl).split()
+                try: return float(parts[parts.index("CALL") - 1])
+                except: return 0.0
+                
+            explorer_df['call_strike'] = explorer_df['call_label'].apply(_extract_call_strike)
+            st.session_state['collar_combos_df'] = explorer_df
+            st.session_state['collar_current_price'] = current_price
+            st.session_state['collar_cost_basis'] = cost_basis_input
+            
+            if len(result_df) > 10:
+                st.info(
+                    f"📊 **{len(result_df)} Kombinationen** – zu viele zum Durchscrollen? "
+                    f"→ [Collar Explorer öffnen](/collar_explorer) für die visuelle Analyse"
+                )
 
         # ── Styled dataframe with column contrast ──────────────────
         #    Alternate background colours per column group so the
