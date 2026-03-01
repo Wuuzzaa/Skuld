@@ -272,33 +272,6 @@ if st.session_state["mpf_puts_df"] is not None:
         display_df = result_df[cols_present].copy()
 
         st.markdown(f"### {header} ({len(display_df)} Optionen)")
-        
-        # --- Integration Collar Explorer ---
-        if not result_df.empty:
-            explorer_df = result_df.copy()
-            explorer_df['put_strike'] = explorer_df['strike_price']
-            explorer_df['put_price'] = explorer_df['put_midpoint_price']
-            
-            if collar_enabled and 'call_midpoint_price' in explorer_df.columns:
-                explorer_df['call_price'] = explorer_df['call_midpoint_price']
-            else:
-                explorer_df['call_price'] = 0.0
-                explorer_df['call_label'] = None
-            
-            def _extract_call_strike(cl):
-                if pd.isna(cl) or cl is None: return 0.0
-                parts = str(cl).split()
-                try: return float(parts[parts.index("CALL") - 1])
-                except: return 0.0
-                
-            explorer_df['call_strike'] = explorer_df['call_label'].apply(_extract_call_strike)
-            st.session_state['collar_combos_df'] = explorer_df
-            st.session_state['collar_current_price'] = current_price
-            st.session_state['collar_cost_basis'] = cost_basis_input
-            
-            if len(result_df) > 10:
-                st.info(f"📊 **{len(result_df)} Kombinationen** – zu viele zum Durchscrollen? Nutze die visuelle Analyse!")
-                st.page_link("pages/collar_explorer.py", label="Zum Collar Explorer wechseln", icon="📈")
 
         # ── Styled dataframe with column contrast ──────────────────
         #    Alternate background colours per column group so the
@@ -364,6 +337,35 @@ if st.session_state["mpf_puts_df"] is not None:
 
         styled_df = display_df.copy()
         styled_df.rename(columns=rename_map, inplace=True)
+        
+        # --- Tabellen-Visualisierung ---
+        with st.expander("📊 Diagramm: Ergebnisse grafisch vergleichen", expanded=False):
+            st.caption("Vergleiche die Tabellenwerte auf einen Blick in einem simplen Balkendiagramm.")
+            
+            possible_metrics = [
+                m for m in [
+                    "% Locked In Profit", "Locked In Profit", "New Cost Basis", 
+                    "Put Time Value /Mo", "Put OI", 
+                    "Put Midpoint Price To Buy", "Call Midpoint Price To Sell"
+                ] if m in styled_df.columns
+            ]
+            
+            vis_metric = st.selectbox(
+                "Metrik für das Diagramm auswählen:",
+                options=possible_metrics,
+                key="mpf_vis_metric"
+            )
+            
+            chart_data = styled_df.copy()
+            if collar_enabled and "Call (DTE)" in chart_data.columns:
+                chart_data["Call (DTE)"] = chart_data["Call (DTE)"].fillna("Kein Call")
+                chart_data["Kombination"] = chart_data["Put (DTE)"].astype(str) + " + " + chart_data["Call (DTE)"].astype(str)
+                x_col = "Kombination"
+            else:
+                x_col = "Put (DTE)"
+                
+            st.bar_chart(chart_data, x=x_col, y=vis_metric)
+            
         renamed_format = {rename_map.get(k, k): v for k, v in active_format.items()}
         renamed_styles = {rename_map.get(k, k): v for k, v in col_styles.items()}
 
