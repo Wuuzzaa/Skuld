@@ -50,13 +50,16 @@ def calculate_position_insurance_metrics(df: pd.DataFrame, cost_basis: float) ->
     df['locked_in_profit'] = df['strike_price'] - df['new_cost_basis']
 
     # 3. Locked-in Profit % = Locked-in Profit / New Cost Basis
-    df['locked_in_profit_pct'] = (df['locked_in_profit'] / df['new_cost_basis']) * 100
+    df['locked_in_profit_pct'] = df.apply(
+        lambda row: (row['locked_in_profit'] / row['new_cost_basis'] * 100) if row['new_cost_basis'] != 0 else 0,
+        axis=1
+    )
 
     # 4. Risk (Max Loss) = If Locked-in Profit is negative, it's the loss.
     #    Actually "Risk" is usually defined relative to the Cost Basis or Current Value.
     #    From requirements: "Maximales Risiko (%) Falls Locked-in Profit negativ: |Locked-in Profit| / Neuer Einstandskurs * 100"
     df['risk_pct'] = df.apply(
-        lambda row: (abs(row['locked_in_profit']) / row['new_cost_basis'] * 100) if row['locked_in_profit'] < 0 else 0,
+        lambda row: (abs(row['locked_in_profit']) / row['new_cost_basis'] * 100) if (row['locked_in_profit'] < 0 and row['new_cost_basis'] != 0) else 0,
         axis=1
     )
 
