@@ -136,7 +136,7 @@ with col_chart:
                 marker=dict(
                     size=24,
                     color='rgba(0,0,0,0)',
-                    line=dict(width=2, color='white', dash='dash')
+                    line=dict(width=2, color='white')
                 ),
                 showlegend=False,
                 hoverinfo='skip'

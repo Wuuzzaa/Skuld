@@ -274,14 +274,19 @@ if st.session_state["mpf_puts_df"] is not None:
         st.markdown(f"### {header} ({len(display_df)} Optionen)")
         
         # --- Integration Collar Explorer ---
-        if collar_enabled and not result_df.empty:
+        if not result_df.empty:
             explorer_df = result_df.copy()
             explorer_df['put_strike'] = explorer_df['strike_price']
             explorer_df['put_price'] = explorer_df['put_midpoint_price']
-            explorer_df['call_price'] = explorer_df['call_midpoint_price']
+            
+            if collar_enabled and 'call_midpoint_price' in explorer_df.columns:
+                explorer_df['call_price'] = explorer_df['call_midpoint_price']
+            else:
+                explorer_df['call_price'] = 0.0
+                explorer_df['call_label'] = None
             
             def _extract_call_strike(cl):
-                if pd.isna(cl): return 0.0
+                if pd.isna(cl) or cl is None: return 0.0
                 parts = str(cl).split()
                 try: return float(parts[parts.index("CALL") - 1])
                 except: return 0.0
