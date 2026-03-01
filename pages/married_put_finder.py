@@ -484,7 +484,5 @@ if st.session_state["mpf_puts_df"] is not None:
 # ── Footer ──────────────────────────────────────────────────────────
 st.divider()
 st.markdown(
-    "🛡️ [Position Insurance Tool](/position_insurance_tool) &ensp;|&ensp; "
-    "📊 [Call Income Simulator](/call_income_simulator) &ensp;|&ensp; "
     "🔍 [Smart Finder](/smart_finder)"
 )

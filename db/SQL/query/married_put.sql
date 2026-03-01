@@ -68,9 +68,9 @@ RoiData AS (
     SELECT
         *,
         (total_investment + minimum_potential_profit) as total_return,
-        minimum_potential_profit / total_investment * 100 as roi_pct,
+        minimum_potential_profit / NULLIF(total_investment, 0) * 100 as roi_pct,
         round(
-            CAST((minimum_potential_profit / days_to_expiration) * 365 AS NUMERIC),
+            CAST((minimum_potential_profit / NULLIF(days_to_expiration, 0)) * 365 AS NUMERIC),
             2
         ) as minimum_potential_profit_total_annualized
     FROM
