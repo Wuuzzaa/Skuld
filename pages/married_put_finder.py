@@ -349,40 +349,53 @@ if st.session_state["mpf_puts_df"] is not None:
 
         styler = styler.hide(axis="index")
 
-        st.dataframe(
+        event = st.dataframe(
             styler,
             use_container_width=True,
             height=min(800, 40 + 35 * len(display_df)),
+            selection_mode="single-row",
+            on_select="rerun",
+            key="mpf_option_table"
         )
 
         # ── Dokumentation ──────────────────────────────────────────
-        with st.expander("📖 Dokumentation – Feldübersicht", expanded=False):
-            if not display_df.empty:
-                # Erste Zeile aus result_df nehmen (damit wir alle Rohdaten wie intrinsic_value haben)
-                example_row = result_df.iloc[0]
-                
-                # Collar-Parameter extrahieren
-                c_price = example_row.get("call_midpoint_price", None) if collar_enabled else None
-                c_strike = None
-                if collar_enabled and "call_label" in example_row and pd.notna(example_row["call_label"]):
-                    try:
-                        parts = str(example_row["call_label"]).split()
-                        call_idx = parts.index("CALL")
-                        c_strike = float(parts[call_idx - 1])
-                    except (ValueError, IndexError):
-                        pass
+        selected_rows = event.selection.rows if hasattr(event, "selection") else []
+        if selected_rows and not display_df.empty:
+            show_documentation = True
+            selected_idx = selected_rows[0]
+            # Extrahiere die echte Zeile aus result_df anstatt display_df 
+            # um alle versteckten Metriken (wie intrinsic_value) parat zu haben
+            example_row = result_df.iloc[selected_idx]
+        else:
+            show_documentation = False
 
-                from src.documentation_renderer import render_documentation
-                doc_md = render_documentation(
-                    example_row=example_row,
-                    current_price=current_price,
-                    cost_basis=cost_basis_input,
-                    collar_enabled=collar_enabled,
-                    call_price=c_price,
-                    call_strike=c_strike
-                )
-                
-                st.markdown(doc_md)
+        if show_documentation:
+            st.divider()
+            
+            # Collar-Parameter extrahieren
+            c_price = example_row.get("call_midpoint_price", None) if collar_enabled else None
+            c_strike = None
+            if collar_enabled and "call_label" in example_row and pd.notna(example_row["call_label"]):
+                try:
+                    parts = str(example_row["call_label"]).split()
+                    call_idx = parts.index("CALL")
+                    c_strike = float(parts[call_idx - 1])
+                except (ValueError, IndexError):
+                    pass
+
+            from src.documentation_renderer import render_documentation
+            doc_md = render_documentation(
+                example_row=example_row,
+                current_price=current_price,
+                cost_basis=cost_basis_input,
+                collar_enabled=collar_enabled,
+                call_price=c_price,
+                call_strike=c_strike
+            )
+            
+            st.markdown(doc_md)
+        else:
+            st.caption("💡 Klicke auf eine Zeile in der Tabelle, um die vollständige Berechnung für diese Option zu sehen.")
 
 # ── Footer ──────────────────────────────────────────────────────────
 st.divider()
