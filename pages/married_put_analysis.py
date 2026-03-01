@@ -93,9 +93,9 @@ if 'married_put_df' in st.session_state and not st.session_state['married_put_df
     # Key columns for display (removed symbol_option_rank)
     key_columns = [
         'symbol', 'Company', 'expiration_date', 'days_to_expiration',
-        'strike', 'live_stock_price', 'premium_option_price', 'extrinsic_value',
+        'strike_price', 'live_stock_price', 'premium_option_price', 'extrinsic_value',
         'total_investment', 'minimum_potential_profit', 'roi_pct', 'roi_annualized_pct',
-        'delta', 'iv', 'option_open_interest', 'classification', 'Current-Div',
+        'delta', 'iv', 'open_interest', 'Classification', 'Current-Div',
         'dividends_to_expiration', 'dividend_sum_to_expiration'
     ]
     
@@ -129,7 +129,7 @@ if 'married_put_df' in st.session_state and not st.session_state['married_put_df
                 "Stock Price",
                 format="$%.2f"
             ),
-            "strike": st.column_config.NumberColumn(
+            "strike_price": st.column_config.NumberColumn(
                 "Strike",
                 format="$%.2f"
             ),
@@ -147,7 +147,7 @@ if 'married_put_df' in st.session_state and not st.session_state['married_put_df
         
         st.markdown("---")
         st.subheader(f"🔍 Calculation Details for {row['symbol']}")
-        st.write(f"**Company:** `{row['Company']}` | **Expiration:** `{row['expiration_date']}` ({row['days_to_expiration']} days) | **Strike:** `${row['strike']:.2f}`")
+        st.write(f"**Company:** `{row['Company']}` | **Expiration:** `{row['expiration_date']}` ({row['days_to_expiration']} days) | **Strike:** `${row.get('strike_price', 0):.2f}`")
 
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Stock Price", f"${row['live_stock_price']:.2f}")
