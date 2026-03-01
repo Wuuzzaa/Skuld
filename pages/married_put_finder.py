@@ -170,7 +170,7 @@ if st.session_state["mpf_puts_df"] is not None:
         min_oi_input = st.number_input(
             "Min. Put OI",
             min_value=0,
-            value=0,
+            value=20,
             step=10,
             help="Filtert Puts mit zu geringem Open Interest heraus.",
             key="mpf_min_oi",
