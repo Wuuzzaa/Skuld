@@ -364,7 +364,43 @@ if st.session_state["mpf_puts_df"] is not None:
             else:
                 x_col = "Put (DTE)"
                 
-            st.bar_chart(chart_data, x=x_col, y=vis_metric)
+            import plotly.express as px
+            
+            # Um numerische Werte korrekt darstellen zu können, müssen eventuell die formatierten Strings
+            # ($ oder % Zeichen) rückgängig gemacht werden. Wir nehmen besser die echten Werte aus `display_df`.
+            raw_metric_name = None
+            for orig, renamed in rename_map.items():
+                if renamed == vis_metric:
+                    raw_metric_name = orig
+                    break
+                    
+            if raw_metric_name and raw_metric_name in display_df.columns:
+                plot_data = display_df.copy()
+                plot_data["X_Labels"] = chart_data[x_col]
+                
+                fig = px.bar(
+                    plot_data, 
+                    x="X_Labels", 
+                    y=raw_metric_name,
+                    labels={"X_Labels": "Option / Kombination", raw_metric_name: vis_metric},
+                    color=raw_metric_name,
+                    color_continuous_scale="Blues"
+                )
+                
+                # Y-Achse nicht zwingen bei Null zu starten, um kleine Unterschiede sichtbar zu machen
+                min_val = plot_data[raw_metric_name].min()
+                max_val = plot_data[raw_metric_name].max()
+                padding = (max_val - min_val) * 0.1 if max_val != min_val else 1
+                fig.update_layout(
+                    yaxis=dict(range=[min_val - padding, max_val + padding]),
+                    showlegend=False,
+                    xaxis_tickangle=-45,
+                    margin=dict(b=100)
+                )
+                
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.bar_chart(chart_data, x=x_col, y=vis_metric)
             
         renamed_format = {rename_map.get(k, k): v for k, v in active_format.items()}
         renamed_styles = {rename_map.get(k, k): v for k, v in col_styles.items()}
