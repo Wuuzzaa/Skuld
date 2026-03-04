@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  # The Ollama server that runs the local LLM
+  ollama:
+    image: ollama/ollama:latest
+    container_name: skuld_llm_ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "127.0.0.1:11434:11434"
+    restart: unless-stopped
+    # We download the model asynchronously on startup and keep the server running
+    entrypoint: >
+      /bin/sh -c " /bin/ollama serve & sleep 5; echo 'Downloading llama3.2:3b model...'; /bin/ollama pull llama3.2:3b; wait "
+    # Ensure this doesn't conflict with main networks unless necessary
+    networks:
+      - llm_network
+
+  # The custom python script container that summarizes logs
+  log-summarizer:
+    build:
+      context: ./ops/llm_log_summarizer
+    container_name: skuld_llm_log_summarizer
+    env_file:
+      - .env
+    volumes:
+      # Read-only mount of the logs directory
+      - ./logs:/logs:ro
+    depends_on:
+      - ollama
+    networks:
+      - llm_network
+    restart: unless-stopped
+
+volumes:
+  ollama_data:
+
+
+networks:
+  llm_network:
+    driver: bridge
