@@ -85,7 +85,7 @@ def main(args):
                 # ("Yahoo Asset Profiles", load_asset_profile, (symbols["stocks"],)),
                 #todo task für symbole anpassen
             ]
-        elif args.mode == "marked_start_mid_end":
+        elif args.mode == "market_start_mid_end":
             parallel_tasks = [
                 ("Fetch Current Stock Day Prices", load_stock_prices, (symbols["stocks"],)),
             ]
@@ -196,7 +196,7 @@ if __name__ == "__main__":
                         choices=[
                             "all",
                             "saturday_night",
-                            "marked_start_mid_end",
+                            "market_start_mid_end",
                             "stock_data_daily",
                             "option_data",
                             "historical_prices",

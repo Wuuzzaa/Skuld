@@ -151,7 +151,21 @@ class YahooQueryScraper:
         local_batch_size = 200
         local_symbol_batches = [self.symbols[i:i + local_batch_size] for i in range(0, len(self.symbols), local_batch_size)]
         logger.info(f"Initializing {len(local_symbol_batches)} ticker batches with batch size {local_batch_size} for YahooQueryScraper - total symbols: {len(self.symbols)}")
-        local_ticker_batches = [Ticker(symbol_batch, progress=True, asynchronous=True) for symbol_batch in local_symbol_batches]
+        for attempt in range(self.retries):
+            try:
+                local_ticker_batches = [Ticker(symbol_batch, progress=True, asynchronous=True) for symbol_batch in local_symbol_batches]
+            except Exception as e:
+                    logger.error(f"ERROR: Error fetching historical prices - {str(e)}")
+                    logger.error(f"{attempt} failed -> Retry after 10s")
+                    time.sleep(10)
+            else:
+                    # Success - exit the retry loop
+                    break
+        else:
+                logger.error(" ! " * 80)
+                logger.error("RETRY LIMIT REACHED")
+                logger.error(" ! " * 80)
+                raise Exception("RETRY LIMIT REACHED")
         batch = 1
         for ticker_batch in local_ticker_batches:
             logger.info(f"({batch}/{len(local_ticker_batches)}) Batch")
