@@ -193,6 +193,9 @@ jobs:
             mysudo docker rm -f skuld-frontend 2>/dev/null || true
             mysudo docker rm -f skuld-backend 2>/dev/null || true
             mysudo docker rm -f authelia 2>/dev/null || true
+            # Also remove containers by partial name match (catches prefixed names)
+            mysudo docker ps -a --filter "name=authelia" -q | xargs -r mysudo docker rm -f 2>/dev/null || true
+            mysudo docker ps -a --filter "name=skuld" -q | xargs -r mysudo docker rm -f 2>/dev/null || true
             mysudo docker compose down --remove-orphans
             
             echo "=== Ensuring financial_data.db is a file ==="
