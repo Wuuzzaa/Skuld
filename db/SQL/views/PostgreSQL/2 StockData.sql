@@ -506,7 +506,41 @@ SELECT
 	i.company_industry,
 	i.company_sector,
 	i.company_country,
-	i.company_long_business_summary
+	i.company_long_business_summary,
+
+	-- Technical Indicators
+	j."EMA_5",
+    j."EMA_10",
+    j."EMA_20",
+    j."EMA_30",
+    j."EMA_50",
+    j."EMA_100",
+    j."EMA_200",
+    j."SMA_5",
+    j."SMA_10",
+    j."SMA_20",
+    j."SMA_30",
+    j."SMA_50",
+    j."SMA_100",
+    j."SMA_200",
+    j."MACD_12_26_9",
+    j."MACDh_12_26_9",
+    j."MACDs_12_26_9",
+    j."BBL_20_2.0_2.0",
+    j."BBM_20_2.0_2.0",
+    j."BBU_20_2.0_2.0",
+    j."BBB_20_2.0_2.0",
+    j."BBP_20_2.0_2.0",
+    j."ATRr_14",
+    j."ADX_10",
+    j."ADXR_10_2",
+    j."DMP_10",
+    j."DMN_10",
+    j."STOCHk_14_3_1",
+    j."STOCHd_14_3_1",
+    j."STOCHh_14_3_1",
+    j."RSI_14",
+    j."RSL"
 FROM
 	"StockPricesYahoo" AS A
 	LEFT OUTER JOIN (
@@ -530,4 +564,6 @@ FROM
 		SELECT symbol, MIN(from_date) AS from_date FROM "StockPricesYahooMasterData" GROUP BY symbol
 	) AS H ON A.SYMBOL = H.SYMBOL
 	LEFT OUTER JOIN "FundamentalData" AS I
-	ON A.SYMBOL = I.SYMBOL;
+	ON A.SYMBOL = I.SYMBOL
+	LEFT OUTER JOIN "TechnicalIndicatorsCalculated" AS J
+	ON A.SYMBOL = J.SYMBOL;
