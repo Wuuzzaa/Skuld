@@ -106,9 +106,9 @@ def main(args):
         elif args.mode == "historical_iv":
             parallel_tasks = []
             calculate_and_store_stock_implied_volatility_history()
-        elif args.mode == "historcial_technical_indicators":
+        elif args.mode == "historical_technical_indicators":
             parallel_tasks = [
-                ("Technical Indicators", calc_technical_indicators_history, (symbols["stocks"],)),
+                ("Technical Indicators History", calc_technical_indicators_history, (symbols["stocks"],)),
             ]
         elif args.mode == "historization":
             pass
@@ -209,7 +209,7 @@ if __name__ == "__main__":
                             "historical_iv",
                             "historization",
                             "only_run_migrations",
-                            "historcial_technical_indicators"
+                            "historical_technical_indicators"
                         ],
                         help="Mode for data collection")
     parser.add_argument("--env", type=str, required=False, default=None,
