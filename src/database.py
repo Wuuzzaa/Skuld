@@ -130,19 +130,21 @@ def insert_into_table(
         # Postgres tends to be stricter, so we catch errors but don't stop the flow
         dataframe = dataframe.replace("None", np.nan)
 
-        # 1. Get the list of columns currently in the database table
-        inspector = inspect(connection)
-        existing_columns = [col['name'] for col in inspector.get_columns(table_name)]
+        try:
+            # 1. Get the list of columns currently in the database table
+            inspector = inspect(connection)
+            existing_columns = [col['name'] for col in inspector.get_columns(table_name)]
 
-        # 2. Identify the common columns between your DataFrame and the SQL table
-        columns_to_keep = [col for col in dataframe.columns if col in existing_columns]
+            # 2. Identify the common columns between your DataFrame and the SQL table
+            columns_to_keep = [col for col in dataframe.columns if col in existing_columns]
 
-        # 3. Filter the DataFrame
-        filtered_df = dataframe[columns_to_keep]
+            # 3. Filter the DataFrame
+            dataframe = dataframe[columns_to_keep]
+        except Exception as e:
+            logger.info(f"{table_name} does not exist: \n{e}")
 
         # 4. Perform the insertion
-
-        pg_affected = filtered_df.to_sql(
+        pg_affected = dataframe.to_sql(
                             table_name,
                             connection, 
                             if_exists=if_exists, 

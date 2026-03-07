@@ -49,13 +49,14 @@ TABLE_ANALYST_PRICE_TARGETS = 'AnalystPriceTargets'
 TABLE_EARNING_DATES = 'EarningDates'
 TABLE_FUNDAMENTAL_DATA_DIVIDEND_RADAR = 'FundamentalDataDividendRadar'
 TABLE_FUNDAMENTAL_DATA_YAHOO = 'FundamentalDataYahoo'
-TABLE_TECHNICAL_INDICATORS = 'TechnicalIndicators'
+TABLE_TECHNICAL_INDICATORS = 'TechnicalIndicatorsCalculated'
 TABLE_STOCK_PRICE = 'StockPrice'
 TABLE_STOCK_PRICES_YAHOO = 'StockPricesYahoo'
 TABLE_STOCK_IMPLIED_VOLATILITY_MASSIVE = 'StockImpliedVolatilityMassive'
 TABLE_STOCK_SYMBOLS_MASSIVE = 'StockSymbolsMassive'
 TABLE_STOCK_ASSET_PROFILES_YAHOO = 'StockAssetProfilesYahoo'
 TABLE_DIVIDEND_DATA_YAHOO = 'DividendDataYahoo'
+
 
 # History enabled tables
 HISTORY_ENABLED_TABLES = [
