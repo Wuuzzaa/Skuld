@@ -33,6 +33,14 @@ with col4:
 # Row 2 for Status Filter (Checkboxes)
 st.write("---")
 st.caption("Dividend Growth Status")
+
+def _on_click_alle():
+    """Callback – runs BEFORE next rerun, so widget keys can still be set."""
+    st.session_state["chk_contender"] = False
+    st.session_state["chk_challenger"] = False
+    st.session_state["chk_champion"] = False
+    st.session_state["chk_show_all"] = True
+
 cb_cols = st.columns([1, 1, 1, 0.8])
 
 with cb_cols[0]:
@@ -42,12 +50,7 @@ with cb_cols[1]:
 with cb_cols[2]:
     chk_champion = st.checkbox("Champion", value=True, key="chk_champion")
 with cb_cols[3]:
-    if st.button("Alle (kein Filter)", key="btn_select_all"):
-        st.session_state["chk_contender"] = False
-        st.session_state["chk_challenger"] = False
-        st.session_state["chk_champion"] = False
-        st.session_state["chk_show_all"] = True
-        st.rerun()
+    st.button("Alle (kein Filter)", key="btn_select_all", on_click=_on_click_alle)
 
 # "Alle" means no classification filter at all
 show_all = st.session_state.get("chk_show_all", False)
