@@ -80,11 +80,7 @@ fi\n\
 service cron start\n\
 echo "✓ Cron service started"\n\
 \n\
-# Initial data collection check\n\
-if [ ! -f "/app/Skuld/db/financial_data.db" ]; then\n\
-  echo "⚠ Database not found. Running initial data collection..."\n\
-  cd /app/Skuld && python main.py --mode all || echo "Initial collection failed, will retry via cron"\n\
-fi\n\
+# Note: SQLite (financial_data.db) removed – all data lives in PostgreSQL now.\n\
 \n\
 # Keep container alive and show cron logs\n\
 touch /var/log/cron.log\n\

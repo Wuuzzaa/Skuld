@@ -49,7 +49,6 @@ jobs:
         run: |
           rsync -avz --delete \
             -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectionAttempts=1" \
-            --exclude 'financial_data.db' \
             --exclude 'logs/' \
             --exclude '.git/' \
             --exclude '.github/' \
@@ -197,17 +196,6 @@ jobs:
             mysudo docker ps -a --filter "name=authelia" -q | xargs -r mysudo docker rm -f 2>/dev/null || true
             mysudo docker ps -a --filter "name=skuld" -q | xargs -r mysudo docker rm -f 2>/dev/null || true
             mysudo docker compose down --remove-orphans
-            
-            echo "=== Ensuring financial_data.db is a file ==="
-            if [ -d "financial_data.db" ]; then
-              echo "⚠️  financial_data.db is a directory, converting to file using Docker..."
-              # Use docker to remove the directory since it was created by docker (root)
-              mysudo docker run --rm -v $(pwd):/work -w /work alpine rm -rf financial_data.db
-              touch financial_data.db
-            elif [ ! -f "financial_data.db" ]; then
-              echo "📝 Creating empty financial_data.db..."
-              touch financial_data.db
-            fi
             
             echo "=== Ensuring logs directory exists ==="
             mkdir -p logs
