@@ -22,7 +22,7 @@ with col1:
     max_results = st.number_input("Max Results", min_value=10, max_value=1000, value=50, step=10)
 
 with col2:
-    min_roi = st.number_input("Min ROI %", min_value=0.0, max_value=100.0, value=0.0, step=1.0)
+    min_roi = st.number_input("Min ROI %", min_value=0.0, max_value=100.0, value=3.0, step=1.0)
 
 with col3:
     max_roi = st.number_input("Max ROI %", min_value=0.0, max_value=100.0, value=7.0, step=1.0)
@@ -91,13 +91,23 @@ if 'married_put_df' in st.session_state and not st.session_state['married_put_df
     # Apply symbol filter
     display_df = df if selected_symbol == 'All' else df[df['symbol'] == selected_symbol]
     
-    # Key columns for display (removed symbol_option_rank)
+    # All columns for display (matching SQL query output)
     key_columns = [
-        'symbol', 'Company', 'expiration_date', 'days_to_expiration',
-        'strike', 'live_stock_price', 'premium_option_price', 'extrinsic_value',
-        'total_investment', 'minimum_potential_profit', 'roi_pct', 'roi_annualized_pct',
-        'delta', 'iv', 'option_open_interest', 'classification', 'Current-Div',
-        'dividends_to_expiration', 'dividend_sum_to_expiration'
+        'symbol', 'Company', 'Sector', 'Industry',
+        'expiration_date', 'days_to_expiration',
+        'strike_price', 'live_stock_price', 'premium_option_price',
+        'intrinsic_value', 'extrinsic_value',
+        'total_investment', 'minimum_potential_profit',
+        'roi_pct', 'roi_annualized_pct',
+        'max_loss_total', 'total_return',
+        'delta', 'impliedVolatility', 'open_interest',
+        'Classification', 'No-Years', 'Current-Div',
+        'Payouts/-Year', 'dividends_to_expiration', 'dividend_sum_to_expiration',
+        'dividends_to_break_even',
+        'earnings_date', 'days_to_earnings',
+        'analyst_mean_target_price_year',
+        'spread_ptc',
+        'strike_stock_price_difference', 'strike_stock_price_difference_ptc',
     ]
     
     # Filter columns that actually exist in the dataframe
@@ -128,18 +138,61 @@ if 'married_put_df' in st.session_state and not st.session_state['married_put_df
                 "Min Profit",
                 format="$%.2f"
             ),
+            "max_loss_total": st.column_config.NumberColumn(
+                "Max Loss",
+                format="$%.2f"
+            ),
+            "total_return": st.column_config.NumberColumn(
+                "Total Return",
+                format="$%.2f"
+            ),
             "live_stock_price": st.column_config.NumberColumn(
                 "Stock Price",
                 format="$%.2f"
             ),
-            "strike": st.column_config.NumberColumn(
+            "strike_price": st.column_config.NumberColumn(
                 "Strike",
                 format="$%.2f"
             ),
             "premium_option_price": st.column_config.NumberColumn(
                 "Option Premium",
                 format="$%.2f"
-            )
+            ),
+            "intrinsic_value": st.column_config.NumberColumn(
+                "Intrinsic Value",
+                format="$%.2f"
+            ),
+            "extrinsic_value": st.column_config.NumberColumn(
+                "Extrinsic Value",
+                format="$%.2f"
+            ),
+            "impliedVolatility": st.column_config.NumberColumn(
+                "IV",
+                format="%.2f"
+            ),
+            "spread_ptc": st.column_config.NumberColumn(
+                "Spread %",
+                format="%.2f%%"
+            ),
+            "strike_stock_price_difference": st.column_config.NumberColumn(
+                "Strike-Stock Diff",
+                format="$%.2f"
+            ),
+            "strike_stock_price_difference_ptc": st.column_config.NumberColumn(
+                "Strike-Stock Diff %",
+                format="%.2f%%"
+            ),
+            "dividend_sum_to_expiration": st.column_config.NumberColumn(
+                "Div Sum to Exp",
+                format="$%.2f"
+            ),
+            "analyst_mean_target_price_year": st.column_config.NumberColumn(
+                "Analyst Target",
+                format="$%.2f"
+            ),
+            "Classification": st.column_config.TextColumn(
+                "Dividend Status"
+            ),
         }
     )
 
