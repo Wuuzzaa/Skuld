@@ -30,15 +30,46 @@ with col3:
 with col4:
     days_range = st.slider("Days to Expiration", min_value=30, max_value=720, value=(30, 500), step=30)
 
-# Row 2 for Status Filter
+# Row 2 for Status Filter (Checkboxes)
 st.write("---")
-all_statuses = ["Dividend Champion", "Dividend Contender", "Dividend Challenger", "Dividend Achiever", "Dividend King", "Dividend Aristocrat"]
-default_statuses = ["Dividend Champion", "Dividend Contender", "Dividend Challenger"]
-selected_statuses = st.multiselect("Dividend Growth Status", options=all_statuses, default=default_statuses)
+st.caption("Dividend Growth Status")
+cb_cols = st.columns([1, 1, 1, 0.8])
+
+with cb_cols[0]:
+    chk_contender = st.checkbox("Contender", value=True, key="chk_contender")
+with cb_cols[1]:
+    chk_challenger = st.checkbox("Challenger", value=True, key="chk_challenger")
+with cb_cols[2]:
+    chk_champion = st.checkbox("Champion", value=True, key="chk_champion")
+with cb_cols[3]:
+    if st.button("Alle (kein Filter)", key="btn_select_all"):
+        st.session_state["chk_contender"] = False
+        st.session_state["chk_challenger"] = False
+        st.session_state["chk_champion"] = False
+        st.session_state["chk_show_all"] = True
+        st.rerun()
+
+# "Alle" means no classification filter at all
+show_all = st.session_state.get("chk_show_all", False)
+
+# If any individual checkbox is toggled, deactivate "show all"
+if any([chk_contender, chk_challenger, chk_champion]):
+    show_all = False
+    st.session_state["chk_show_all"] = False
+
+# Build selected statuses list from checkboxes
+selected_statuses = []
+if not show_all:
+    if chk_contender:
+        selected_statuses.append("Dividend Contender")
+    if chk_challenger:
+        selected_statuses.append("Dividend Challenger")
+    if chk_champion:
+        selected_statuses.append("Dividend Champion")
 
 # Auto-load data on page load or when filters change
 # Using session state to track if data needs to be reloaded
-filter_key = f"{max_results}_{min_roi}_{max_roi}_{days_range}_{selected_statuses}"
+filter_key = f"{max_results}_{min_roi}_{max_roi}_{days_range}_{selected_statuses}_{show_all}"
 if 'last_filter_key' not in st.session_state or st.session_state['last_filter_key'] != filter_key:
     st.session_state['last_filter_key'] = filter_key
     
@@ -61,8 +92,8 @@ if 'last_filter_key' not in st.session_state or st.session_state['last_filter_ke
                     (df['days_to_expiration'] <= days_range[1])
                 ]
 
-                # Apply Status Filter
-                if selected_statuses:
+                # Apply Status Filter (skip if "Alle" is active)
+                if not show_all and selected_statuses:
                      # 'Classification' is the column name in the DF (aliased from dividend_classification)
                     df = df[df['Classification'].isin(selected_statuses)]
                 
