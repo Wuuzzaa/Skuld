@@ -5,6 +5,7 @@ import os
 
 from config import PATH_DATABASE_QUERY_FOLDER
 from src.page_display_dataframe import page_display_dataframe
+from src.documentation_renderer import render_married_put_analysis_documentation
 
 # Add src directory to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
@@ -102,10 +103,14 @@ if 'married_put_df' in st.session_state and not st.session_state['married_put_df
     # Filter columns that actually exist in the dataframe
     available_columns = [col for col in key_columns if col in display_df.columns]
 
-    # show final dataframe
-    page_display_dataframe(
-        df=display_df[available_columns],
-        symbol_column='symbol',
+    # show final dataframe with row selection for documentation
+    event = st.dataframe(
+        display_df[available_columns],
+        use_container_width=True,
+        height=min(800, 40 + 35 * len(display_df)),
+        selection_mode="single-row",
+        on_select="rerun",
+        key="married_put_table",
         column_config={
             "roi_annualized_pct": st.column_config.NumberColumn(
                 "ROI % (Annual)",
@@ -137,6 +142,18 @@ if 'married_put_df' in st.session_state and not st.session_state['married_put_df
             )
         }
     )
+
+    # ── Inline Documentation on row click ──────────────────────────
+    selected_rows = event.selection.rows if hasattr(event, "selection") else []
+    if selected_rows and not display_df.empty:
+        selected_idx = selected_rows[0]
+        selected_row = display_df.iloc[selected_idx]
+
+        st.divider()
+        doc_md = render_married_put_analysis_documentation(row=selected_row)
+        st.markdown(doc_md)
+    else:
+        st.caption("💡 Klicke auf eine Zeile in der Tabelle, um die vollständige Berechnung für diese Option zu sehen.")
 
 else:
     st.info("No data available")

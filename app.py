@@ -29,6 +29,7 @@ st.title("SKULD - Option Viewer")
 analyst_prices = st.Page("pages/analyst_prices.py", title="Analyst Prices")
 spreads = st.Page("pages/spreads.py", title="Spreads")
 marrieds = st.Page("pages/married_put_analysis.py", title="Married Puts")
+position_insurance = st.Page("pages/position_insurance_tool.py", title="Position Insurance Tool")
 multifactor_swingtrading = st.Page('pages/multifactor_swingtrading.py', title="Multifactor Swingtrading")
 expected_value = st.Page('pages/expected_value.py', title="Expected Value")
 data_logs = st.Page("pages/data_change_logs.py", title="Data Logs")
@@ -40,6 +41,7 @@ page = st.navigation(
         analyst_prices,
         spreads,
         marrieds,
+        position_insurance,
         multifactor_swingtrading,
         expected_value,
         data_logs,
