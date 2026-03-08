@@ -48,7 +48,7 @@ class YahooQueryScraper:
                 # Symbole in 2000er-Pakete aufteilen
                 local_batch_size = 2000
                 # asynchronous=True, max_workers=2, is not possible because of the high number of symbols and the rate limit
-                local_ticker_batches = _get_ticker_batches(self.symbols, local_batch_size, self.retries, asynchronous=False)
+                local_ticker_batches = _get_ticker_batches(symbols, local_batch_size, self.retries, asynchronous=False)
                 batch = 1
                 for ticker_batch in local_ticker_batches:
                     logger.info(f"({batch}/{len(local_ticker_batches)}) Batch")
@@ -98,7 +98,7 @@ class YahooQueryScraper:
             logger.info(f"Loading for {len(symbols)} symbols all financial data from Yahoo Finance")
             # Symbole in 2000er-Pakete aufteilen
             local_batch_size = 2000
-            local_ticker_batches = _get_ticker_batches(self.symbols, local_batch_size, self.retries, asynchronous=True)
+            local_ticker_batches = _get_ticker_batches(symbols, local_batch_size, self.retries, asynchronous=True)
             for ticker_batch in local_ticker_batches:
                 logger.info(f"({batch}/{len(local_ticker_batches)}) Batch")
                 batch += 1
