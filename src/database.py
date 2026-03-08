@@ -66,7 +66,13 @@ def get_postgres_engine():
 
         # Create Engine
         db_url = f"postgresql+psycopg2://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{db_host}:{db_port}/{POSTGRES_DB}"
-        _POSTGRES_ENGINE = create_engine(db_url)
+        _POSTGRES_ENGINE = create_engine(
+            db_url,
+            pool_size=10,
+            max_overflow=20,
+            pool_pre_ping=True,
+            pool_recycle=300,
+        )
         logger.info("Successfully created PostgreSQL engine.")
         return _POSTGRES_ENGINE
 
@@ -282,10 +288,11 @@ def select_into_dataframe_pg(query: str = None, sql_file_path: str = None, param
         pg_engine = get_postgres_engine()
         if pg_engine:
             start_pg = time.time()
-            if params:
-                df = pd.read_sql(text(str(sql)), pg_engine, params=params)
-            else:
-                df = pd.read_sql(text(str(sql)), pg_engine)
+            with pg_engine.connect() as conn:
+                if params:
+                    df = pd.read_sql(text(str(sql)), conn, params=params)
+                else:
+                    df = pd.read_sql(text(str(sql)), conn)
             logger.debug(f"[PostgreSQL] Rows: {len(df)} - Runtime: {round(time.time() - start_pg, 2)}s.")
     except Exception as e:
         logger.error(f"[PostgreSQL] Error executing query: \n{e}")
