@@ -38,7 +38,7 @@ WITH BaseData AS (
         AND contract_type = 'put'
         AND open_interest > 0
         AND extrinsic_value > 0
-        AND strike_price > live_stock_price * 1.2
+        AND strike_price > live_stock_price * :strike_multiplier
         AND days_to_expiration > 0
         AND NO_DIVIDEND_PAYOUTS_LAST_YEAR > 0
 ),

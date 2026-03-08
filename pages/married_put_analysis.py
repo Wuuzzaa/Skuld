@@ -16,7 +16,7 @@ from src.database import select_into_dataframe
 st.subheader("Married Put Analysis")
 
 # Filter Controls
-col1, col2, col3, col4 = st.columns(4)
+col1, col2, col3, col4, col5 = st.columns(5)
 
 with col1:
     max_results = st.number_input("Max Results", min_value=10, max_value=1000, value=50, step=10)
@@ -28,6 +28,10 @@ with col3:
     max_roi = st.number_input("Max ROI %", min_value=0.0, max_value=100.0, value=7.0, step=1.0)
 
 with col4:
+    strike_multiplier = st.number_input("Strike > Stock ×", min_value=1.0, max_value=2.0, value=1.2, step=0.05, format="%.2f",
+                                         help="Strike muss größer sein als Aktienkurs × dieser Faktor (z.B. 1.0 = ITM, 1.2 = Deep ITM)")
+
+with col5:
     days_range = st.slider("Days to Expiration", min_value=30, max_value=720, value=(30, 500), step=30)
 
 # Row 2 for Status Filter (Checkboxes)
@@ -72,7 +76,7 @@ if not show_all:
 
 # Auto-load data on page load or when filters change
 # Using session state to track if data needs to be reloaded
-filter_key = f"{max_results}_{min_roi}_{max_roi}_{days_range}_{selected_statuses}_{show_all}"
+filter_key = f"{max_results}_{min_roi}_{max_roi}_{strike_multiplier}_{days_range}_{selected_statuses}_{show_all}"
 if 'last_filter_key' not in st.session_state or st.session_state['last_filter_key'] != filter_key:
     st.session_state['last_filter_key'] = filter_key
     
@@ -80,7 +84,7 @@ if 'last_filter_key' not in st.session_state or st.session_state['last_filter_ke
         try:
             # Execute SQL query
             sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'married_put.sql'
-            df = select_into_dataframe(sql_file_path=sql_file_path)
+            df = select_into_dataframe(sql_file_path=sql_file_path, params={"strike_multiplier": strike_multiplier})
             
             if df is not None and not df.empty:
                 # Apply ROI filters
