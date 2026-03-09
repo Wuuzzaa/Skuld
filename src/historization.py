@@ -38,6 +38,7 @@ def run_historization_pipeline():
         logger.info("Historization Pipeline Completed Successfully.")
     except Exception as e:
         logger.error(f"Historization Pipeline Failed: {e}")
+        raise e
     
     # _create_history_merge_views()
     logger.info(f"Historization Pipeline Finished in {round(time.time() - start_time, 2)}s.")

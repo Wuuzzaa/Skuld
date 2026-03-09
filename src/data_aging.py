@@ -263,17 +263,16 @@ class DataAgingService:
 
         pg_engine = get_postgres_engine()
         table = source_table
-
-        daily_table = f"{table}HistoryDaily"
-        weekly_table = f"{table}HistoryWeekly"
         monthly_table = f"{table}HistoryMonthly"     
         master_data_table = f"{table}MasterData" 
         history_view = f"{table}History" 
         logger.info(f"Processing {monthly_table}...")     
     
-        key_columns, data_columns = get_table_key_and_data_columns(master_data_table)
+        key_columns, data_columns = get_table_key_and_data_columns(source_table)
         key_columns_str = ", ".join([f'"{col["name"]}"' for col in key_columns])
         key_columns_not_exist_master_str = " AND ".join([f'SUBQUERY."{col["name"]}" = MASTER_DATA."{col["name"]}"' for col in key_columns])
+        key_join_str = " AND ".join([f'a."{col["name"]}" = b."{col["name"]}"' for col in key_columns])
+
 
 
         # We process each data column
@@ -291,9 +290,9 @@ class DataAgingService:
                 # We insert the constant value. We primarily use min(val) since min=max.
 
                 promote_sql = f"""
-                    INSERT INTO "{master_data_table}" (
-                        {key_columns_str}, "{col_name}"
-                    )
+                    UPDATE "{master_data_table}" AS a
+                    SET "{col_name}" = b."{col_name}"
+                    FROM (
                     SELECT * FROM (
                     SELECT
                         {key_columns_str},
@@ -319,8 +318,8 @@ class DataAgingService:
                             AND  SUBQUERY."{col_name}" = MASTER_DATA."{col_name}"
                             AND MASTER_DATA."{col_name}" IS NOT NULL
                         )             
-                    ON CONFLICT({key_columns_str}) 
-                    DO UPDATE SET "{col_name}" = excluded."{col_name}"
+                    ) AS b
+                    WHERE {key_join_str};
                 """
 
                 if col_type.lower() == 'boolean':
@@ -335,7 +334,7 @@ class DataAgingService:
                 except Exception as e:
                     conn.rollback()
                     logger.error(f"[PostgreSQL] Error promoting {source_table} column {col_name} to Master Data: {e}")
-                    continue
+                    raise e
                 
         logger.info(f"Data promoted to Master Data in {round(time.time() - start_time, 2)}s.")
 
