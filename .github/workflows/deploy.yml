@@ -7,11 +7,33 @@ on:
       - 'monitoring/**'
 
 jobs:
-  deploy:
+  # ── Step 1: Read deploy target from ops/deploy-target.env ──
+  resolve-target:
     runs-on: ubuntu-latest
+    outputs:
+      target: ${{ steps.config.outputs.target }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read deploy target
+        id: config
+        run: |
+          source ops/deploy-target.env
+          echo "target=$DEPLOY_TARGET" >> $GITHUB_OUTPUT
+          echo "📍 Deploy target: **$DEPLOY_TARGET**" >> $GITHUB_STEP_SUMMARY
+
+  # ── Step 2: Deploy to the resolved target environment ──
+  deploy:
+    needs: resolve-target
+    runs-on: ubuntu-latest
+    environment: ${{ needs.resolve-target.outputs.target }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Show deploy target
+        run: |
+          echo "🚀 Deploying to: ${{ needs.resolve-target.outputs.target }}"
+          echo "🖥️ Host: ${{ secrets.DEPLOY_HOST }}"
 
       # ── Telegram: Deploy Notification (self-contained, safe to remove) ──
       - name: Notify deploy started via Telegram
@@ -25,7 +47,8 @@ jobs:
           COMMIT_MSG=$(git log -1 --format='%s')
           SHORT_SHA=$(git rev-parse --short HEAD)
           REPO="${{ github.repository }}"
-          TEXT="🚀 <b>[Production] Deploy gestartet</b>%0A%0A👤 <b>${ACTOR}</b> hat eine neue Version auf <code>${BRANCH}</code> gepusht.%0A📝 <code>${SHORT_SHA}</code>: ${COMMIT_MSG}%0A📦 ${REPO}"
+          TARGET="${{ needs.resolve-target.outputs.target }}"
+          TEXT="🚀 <b>[Production → ${TARGET}] Deploy gestartet</b>%0A%0A👤 <b>${ACTOR}</b> hat eine neue Version auf <code>${BRANCH}</code> gepusht.%0A📝 <code>${SHORT_SHA}</code>: ${COMMIT_MSG}%0A📦 ${REPO}"
           curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TELEGRAM_CHAT_ID}" \
             -d text="${TEXT}" \
@@ -225,7 +248,8 @@ jobs:
         run: |
           COMMIT_MSG=$(git log -1 --format='%s')
           SHORT_SHA=$(git rev-parse --short HEAD)
-          TEXT="✅ <b>[Production] Deploy erfolgreich</b>%0A%0A📝 <code>${SHORT_SHA}</code>: ${COMMIT_MSG}"
+          TARGET="${{ needs.resolve-target.outputs.target }}"
+          TEXT="✅ <b>[Production → ${TARGET}] Deploy erfolgreich</b>%0A%0A📝 <code>${SHORT_SHA}</code>: ${COMMIT_MSG}"
           curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TELEGRAM_CHAT_ID}" \
             -d text="${TEXT}" \
@@ -242,7 +266,8 @@ jobs:
           COMMIT_MSG=$(git log -1 --format='%s')
           SHORT_SHA=$(git rev-parse --short HEAD)
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          TEXT="❌ <b>[Production] Deploy fehlgeschlagen!</b>%0A%0A👤 ${ACTOR}%0A📝 <code>${SHORT_SHA}</code>: ${COMMIT_MSG}%0A🔗 <a href=\"${RUN_URL}\">Build Logs ansehen</a>"
+          TARGET="${{ needs.resolve-target.outputs.target }}"
+          TEXT="❌ <b>[Production → ${TARGET}] Deploy fehlgeschlagen!</b>%0A%0A👤 ${ACTOR}%0A📝 <code>${SHORT_SHA}</code>: ${COMMIT_MSG}%0A🔗 <a href=\"${RUN_URL}\">Build Logs ansehen</a>"
           curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TELEGRAM_CHAT_ID}" \
             -d text="${TEXT}" \

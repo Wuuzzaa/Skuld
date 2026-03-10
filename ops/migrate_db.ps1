@@ -2,9 +2,20 @@
 
 $ErrorActionPreference = "Stop"
 
-# Configuration
+# Configuration — reads active production host from deploy-target.env
+$DeployTargetEnv = Join-Path $PSScriptRoot "deploy-target.env"
+if (Test-Path $DeployTargetEnv) {
+    $targetVars = @{}
+    Get-Content $DeployTargetEnv | Where-Object { $_ -match '^\s*[^#]' -and $_ -like '*=*' } | ForEach-Object {
+        $parts = $_.Split('=', 2); $targetVars[$parts[0].Trim()] = $parts[1].Trim().Trim('"')
+    }
+    $activeTarget = $targetVars["DEPLOY_TARGET"]
+    if ($activeTarget -eq "skuld-2") { $ProdHost = $targetVars["SKULD2_HOST"] }
+    else { $ProdHost = $targetVars["SKULD1_HOST"] }
+} else {
+    $ProdHost = "91.98.156.116"  # Fallback
+}
 $ProdUser = "deploy"
-$ProdHost = "91.98.156.116"
 $ProdDB = "Skuld"
 # Production container name (Standard stack usually uses this, verify if different)
 $ProdContainer = "postgres_setup-db-1" 

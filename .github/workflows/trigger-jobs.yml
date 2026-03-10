@@ -47,10 +47,26 @@ on:
 # PRODUCTION JOB (runs on ubuntu-latest, connects via SSH to Hetzner)
 # =====================================================================
 jobs:
-  trigger-production:
-    name: "Production: ${{ inputs.job }}"
+  # ── Step 0: Read deploy target for production ──
+  resolve-target:
     if: ${{ inputs.environment == 'production' }}
     runs-on: ubuntu-latest
+    outputs:
+      target: ${{ steps.config.outputs.target }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read deploy target
+        id: config
+        run: |
+          source ops/deploy-target.env
+          echo "target=$DEPLOY_TARGET" >> $GITHUB_OUTPUT
+
+  trigger-production:
+    name: "Production: ${{ inputs.job }}"
+    needs: resolve-target
+    if: ${{ inputs.environment == 'production' }}
+    runs-on: ubuntu-latest
+    environment: ${{ needs.resolve-target.outputs.target }}
     timeout-minutes: 360
 
     steps:

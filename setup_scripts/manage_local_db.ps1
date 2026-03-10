@@ -211,8 +211,8 @@ DB_PORT=5432
 PGADMIN_EMAIL=admin@admin.com
 PGADMIN_PASSWORD=admin
 PGADMIN_PORT=5051
-# Remote Backup Config
-REMOTE_DB_HOST=91.98.156.116
+# Remote Backup Config (default resolved from ops/deploy-target.env)
+REMOTE_DB_HOST=
 REMOTE_DB_USER=deploy
 REMOTE_DB_PATH=/home/deploy/backups/postgres
 SSH_KEY_PATH=
@@ -242,7 +242,18 @@ $PG_EMAIL_VAL = if ($EnvVars.ContainsKey("PGADMIN_EMAIL")) { $EnvVars["PGADMIN_E
 $PG_PORT_VAL = if ($EnvVars.ContainsKey("PGADMIN_PORT")) { $EnvVars["PGADMIN_PORT"] } else { 5051 }
 
 # Remote defaults
-$REMOTE_HOST_VAL = if ($EnvVars.ContainsKey("REMOTE_DB_HOST")) { $EnvVars["REMOTE_DB_HOST"] } else { "91.98.156.116" }
+# Resolve production host from deploy-target.env if not set in .env
+$DefaultRemoteHost = "91.98.156.116"
+$DeployTargetFile = Join-Path (Split-Path $PSScriptRoot) "ops\deploy-target.env"
+if (Test-Path $DeployTargetFile) {
+    $dtVars = @{}
+    Get-Content $DeployTargetFile | Where-Object { $_ -match '^\s*[^#]' -and $_ -like '*=*' } | ForEach-Object {
+        $p = $_.Split('=', 2); $dtVars[$p[0].Trim()] = $p[1].Trim().Trim('"')
+    }
+    if ($dtVars["DEPLOY_TARGET"] -eq "skuld-2") { $DefaultRemoteHost = $dtVars["SKULD2_HOST"] }
+    elseif ($dtVars["SKULD1_HOST"]) { $DefaultRemoteHost = $dtVars["SKULD1_HOST"] }
+}
+$REMOTE_HOST_VAL = if ($EnvVars.ContainsKey("REMOTE_DB_HOST") -and $EnvVars["REMOTE_DB_HOST"]) { $EnvVars["REMOTE_DB_HOST"] } else { $DefaultRemoteHost }
 $REMOTE_USER_VAL = if ($EnvVars.ContainsKey("REMOTE_DB_USER")) { $EnvVars["REMOTE_DB_USER"] } else { "deploy" }
 $REMOTE_PATH_VAL = if ($EnvVars.ContainsKey("REMOTE_DB_PATH")) { $EnvVars["REMOTE_DB_PATH"] } else { "/home/deploy/backups/postgres" }
 $SSH_KEY_VAL     = if ($EnvVars.ContainsKey("SSH_KEY_PATH"))     { $EnvVars["SSH_KEY_PATH"] }     else { "" }

@@ -4,8 +4,24 @@ on:
   workflow_dispatch:
 
 jobs:
-  debug:
+  # ── Step 1: Read deploy target ──
+  resolve-target:
     runs-on: ubuntu-latest
+    outputs:
+      target: ${{ steps.config.outputs.target }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read deploy target
+        id: config
+        run: |
+          source ops/deploy-target.env
+          echo "target=$DEPLOY_TARGET" >> $GITHUB_OUTPUT
+          echo "📍 Debug target: **$DEPLOY_TARGET**" >> $GITHUB_STEP_SUMMARY
+
+  debug:
+    needs: resolve-target
+    runs-on: ubuntu-latest
+    environment: ${{ needs.resolve-target.outputs.target }}
     steps:
       - name: Setup SSH Key
         run: |
