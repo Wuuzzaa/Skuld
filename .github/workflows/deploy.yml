@@ -225,6 +225,21 @@ jobs:
             
             echo "=== Building new image ==="
             mysudo docker compose build --pull --no-cache
+
+            echo "=== Ensuring external Docker networks exist ==="
+            if ! mysudo docker network inspect web >/dev/null 2>&1; then
+              echo "Creating external network: web"
+              mysudo docker network create web
+            else
+              echo "External network already exists: web"
+            fi
+
+            if ! mysudo docker network inspect postgres_setup_default >/dev/null 2>&1; then
+              echo "Creating external network: postgres_setup_default"
+              mysudo docker network create postgres_setup_default
+            else
+              echo "External network already exists: postgres_setup_default"
+            fi
             
             echo "=== Starting new container ==="
             mysudo docker compose up -d --remove-orphans
