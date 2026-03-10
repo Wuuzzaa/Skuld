@@ -5,6 +5,7 @@ on:
     branches: [ master ]
     paths-ignore:
       - 'monitoring/**'
+      - 'traefik/**'
 
 jobs:
   # ── Step 1: Read deploy target from ops/deploy-target.env ──
