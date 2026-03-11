@@ -180,9 +180,20 @@ jobs:
             mysudo docker compose up -d --remove-orphans
 
             for attempt in $(seq 1 30); do
-              status=$(mysudo docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}running{{end}}' postgres_setup-db-1 2>/dev/null || true)
-              if [ "$status" = "healthy" ]; then
-                exit 0
+              container_state=$(mysudo docker inspect --format '{{.State.Status}}' postgres_setup-db-1 2>/dev/null || true)
+              health_state=$(mysudo docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' postgres_setup-db-1 2>/dev/null || true)
+
+              echo "PostgreSQL status check ${attempt}: state=${container_state:-unknown}, health=${health_state:-unknown}"
+
+              if [ "$container_state" = "running" ] && [ "$health_state" = "healthy" ]; then
+                break
+              fi
+
+              if [ "$container_state" = "exited" ] || [ "$container_state" = "dead" ]; then
+                mysudo docker compose ps
+                mysudo docker compose logs --tail=100
+                echo "PostgreSQL container is not running."
+                exit 1
               fi
 
               if [ "$attempt" -eq 30 ]; then
@@ -194,6 +205,8 @@ jobs:
 
               sleep 5
             done
+
+            mysudo docker compose ps
           ENDSSH
 
   deploy-app:
