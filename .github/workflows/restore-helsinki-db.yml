@@ -41,6 +41,7 @@ jobs:
     environment: ${{ inputs.source }}
     outputs:
       dump_file: ${{ steps.locate.outputs.dump_file }}
+      dump_path: ${{ steps.locate.outputs.dump_path }}
       dump_size: ${{ steps.locate.outputs.dump_size }}
     steps:
       - name: Setup SSH key
@@ -75,6 +76,7 @@ jobs:
             "du -h '$LATEST' | cut -f1")
 
           echo "dump_file=${DUMP_FILE}" >> $GITHUB_OUTPUT
+          echo "dump_path=${LATEST}" >> $GITHUB_OUTPUT
           echo "dump_size=${DUMP_SIZE}" >> $GITHUB_OUTPUT
 
           echo "### Selected backup" >> $GITHUB_STEP_SUMMARY
@@ -85,7 +87,7 @@ jobs:
         if: ${{ inputs.dry_run == false }}
         run: |
           DUMP_FILE="${{ steps.locate.outputs.dump_file }}"
-          LATEST="${{ steps.locate.outputs.dump_path }}"
+          LATEST="${{ needs.find-backup-on-source.outputs.dump_path }}"
 
           mkdir -p /tmp/helsinki-db-restore
           scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
