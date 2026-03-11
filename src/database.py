@@ -479,6 +479,18 @@ def run_migrations():
         # pg_migrations()
 
 
+def _get_missing_expected_views(inspector):
+    expected_views = {
+        "OptionData",
+        "FundamentalData",
+        "OptionDataMerged",
+        "OptionPricingMetrics",
+        "StockData",
+    }
+    existing_views = set(inspector.get_view_names())
+    return sorted(expected_views - existing_views)
+
+
 def _recreate_views_for_engine(engine):
     """
     Internal helper to recreate views on a specific engine.
@@ -507,10 +519,14 @@ def _recreate_views_for_engine(engine):
     
     hash_value = calculate_view_hash(view_path, view_files)
     db_hash_value = get_db_view_hash(engine)
+    missing_views = _get_missing_expected_views(inspect(engine))
 
-    if db_hash_value == hash_value:
+    if db_hash_value == hash_value and not missing_views:
         logger.info(f"[{label}] Views are up to date. Skipping recreation.")
         return
+
+    if missing_views:
+        logger.warning(f"[{label}] Expected views missing despite stored view hash: {missing_views}. Recreating views.")
     
     with engine.connect() as connection:
         while pending_views:
@@ -577,10 +593,14 @@ def _recreate_views_connection(connection):
     
     hash_value = calculate_view_hash(view_path, view_files)
     db_hash_value = get_db_view_hash_conn(connection)
+    missing_views = _get_missing_expected_views(inspect(connection.engine))
 
-    if db_hash_value == hash_value:
+    if db_hash_value == hash_value and not missing_views:
         logger.info(f"[{label}] Views are up to date. Skipping recreation.")
         return
+
+    if missing_views:
+        logger.warning(f"[{label}] Expected views missing despite stored view hash: {missing_views}. Recreating views.")
     
     drop_all_views(connection.engine)
     while pending_views:
