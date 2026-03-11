@@ -6,7 +6,6 @@ on:
     paths-ignore:
       - 'monitoring/**'
       - 'traefik/**'
-      - 'postgres_setup/**'
 
 jobs:
   # ── Step 1: Read deploy target from ops/deploy-target.env ──
