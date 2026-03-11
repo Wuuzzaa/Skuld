@@ -1,0 +1,89 @@
+name: Deploy PostgreSQL Production
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - 'postgres_setup/**'
+      - '.github/workflows/deploy-postgres.yml'
+  workflow_dispatch:
+
+jobs:
+  resolve-target:
+    runs-on: ubuntu-latest
+    outputs:
+      target: ${{ steps.config.outputs.target }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read deploy target
+        id: config
+        run: |
+          source ops/deploy-target.env
+          echo "target=$DEPLOY_TARGET" >> $GITHUB_OUTPUT
+          echo "📍 PostgreSQL target: **$DEPLOY_TARGET**" >> $GITHUB_STEP_SUMMARY
+
+  deploy-postgres:
+    needs: resolve-target
+    runs-on: ubuntu-latest
+    environment: ${{ needs.resolve-target.outputs.target }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: Prepare remote directory
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "echo '${{ secrets.DEPLOY_PASSWORD }}' | sudo -S mkdir -p /opt/postgres_setup && \
+             echo '${{ secrets.DEPLOY_PASSWORD }}' | sudo -S chown -R ${{ secrets.DEPLOY_USER }} /opt/postgres_setup"
+
+      - name: Sync PostgreSQL files
+        run: |
+          rsync -avz --delete \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
+            postgres_setup/ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/postgres_setup/
+
+      - name: Deploy PostgreSQL stack
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'ENDSSH'
+            set -euo pipefail
+
+            DEPLOY_PASS="${{ secrets.DEPLOY_PASSWORD }}"
+            PGADMIN_EMAIL="${{ secrets.PGADMIN_DEFAULT_EMAIL }}"
+            PGADMIN_PASSWORD="${{ secrets.PGADMIN_DEFAULT_PASSWORD }}"
+            if [ -z "$PGADMIN_EMAIL" ]; then
+              PGADMIN_EMAIL="admin@skuld.local"
+            fi
+            if [ -z "$PGADMIN_PASSWORD" ]; then
+              PGADMIN_PASSWORD="admin"
+            fi
+            mysudo() {
+              echo "$DEPLOY_PASS" | sudo -S "$@"
+            }
+
+            cd /opt/postgres_setup
+
+            if ! mysudo docker network inspect postgres_setup_default >/dev/null 2>&1; then
+              mysudo docker network create postgres_setup_default
+            fi
+
+            cat > .env <<EOF
+POSTGRES_DB=Skuld
+POSTGRES_USER=admin
+POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+PGADMIN_DEFAULT_EMAIL=${PGADMIN_EMAIL}
+PGADMIN_DEFAULT_PASSWORD=${PGADMIN_PASSWORD}
+EOF
+
+            mysudo docker compose down --remove-orphans || true
+            mysudo docker compose pull
+            mysudo docker compose up -d --remove-orphans
+            mysudo docker compose ps
+          ENDSSH
