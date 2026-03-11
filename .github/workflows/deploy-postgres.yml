@@ -75,12 +75,12 @@ jobs:
             fi
 
             cat > .env <<EOF
-POSTGRES_DB=Skuld
-POSTGRES_USER=admin
-POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
-PGADMIN_DEFAULT_EMAIL=${PGADMIN_EMAIL}
-PGADMIN_DEFAULT_PASSWORD=${PGADMIN_PASSWORD}
-EOF
+            POSTGRES_DB=Skuld
+            POSTGRES_USER=admin
+            POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+            PGADMIN_DEFAULT_EMAIL=${PGADMIN_EMAIL}
+            PGADMIN_DEFAULT_PASSWORD=${PGADMIN_PASSWORD}
+            EOF
 
             mysudo docker compose down --remove-orphans || true
             mysudo docker compose pull
