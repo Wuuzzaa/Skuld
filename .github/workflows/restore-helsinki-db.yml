@@ -184,10 +184,16 @@ jobs:
             gunzip -c ~/backups/migration/${DUMP_FILE} | \
               sudo docker exec -i postgres_setup-db-1 psql -U admin -d Skuld --quiet
 
-            echo "=== Restart app containers ==="
+            echo "=== Restart app containers and rebuild views ==="
             if [ -d /opt/skuld ]; then
               cd /opt/skuld
-              mysudo docker compose start skuld-frontend skuld-backend 2>/dev/null || true
+
+              mysudo docker compose start skuld-backend 2>/dev/null || true
+              sleep 5
+
+              mysudo docker exec skuld-backend python main.py --mode only_run_migrations
+
+              mysudo docker compose start skuld-frontend 2>/dev/null || true
             fi
           ENDSSH
 
