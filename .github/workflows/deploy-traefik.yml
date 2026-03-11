@@ -74,8 +74,8 @@ jobs:
             chmod 600 letsencrypt/acme.json
 
             cat > .env <<EOF
-            TRAEFIK_ACME_EMAIL=${TRAEFIK_ACME_EMAIL}
-            EOF
+TRAEFIK_ACME_EMAIL=${TRAEFIK_ACME_EMAIL}
+EOF
 
             mysudo docker compose down --remove-orphans || true
             mysudo docker compose pull
