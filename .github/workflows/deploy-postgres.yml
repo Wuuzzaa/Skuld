@@ -74,13 +74,13 @@ jobs:
               mysudo docker network create postgres_setup_default
             fi
 
-            cat > .env <<EOF
-POSTGRES_DB=Skuld
-POSTGRES_USER=admin
-POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
-PGADMIN_DEFAULT_EMAIL=${PGADMIN_EMAIL}
-PGADMIN_DEFAULT_PASSWORD=${PGADMIN_PASSWORD}
-EOF
+            {
+              printf '%s\n' 'POSTGRES_DB=Skuld'
+              printf '%s\n' 'POSTGRES_USER=admin'
+              printf '%s\n' "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}"
+              printf '%s\n' "PGADMIN_DEFAULT_EMAIL=${PGADMIN_EMAIL}"
+              printf '%s\n' "PGADMIN_DEFAULT_PASSWORD=${PGADMIN_PASSWORD}"
+            } > .env
 
             mysudo docker compose down --remove-orphans || true
             mysudo docker compose pull
