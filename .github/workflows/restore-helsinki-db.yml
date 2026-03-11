@@ -41,22 +41,13 @@ jobs:
     environment: ${{ inputs.source }}
     outputs:
       dump_file: ${{ steps.locate.outputs.dump_file }}
-      dump_path: ${{ steps.locate.outputs.dump_path }}
       dump_size: ${{ steps.locate.outputs.dump_size }}
-      source_host: ${{ steps.meta.outputs.source_host }}
-      source_user: ${{ steps.meta.outputs.source_user }}
     steps:
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-
-      - name: Expose source connection metadata
-        id: meta
-        run: |
-          echo "source_host=${{ secrets.DEPLOY_HOST }}" >> $GITHUB_OUTPUT
-          echo "source_user=${{ secrets.DEPLOY_USER }}" >> $GITHUB_OUTPUT
 
       - name: Test source connectivity
         run: |
@@ -84,12 +75,33 @@ jobs:
             "du -h '$LATEST' | cut -f1")
 
           echo "dump_file=${DUMP_FILE}" >> $GITHUB_OUTPUT
-          echo "dump_path=${LATEST}" >> $GITHUB_OUTPUT
           echo "dump_size=${DUMP_SIZE}" >> $GITHUB_OUTPUT
 
           echo "### Selected backup" >> $GITHUB_STEP_SUMMARY
           echo "- File: ${DUMP_FILE}" >> $GITHUB_STEP_SUMMARY
           echo "- Size: ${DUMP_SIZE}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Download backup from source to runner
+        if: ${{ inputs.dry_run == false }}
+        run: |
+          DUMP_FILE="${{ steps.locate.outputs.dump_file }}"
+          LATEST="${{ steps.locate.outputs.dump_path }}"
+
+          mkdir -p /tmp/helsinki-db-restore
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${LATEST} \
+            /tmp/helsinki-db-restore/${DUMP_FILE}
+
+          ls -lh /tmp/helsinki-db-restore/${DUMP_FILE}
+
+      - name: Upload backup artifact
+        if: ${{ inputs.dry_run == false }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: helsinki-db-restore-dump
+          path: /tmp/helsinki-db-restore/${{ steps.locate.outputs.dump_file }}
+          if-no-files-found: error
+          retention-days: 1
 
   restore-helsinki:
     needs: find-backup-on-source
@@ -103,6 +115,12 @@ jobs:
           echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
 
+      - name: Download backup artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: helsinki-db-restore-dump
+          path: /tmp/helsinki-db-restore
+
       - name: Test target connectivity
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
@@ -112,21 +130,14 @@ jobs:
       - name: Transfer latest backup to Helsinki
         run: |
           DUMP_FILE="${{ needs.find-backup-on-source.outputs.dump_file }}"
-          DUMP_PATH="${{ needs.find-backup-on-source.outputs.dump_path }}"
-          SOURCE_HOST="${{ needs.find-backup-on-source.outputs.source_host }}"
-          SOURCE_USER="${{ needs.find-backup-on-source.outputs.source_user }}"
           TARGET_HOST="${{ secrets.DEPLOY_HOST }}"
           TARGET_USER="${{ secrets.DEPLOY_USER }}"
-
-          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-            ${SOURCE_USER}@${SOURCE_HOST}:${DUMP_PATH} \
-            /tmp/${DUMP_FILE}
 
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${TARGET_USER}@${TARGET_HOST} "mkdir -p ~/backups/migration"
 
           scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-            /tmp/${DUMP_FILE} \
+            /tmp/helsinki-db-restore/${DUMP_FILE} \
             ${TARGET_USER}@${TARGET_HOST}:~/backups/migration/${DUMP_FILE}
 
       - name: Restore on Helsinki
