@@ -122,8 +122,8 @@ DB_PORT=5432
 PGADMIN_EMAIL=admin@admin.com
 PGADMIN_PASSWORD=admin
 PGADMIN_PORT=5051
-# Remote Backup Config (default reads from ops/deploy-target.env if available)
-REMOTE_DB_HOST=
+# Remote Backup Config
+REMOTE_DB_HOST=91.98.156.116
 REMOTE_DB_USER=deploy
 REMOTE_DB_PATH=/home/deploy/backups/postgres
 SSH_KEY_PATH=
@@ -159,18 +159,6 @@ PGADMIN_EMAIL=${PGADMIN_EMAIL:-admin@admin.com}
 PGADMIN_PASSWORD=${PGADMIN_PASSWORD:-admin}
 PGADMIN_PORT=${PGADMIN_PORT:-5051}
 
-# Resolve production host from deploy-target.env if REMOTE_DB_HOST is not set
-if [ -z "${REMOTE_DB_HOST}" ]; then
-    DEPLOY_TARGET_FILE="$(dirname "$0")/../ops/deploy-target.env"
-    if [ -f "$DEPLOY_TARGET_FILE" ]; then
-        source "$DEPLOY_TARGET_FILE"
-        if [ "$DEPLOY_TARGET" = "skuld-2" ]; then
-            REMOTE_DB_HOST="$SKULD2_HOST"
-        else
-            REMOTE_DB_HOST="$SKULD1_HOST"
-        fi
-    fi
-fi
 REMOTE_HOST_VAL=${REMOTE_DB_HOST:-"91.98.156.116"}
 REMOTE_USER_VAL=${REMOTE_DB_USER:-"deploy"}
 REMOTE_PATH_VAL=${REMOTE_DB_PATH:-"/home/deploy/backups/postgres"}

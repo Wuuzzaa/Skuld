@@ -8,24 +8,8 @@ on:
       - '.github/workflows/deploy-monitoring-hetzner.yml'
 
 jobs:
-  # ── Step 1: Read deploy target ──
-  resolve-target:
-    runs-on: ubuntu-latest
-    outputs:
-      target: ${{ steps.config.outputs.target }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Read deploy target
-        id: config
-        run: |
-          source ops/deploy-target.env
-          echo "target=$DEPLOY_TARGET" >> $GITHUB_OUTPUT
-
-  # ── Step 2: Deploy monitoring to resolved target ──
   deploy-hetzner:
-    needs: resolve-target
     runs-on: ubuntu-latest
-    environment: ${{ needs.resolve-target.outputs.target }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
