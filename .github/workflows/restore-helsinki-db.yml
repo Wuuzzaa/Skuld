@@ -1,0 +1,185 @@
+name: Restore Helsinki DB
+
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: Source server for the latest backup
+        required: true
+        type: choice
+        options:
+          - skuld-1
+          - skuld-2
+        default: skuld-1
+      dry_run:
+        description: Test connectivity only, do not transfer or restore data
+        required: true
+        type: boolean
+        default: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate inputs
+        run: |
+          if [ "${{ inputs.source }}" = "skuld-2" ]; then
+            echo "Source is already skuld-2. This workflow is intended to restore TO Helsinki." >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "## Restore Helsinki DB" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Setting | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Source | ${{ inputs.source }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Target | skuld-2 |" >> $GITHUB_STEP_SUMMARY
+          echo "| Dry run | ${{ inputs.dry_run }} |" >> $GITHUB_STEP_SUMMARY
+
+  find-backup-on-source:
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.source }}
+    outputs:
+      dump_file: ${{ steps.locate.outputs.dump_file }}
+      dump_path: ${{ steps.locate.outputs.dump_path }}
+      dump_size: ${{ steps.locate.outputs.dump_size }}
+      source_host: ${{ steps.meta.outputs.source_host }}
+      source_user: ${{ steps.meta.outputs.source_user }}
+    steps:
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: Expose source connection metadata
+        id: meta
+        run: |
+          echo "source_host=${{ secrets.DEPLOY_HOST }}" >> $GITHUB_OUTPUT
+          echo "source_user=${{ secrets.DEPLOY_USER }}" >> $GITHUB_OUTPUT
+
+      - name: Test source connectivity
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "echo 'Connected to source:'; hostname; ls -1 ~/backups/postgres | tail -n 5"
+
+      - name: Locate latest backup
+        if: ${{ inputs.dry_run == false }}
+        id: locate
+        run: |
+          LATEST=$(ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            -o ServerAliveInterval=30 -o ServerAliveCountMax=10 \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "find ~/backups/postgres -maxdepth 1 -type f \( -name 'skuld_*.sql.gz' -o -name 'skuld_manual_*.sql.gz' \) -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n 1 | cut -d' ' -f2-")
+
+          if [ -z "$LATEST" ]; then
+            echo "No backup found in ~/backups/postgres on source server."
+            exit 1
+          fi
+
+          DUMP_FILE=$(basename "$LATEST")
+          DUMP_SIZE=$(ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "du -h '$LATEST' | cut -f1")
+
+          echo "dump_file=${DUMP_FILE}" >> $GITHUB_OUTPUT
+          echo "dump_path=${LATEST}" >> $GITHUB_OUTPUT
+          echo "dump_size=${DUMP_SIZE}" >> $GITHUB_OUTPUT
+
+          echo "### Selected backup" >> $GITHUB_STEP_SUMMARY
+          echo "- File: ${DUMP_FILE}" >> $GITHUB_STEP_SUMMARY
+          echo "- Size: ${DUMP_SIZE}" >> $GITHUB_STEP_SUMMARY
+
+  restore-helsinki:
+    needs: find-backup-on-source
+    if: ${{ inputs.dry_run == false }}
+    runs-on: ubuntu-latest
+    environment: skuld-2
+    steps:
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: Test target connectivity
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "echo 'Connected to target:'; hostname; docker ps --format 'table {{.Names}}\t{{.Status}}' | head -10"
+
+      - name: Transfer latest backup to Helsinki
+        run: |
+          DUMP_FILE="${{ needs.find-backup-on-source.outputs.dump_file }}"
+          DUMP_PATH="${{ needs.find-backup-on-source.outputs.dump_path }}"
+          SOURCE_HOST="${{ needs.find-backup-on-source.outputs.source_host }}"
+          SOURCE_USER="${{ needs.find-backup-on-source.outputs.source_user }}"
+          TARGET_HOST="${{ secrets.DEPLOY_HOST }}"
+          TARGET_USER="${{ secrets.DEPLOY_USER }}"
+
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${SOURCE_USER}@${SOURCE_HOST}:${DUMP_PATH} \
+            /tmp/${DUMP_FILE}
+
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${TARGET_USER}@${TARGET_HOST} "mkdir -p ~/backups/migration"
+
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            /tmp/${DUMP_FILE} \
+            ${TARGET_USER}@${TARGET_HOST}:~/backups/migration/${DUMP_FILE}
+
+      - name: Restore on Helsinki
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            -o ServerAliveInterval=30 -o ServerAliveCountMax=10 \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'ENDSSH'
+            set -euo pipefail
+
+            DEPLOY_PASS="${{ secrets.DEPLOY_PASSWORD }}"
+            DUMP_FILE="${{ needs.find-backup-on-source.outputs.dump_file }}"
+
+            mysudo() {
+              echo "$DEPLOY_PASS" | sudo -S "$@"
+            }
+
+            mkdir -p ~/backups/migration
+
+            echo "=== Create pre-restore backup on Helsinki ==="
+            TIMESTAMP=$(date -u '+%Y%m%d_%H%M%S')
+            mysudo docker exec postgres_setup-db-1 \
+              pg_dump -U admin -d Skuld 2>/dev/null | gzip > ~/backups/migration/pre_restore_${TIMESTAMP}.sql.gz || \
+              echo "No existing DB content to back up."
+
+            echo "=== Stop app containers ==="
+            if [ -d /opt/skuld ]; then
+              cd /opt/skuld
+              mysudo docker compose stop skuld-frontend skuld-backend 2>/dev/null || true
+            fi
+
+            echo "=== Reset database ==="
+            mysudo docker exec postgres_setup-db-1 \
+              psql -U admin -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='Skuld' AND pid <> pg_backend_pid();" 2>/dev/null || true
+            mysudo docker exec postgres_setup-db-1 \
+              psql -U admin -d postgres -c "DROP DATABASE IF EXISTS \"Skuld\";"
+            mysudo docker exec postgres_setup-db-1 \
+              psql -U admin -d postgres -c "CREATE DATABASE \"Skuld\" OWNER admin;"
+
+            echo "=== Restore backup ==="
+            gunzip -c ~/backups/migration/${DUMP_FILE} | \
+              mysudo docker exec -i postgres_setup-db-1 psql -U admin -d Skuld --quiet
+
+            echo "=== Restart app containers ==="
+            if [ -d /opt/skuld ]; then
+              cd /opt/skuld
+              mysudo docker compose start skuld-frontend skuld-backend 2>/dev/null || true
+            fi
+          ENDSSH
+
+      - name: Summarize restore
+        run: |
+          echo "### Restore finished" >> $GITHUB_STEP_SUMMARY
+          echo "- Source: ${{ inputs.source }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Target: skuld-2" >> $GITHUB_STEP_SUMMARY
+          echo "- Backup: ${{ needs.find-backup-on-source.outputs.dump_file }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Size: ${{ needs.find-backup-on-source.outputs.dump_size }}" >> $GITHUB_STEP_SUMMARY
