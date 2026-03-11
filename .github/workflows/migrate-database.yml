@@ -4,9 +4,9 @@ name: "🔄 Migrate Database between Servers"
 # Migrates the PostgreSQL database from one server to another.
 #
 # How it works:
-#   1. SSH into SOURCE server → find latest existing backup in ~/backups/postgres
-#   2. Copy the backup SOURCE -> Runner -> TARGET
-#   3. SSH into TARGET server -> restore into postgres_setup-db-1
+#   1. SSH into SOURCE server → pg_dump → compress
+#   2. SCP the dump from SOURCE to TARGET
+#   3. SSH into TARGET server → pg_restore
 #
 # Both servers must be reachable with the GitHub Actions SSH key.
 # The workflow uses GitHub Environments for server-specific secrets.
@@ -63,15 +63,14 @@ jobs:
           echo "| **Triggered by** | \`${{ github.actor }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-  # ── Step 1: Locate latest backup on SOURCE ──
-  find-backup-on-source:
+  # ── Step 1: Dump from SOURCE ──
+  dump-source:
     needs: validate
     runs-on: ubuntu-latest
     environment: ${{ inputs.source }}
     outputs:
-      dump_file: ${{ steps.locate.outputs.dump_file }}
-      dump_size: ${{ steps.locate.outputs.dump_size }}
-      dump_path: ${{ steps.locate.outputs.dump_path }}
+      dump_file: ${{ steps.dump.outputs.dump_file }}
+      dump_size: ${{ steps.dump.outputs.dump_size }}
     steps:
       - name: Setup SSH Key
         run: |
@@ -86,32 +85,39 @@ jobs:
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
             "echo '✅ Connected to $(hostname)'; docker ps --format 'table {{.Names}}\t{{.Status}}' | head -10"
 
-      - name: "📦 Locate latest database backup on SOURCE"
+      - name: "📤 Create database dump on SOURCE"
         if: ${{ inputs.dry_run == false }}
-        id: locate
+        id: dump
         run: |
-          echo "Finding latest backup on ${{ inputs.source }}..."
-
-          LATEST=$(ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+          TIMESTAMP=$(date -u '+%Y%m%d_%H%M%S')
+          DUMP_FILENAME="skuld_migration_${TIMESTAMP}.sql.gz"
+          
+          echo "Creating pg_dump on ${{ inputs.source }}..."
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             -o ServerAliveInterval=30 -o ServerAliveCountMax=10 \
-            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
-            "find ~/backups/postgres -maxdepth 1 -type f \( -name 'skuld_*.sql.gz' -o -name 'skuld_manual_*.sql.gz' \) -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n 1 | cut -d' ' -f2-")
-
-          if [ -z "$LATEST" ]; then
-            echo "No backup found in ~/backups/postgres on ${{ inputs.source }}"
-            exit 1
-          fi
-
-          DUMP_FILENAME=$(basename "$LATEST")
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << ENDSSH
+            set -euo pipefail
+            DEPLOY_PASS="${{ secrets.DEPLOY_PASSWORD }}"
+            
+            mkdir -p ~/backups/migration
+            
+            echo "Starting pg_dump..."
+            echo "\$DEPLOY_PASS" | sudo -S docker exec postgres_setup-db-1 \
+              pg_dump -U admin -d Skuld --no-owner --no-acl | gzip > ~/backups/migration/${DUMP_FILENAME}
+            
+            FILESIZE=\$(du -h ~/backups/migration/${DUMP_FILENAME} | cut -f1)
+            echo "✅ Dump complete: ${DUMP_FILENAME} (\${FILESIZE})"
+          ENDSSH
+          
+          echo "dump_file=${DUMP_FILENAME}" >> $GITHUB_OUTPUT
+          
+          # Get file size
           DUMP_SIZE=$(ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
-            "du -h '$LATEST' | cut -f1")
-
-          echo "dump_file=${DUMP_FILENAME}" >> $GITHUB_OUTPUT
+            "du -h ~/backups/migration/${DUMP_FILENAME} | cut -f1")
           echo "dump_size=${DUMP_SIZE}" >> $GITHUB_OUTPUT
-          echo "dump_path=${LATEST}" >> $GITHUB_OUTPUT
           
-          echo "### 📦 Backup selected on ${{ inputs.source }}" >> $GITHUB_STEP_SUMMARY
+          echo "### 📤 Dump created on ${{ inputs.source }}" >> $GITHUB_STEP_SUMMARY
           echo "- File: \`${DUMP_FILENAME}\`" >> $GITHUB_STEP_SUMMARY
           echo "- Size: \`${DUMP_SIZE}\`" >> $GITHUB_STEP_SUMMARY
 
@@ -121,7 +127,7 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          TEXT="🔄 <b>DB Migration gestartet</b>%0A%0A📤 Source: <code>${{ inputs.source }}</code>%0A📥 Target: <code>${{ inputs.target }}</code>%0A📦 Backup: <code>${{ steps.locate.outputs.dump_file }}</code> (${{ steps.locate.outputs.dump_size }})%0A👤 ${{ github.actor }}"
+          TEXT="🔄 <b>DB Migration gestartet</b>%0A%0A📤 Source: <code>${{ inputs.source }}</code>%0A📥 Target: <code>${{ inputs.target }}</code>%0A📦 Dump: <code>${{ steps.dump.outputs.dump_size }}</code>%0A👤 ${{ github.actor }}"
           curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TELEGRAM_CHAT_ID}" \
             -d text="${TEXT}" \
@@ -129,7 +135,7 @@ jobs:
 
   # ── Step 2: Transfer dump and restore on TARGET ──
   restore-target:
-    needs: [validate, find-backup-on-source]
+    needs: [validate, dump-source]
     if: ${{ inputs.dry_run == false }}
     runs-on: ubuntu-latest
     environment: ${{ inputs.target }}
@@ -171,15 +177,14 @@ jobs:
 
       - name: "📥 Transfer dump: SOURCE → Runner → TARGET"
         run: |
-          DUMP_FILE="${{ needs.find-backup-on-source.outputs.dump_file }}"
-          DUMP_PATH="${{ needs.find-backup-on-source.outputs.dump_path }}"
+          DUMP_FILE="${{ needs.dump-source.outputs.dump_file }}"
           SOURCE_HOST="${{ steps.source_host.outputs.host }}"
           TARGET_HOST="${{ secrets.DEPLOY_HOST }}"
           DEPLOY_USER="${{ secrets.DEPLOY_USER }}"
           
           echo "⬇️ Downloading dump from source ($SOURCE_HOST)..."
           scp -i ~/.ssh/source_key -o StrictHostKeyChecking=no \
-            ${DEPLOY_USER}@${SOURCE_HOST}:${DUMP_PATH} \
+            ${DEPLOY_USER}@${SOURCE_HOST}:~/backups/migration/${DUMP_FILE} \
             /tmp/${DUMP_FILE}
           
           ls -lh /tmp/${DUMP_FILE}
@@ -196,7 +201,7 @@ jobs:
 
       - name: "🗄️ Restore database on TARGET"
         run: |
-          DUMP_FILE="${{ needs.find-backup-on-source.outputs.dump_file }}"
+          DUMP_FILE="${{ needs.dump-source.outputs.dump_file }}"
           
           ssh -i ~/.ssh/target_key -o StrictHostKeyChecking=no \
             -o ServerAliveInterval=30 -o ServerAliveCountMax=10 \
@@ -226,7 +231,7 @@ jobs:
             
             # Restore from dump
             gunzip -c ~/backups/migration/${DUMP_FILE} | \
-              mysudo docker exec -i postgres_setup-db-1 \
+              echo "\$DEPLOY_PASS" | sudo -S docker exec -i postgres_setup-db-1 \
               psql -U admin -d Skuld --quiet
             
             echo "=== Restarting Skuld containers ==="
@@ -245,7 +250,7 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          TEXT="✅ <b>DB Migration erfolgreich!</b>%0A%0A📤 <code>${{ inputs.source }}</code> → 📥 <code>${{ inputs.target }}</code>%0A📦 Backup: <code>${{ needs.find-backup-on-source.outputs.dump_file }}</code> (${{ needs.find-backup-on-source.outputs.dump_size }})%0A👤 ${{ github.actor }}"
+          TEXT="✅ <b>DB Migration erfolgreich!</b>%0A%0A📤 <code>${{ inputs.source }}</code> → 📥 <code>${{ inputs.target }}</code>%0A📦 Dump: <code>${{ needs.dump-source.outputs.dump_size }}</code>%0A👤 ${{ github.actor }}"
           curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TELEGRAM_CHAT_ID}" \
             -d text="${TEXT}" \
@@ -266,7 +271,7 @@ jobs:
 
   # ── Dry Run Summary ──
   dry-run-summary:
-    needs: [validate, find-backup-on-source]
+    needs: [validate, dump-source]
     if: ${{ inputs.dry_run == true }}
     runs-on: ubuntu-latest
     steps:
