@@ -1,0 +1,279 @@
+name: "🔄 Migrate Database between Servers"
+
+# ============================================================================
+# Migrates the PostgreSQL database from one server to another.
+#
+# How it works:
+#   1. SSH into SOURCE server → find latest existing backup in ~/backups/postgres
+#   2. Copy the backup SOURCE -> Runner -> TARGET
+#   3. SSH into TARGET server -> restore into postgres_setup-db-1
+#
+# Both servers must be reachable with the GitHub Actions SSH key.
+# The workflow uses GitHub Environments for server-specific secrets.
+#
+# Safety:
+#   - Creates a backup on the target before overwriting
+#   - Dry-run mode available to test connectivity only
+#   - Sends Telegram notifications at each phase
+# ============================================================================
+
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: "📤 Source server (where to dump FROM)"
+        required: true
+        type: choice
+        options:
+          - skuld-1
+          - skuld-2
+        default: skuld-1
+      target:
+        description: "📥 Target server (where to restore TO)"
+        required: true
+        type: choice
+        options:
+          - skuld-1
+          - skuld-2
+        default: skuld-2
+      dry_run:
+        description: "🧪 Dry run (test connectivity only, no data transfer)"
+        type: boolean
+        default: true
+
+jobs:
+  # ── Validate ──
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate inputs
+        run: |
+          if [ "${{ inputs.source }}" = "${{ inputs.target }}" ]; then
+            echo "❌ Source and target cannot be the same server!" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+          
+          echo "## 🔄 Database Migration" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Setting | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Source** | \`${{ inputs.source }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Target** | \`${{ inputs.target }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Dry Run** | \`${{ inputs.dry_run }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Triggered by** | \`${{ github.actor }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+  # ── Step 1: Locate latest backup on SOURCE ──
+  find-backup-on-source:
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.source }}
+    outputs:
+      dump_file: ${{ steps.locate.outputs.dump_file }}
+      dump_size: ${{ steps.locate.outputs.dump_size }}
+      dump_path: ${{ steps.locate.outputs.dump_path }}
+    steps:
+      - name: Setup SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: "🔍 Test connectivity to SOURCE (${{ inputs.source }})"
+        run: |
+          echo "Testing SSH to ${{ inputs.source }} (${{ secrets.DEPLOY_HOST }})..."
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "echo '✅ Connected to $(hostname)'; docker ps --format 'table {{.Names}}\t{{.Status}}' | head -10"
+
+      - name: "📦 Locate latest database backup on SOURCE"
+        if: ${{ inputs.dry_run == false }}
+        id: locate
+        run: |
+          echo "Finding latest backup on ${{ inputs.source }}..."
+
+          LATEST=$(ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            -o ServerAliveInterval=30 -o ServerAliveCountMax=10 \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "find ~/backups/postgres -maxdepth 1 -type f \( -name 'skuld_*.sql.gz' -o -name 'skuld_manual_*.sql.gz' \) -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n 1 | cut -d' ' -f2-")
+
+          if [ -z "$LATEST" ]; then
+            echo "No backup found in ~/backups/postgres on ${{ inputs.source }}"
+            exit 1
+          fi
+
+          DUMP_FILENAME=$(basename "$LATEST")
+          DUMP_SIZE=$(ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "du -h '$LATEST' | cut -f1")
+
+          echo "dump_file=${DUMP_FILENAME}" >> $GITHUB_OUTPUT
+          echo "dump_size=${DUMP_SIZE}" >> $GITHUB_OUTPUT
+          echo "dump_path=${LATEST}" >> $GITHUB_OUTPUT
+          
+          echo "### 📦 Backup selected on ${{ inputs.source }}" >> $GITHUB_STEP_SUMMARY
+          echo "- File: \`${DUMP_FILENAME}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Size: \`${DUMP_SIZE}\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: "📨 Notify via Telegram"
+        if: ${{ inputs.dry_run == false }}
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          TEXT="🔄 <b>DB Migration gestartet</b>%0A%0A📤 Source: <code>${{ inputs.source }}</code>%0A📥 Target: <code>${{ inputs.target }}</code>%0A📦 Backup: <code>${{ steps.locate.outputs.dump_file }}</code> (${{ steps.locate.outputs.dump_size }})%0A👤 ${{ github.actor }}"
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d text="${TEXT}" \
+            -d parse_mode=HTML >/dev/null 2>&1 || true
+
+  # ── Step 2: Transfer dump and restore on TARGET ──
+  restore-target:
+    needs: [validate, find-backup-on-source]
+    if: ${{ inputs.dry_run == false }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.target }}
+    steps:
+      - name: Checkout (for deploy-target.env)
+        uses: actions/checkout@v4
+
+      - name: Setup SSH Keys (need both source and target)
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/target_key
+          chmod 600 ~/.ssh/target_key
+          
+      - name: "🔍 Read source host from config"
+        id: source_host
+        run: |
+          source ops/deploy-target.env
+          SOURCE="${{ inputs.source }}"
+          if [ "$SOURCE" = "skuld-1" ]; then
+            echo "host=$SKULD1_HOST" >> $GITHUB_OUTPUT
+          elif [ "$SOURCE" = "skuld-2" ]; then
+            echo "host=$SKULD2_HOST" >> $GITHUB_OUTPUT
+          fi
+
+      - name: "🔑 Setup source SSH key"
+        run: |
+          # We need the source server's key too — stored as DEPLOY_SSH_KEY in source's environment
+          # Since we can only access one environment per job, we use the source host from config
+          # and the SSH key from repo-level secrets (DEPLOY_SSH_KEY is the same key for all servers)
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/source_key
+          chmod 600 ~/.ssh/source_key
+
+      - name: "🔍 Test connectivity to TARGET (${{ inputs.target }})"
+        run: |
+          echo "Testing SSH to ${{ inputs.target }} (${{ secrets.DEPLOY_HOST }})..."
+          ssh -i ~/.ssh/target_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "echo '✅ Connected to $(hostname)'; docker ps --format 'table {{.Names}}\t{{.Status}}' | head -10"
+
+      - name: "📥 Transfer dump: SOURCE → Runner → TARGET"
+        run: |
+          DUMP_FILE="${{ needs.find-backup-on-source.outputs.dump_file }}"
+          DUMP_PATH="${{ needs.find-backup-on-source.outputs.dump_path }}"
+          SOURCE_HOST="${{ steps.source_host.outputs.host }}"
+          TARGET_HOST="${{ secrets.DEPLOY_HOST }}"
+          DEPLOY_USER="${{ secrets.DEPLOY_USER }}"
+          
+          echo "⬇️ Downloading dump from source ($SOURCE_HOST)..."
+          scp -i ~/.ssh/source_key -o StrictHostKeyChecking=no \
+            ${DEPLOY_USER}@${SOURCE_HOST}:${DUMP_PATH} \
+            /tmp/${DUMP_FILE}
+          
+          ls -lh /tmp/${DUMP_FILE}
+          
+          echo "⬆️ Uploading dump to target ($TARGET_HOST)..."
+          ssh -i ~/.ssh/target_key -o StrictHostKeyChecking=no \
+            ${DEPLOY_USER}@${TARGET_HOST} "mkdir -p ~/backups/migration"
+          
+          scp -i ~/.ssh/target_key -o StrictHostKeyChecking=no \
+            /tmp/${DUMP_FILE} \
+            ${DEPLOY_USER}@${TARGET_HOST}:~/backups/migration/${DUMP_FILE}
+          
+          echo "✅ Transfer complete"
+
+      - name: "🗄️ Restore database on TARGET"
+        run: |
+          DUMP_FILE="${{ needs.find-backup-on-source.outputs.dump_file }}"
+          
+          ssh -i ~/.ssh/target_key -o StrictHostKeyChecking=no \
+            -o ServerAliveInterval=30 -o ServerAliveCountMax=10 \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << ENDSSH
+            set -euo pipefail
+            DEPLOY_PASS="${{ secrets.DEPLOY_PASSWORD }}"
+            
+            echo "=== Pre-restore backup on target ==="
+            TIMESTAMP=\$(date -u '+%Y%m%d_%H%M%S')
+            mkdir -p ~/backups/migration
+            echo "\$DEPLOY_PASS" | sudo -S docker exec postgres_setup-db-1 \
+              pg_dump -U admin -d Skuld 2>/dev/null | gzip > ~/backups/migration/pre_migration_backup_\${TIMESTAMP}.sql.gz || \
+              echo "⚠️ No existing DB to backup (first migration?)"
+            
+            echo "=== Stopping Skuld containers (to avoid connection issues) ==="
+            cd /opt/skuld
+            echo "\$DEPLOY_PASS" | sudo -S docker compose stop skuld-frontend skuld-backend 2>/dev/null || true
+            
+            echo "=== Restoring database ==="
+            # Drop and recreate database
+            echo "\$DEPLOY_PASS" | sudo -S docker exec postgres_setup-db-1 \
+              psql -U admin -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='Skuld' AND pid <> pg_backend_pid();" 2>/dev/null || true
+            echo "\$DEPLOY_PASS" | sudo -S docker exec postgres_setup-db-1 \
+              psql -U admin -d postgres -c "DROP DATABASE IF EXISTS \"Skuld\";"
+            echo "\$DEPLOY_PASS" | sudo -S docker exec postgres_setup-db-1 \
+              psql -U admin -d postgres -c "CREATE DATABASE \"Skuld\" OWNER admin;"
+            
+            # Restore from dump
+            gunzip -c ~/backups/migration/${DUMP_FILE} | \
+              mysudo docker exec -i postgres_setup-db-1 \
+              psql -U admin -d Skuld --quiet
+            
+            echo "=== Restarting Skuld containers ==="
+            echo "\$DEPLOY_PASS" | sudo -S docker compose start skuld-frontend skuld-backend 2>/dev/null || \
+              echo "⚠️ Skuld containers not yet deployed on target (will start with next deploy)"
+            
+            echo "✅ Database restore complete!"
+          ENDSSH
+          
+          echo "### 📥 Restore on ${{ inputs.target }}" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Database restored successfully" >> $GITHUB_STEP_SUMMARY
+
+      - name: "📨 Notify success via Telegram"
+        if: success()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          TEXT="✅ <b>DB Migration erfolgreich!</b>%0A%0A📤 <code>${{ inputs.source }}</code> → 📥 <code>${{ inputs.target }}</code>%0A📦 Backup: <code>${{ needs.find-backup-on-source.outputs.dump_file }}</code> (${{ needs.find-backup-on-source.outputs.dump_size }})%0A👤 ${{ github.actor }}"
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d text="${TEXT}" \
+            -d parse_mode=HTML >/dev/null 2>&1 || true
+
+      - name: "📨 Notify failure via Telegram"
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          TEXT="❌ <b>DB Migration fehlgeschlagen!</b>%0A%0A📤 <code>${{ inputs.source }}</code> → 📥 <code>${{ inputs.target }}</code>%0A🔗 <a href=\"${RUN_URL}\">Logs ansehen</a>"
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d text="${TEXT}" \
+            -d parse_mode=HTML >/dev/null 2>&1 || true
+
+  # ── Dry Run Summary ──
+  dry-run-summary:
+    needs: [validate, find-backup-on-source]
+    if: ${{ inputs.dry_run == true }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: "🧪 Dry Run Summary"
+        run: |
+          echo "### 🧪 Dry Run Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Connectivity to source (**${{ inputs.source }}**) verified." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "To perform the actual migration, re-run with **Dry run = false**." >> $GITHUB_STEP_SUMMARY
