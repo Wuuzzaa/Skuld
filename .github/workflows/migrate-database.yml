@@ -203,6 +203,10 @@ jobs:
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << ENDSSH
             set -euo pipefail
             DEPLOY_PASS="${{ secrets.DEPLOY_PASSWORD }}"
+
+            mysudo() {
+              echo "$DEPLOY_PASS" | sudo -S "$@"
+            }
             
             echo "=== Pre-restore backup on target ==="
             TIMESTAMP=\$(date -u '+%Y%m%d_%H%M%S')

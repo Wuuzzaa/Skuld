@@ -1,0 +1,409 @@
+name: Deploy Helsinki Stack
+
+on:
+  push:
+    branches:
+      - feature/helsinki-migration-prep
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-helsinki-stack
+  cancel-in-progress: true
+
+jobs:
+  deploy-traefik:
+    runs-on: ubuntu-latest
+    environment: skuld-2
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: Deploy Traefik
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'ENDSSH'
+            set -euo pipefail
+
+            DEPLOY_PASS="${{ secrets.DEPLOY_PASSWORD }}"
+            TRAEFIK_ACME_EMAIL="${{ secrets.TRAEFIK_ACME_EMAIL }}"
+            if [ -z "$TRAEFIK_ACME_EMAIL" ]; then
+              TRAEFIK_ACME_EMAIL="admin@skuld-options.com"
+            fi
+
+            mysudo() {
+              echo "$DEPLOY_PASS" | sudo -S "$@"
+            }
+
+            mysudo mkdir -p /opt/traefik/dynamic /opt/traefik/letsencrypt
+            mysudo chown -R $USER:$USER /opt/traefik
+
+            if ! mysudo docker network inspect web >/dev/null 2>&1; then
+              mysudo docker network create web
+            fi
+          ENDSSH
+
+          rsync -avz --delete \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
+            traefik/ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/traefik/
+
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'ENDSSH'
+            set -euo pipefail
+
+            DEPLOY_PASS="${{ secrets.DEPLOY_PASSWORD }}"
+            TRAEFIK_ACME_EMAIL="${{ secrets.TRAEFIK_ACME_EMAIL }}"
+            if [ -z "$TRAEFIK_ACME_EMAIL" ]; then
+              TRAEFIK_ACME_EMAIL="admin@skuld-options.com"
+            fi
+
+            mysudo() {
+              echo "$DEPLOY_PASS" | sudo -S "$@"
+            }
+
+            cd /opt/traefik
+
+            touch letsencrypt/acme.json
+            chmod 600 letsencrypt/acme.json
+
+            cat > .env <<EOF
+TRAEFIK_ACME_EMAIL=${TRAEFIK_ACME_EMAIL}
+EOF
+
+            mysudo docker compose down --remove-orphans || true
+            mysudo docker compose pull
+            mysudo docker compose up -d --remove-orphans
+
+            for attempt in $(seq 1 20); do
+              status=$(mysudo docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}running{{end}}' traefik 2>/dev/null || true)
+              if [ "$status" = "healthy" ] || [ "$status" = "running" ]; then
+                exit 0
+              fi
+
+              if [ "$attempt" -eq 20 ]; then
+                mysudo docker compose ps
+                mysudo docker compose logs --tail=100
+                echo "Traefik did not become healthy in time."
+                exit 1
+              fi
+
+              sleep 5
+            done
+          ENDSSH
+
+  deploy-postgres:
+    needs: deploy-traefik
+    runs-on: ubuntu-latest
+    environment: skuld-2
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: Deploy PostgreSQL
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'ENDSSH'
+            set -euo pipefail
+
+            DEPLOY_PASS="${{ secrets.DEPLOY_PASSWORD }}"
+
+            mysudo() {
+              echo "$DEPLOY_PASS" | sudo -S "$@"
+            }
+
+            mysudo mkdir -p /opt/postgres_setup
+            mysudo chown -R $USER:$USER /opt/postgres_setup
+
+            if ! mysudo docker network inspect postgres_setup_default >/dev/null 2>&1; then
+              mysudo docker network create postgres_setup_default
+            fi
+          ENDSSH
+
+          rsync -avz --delete \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
+            postgres_setup/ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/postgres_setup/
+
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'ENDSSH'
+            set -euo pipefail
+
+            DEPLOY_PASS="${{ secrets.DEPLOY_PASSWORD }}"
+            PGADMIN_EMAIL="${{ secrets.PGADMIN_DEFAULT_EMAIL }}"
+            PGADMIN_PASSWORD="${{ secrets.PGADMIN_DEFAULT_PASSWORD }}"
+            if [ -z "$PGADMIN_EMAIL" ]; then
+              PGADMIN_EMAIL="admin@skuld.local"
+            fi
+            if [ -z "$PGADMIN_PASSWORD" ]; then
+              PGADMIN_PASSWORD="admin"
+            fi
+
+            mysudo() {
+              echo "$DEPLOY_PASS" | sudo -S "$@"
+            }
+
+            cd /opt/postgres_setup
+
+            cat > .env <<EOF
+POSTGRES_DB=Skuld
+POSTGRES_USER=admin
+POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+PGADMIN_DEFAULT_EMAIL=${PGADMIN_EMAIL}
+PGADMIN_DEFAULT_PASSWORD=${PGADMIN_PASSWORD}
+EOF
+
+            mysudo docker compose down --remove-orphans || true
+            mysudo docker compose pull
+            mysudo docker compose up -d --remove-orphans
+
+            for attempt in $(seq 1 30); do
+              status=$(mysudo docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}running{{end}}' postgres_setup-db-1 2>/dev/null || true)
+              if [ "$status" = "healthy" ]; then
+                exit 0
+              fi
+
+              if [ "$attempt" -eq 30 ]; then
+                mysudo docker compose ps
+                mysudo docker compose logs --tail=100
+                echo "PostgreSQL did not become healthy in time."
+                exit 1
+              fi
+
+              sleep 5
+            done
+          ENDSSH
+
+  deploy-app:
+    needs: deploy-postgres
+    runs-on: ubuntu-latest
+    environment: skuld-2
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: Get version
+        id: get_version
+        run: |
+          COUNT=$(git rev-list --count HEAD)
+          HASH=$(git rev-parse --short HEAD)
+          DATE=$(git log -1 --format=%cd --date=format:'%Y-%m-%d %H:%M')
+          echo "VERSION=${COUNT}-${HASH} (${DATE})" >> $GITHUB_OUTPUT
+
+      - name: Notify deploy started via Telegram
+        if: always()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          ACTOR="${{ github.actor }}"
+          BRANCH="${{ github.ref_name }}"
+          COMMIT_MSG=$(git log -1 --format='%s')
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          TEXT="🚀 <b>[Helsinki] Full stack deploy gestartet</b>%0A%0A👤 <b>${ACTOR}</b>%0A🌿 <code>${BRANCH}</code>%0A📝 <code>${SHORT_SHA}</code>: ${COMMIT_MSG}"
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d text="${TEXT}" \
+            -d parse_mode=HTML >/dev/null 2>&1 || true
+
+      - name: Prepare and sync app files
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'ENDSSH'
+            set -euo pipefail
+
+            DEPLOY_PASS="${{ secrets.DEPLOY_PASSWORD }}"
+
+            mysudo() {
+              echo "$DEPLOY_PASS" | sudo -S "$@"
+            }
+
+            mysudo mkdir -p /opt/skuld
+            mysudo chown -R $USER:$USER /opt/skuld
+            mysudo docker system prune -af || true
+          ENDSSH
+
+          rsync -avz --delete \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectionAttempts=1" \
+            --exclude 'logs/' \
+            --exclude '.git/' \
+            --exclude '.github/' \
+            --exclude '__pycache__/' \
+            --exclude '*.pyc' \
+            --exclude 'authelia/users_database.yml' \
+            --exclude 'authelia/db.sqlite3' \
+            --exclude 'authelia/notification.txt' \
+            --exclude 'authelia/session_secret' \
+            --exclude 'authelia/jwt_secret' \
+            --exclude 'authelia/storage_encryption_key' \
+            ./ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/skuld/
+
+      - name: Deploy application stack
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'ENDSSH'
+            set -euo pipefail
+
+            DEPLOY_PASS="${{ secrets.DEPLOY_PASSWORD }}"
+            TELEGRAM_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
+            TELEGRAM_CHAT="${{ secrets.TELEGRAM_CHAT_ID }}"
+
+            mysudo() {
+              echo "$DEPLOY_PASS" | sudo -S "$@"
+            }
+
+            send_telegram() {
+              local msg="$1"
+              curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
+                -d chat_id="${TELEGRAM_CHAT}" \
+                -d text="${msg}" \
+                -d parse_mode=HTML >/dev/null 2>&1 || true
+            }
+
+            cd /opt/skuld
+
+            mkdir -p authelia logs
+
+            cat > .env <<EOF
+DOMAIN_NAME=app.skuld-options.com
+AUTH_DOMAIN=auth.skuld-options.com
+TRAEFIK_ENTRYPOINT=websecure
+TRAEFIK_CERTRESOLVER_LABEL_SKULD=traefik.http.routers.skuld.tls.certresolver=letsencrypt
+TRAEFIK_CERTRESOLVER_LABEL_AUTHELIA=traefik.http.routers.authelia.tls.certresolver=letsencrypt
+AUTH_SCHEME=https
+TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
+TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}
+MASSIVE_API_KEY=${{ secrets.MASSIVE_API_KEY }}
+MASSIVE_API_KEY_FLAT_FILES=${{ secrets.MASSIVE_API_KEY_FLAT_FILES }}
+SKULD_VERSION=${{ steps.get_version.outputs.VERSION }}
+POSTGRES_HOST=postgres_setup-db-1
+POSTGRES_DB=Skuld
+POSTGRES_USER=admin
+POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+POSTGRES_PORT=5432
+EOF
+
+            printf '%s' '${{ secrets.AUTHELIA_JWT_SECRET }}' > authelia/jwt_secret
+            printf '%s' '${{ secrets.AUTHELIA_SESSION_SECRET }}' > authelia/session_secret
+            printf '%s' '${{ secrets.AUTHELIA_STORAGE_ENCRYPTION_KEY }}' > authelia/storage_encryption_key
+
+            AUTHELIA_HASH='${{ secrets.AUTHELIA_PASSWORD_HASH }}'
+            cat > authelia/users_database.yml <<EOF
+users:
+  admin:
+    displayname: "Admin"
+    password: "${AUTHELIA_HASH}"
+    email: admin@skuld.com
+    groups:
+      - admins
+      - dev
+EOF
+
+            for network_name in web postgres_setup_default; do
+              if ! mysudo docker network inspect "$network_name" >/dev/null 2>&1; then
+                mysudo docker network create "$network_name"
+              fi
+            done
+
+            for attempt in $(seq 1 30); do
+              status=$(mysudo docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}running{{end}}' postgres_setup-db-1 2>/dev/null || true)
+              if [ "$status" = "healthy" ]; then
+                break
+              fi
+
+              if [ "$attempt" -eq 30 ]; then
+                send_telegram "❌ <b>[Helsinki] PostgreSQL nicht bereit</b>%0AApp-Deploy wurde abgebrochen."
+                mysudo docker ps -a
+                exit 1
+              fi
+
+              sleep 5
+            done
+
+            MAX_WAIT=3600
+            POLL_INTERVAL=30
+            WAITED=0
+            NOTIFIED=0
+
+            is_job_running() {
+              mysudo docker exec skuld-backend sh -c \
+                'pgrep -f "python.*main\.py" || pgrep -f "run_data_collection\.sh"' \
+                >/dev/null 2>&1
+            }
+
+            while is_job_running; do
+              if [ "$NOTIFIED" -eq 0 ]; then
+                send_telegram "⏳ <b>[Helsinki] Deploy wartet</b>%0AEin Job in <code>skuld-backend</code> läuft noch."
+                NOTIFIED=1
+              fi
+
+              if [ "$WAITED" -ge "$MAX_WAIT" ]; then
+                send_telegram "⚠️ <b>[Helsinki] Deploy-Timeout</b>%0AWartezeit auf Backend-Job überschritten, Deploy läuft weiter."
+                break
+              fi
+
+              sleep "$POLL_INTERVAL"
+              WAITED=$((WAITED + POLL_INTERVAL))
+            done
+
+            mysudo docker rm -f skuld-streamlit 2>/dev/null || true
+            mysudo docker rm -f skuld-frontend 2>/dev/null || true
+            mysudo docker rm -f skuld-backend 2>/dev/null || true
+            mysudo docker rm -f authelia 2>/dev/null || true
+            for container_id in $(mysudo docker ps -a --filter "name=authelia" -q); do
+              mysudo docker rm -f "$container_id" 2>/dev/null || true
+            done
+            for container_id in $(mysudo docker ps -a --filter "name=skuld" -q); do
+              mysudo docker rm -f "$container_id" 2>/dev/null || true
+            done
+            mysudo docker compose down --remove-orphans || true
+
+            mysudo docker compose build --pull --no-cache
+            mysudo docker compose up -d --remove-orphans
+            mysudo docker image prune -f
+            mysudo docker compose ps
+            mysudo docker compose logs --tail=50
+          ENDSSH
+
+      - name: Notify deploy success via Telegram
+        if: success()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          COMMIT_MSG=$(git log -1 --format='%s')
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          TEXT="✅ <b>[Helsinki] Full stack deploy erfolgreich</b>%0A%0A📝 <code>${SHORT_SHA}</code>: ${COMMIT_MSG}"
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d text="${TEXT}" \
+            -d parse_mode=HTML >/dev/null 2>&1 || true
+
+      - name: Notify deploy failure via Telegram
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          TEXT="❌ <b>[Helsinki] Full stack deploy fehlgeschlagen</b>%0A%0A📝 <code>${SHORT_SHA}</code>%0A🔗 <a href=\"${RUN_URL}\">Build Logs ansehen</a>"
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d text="${TEXT}" \
+            -d parse_mode=HTML >/dev/null 2>&1 || true
