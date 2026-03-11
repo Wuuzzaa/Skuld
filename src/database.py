@@ -17,19 +17,6 @@ _SSH_TUNNEL = None
 _POSTGRES_ENGINE = None
 
 
-def _is_ignorable_migration_error(error: Exception) -> bool:
-    """Return True for duplicate-object migration errors that can be skipped safely."""
-    message = str(error).lower()
-    ignorable_patterns = [
-        "duplicate column",
-        "already exists",
-        "duplicate table",
-        "duplicate object",
-        "duplicate relation",
-    ]
-    return any(pattern in message for pattern in ignorable_patterns)
-
-
 def get_database_engine():
     """
     Creates and returns a SQLAlchemy engine for the SQLite database.
@@ -442,9 +429,8 @@ def _run_migrations_for_engine(engine):
                             connection.execute(text(statement))
                         except Exception as e:
                             logger.error(f"[{label}] Error applying migration {migration_file}: \n{e}")
-                            if not _is_ignorable_migration_error(e):
+                            if not 'duplicate column' in e:
                                 raise e
-                            logger.info(f"[{label}] Ignoring idempotent migration error for statement: {statement[:120]}")
                         
                 logger.info(f"[{label}] Migration {migration_file} applied successfully.")
             except Exception as e:
