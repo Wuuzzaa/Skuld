@@ -570,6 +570,7 @@ SELECT
     b."RSI_14",
     b."RSL",
 
+
 	-- Additional calculated fields
 	ROUND((b.analyst_mean_target - b.live_stock_price)::numeric,2) as "target-close$",
 	ROUND((ROUND((b.analyst_mean_target - b.live_stock_price)::numeric,2) / b.live_stock_price * 100.0)::numeric, 2) as "target-close%",
