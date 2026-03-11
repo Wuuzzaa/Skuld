@@ -46,6 +46,8 @@ jobs:
         run: |
           rsync -avz --delete \
             -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
+            --exclude 'letsencrypt/' \
+            --exclude '.env' \
             traefik/ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/traefik/
 
       - name: Deploy Traefik stack
@@ -65,6 +67,8 @@ jobs:
             }
 
             cd /opt/traefik
+
+            mkdir -p dynamic letsencrypt
 
             if ! mysudo docker network inspect web >/dev/null 2>&1; then
               mysudo docker network create web

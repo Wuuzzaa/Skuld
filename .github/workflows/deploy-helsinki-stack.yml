@@ -50,6 +50,8 @@ jobs:
 
           rsync -avz --delete \
             -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
+            --exclude 'letsencrypt/' \
+            --exclude '.env' \
             traefik/ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/traefik/
 
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
@@ -67,6 +69,8 @@ jobs:
             }
 
             cd /opt/traefik
+
+            mkdir -p dynamic letsencrypt
 
             touch letsencrypt/acme.json
             chmod 600 letsencrypt/acme.json
