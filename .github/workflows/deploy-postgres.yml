@@ -56,6 +56,14 @@ jobs:
             set -euo pipefail
 
             DEPLOY_PASS="${{ secrets.DEPLOY_PASSWORD }}"
+            PGADMIN_EMAIL="${{ secrets.PGADMIN_DEFAULT_EMAIL }}"
+            PGADMIN_PASSWORD="${{ secrets.PGADMIN_DEFAULT_PASSWORD }}"
+            if [ -z "$PGADMIN_EMAIL" ]; then
+              PGADMIN_EMAIL="admin@skuld.local"
+            fi
+            if [ -z "$PGADMIN_PASSWORD" ]; then
+              PGADMIN_PASSWORD="admin"
+            fi
             mysudo() {
               echo "$DEPLOY_PASS" | sudo -S "$@"
             }
@@ -70,8 +78,8 @@ jobs:
 POSTGRES_DB=Skuld
 POSTGRES_USER=admin
 POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
-PGADMIN_DEFAULT_EMAIL=${{ secrets.PGADMIN_DEFAULT_EMAIL }}
-PGADMIN_DEFAULT_PASSWORD=${{ secrets.PGADMIN_DEFAULT_PASSWORD }}
+PGADMIN_DEFAULT_EMAIL=${PGADMIN_EMAIL}
+PGADMIN_DEFAULT_PASSWORD=${PGADMIN_PASSWORD}
 EOF
 
             mysudo docker compose down --remove-orphans || true
