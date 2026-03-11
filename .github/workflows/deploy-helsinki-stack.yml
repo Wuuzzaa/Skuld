@@ -8,7 +8,7 @@ on:
 
 concurrency:
   group: deploy-helsinki-stack
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy-traefik:
@@ -155,7 +155,7 @@ jobs:
             PGADMIN_EMAIL="${{ secrets.PGADMIN_DEFAULT_EMAIL }}"
             PGADMIN_PASSWORD="${{ secrets.PGADMIN_DEFAULT_PASSWORD }}"
             if [ -z "$PGADMIN_EMAIL" ]; then
-              PGADMIN_EMAIL="admin@skuld.local"
+              PGADMIN_EMAIL="admin@skuld-options.com"
             fi
             if [ -z "$PGADMIN_PASSWORD" ]; then
               PGADMIN_PASSWORD="admin"
@@ -175,9 +175,8 @@ jobs:
               printf '%s\n' "PGADMIN_DEFAULT_PASSWORD=${PGADMIN_PASSWORD}"
             } > .env
 
-            mysudo docker compose down --remove-orphans || true
-            mysudo docker compose pull
-            mysudo docker compose up -d --remove-orphans
+            mysudo docker compose pull db pgadmin
+            mysudo docker compose up -d --remove-orphans db pgadmin
 
             for attempt in $(seq 1 30); do
               container_state=$(mysudo docker inspect --format '{{.State.Status}}' postgres_setup-db-1 2>/dev/null || true)

@@ -7,6 +7,10 @@ on:
       - 'monitoring/hetzner/**'
       - '.github/workflows/deploy-monitoring-hetzner.yml'
 
+concurrency:
+  group: deploy-production-monitoring
+  cancel-in-progress: false
+
 jobs:
   # ── Step 1: Read deploy target ──
   resolve-target:

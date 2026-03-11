@@ -7,6 +7,10 @@ on:
       - 'traefik/**'
       - '.github/workflows/deploy-traefik.yml'
 
+concurrency:
+  group: deploy-production-traefik
+  cancel-in-progress: false
+
 jobs:
   resolve-target:
     runs-on: ubuntu-latest
