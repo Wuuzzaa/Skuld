@@ -28,6 +28,19 @@ on:
         default: false
 
 jobs:
+  # ── Read deploy target (used by sync-database for Hetzner SSH) ──
+  resolve-target:
+    runs-on: self-hosted
+    outputs:
+      target: ${{ steps.config.outputs.target }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read deploy target
+        id: config
+        run: |
+          source ops/deploy-target.env
+          echo "target=$DEPLOY_TARGET" >> $GITHUB_OUTPUT
+
   validate-inputs:
     runs-on: self-hosted
     outputs:
@@ -199,9 +212,10 @@ jobs:
   # PHASE 2: DATABASE SYNC
   # =====================================================================
   sync-database:
-    needs: [validate-inputs, deploy-code]
+    needs: [validate-inputs, deploy-code, resolve-target]
     if: ${{ inputs.sync_database && (needs.deploy-code.result == 'success' || needs.deploy-code.result == 'skipped') }}
     runs-on: self-hosted
+    environment: ${{ needs.resolve-target.outputs.target }}
     env:
       STAGING_DB_CONTAINER: skuld_staging_db
       STAGING_DB_NAME: Skuld
