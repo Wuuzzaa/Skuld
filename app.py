@@ -55,3 +55,4 @@ page.run()
 # Footer for all pages
 st.divider()
 st.caption(f"SKULD Option Viewer - Data analysis tool for option trading strategies. Version: {VERSION}")
+
