@@ -80,6 +80,24 @@ services:
     container_name: skuld_staging_db
     env_file:
       - .env
+    command:
+      - postgres
+      - -c
+      - shared_buffers=768MB
+      - -c
+      - effective_cache_size=2GB
+      - -c
+      - work_mem=16MB
+      - -c
+      - maintenance_work_mem=256MB
+      - -c
+      - max_connections=80
+      - -c
+      - max_worker_processes=4
+      - -c
+      - max_parallel_workers=4
+      - -c
+      - max_parallel_workers_per_gather=2
     # Add alias to ensure resolution on default network or specific networks
     networks:
       postgres_setup_default:
@@ -89,6 +107,17 @@ services:
     volumes:
       - staging_db_data:/var/lib/postgresql/data
     restart: unless-stopped
+    cpus: 2.0
+    mem_limit: 3g
+    mem_reservation: 1g
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 3G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin -d Skuld"]
       interval: 10s
