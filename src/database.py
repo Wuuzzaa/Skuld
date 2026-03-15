@@ -10,6 +10,8 @@ from config import HISTORY_ENABLED_TABLES, SSH_PKEY_PATH, SSH_HOST, SSH_USER, PO
 import numpy as np
 import hashlib
 
+from src.decorator_log_function import log_function
+
 # logging
 logger = logging.getLogger(__name__)
 
@@ -215,6 +217,7 @@ def execute_sql(connection, sql: str, table_name: str, operation_type: str = "IN
             logger.error(f"[PostgreSQL] Error executing SQL on {table_name}: \n{e}")
             raise e
 
+@log_function
 def select_into_dataframe(query: str = None, sql_file_path: str = None, params: dict = None):
     """
     Executes a SQL query and returns the result as a DataFrame.

@@ -1,12 +1,15 @@
+import logging
+
 import streamlit as st
 import pandas as pd
 import sqlite3
 import os
 from src.database import select_into_dataframe
+from src.decorator_log_function import log_function
 
-# Datenbankpfad (wie im Docker-Compose gemountet)
+logger = logging.getLogger(__name__)
 
-
+@log_function
 def get_data():
     try:
         df = select_into_dataframe('SELECT * FROM "DataChangeLogs"')

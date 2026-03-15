@@ -38,4 +38,6 @@ SELECT
     d.strike_stock_price_difference_ptc
 FROM
 	"OptionDataMassive" AS a
-	LEFT OUTER JOIN "OptionPricingMetrics" as d ON a.option_osi = d.option_osi;
+	LEFT OUTER JOIN "OptionPricingMetrics" as d 
+	ON a.option_osi = d.option_osi 
+	AND a.symbol = d.symbol;
