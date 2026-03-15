@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 import os
-from config import PATH_DATABASE_FILE
 from src.database import select_into_dataframe
 
 # Datenbankpfad (wie im Docker-Compose gemountet)
