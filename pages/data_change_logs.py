@@ -3,15 +3,14 @@ import pandas as pd
 import sqlite3
 import os
 from config import PATH_DATABASE_FILE
+from src.database import select_into_dataframe
 
 # Datenbankpfad (wie im Docker-Compose gemountet)
-DB_PATH = PATH_DATABASE_FILE
+
 
 def get_data():
     try:
-        conn = sqlite3.connect(DB_PATH)
-        df = pd.read_sql_query("SELECT * FROM DataChangeLogs", conn)
-        conn.close()
+        df = select_into_dataframe('SELECT * FROM "DataChangeLogs"')
         return df
     except Exception as e:
         st.error(f"Fehler beim Laden der Daten: {e}")

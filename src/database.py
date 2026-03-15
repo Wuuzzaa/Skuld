@@ -6,7 +6,7 @@ import pandas as pd
 import logging
 from typing import Literal
 from sqlalchemy import create_engine, text, inspect
-from config import HISTORY_ENABLED_TABLES, PATH_DATABASE_FILE, SSH_PKEY_PATH, SSH_HOST, SSH_USER, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_PORT, POSTGRES_HOST, TABLE_STOCK_IMPLIED_VOLATILITY_MASSIVE, TABLE_STOCK_PRICES_YAHOO
+from config import HISTORY_ENABLED_TABLES, SSH_PKEY_PATH, SSH_HOST, SSH_USER, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_PORT, POSTGRES_HOST, TABLE_STOCK_IMPLIED_VOLATILITY_MASSIVE, TABLE_STOCK_PRICES_YAHOO
 import numpy as np
 import hashlib
 
@@ -15,16 +15,6 @@ logger = logging.getLogger(__name__)
 
 _SSH_TUNNEL = None
 _POSTGRES_ENGINE = None
-
-
-def get_database_engine():
-    """
-    Creates and returns a SQLAlchemy engine for the SQLite database.
-    """
-    raise Exception("SQLite not supported")
-    # return create_engine(f'sqlite:///{PATH_DATABASE_FILE}')
-    return create_engine(f'sqlite:///{str(PATH_DATABASE_FILE.absolute())}')
-
 
 def get_postgres_engine():
     """
@@ -210,22 +200,6 @@ def execute_sql(connection, sql: str, table_name: str, operation_type: str = "IN
     - operation_type (str): The type of operation (INSERT, UPDATE, DELETE).
     """
     logger.debug(f"SQL Statement for {additional_data}:\n{text(sql)}")
-
-    # if connection is SQLite, we execute directly
-    if 'sqlite' in str(connection.engine.url):
-        try:
-            start = time.time()
-            result = connection.execute(text(sql))
-            affected_rows = result.rowcount
-            
-            logger.info(f"[SQLite]     Successfully executed {operation_type} SQL on {table_name} in {round(time.time() - start, 2)}s. Rows affected: {affected_rows}")
-            
-            # Log the operation
-            log_data_change(connection, operation_type, table_name, affected_rows=affected_rows, additional_data=additional_data)
-            return affected_rows
-        except Exception as e:
-            logger.error(f"[SQLite]     Error executing SQL on {table_name}: \n{e}")
-            raise e
         
     if 'postgresql' in str(connection.engine.url):
         # Execute on PostgreSQL (Side-by-side test)
@@ -328,7 +302,7 @@ def get_columns(table_name):
     with get_postgres_engine().begin() as connection:
         try:
             query = text(f"""
-                         SELECT 
+                        SELECT 
                             cols.column_name, 
                             UPPER(cols.data_type) AS data_type,
                             CASE 
@@ -357,8 +331,6 @@ def _run_migrations_for_engine(engine):
     """
     if 'postgresql' in str(engine.url):
         label = "PostgreSQL"
-    if 'sqlite' in str(engine.url):
-        label = "SQLite"
 
     logger.info(f"Starting {label} migration...")
     start = time.time()
@@ -409,10 +381,9 @@ def _run_migrations_for_engine(engine):
             logger.info(f"[{label}] Applying migration {migration_file}...")
             last_migration_version = int(pending_migrations[-1].split(".")[0])
             if label == "PostgreSQL" and last_migration_version == 19:
-                # recover_history()
                 with connection.begin():
                     for table in HISTORY_ENABLED_TABLES:
-                        add_from_date_to_date_master_data_table(connection, table)
+                        pass
                         # change_column_data_types(connection, table)
 
             try:
@@ -423,8 +394,6 @@ def _run_migrations_for_engine(engine):
 
                 with connection.begin():
                     for statement in statements:
-                        if label == "PostgreSQL":
-                            statement = mapping_sqlite_to_postgres(statement)
                         try:
                             connection.execute(text(statement))
                         except Exception as e:
@@ -437,9 +406,6 @@ def _run_migrations_for_engine(engine):
                 logger.error(f"[{label}] Error applying migration {migration_file}: \n{e}")
                 raise e
             
-        if label == "PostgreSQL" and last_migration_version == 23:
-            calculate_and_store_stock_implied_volatility_history_migration()
-
         with connection.begin():
             if pending_migrations:
                 last_migration_version = int(pending_migrations[-1].split(".")[0])
@@ -453,11 +419,8 @@ def _run_migrations_for_engine(engine):
 
 def run_migrations():
     """
-    Runs the database migration system on both SQLite and PostgreSQL.
+    Runs the database migration system on PostgreSQL.
     """
-    # # SQLite
-    # _run_migrations_for_engine(get_database_engine())
-    
     # PostgreSQL
     pg_engine = get_postgres_engine()
     if pg_engine:
@@ -476,97 +439,18 @@ def _get_missing_expected_views(inspector):
     existing_views = set(inspector.get_view_names())
     return sorted(expected_views - existing_views)
 
-
-def _recreate_views_for_engine(engine):
-    """
-    Internal helper to recreate views on a specific engine.
-    """
-    if 'postgresql' in str(engine.url):
-        label = "PostgreSQL"
-    if 'sqlite' in str(engine.url):
-        label = "SQLite"
-    logger.info(f"[{label}] Recreating views...")
-    start = time.time()
-
-    
-    if label == "PostgreSQL":
-        view_path = "db/SQL/views/PostgreSQL/"
-    else:
-        view_path = "db/SQL/views/create_view/"
-
-    if not os.path.exists(view_path):
-        logger.info(f"[{label}] Views directory not found at {view_path}. Skipping view recreation.")
-        return
-
-    view_files = [f for f in os.listdir(view_path) if f.endswith(".sql")]
-    view_files.sort()
-
-    pending_views = view_files.copy()
-    
-    hash_value = calculate_view_hash(view_path, view_files)
-    db_hash_value = get_db_view_hash(engine)
-    missing_views = _get_missing_expected_views(inspect(engine))
-
-    if db_hash_value == hash_value and not missing_views:
-        logger.info(f"[{label}] Views are up to date. Skipping recreation.")
-        return
-
-    if missing_views:
-        logger.warning(f"[{label}] Expected views missing despite stored view hash: {missing_views}. Recreating views.")
-    
-    with engine.connect() as connection:
-        while pending_views:
-            progress_made = False
-            failed_views = []
-            
-            for view_file in pending_views:
-                try:
-                    with open(os.path.join(view_path, view_file), "r") as f:
-                        sql_script = f.read()
-                    
-                    statements = [s.strip() for s in sql_script.split(';') if s.strip()]
-                    
-                    with connection.begin():
-                        for statement in statements:
-                            connection.execute(text(statement))
-                    
-                    progress_made = True
-                except Exception as e:
-                    logger.error(f"[{label}] Failed to create view {view_file}: \n{e}")
-                    failed_views.append(view_file)
-            
-            if not progress_made and failed_views:
-                logger.error(f"[{label}] Error: Could not create the following views due to potential circular dependencies or errors: {failed_views}")
-                break
-            
-            pending_views = failed_views
-    
-    if not pending_views:
-        logger.info(f"[{label}] All views recreated successfully in {round(time.time() - start, 2)}s.")
-        with engine.connect() as connection:
-            execute_sql(connection, f'UPDATE "DbVersion" SET view_hash = {hash_value}', "DbVersion", "UPDATE", "Update view hash after recreation")
-    else:
-        logger.info(f"[{label}] View recreation finished with errors in {round(time.time() - start, 2)}s.")
-        with engine.connect() as connection:
-            execute_sql(connection, f'UPDATE "DbVersion" SET view_hash = NULL', "DbVersion", "UPDATE", "Update view hash after recreation")
-        raise Exception(f"Failed to recreate some views in {label}: {pending_views}")
-
 def _recreate_views_connection(connection):
     """
     Internal helper to recreate views on a specific engine.
     """
     if 'postgresql' in str(connection.engine.url):
         label = "PostgreSQL"
-    if 'sqlite' in str(connection.engine.url):
-        label = "SQLite"
     logger.info(f"[{label}] Recreating views...")
     start = time.time()
 
     
     if label == "PostgreSQL":
         view_path = "db/SQL/views/PostgreSQL/"
-    else:
-        view_path = "db/SQL/views/create_view/"
 
     if not os.path.exists(view_path):
         logger.info(f"[{label}] Views directory not found at {view_path}. Skipping view recreation.")
@@ -623,18 +507,6 @@ def _recreate_views_connection(connection):
         execute_sql(connection, f'UPDATE "DbVersion" SET view_hash = NULL', "DbVersion", "UPDATE", "Update view hash after recreation")
         raise Exception(f"Failed to recreate some views in {label}: {pending_views}")
 
-def calculate_view_hash2(views_path, view_files):
-    concatinated_string = ""
-    for view_file in sorted(view_files):
-        try:
-            with open(os.path.join(views_path, view_file), "r") as f:
-                sql_script = f.read()
-                concatinated_string = concatinated_string + sql_script
-        except Exception as e:
-            logger.error(f"Error reading view file {views_path}: \n{e}")
-            raise e
-    return hash(concatinated_string)
-
 def calculate_view_hash(views_path, view_files):
     hasher = hashlib.sha256()
     
@@ -657,14 +529,6 @@ def calculate_view_hash(views_path, view_files):
     logger.info(f"Calculated view hash: {hash_value}")
     return hash_value
 
-def get_db_view_hash(engine):
-    with engine.connect() as connection:
-        with connection.begin():
-            result = connection.execute(text('SELECT view_hash FROM "DbVersion"')).fetchone()
-            current_view_hash = result[0] if result else None
-        logger.info(f"Current database view hash: {current_view_hash}")
-    return current_view_hash
-
 def get_db_view_hash_conn(connection):
     with connection.begin():
         result = connection.execute(text('SELECT view_hash FROM "DbVersion"')).fetchone()
@@ -676,24 +540,17 @@ def recreate_views():
     """
     Recreates all views in both databases.
     """
-    # SQLite
-    # _recreate_views_for_engine(get_database_engine())
-    
     # PostgreSQL
     pg_engine = get_postgres_engine()
-    if pg_engine:
-        _recreate_views_for_engine(pg_engine)
+    with pg_engine.connect() as connection:
+        _recreate_views_connection(connection)
 
 def table_exists(table_name: str) -> bool:
     """
     Checks if a table exists in the database.
-    Returns True only if it exists in ALL active databases (SQLite and Postgres).
+    Returns True only if it exists in active databases.
     """
-    # # Check SQLite
-    # engine = get_database_engine()
-    # inspector = inspect(engine)
-    # exists_sqlite = inspector.has_table(table_name)
-    
+
     # Check Postgres
     exists_pg = True
     try:
@@ -703,7 +560,6 @@ def table_exists(table_name: str) -> bool:
             exists_pg = insp_pg.has_table(table_name)
     except Exception as e:
         logger.error(f"[PostgreSQL] Error checking table existence {table_name}: \n{e}")
-        # If we can't check, we assume match sqlite or return False?
         # If we return False, we might trigger creation which might fail if DB is down.
         # But for 'side by side' test, we want to try to create if missing.
         exists_pg = False
@@ -713,13 +569,8 @@ def table_exists(table_name: str) -> bool:
 def view_exists(view_name: str) -> bool:
     """
     Checks if a view exists in the database.
-    Returns True only if it exists in ALL active databases.
+    Returns True only if it exists in active databases.
     """
-    # # Check SQLite
-    # engine = get_database_engine()
-    # inspector = inspect(engine)
-    # exists_sqlite = view_name in inspector.get_view_names()
-
     # Check Postgres
     exists_pg = True
     try:
@@ -761,100 +612,6 @@ def pg_migrations():
         logger.error(f"[PostgreSQL] Error: \n{e}")
         raise e
 
-def mapping_sqlite_to_postgres(sql: str) -> str:
-    """
-    Maps SQLite-specific SQL syntax to PostgreSQL-compatible syntax.
-    This is a basic implementation and may need to be extended for complex queries.
-    """
-    # Example mappings
-    mappings = {
-        'DATETIME': 'TIMESTAMP',
-        'REAL': 'DOUBLE PRECISION',
-        'FLOAT': 'DOUBLE PRECISION'
-    }
-    # print(sql)
-    for sqlite_syntax, pg_syntax in mappings.items():
-        sql = re.sub(r'\b' + re.escape(sqlite_syntax) + r'\b', pg_syntax, sql, flags=re.IGNORECASE)
-        sql = sql.replace(f'"{sqlite_syntax}"', f'"{pg_syntax}"')
-    # print(sql)
-    return sql
-
-def data_validation():
-    tables = select_into_dataframe(query="""
-        SELECT
-            name
-        FROM
-            sqlite_schema
-        where
-            type = 'table'
-            and name <> 'sqlite_sequence'
-        order by name;
-    """)
-    for index, row in tables.iterrows():
-        table_name = row['name']
-        count_df = select_into_dataframe(query=f'SELECT COUNT(*) as cnt FROM "{table_name}"')
-        if not count_df.empty:
-            count = count_df.iloc[0]['cnt']
-            logger.info(f"[SQLite]     Table {table_name} has {count} rows.")
-        count_df = select_into_dataframe_pg(query=f'SELECT COUNT(*) as cnt FROM "{table_name}"')
-        if not count_df.empty:
-            count = count_df.iloc[0]['cnt']
-            logger.info(f"[PostgreSQL] Table {table_name} has {count} rows.")
-
-def pg_migrate_week_to_ISO_week(pg_engine):
-
-    if not pg_engine:
-        logger.info("PostgreSQL not configured, skipping week to ISO week migration.")
-        return
-    if column_exists(pg_engine, "DatesHistory", "isoyear"):
-        logger.info("PostgreSQL DatesHistory table already has isoyear column, skipping migration.")
-        return
-    
-    with pg_engine.begin() as connection:
-        # for table in HISTORY_ENABLED_TABLES:
-        #     rename_weekly_table_column = f'ALTER TABLE "{table}HistoryWeekly" RENAME COLUMN year TO isoyear;'
-        #     execute_sql(connection, rename_weekly_table_column, f"{table}HistoryWeekly", 'ALTER TABLE', "Migration to ISO week")
-
-        #     update_weekly_table_data = f'''
-        #         UPDATE "{table}HistoryWeekly" as weekly
-        #         SET isoyear = EXTRACT(ISOYEAR FROM dh.date),
-        #             week = EXTRACT(WEEK FROM dh.date)
-        #         FROM (SELECT * FROM "DatesHistory" ORDER BY date DESC) AS dh
-        #         WHERE weekly.isoyear = dh.year
-        #         AND weekly.week = dh.week;
-        #     '''
-        #     execute_sql(connection, update_weekly_table_data, f"{table}HistoryWeekly", 'INSERT', "Migration to ISO week")
-        
-        # migrate DatesHistory table
-        rename_dates_history = 'ALTER TABLE "DatesHistory" RENAME TO "DatesHistoryOld";'
-        execute_sql(connection, rename_dates_history, "DatesHistory", 'ALTER TABLE', "Migration to ISO week")
-        
-        create_dates_history = """
-            Create Table "DatesHistory"(
-            date DATE PRIMARY KEY,
-            year INT,
-            month INT,
-            isoyear INT,
-            week INT
-        );
-        """
-        execute_sql(connection, create_dates_history, "DatesHistory", 'CREATE TABLE', "Migration to ISO week")
-        copy_dates_history = """
-            INSERT INTO "DatesHistory" 
-            (date, year, month, isoyear, week)
-            SELECT
-                date,
-                EXTRACT(YEAR FROM date) AS year,
-                EXTRACT(MONTH FROM date) AS month,
-                EXTRACT(ISOYEAR FROM date) AS isoyear,
-                EXTRACT(WEEK FROM date) AS week
-            FROM "DatesHistoryOld";
-        """
-        execute_sql(connection, copy_dates_history, "DatesHistory", 'INSERT', "Migration to ISO week")
-
-        drop_dates_history_old = 'DROP TABLE "DatesHistoryOld";'
-        execute_sql(connection, drop_dates_history_old, "DatesHistory", 'DROP TABLE', "Migration to ISO week")
-
 def column_exists(engine, table_name, column_name, schema=None):
     inspector = inspect(engine)
     columns = inspector.get_columns(table_name, schema=schema)
@@ -862,9 +619,9 @@ def column_exists(engine, table_name, column_name, schema=None):
 
 def drop_all_views(engine):
     """
-    Drops all standard and materialized views in a PostgreSQL or SQLite database.
+    Drops all standard and materialized views in PostgreSQL database.
     """
-    label = "PostgreSQL" if 'postgresql' in str(engine.url) else "SQLite    "
+    label = "PostgreSQL"
     inspector = inspect(engine)
     
     # 1. Get standard views
@@ -941,220 +698,3 @@ def change_column_data_types(conn, table):
     except Exception as e:
         logger.warning(f"Error during column data type change: {e}")
         raise e
-
-def add_from_date_to_date_master_data_table(conn, table):
-    try:
-        ########
-        weekly_table = f"{table}HistoryWeekly"
-        monthly_table = f"{table}HistoryMonthly"
-        master_data_table = f"{table}MasterData"
-
-        create_from_to_date_columns(conn, master_data_table)
-
-        key_columns, _ = get_table_key_and_data_columns(master_data_table)
-        key_columns_str = ", ".join([f'"{col["name"]}"' for col in key_columns])
-
-        insert_sql = f"""
-            INSERT INTO "{master_data_table}" AS ORIGINAL (
-                FROM_DATE,
-                TO_DATE,
-                {key_columns_str}
-            )
-            SELECT
-                MIN(DATES.DATE) as FROM_DATE,
-                MAX(DATES.DATE) as TO_DATE,
-                {key_columns_str}
-            FROM
-                "DatesHistory" AS DATES
-                INNER JOIN "{weekly_table}" AS WEEKLY 
-                ON DATES.ISOYEAR = WEEKLY.ISOYEAR
-                AND DATES.WEEK = WEEKLY.WEEK
-            GROUP BY {key_columns_str}
-            ON CONFLICT ({key_columns_str}) DO UPDATE
-            SET
-                FROM_DATE = CASE
-                    WHEN ORIGINAL.FROM_DATE IS NULL OR EXCLUDED.FROM_DATE < ORIGINAL.FROM_DATE THEN EXCLUDED.FROM_DATE
-                    ELSE ORIGINAL.FROM_DATE
-                END,
-                TO_DATE = CASE
-                    WHEN ORIGINAL.FROM_DATE IS NULL OR EXCLUDED.TO_DATE > ORIGINAL.TO_DATE THEN EXCLUDED.TO_DATE
-                    ELSE ORIGINAL.TO_DATE
-                END;
-        """
-
-        logger.info(f"Start execution: Insert keys from Weekly to Master Data {master_data_table}")
-        # execute_sql(conn, insert_sql, master_data_table, 'UPSERT', f"Insert keys from Weekly to Master Data")
-
-        #### 
-
-        insert_sql = f"""
-            INSERT INTO "{master_data_table}" AS ORIGINAL (
-                FROM_DATE,
-                TO_DATE,
-                {key_columns_str}
-            )
-            SELECT
-                MIN(DATES.DATE) as FROM_DATE,
-                MAX(DATES.DATE) as TO_DATE,
-                {key_columns_str}
-            FROM
-                "DatesHistory" AS DATES
-                INNER JOIN "{monthly_table}" AS MONTHLY 
-                ON DATES.YEAR = MONTHLY.YEAR
-                AND DATES.MONTH = MONTHLY.MONTH
-            GROUP BY {key_columns_str}
-            ON CONFLICT ({key_columns_str}) DO UPDATE
-            SET
-                FROM_DATE = CASE
-                    WHEN ORIGINAL.FROM_DATE IS NULL OR EXCLUDED.FROM_DATE < ORIGINAL.FROM_DATE THEN EXCLUDED.FROM_DATE
-                    ELSE ORIGINAL.FROM_DATE
-                END,
-                TO_DATE = CASE
-                    WHEN ORIGINAL.FROM_DATE IS NULL OR EXCLUDED.TO_DATE > ORIGINAL.TO_DATE THEN EXCLUDED.TO_DATE
-                    ELSE ORIGINAL.TO_DATE
-                END;
-        """
-
-        logger.info(f"Start execution: Insert keys from Monthly to Master Data {master_data_table}")
-        # execute_sql(conn, insert_sql, master_data_table, 'UPSERT', f"Insert keys from Monthly to Master Data")
-    except Exception as e:
-        logger.warning(f"Error: {e}")
-        raise e
-
-def create_from_to_date_columns(conn, master_data_table):
-    for col in ["from_date", "to_date"]:
-        alter_statement = f'ALTER TABLE "{master_data_table}" ADD COLUMN IF NOT EXISTS {col} DATE'
-        try:
-            execute_sql(conn, alter_statement, master_data_table, 'ALTER', f"Add {col} column to {master_data_table}")
-        except Exception as e:
-            conn.rollback()
-            raise e
-
-def recover_history():
-    # sqlite_engine = get_database_engine()
-    pg_engine = get_postgres_engine()
-
-    for table in HISTORY_ENABLED_TABLES:
-        daily_table = f"{table}HistoryDaily"
-        weekly_table = f"{table}HistoryWeekly"
-        monthly_table = f"{table}HistoryMonthly"
-        master_data_table = f"{table}MasterData"
-
-        backup_table = f"{daily_table}Backup"
-        select_all = f'select * from "{daily_table}"'
-        logger.info(f"Select all data from {daily_table}")
-        # df = pd.read_sql(text(str(select_all)), sqlite_engine)
-        logger.info(f"Size: {table} - {len(df)}")
-
-        try:
-            drop_backup_sql = f'''
-                DROP TABLE IF EXISTS "{backup_table}";
-            '''
-            with pg_engine.begin() as connection:
-                execute_sql(connection, drop_backup_sql, backup_table, 'DROP', f"Drop backup table {backup_table}")
-
-            create_table = f'CREATE TABLE "{backup_table}" (LIKE "{daily_table}" INCLUDING ALL);'
-            with pg_engine.begin() as connection:
-                execute_sql(connection, create_table, backup_table, 'CREATE', f"Create {backup_table} table")
-
-            if table == "OptionDataMassive":
-                raw_connection =  pg_engine.raw_connection()
-                try:
-                    insert_into_table_bulk(
-                        raw_connection,
-                        table_name=backup_table,
-                        dataframe=df
-                    )
-                    raw_connection.commit()
-                except Exception as e:
-                    logger.error(f"[PostgreSQL] Error executing SQL: \n{e}")
-                    raise e
-                finally:
-                    raw_connection.close()
-            else:
-                with pg_engine.begin() as connection:
-                    insert_into_table(
-                        connection,
-                        table_name=backup_table,
-                        dataframe=df,
-                        if_exists="append"
-                    )
-
-            key_columns, data_columns = get_table_key_and_data_columns(table)
-            update_set_str = ", ".join([f'"{col["name"]}" = EXCLUDED."{col["name"]}"' for col in data_columns])
-            key_columns_str = ", ".join([f'"{col["name"]}"' for col in key_columns])
-
-            insert_sql = f'''
-                INSERT INTO "{daily_table}" 
-                SELECT * FROM "{backup_table}"
-                ON CONFLICT (snapshot_date, {key_columns_str}) 
-                DO UPDATE SET 
-                    {update_set_str};
-            '''
-
-            with pg_engine.begin() as connection:
-                execute_sql(connection, insert_sql, daily_table, 'UPSERT', f"Recover data to {daily_table}")
-        except Exception as e:
-            logger.error(f"Error during history recovery for table {table}: {e}")
-            raise e
-        finally:
-             # clean up backup table
-            drop_backup_sql = f'''
-                DROP TABLE IF EXISTS "{backup_table}";
-            '''
-            with pg_engine.begin() as connection:
-                execute_sql(connection, drop_backup_sql, backup_table, 'DROP', f"Drop backup table {backup_table}")
-
-        for hist_table in [weekly_table, monthly_table, master_data_table, "DatesHistory"]:
-            truncate_sql = f'''
-                TRUNCATE TABLE "{hist_table}";
-            '''
-            with pg_engine.begin() as connection:
-                execute_sql(connection, truncate_sql, hist_table, 'TRUNCATE', f"Truncate data {hist_table}")
-
-        ## clean up corrupted history
-        delete_sql = f'''
-            DELETE FROM "{daily_table}"
-            WHERE snapshot_date < '2026-01-05'
-            OR EXTRACT(ISODOW FROM snapshot_date) IN (6, 7);
-        '''
-        with pg_engine.begin() as connection:
-            execute_sql(connection, delete_sql, daily_table, 'DELETE', f"DELETE corrupted data from {daily_table}")
-
-    with pg_engine.begin() as conn:
-        
-        insert_sql = f"""
-            INSERT INTO "DatesHistory" (
-                date,
-                year,
-                month,
-                isoyear,
-                week
-            )
-            SELECT DISTINCT
-                snapshot_date                               AS date,
-                EXTRACT(YEAR  FROM snapshot_date)::int      AS year,
-                EXTRACT(MONTH FROM snapshot_date)::int      AS month,
-                EXTRACT(ISOYEAR  FROM snapshot_date)::int   AS year,
-                EXTRACT(WEEK  FROM snapshot_date)::int      AS week
-            FROM "OptionDataMassiveHistoryDaily"
-            ON CONFLICT(date) DO NOTHING
-        """
-        try:
-            affected = execute_sql(conn, insert_sql, 'DatesHistory', 'UPSERT', f"Insert dates to DatesHistory")
-        except Exception as e:
-            conn.rollback()
-            logger.error(f"Error inserting new date: {e}")
-            raise e
-
-def calculate_and_store_stock_implied_volatility_history_migration():
-    df = select_into_dataframe(sql_file_path = "db/SQL/query/calculate_implied_volatility_history.sql")
-
-    with get_postgres_engine().begin() as connection:
-        # Insert the new data into the target table
-        insert_into_table(
-            connection,
-            f"{TABLE_STOCK_IMPLIED_VOLATILITY_MASSIVE}HistoryDaily",
-            df,
-            if_exists="append"
-        )
