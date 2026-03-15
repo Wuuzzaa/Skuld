@@ -30,6 +30,7 @@ analyst_prices = st.Page("pages/analyst_prices.py", title="Analyst Prices")
 spreads = st.Page("pages/spreads.py", title="Spreads")
 marrieds = st.Page("pages/married_put_analysis.py", title="Married Puts")
 position_insurance = st.Page("pages/position_insurance_tool.py", title="Position Insurance Tool")
+trend_following = st.Page("pages/trend_following.py", title="Trend Following")
 multifactor_swingtrading = st.Page('pages/multifactor_swingtrading.py', title="Multifactor Swingtrading")
 expected_value = st.Page('pages/expected_value.py', title="Expected Value")
 smart_finder = st.Page('pages/smart_finder.py', title="Smart Finder")
@@ -46,6 +47,7 @@ page = st.navigation(
         smart_finder,
         married_put_finder,
         position_insurance,
+        trend_following,
         multifactor_swingtrading,
         expected_value,
         data_logs,
