@@ -3,10 +3,8 @@ import streamlit as st
 
 from src.page_display_dataframe import page_display_dataframe
 from src.trend_following_strategy import (
-    calculate_trend_following_backtest,
     calculate_trend_following_strategy,
     load_symbol_history,
-    load_trend_following_history,
     load_trend_following_universe,
 )
 
@@ -95,18 +93,27 @@ def _rename_ranking_columns(df: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+def _build_weekly_checklist(summary: dict[str, object]) -> list[str]:
+    checklist = [
+        f"Pruefe zuerst die {summary['portfolio_count']} aktuellen Portfolio-Werte.",
+        f"Pruefe danach {summary['sell_count']} moegliche Abgaenge mit Exit-Grund.",
+        f"Pruefe zum Schluss {summary['watchlist_count']} Nachruecker in der Watchlist-Zone.",
+    ]
+    return checklist
+
+
 st.subheader("Trend Following")
 st.caption(
-    "RSL-first trend model with live portfolio, watchlist, exit diagnostics and a simple historical rebalance view."
+    "Einfacher Wochen-Check fuer das RSL-Trendmodell: halten, verkaufen, beobachten, nachruecken."
 )
 
 with st.expander("How to read this page", expanded=True):
     st.markdown(
         """
-1. Portfolio: the names the current rules would hold now.
-2. Watchlist: the next ranked symbols that are close to entry but not yet in the portfolio.
-3. Decisions: buy, hold and sell actions compared with the previous snapshot, including explicit sell reasons.
-4. Historical Model: a simple equal-weight rebalance simulation over the selected lookback window.
+1. Weekly Decision: Hier siehst du sofort, was diese Woche zu tun ist.
+2. Current Portfolio: Das sind die Werte, die das Modell aktuell halten wuerde.
+3. Watchlist Zone: Das sind die naechsten Kandidaten fuer einen Nachrueckplatz.
+4. Exit Reasons: Hier steht, warum ein bisheriger Wert rausfallen wuerde.
         """
     )
 
@@ -127,14 +134,6 @@ with st.sidebar:
         value=8,
         step=1,
         help="How many ranked names just below the portfolio should stay visible as near-entry candidates.",
-    )
-    lookback_days = st.number_input(
-        "Backtest Lookback Days",
-        min_value=60,
-        max_value=1500,
-        value=365,
-        step=30,
-        help="Historical window for the model-performance simulation.",
     )
 
     st.markdown("### Entry Rules")
@@ -192,21 +191,10 @@ with st.sidebar:
 
 with st.spinner("Loading trend-following model..."):
     current_df, previous_df = load_trend_following_universe()
-    history_df = load_trend_following_history(int(lookback_days))
 
     strategy = calculate_trend_following_strategy(
         current_df=current_df,
         previous_df=previous_df,
-        top_n=int(top_n),
-        watchlist_size=int(watchlist_size),
-        min_rsl=float(min_rsl),
-        require_above_sma200=bool(require_above_sma200),
-        min_adx=float(min_adx),
-        min_rsi=float(min_rsi),
-        max_per_sector=int(max_per_sector),
-    )
-    backtest = calculate_trend_following_backtest(
-        history_df=history_df,
         top_n=int(top_n),
         watchlist_size=int(watchlist_size),
         min_rsl=float(min_rsl),
@@ -225,13 +213,9 @@ ranking_df = strategy["ranking"]
 rank_delta_df = strategy["rank_delta"]
 sector_blocked_df = strategy["sector_blocked"]
 
-backtest_summary = backtest["summary"]
-equity_curve_df = backtest["equity_curve"]
-rebalance_log_df = backtest["rebalance_log"]
-recent_history_df = backtest["recent_history"]
-
 action_summary_df = _build_action_summary(actions_df)
 exit_reason_summary_df = _build_exit_reason_summary(exits_df)
+weekly_checklist = _build_weekly_checklist(summary)
 
 metric_col1, metric_col2, metric_col3, metric_col4, metric_col5, metric_col6 = st.columns(6)
 metric_col1.metric("Snapshot", _format_date(summary["current_snapshot_date"]))
@@ -241,90 +225,99 @@ metric_col4.metric("Watchlist", _format_number(summary["watchlist_count"]))
 metric_col5.metric("Buys / Holds", f"{summary['buy_count']} / {summary['hold_count']}")
 metric_col6.metric("Sells", _format_number(summary["sell_count"]))
 
-hist_metric_col1, hist_metric_col2, hist_metric_col3, hist_metric_col4, hist_metric_col5 = st.columns(5)
-hist_metric_col1.metric("Cumulative Return", _format_pct(backtest_summary["cumulative_return"]))
-hist_metric_col2.metric("Annualized Return", _format_pct(backtest_summary["annualized_return"]))
-hist_metric_col3.metric("Hit Rate", _format_pct(backtest_summary["hit_rate"]))
-hist_metric_col4.metric("Avg Turnover", _format_pct(backtest_summary["avg_turnover"]))
-hist_metric_col5.metric("Max Drawdown", _format_pct(backtest_summary["max_drawdown"]))
-
 st.info(
-    f"Current read: {summary['portfolio_count']} live holdings, {summary['watchlist_count']} names on deck, "
-    f"{summary['sell_count']} exits versus the previous snapshot. Use the Decisions tab to understand why changes happened."
+    f"Wochenstatus: {summary['portfolio_count']} Haltepositionen, {summary['buy_count']} neue Kandidaten, "
+    f"{summary['sell_count']} moegliche Exits und {summary['watchlist_count']} Werte knapp hinter dem Portfolio."
 )
 
-live_tab, historical_tab, symbol_tab = st.tabs(["Live Model", "Historical Model", "Symbol Detail"])
+checklist_col, summary_col = st.columns([1.2, 1])
+with checklist_col:
+    st.markdown("### Weekly Decision")
+    for item in weekly_checklist:
+        st.write(f"- {item}")
+with summary_col:
+    st.markdown("### Action Mix")
+    if action_summary_df.empty:
+        st.info("Keine Aktionsdaten vorhanden.")
+    else:
+        st.bar_chart(action_summary_df.set_index("Action")[["Count"]])
 
-with live_tab:
-    overview_tab, decisions_tab, ranking_tab = st.tabs(["Overview", "Decisions", "Ranking"])
+main_tab, detail_tab = st.tabs(["Weekly Review", "Symbol Detail"])
 
-    with overview_tab:
-        overview_col1, overview_col2 = st.columns([1, 1])
+with main_tab:
+    top_col1, top_col2 = st.columns([1, 1])
 
-        with overview_col1:
-            st.markdown("### Current Portfolio")
-            st.caption("These are the names the model would hold right now.")
-            if portfolio_df.empty:
-                st.info("No symbols match the current trend-following rules.")
-            else:
-                portfolio_display = portfolio_df.rename(
-                    columns={
-                        "company_name": "Company",
-                        "sector": "Sector",
-                        "industry": "Industry",
-                        "close_price": "Close",
-                        "rank": "Rank",
-                        "prev_rank": "Prev Rank",
-                        "rank_change": "Rank Change",
-                        "above_sma_50": "Above SMA 50",
-                        "above_sma_200": "Above SMA 200",
-                    }
-                )
-                page_display_dataframe(portfolio_display, symbol_column="symbol")
-
-        with overview_col2:
-            st.markdown("### Watchlist Zone")
-            st.caption("These names are closest to entering if the portfolio changes.")
-            if watchlist_df.empty:
-                st.info("No symbols are currently sitting in the watchlist zone.")
-            else:
-                watchlist_display = watchlist_df.rename(
-                    columns={
-                        "company_name": "Company",
-                        "sector": "Sector",
-                        "industry": "Industry",
-                        "close_price": "Close",
-                        "rank": "Rank",
-                        "prev_rank": "Prev Rank",
-                        "rank_change": "Rank Change",
-                        "distance_to_portfolio": "Distance To Portfolio",
-                        "watchlist_reason": "Watchlist Reason",
-                    }
-                )
-                page_display_dataframe(watchlist_display, symbol_column="symbol")
-
-        summary_col1, summary_col2 = st.columns([1, 1])
-        with summary_col1:
-            st.markdown("### Action Mix")
-            if action_summary_df.empty:
-                st.info("No action mix is available.")
-            else:
-                st.bar_chart(action_summary_df.set_index("Action")[["Count"]])
-
-        with summary_col2:
-            st.markdown("### Main Exit Drivers")
-            if exit_reason_summary_df.empty:
-                st.info("No exits were generated, so there are no exit drivers to summarize.")
-            else:
-                st.bar_chart(exit_reason_summary_df.set_index("Exit Reason")[["Count"]])
-
-    with decisions_tab:
-        st.markdown("### Rebalance Decisions")
-        st.caption("Buys and holds are current selections. Sells show which prior holdings dropped out and why.")
-        if actions_df.empty:
-            st.info("No rebalance actions are available.")
+    with top_col1:
+        st.markdown("### Current Portfolio")
+        st.caption("Das sind die Werte, die du diese Woche zunaechst halten wuerdest.")
+        if portfolio_df.empty:
+            st.info("Keine Werte erfuellen aktuell die Regeln.")
         else:
-            actions_display = actions_df.rename(
+            portfolio_display = portfolio_df.rename(
+                columns={
+                    "company_name": "Company",
+                    "sector": "Sector",
+                    "industry": "Industry",
+                    "close_price": "Close",
+                    "rank": "Rank",
+                    "prev_rank": "Prev Rank",
+                    "rank_change": "Rank Change",
+                    "above_sma_50": "Above SMA 50",
+                    "above_sma_200": "Above SMA 200",
+                }
+            )
+            page_display_dataframe(portfolio_display, symbol_column="symbol")
+
+    with top_col2:
+        st.markdown("### Watchlist Zone")
+        st.caption("Diese Werte sind die naechsten Nachruecker, falls ein Platz frei wird.")
+        if watchlist_df.empty:
+            st.info("Aktuell gibt es keine Watchlist-Kandidaten.")
+        else:
+            watchlist_display = watchlist_df.rename(
+                columns={
+                    "company_name": "Company",
+                    "sector": "Sector",
+                    "industry": "Industry",
+                    "close_price": "Close",
+                    "rank": "Rank",
+                    "prev_rank": "Prev Rank",
+                    "rank_change": "Rank Change",
+                    "distance_to_portfolio": "Distance To Portfolio",
+                    "watchlist_reason": "Watchlist Reason",
+                }
+            )
+            page_display_dataframe(watchlist_display, symbol_column="symbol")
+
+    st.markdown("### Weekly Changes")
+    st.caption("Hier entscheidest du praktisch: neu rein, drin bleiben oder raus.")
+    if actions_df.empty:
+        st.info("Keine Wochenaenderungen verfuegbar.")
+    else:
+        actions_display = actions_df.rename(
+            columns={
+                "company_name": "Company",
+                "sector": "Sector",
+                "zone": "Zone",
+                "current_rank": "Current Rank",
+                "previous_rank": "Previous Rank",
+                "rank_change": "Rank Change",
+                "current_rsl": "Current RSL",
+                "previous_rsl": "Previous RSL",
+                "reason": "Reason",
+                "action": "Action",
+            }
+        )
+        page_display_dataframe(actions_display, symbol_column="symbol")
+
+    mid_col1, mid_col2 = st.columns([1.2, 1])
+    with mid_col1:
+        st.markdown("### Exit Reasons")
+        st.caption("Nur wichtig, wenn ein bisheriger Portfoliowert diese Woche rausfaellt.")
+        if exits_df.empty:
+            st.info("Aktuell keine Exit-Signale.")
+        else:
+            exits_display = exits_df.rename(
                 columns={
                     "company_name": "Company",
                     "sector": "Sector",
@@ -334,160 +327,54 @@ with live_tab:
                     "rank_change": "Rank Change",
                     "current_rsl": "Current RSL",
                     "previous_rsl": "Previous RSL",
-                    "reason": "Reason",
-                    "action": "Action",
+                    "reason": "Exit Reason",
                 }
             )
-            page_display_dataframe(actions_display, symbol_column="symbol")
+            page_display_dataframe(exits_display, symbol_column="symbol")
 
-        details_col1, details_col2 = st.columns([1.4, 1])
-        with details_col1:
-            st.markdown("### Exit Reasons")
-            if exits_df.empty:
-                st.info("No exits were generated in the current rebalance.")
-            else:
-                exits_display = exits_df.rename(
-                    columns={
-                        "company_name": "Company",
-                        "sector": "Sector",
-                        "zone": "Zone",
-                        "current_rank": "Current Rank",
-                        "previous_rank": "Previous Rank",
-                        "rank_change": "Rank Change",
-                        "current_rsl": "Current RSL",
-                        "previous_rsl": "Previous RSL",
-                        "reason": "Exit Reason",
-                    }
-                )
-                page_display_dataframe(exits_display, symbol_column="symbol")
+    with mid_col2:
+        st.markdown("### Main Exit Drivers")
+        if exit_reason_summary_df.empty:
+            st.info("Keine Exit-Treiber vorhanden.")
+        else:
+            st.bar_chart(exit_reason_summary_df.set_index("Exit Reason")[["Count"]])
 
-        with details_col2:
-            st.markdown("### Rank Delta")
-            st.caption("Positive values mean the symbol improved versus the last snapshot.")
-            if rank_delta_df.empty:
-                st.info("No previous rank exists yet for a delta view.")
-            else:
-                rank_delta_chart = rank_delta_df.head(20).copy()
-                rank_delta_chart["rank_change"] = pd.to_numeric(
-                    rank_delta_chart["rank_change"], errors="coerce"
-                ).fillna(0)
-                st.bar_chart(rank_delta_chart.set_index("symbol")[["rank_change"]])
+    with st.expander("Rank Movement", expanded=False):
+        st.caption("Optional: nur oeffnen, wenn du Rangverschiebungen im Detail sehen willst.")
+        if rank_delta_df.empty:
+            st.info("Keine Vorperiode fuer Rangvergleich vorhanden.")
+        else:
+            rank_delta_chart = rank_delta_df.head(20).copy()
+            rank_delta_chart["rank_change"] = pd.to_numeric(rank_delta_chart["rank_change"], errors="coerce").fillna(0)
+            st.bar_chart(rank_delta_chart.set_index("symbol")[["rank_change"]])
 
-                movers_col1, movers_col2 = st.columns(2)
-                with movers_col1:
-                    st.caption("Improvers")
-                    improvers = rank_delta_chart.sort_values(by="rank_change", ascending=False).head(5)
-                    page_display_dataframe(
-                        improvers[["symbol", "company_name", "rank", "prev_rank", "rank_change"]],
-                        symbol_column="symbol",
-                    )
-                with movers_col2:
-                    st.caption("Decliners")
-                    decliners = rank_delta_chart.sort_values(by="rank_change", ascending=True).head(5)
-                    page_display_dataframe(
-                        decliners[["symbol", "company_name", "rank", "prev_rank", "rank_change"]],
-                        symbol_column="symbol",
-                    )
-
-    with ranking_tab:
+    with st.expander("Full Ranking", expanded=False):
+        st.caption("Optional: nur nutzen, wenn du ueber Portfolio und Watchlist hinaus tiefer in die Rangliste schauen willst.")
         ranking_limit = st.select_slider(
             "Ranking Depth",
             options=[20, 50, 100],
             value=50,
-            help="Limits the ranking table so the page stays compact during review.",
+            help="Begrenzt die Rangliste auf die fuer die Wochenauswertung wichtigsten Werte.",
         )
-        st.markdown("### Full Ranking")
-        st.caption("Status shows whether a name is in the portfolio, on the watchlist, or just in the broader ranked bench.")
         if ranking_df.empty:
-            st.info("No ranking is available for the selected filter set.")
+            st.info("Keine Rangliste verfuegbar.")
         else:
             ranking_display = _rename_ranking_columns(ranking_df.head(ranking_limit))
             page_display_dataframe(ranking_display, symbol_column="symbol")
 
-        if not sector_blocked_df.empty:
-            with st.expander("Sector Cap Exclusions", expanded=False):
-                blocked_display = sector_blocked_df.rename(
-                    columns={
-                        "company_name": "Company",
-                        "sector": "Sector",
-                        "base_rank": "Pre-Cap Rank",
-                        "blocked_reason": "Blocked Reason",
-                    }
-                )
-                page_display_dataframe(blocked_display, symbol_column="symbol")
-
-with historical_tab:
-    st.markdown("### Historical Model Performance")
-    st.caption(
-        "This backtest is a simple equal-weight rebalance model built from historical indicator snapshots. It is useful for direction and turnover behavior, not as execution-grade PnL."
-    )
-    if equity_curve_df.empty:
-        st.info("Not enough historical snapshots are available for a model backtest yet.")
-    else:
-        chart_df = equity_curve_df.copy()
-        chart_df["snapshot_date"] = pd.to_datetime(chart_df["snapshot_date"])
-        chart_df = chart_df.set_index("snapshot_date")
-
-        st.markdown("### Equity Curve")
-        st.line_chart(chart_df[["equity"]])
-
-        stat_col1, stat_col2 = st.columns(2)
-        with stat_col1:
-            st.markdown("### Turnover")
-            st.bar_chart(chart_df[["turnover"]])
-        with stat_col2:
-            st.markdown("### Hit Rate")
-            st.line_chart(chart_df[["hit_rate"]])
-
-        with st.expander("Period Detail", expanded=False):
-            period_display = equity_curve_df.rename(
+    if not sector_blocked_df.empty:
+        with st.expander("Sector Cap Exclusions", expanded=False):
+            blocked_display = sector_blocked_df.rename(
                 columns={
-                    "snapshot_date": "Snapshot Date",
-                    "equity": "Equity",
-                    "period_return": "Period Return",
-                    "turnover": "Turnover",
-                    "hit_rate": "Hit Rate",
-                    "holdings": "Holdings",
-                    "buys": "Buys",
-                    "sells": "Sells",
-                    "drawdown": "Drawdown",
+                    "company_name": "Company",
+                    "sector": "Sector",
+                    "base_rank": "Pre-Cap Rank",
+                    "blocked_reason": "Blocked Reason",
                 }
             )
-            page_display_dataframe(period_display)
+            page_display_dataframe(blocked_display, symbol_column="symbol")
 
-    with st.expander("Rebalance Log", expanded=False):
-        if rebalance_log_df.empty:
-            st.info("No rebalance log is available yet.")
-        else:
-            rebalance_display = rebalance_log_df.rename(
-                columns={
-                    "rebalance_date": "Rebalance Date",
-                    "next_date": "Next Date",
-                    "holdings": "Holdings",
-                    "buys": "Buys",
-                    "sells": "Sells",
-                    "turnover": "Turnover",
-                    "period_return": "Period Return",
-                    "hit_rate": "Hit Rate",
-                    "positions": "Positions",
-                }
-            )
-            page_display_dataframe(rebalance_display)
-
-    if not recent_history_df.empty:
-        with st.expander("Position Return Samples", expanded=False):
-            recent_history_display = recent_history_df.rename(
-                columns={
-                    "from_date": "From Date",
-                    "to_date": "To Date",
-                    "entry_price": "Entry Price",
-                    "exit_price": "Exit Price",
-                    "position_return": "Position Return",
-                }
-            )
-            page_display_dataframe(recent_history_display, symbol_column="symbol")
-
-with symbol_tab:
+with detail_tab:
     history_symbol_options = []
     if not portfolio_df.empty:
         history_symbol_options.extend(portfolio_df["symbol"].tolist())
@@ -498,7 +385,7 @@ with symbol_tab:
     history_symbol_options = list(dict.fromkeys(history_symbol_options))
 
     st.markdown("### Symbol Trend Detail")
-    st.caption("Use this view to inspect whether a single symbol is strengthening, weakening, or just moving around the cutoff.")
+    st.caption("Optional: oeffne diese Ansicht nur, wenn du einen einzelnen Wert genauer pruefen willst.")
     if history_symbol_options:
         selected_symbol = st.selectbox(
             "Symbol for Trend Detail",
@@ -567,6 +454,6 @@ This page uses `TechnicalIndicatorsCalculated` and `TechnicalIndicatorsCalculate
 - Portfolio selection: RSL ranking with optional SMA 200, ADX and RSI filters.
 - Watchlist zone: the next ranked names below the live portfolio.
 - Exit reasons: explicit explanation for symbols leaving the prior portfolio.
-- Historical model: equal-weight rebalance simulation across the selected snapshot window.
+- Historical model intentionally removed from the main workflow to keep the weekly review simple.
         """
     )
