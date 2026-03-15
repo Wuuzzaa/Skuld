@@ -6,13 +6,11 @@ from src.page_display_dataframe import page_display_dataframe
 # Titel
 st.subheader("Symbol Page")
 
+# get all symbols
 if 'symbol_list' not in st.session_state:
     st.session_state.symbol_list = select_into_dataframe(query='select distinct symbol from "OptionDataMerged" ORDER BY symbol ASC')
 
-#print(st.session_state.symbol_list)
-
-#symbol_input = st.text_input("Enter Symbol:", value="").upper()
-
+# select one symbol with completion
 selected_symbol = st.selectbox(
     "Select a Symbol:",
     options=st.session_state.symbol_list,
@@ -22,10 +20,11 @@ selected_symbol = st.selectbox(
 
 params = {'symbol': selected_symbol}
 
+# show fundamentals
+st.subheader("Fundamental")
 sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'symbolpage.sql'
 df = select_into_dataframe(sql_file_path=sql_file_path, params=params)
 
-# show final dataframe
 page_display_dataframe(df, symbol_column='symbol')
 
 # show iv history
@@ -34,3 +33,10 @@ sql_file_path_iv = PATH_DATABASE_QUERY_FOLDER / 'iv_history_symbolpage.sql'
 df_iv = select_into_dataframe(sql_file_path=sql_file_path_iv, params=params)
 
 page_display_dataframe(df_iv, symbol_column='symbol')
+
+# show technical indicators
+st.subheader("Technical Indicators")
+sql_file_path_technical_indicators = PATH_DATABASE_QUERY_FOLDER / 'technical_indicators_one_year_one_symbol.sql'
+df_technical_indicators = select_into_dataframe(sql_file_path=sql_file_path_technical_indicators, params=params)
+
+page_display_dataframe(df_technical_indicators, symbol_column='symbol')

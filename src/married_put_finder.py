@@ -1,12 +1,12 @@
 """
-Married Put Finder – Calculation engine.
+Position Insurance Tool - Calculation engine.
 
 Provides PowerOptions-style metrics for the RadioActive Trading method:
-  • Put-only view  (Buy Put Month selected, Sell Call Month = None)
-  • Collar view    (Buy Put Month + Sell Call Month selected)
+    * Put-only view  (Buy Put Month selected, Sell Call Month = None)
+    * Collar view    (Buy Put Month + Sell Call Month selected)
 
 For collar mode, each put is paired with **every** call whose strike is
-≥ the put strike (same-strike collar + wide collar).  When calls span
+>= the put strike (same-strike collar + wide collar).  When calls span
 multiple expiration dates the combinations are multiplied across all
 dates, giving the full PowerOptions-style matrix.
 
@@ -73,7 +73,7 @@ def calculate_put_only_metrics(
     current_price: float,
 ) -> pd.DataFrame:
     """
-    Calculate Put-only Married Put metrics (no Call involved).
+    Calculate Put-only metrics (no Call involved).
 
     Matches the PowerOptions "Sell Call Month = None" view.
 
@@ -83,11 +83,11 @@ def calculate_put_only_metrics(
     Returned columns (appended to a copy of *puts_df*):
         put_label              – e.g. "PG 2025 03-OCT 170.00 PUT (42)"
         put_midpoint_price     – premium_option_price (or option_price fallback)
-        put_time_value         – midpoint − max(0, strike − current_price)
+        put_time_value         – midpoint - max(0, strike - current_price)
         put_time_value_per_mo  – time_value / (DTE / 30)
         new_cost_basis         – cost_basis + midpoint
-        locked_in_profit       – strike − new_cost_basis
-        locked_in_profit_pct   – locked_in_profit / new_cost_basis × 100
+        locked_in_profit       – strike - new_cost_basis
+        locked_in_profit_pct   – locked_in_profit / new_cost_basis * 100
     """
     if puts_df.empty:
         return puts_df
@@ -144,10 +144,10 @@ def calculate_collar_metrics(
             – same as calculate_put_only_metrics
         call_label             – e.g. "TSLA 2024 12-JUL 240.00 CALL (7)"
         call_midpoint_price    – call midpoint price
-        new_cost_basis         – cost_basis + put_midpoint − call_midpoint
-        locked_in_profit       – put_strike − new_cost_basis
-        locked_in_profit_pct   – locked_in_profit / new_cost_basis × 100
-        pct_assigned           – (call_strike − NCB) / NCB × 100
+        new_cost_basis         – cost_basis + put_midpoint - call_midpoint
+        locked_in_profit       – put_strike - new_cost_basis
+        locked_in_profit_pct   – locked_in_profit / new_cost_basis * 100
+        pct_assigned           – (call_strike - NCB) / NCB * 100
         pct_assigned_with_put  – includes residual put value at call strike
     """
     # Start with put-only metrics (one row per put)
@@ -157,7 +157,7 @@ def calculate_collar_metrics(
         return put_metrics
 
     if calls_df is None or calls_df.empty:
-        # No calls → add empty call columns for consistent schema
+        # No calls -> add empty call columns for consistent schema
         for col in ("call_label", "call_midpoint_price", "pct_assigned", "pct_assigned_with_put"):
             put_metrics[col] = None
         return put_metrics
@@ -178,7 +178,7 @@ def calculate_collar_metrics(
         valid_calls = calls[calls["strike_price"] >= put_strike]
 
         if valid_calls.empty:
-            # No valid call → put-only row with empty call columns
+            # No valid call -> put-only row with empty call columns
             row_dict = put_row.to_dict()
             row_dict["call_label"] = None
             row_dict["call_midpoint_price"] = None

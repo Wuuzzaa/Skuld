@@ -75,15 +75,19 @@ with st.expander("Configuration and Filters", expanded=True):
             ]
 
         # dte labels ("5 DTE - Friday 2026-01-16 - Monthly/Weekly/Daily")
-        dte_labels = filtered_dates_df.apply(
-            lambda row: (
+        dte_labels = [
+            (
                 f"{int(row['days_to_expiration'])} DTE - "
                 f"{pd.to_datetime(row['expiration_date']).strftime('%A')}  "
                 f"{row['expiration_date']} - "
                 f"{get_expiration_type(row['expiration_date'])}"
-            ),
-            axis=1
-        ).tolist()
+            )
+            for _, row in filtered_dates_df.iterrows()
+        ]
+
+        if not dte_labels:
+            st.warning("No expiration dates match the selected filters.")
+            st.stop()
 
         # selectbox with dte labels
         selected_label = st.selectbox("Expiration Date", dte_labels)

@@ -8,7 +8,7 @@ if [ -f /app/env.sh ]; then
     set +a
 fi
 
-# Parameter für den Modus (z. B. option_data, saturday_night, marked_start_mid_end, stock_data_daily)
+# Parameter für den Modus (z. B. option_data, saturday_night, market_start_mid_end, stock_data_daily)
 MODE="$1"
 
 # Modus-spezifische Lockfile, Logfile und Memory-Monitor-Datei

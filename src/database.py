@@ -66,7 +66,13 @@ def get_postgres_engine():
 
         # Create Engine
         db_url = f"postgresql+psycopg2://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{db_host}:{db_port}/{POSTGRES_DB}"
-        _POSTGRES_ENGINE = create_engine(db_url)
+        _POSTGRES_ENGINE = create_engine(
+            db_url,
+            pool_size=10,
+            max_overflow=20,
+            pool_pre_ping=True,
+            pool_recycle=300,
+        )
         logger.info("Successfully created PostgreSQL engine.")
         return _POSTGRES_ENGINE
 
@@ -130,6 +136,20 @@ def insert_into_table(
         # Postgres tends to be stricter, so we catch errors but don't stop the flow
         dataframe = dataframe.replace("None", np.nan)
 
+        try:
+            # 1. Get the list of columns currently in the database table
+            inspector = inspect(connection)
+            existing_columns = [col['name'] for col in inspector.get_columns(table_name)]
+
+            # 2. Identify the common columns between your DataFrame and the SQL table
+            columns_to_keep = [col for col in dataframe.columns if col in existing_columns]
+
+            # 3. Filter the DataFrame
+            dataframe = dataframe[columns_to_keep]
+        except Exception as e:
+            logger.info(f"{table_name} does not exist: \n{e}")
+
+        # 4. Perform the insertion
         pg_affected = dataframe.to_sql(
                             table_name,
                             connection, 
@@ -268,10 +288,11 @@ def select_into_dataframe_pg(query: str = None, sql_file_path: str = None, param
         pg_engine = get_postgres_engine()
         if pg_engine:
             start_pg = time.time()
-            if params:
-                df = pd.read_sql(text(str(sql)), pg_engine, params=params)
-            else:
-                df = pd.read_sql(text(str(sql)), pg_engine)
+            with pg_engine.connect() as conn:
+                if params:
+                    df = pd.read_sql(text(str(sql)), conn, params=params)
+                else:
+                    df = pd.read_sql(text(str(sql)), conn)
             logger.debug(f"[PostgreSQL] Rows: {len(df)} - Runtime: {round(time.time() - start_pg, 2)}s.")
     except Exception as e:
         logger.error(f"[PostgreSQL] Error executing query: \n{e}")
@@ -444,6 +465,18 @@ def run_migrations():
         # pg_migrations()
 
 
+def _get_missing_expected_views(inspector):
+    expected_views = {
+        "OptionData",
+        "FundamentalData",
+        "OptionDataMerged",
+        "OptionPricingMetrics",
+        "StockData",
+    }
+    existing_views = set(inspector.get_view_names())
+    return sorted(expected_views - existing_views)
+
+
 def _recreate_views_for_engine(engine):
     """
     Internal helper to recreate views on a specific engine.
@@ -472,10 +505,14 @@ def _recreate_views_for_engine(engine):
     
     hash_value = calculate_view_hash(view_path, view_files)
     db_hash_value = get_db_view_hash(engine)
+    missing_views = _get_missing_expected_views(inspect(engine))
 
-    if db_hash_value == hash_value:
+    if db_hash_value == hash_value and not missing_views:
         logger.info(f"[{label}] Views are up to date. Skipping recreation.")
         return
+
+    if missing_views:
+        logger.warning(f"[{label}] Expected views missing despite stored view hash: {missing_views}. Recreating views.")
     
     with engine.connect() as connection:
         while pending_views:
@@ -542,10 +579,14 @@ def _recreate_views_connection(connection):
     
     hash_value = calculate_view_hash(view_path, view_files)
     db_hash_value = get_db_view_hash_conn(connection)
+    missing_views = _get_missing_expected_views(inspect(connection.engine))
 
-    if db_hash_value == hash_value:
+    if db_hash_value == hash_value and not missing_views:
         logger.info(f"[{label}] Views are up to date. Skipping recreation.")
         return
+
+    if missing_views:
+        logger.warning(f"[{label}] Expected views missing despite stored view hash: {missing_views}. Recreating views.")
     
     drop_all_views(connection.engine)
     while pending_views:

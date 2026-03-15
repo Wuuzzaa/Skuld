@@ -438,12 +438,12 @@ def get_symbols(include: str | None = None) -> list | dict[str, list]:
     """
 
     logger.info("Loading symbols from database...")
-    symbols = select_into_dataframe(f'SELECT symbol FROM "{TABLE_STOCK_SYMBOLS_MASSIVE}"').squeeze().tolist()
+    symbols = select_into_dataframe(f'SELECT symbol FROM "{TABLE_STOCK_SYMBOLS_MASSIVE}" ORDER BY symbol').squeeze().tolist()
     if len(symbols) == 0:
         load_symbols()
-        symbols = select_into_dataframe(f'SELECT symbol FROM "{TABLE_STOCK_SYMBOLS_MASSIVE}"').squeeze().tolist()
+        symbols = select_into_dataframe(f'SELECT symbol FROM "{TABLE_STOCK_SYMBOLS_MASSIVE}" ORDER BY symbol').squeeze().tolist()
     
-    option_symbols = select_into_dataframe(f'SELECT symbol FROM "{TABLE_STOCK_SYMBOLS_MASSIVE}" WHERE has_options = true').squeeze().tolist()
+    option_symbols = select_into_dataframe(f'SELECT symbol FROM "{TABLE_STOCK_SYMBOLS_MASSIVE}" WHERE has_options = true ORDER BY symbol').squeeze().tolist()
 
     logger.info(f"Loaded {len(symbols)} stock symbols, {len(option_symbols)} symbols with options from the database.")
 
@@ -471,6 +471,7 @@ def get_symbols_with_exchange():
                                                 END AS exchange
                                              FROM "{TABLE_STOCK_SYMBOLS_MASSIVE}"
                                              WHERE symbol IN (SELECT symbol FROM "TechnicalIndicatorsMasterData" where from_date < '2026-02-16')
+                                             ORDER BY symbol
                                              """)
 
     logger.info(f"Loaded {len(symbols_exchange)} symbols with exchange from the database.")

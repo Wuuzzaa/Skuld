@@ -157,12 +157,6 @@ jobs:
         run: |
           docker compose down --remove-orphans || true
 
-          if [ -d "financial_data.db" ]; then
-            rm -rf financial_data.db && touch financial_data.db
-          elif [ ! -f "financial_data.db" ]; then
-            touch financial_data.db
-          fi
-
           # --- Build ---
           BUILD_START=$(date +%s)
           docker build -t skuld-app-image .

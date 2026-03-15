@@ -47,10 +47,8 @@ class YahooQueryScraper:
                 logger.info(f"Loading for {len(symbols)} symbols module data from Yahoo Finance - modules: {modules}")
                 # Symbole in 2000er-Pakete aufteilen
                 local_batch_size = 2000
-                local_symbol_batches = [symbols[i:i + local_batch_size] for i in range(0, len(symbols), local_batch_size)]
-                logger.info(f"Initializing {len(local_symbol_batches)} ticker batches with batch size {local_batch_size} for YahooQueryScraper - total symbols: {len(self.symbols)}")
-                 # asynchronous=True, max_workers=2, is not possible because of the high number of symbols and the rate limit
-                local_ticker_batches = [Ticker(symbol_batch, progress=True) for symbol_batch in local_symbol_batches]
+                # asynchronous=True, max_workers=2, is not possible because of the high number of symbols and the rate limit
+                local_ticker_batches = _get_ticker_batches(symbols, local_batch_size, self.retries, asynchronous=False)
                 batch = 1
                 for ticker_batch in local_ticker_batches:
                     logger.info(f"({batch}/{len(local_ticker_batches)}) Batch")
@@ -100,10 +98,7 @@ class YahooQueryScraper:
             logger.info(f"Loading for {len(symbols)} symbols all financial data from Yahoo Finance")
             # Symbole in 2000er-Pakete aufteilen
             local_batch_size = 2000
-            local_symbol_batches = [symbols[i:i + local_batch_size] for i in range(0, len(symbols), local_batch_size)]
-            logger.info(f"Initializing {len(local_symbol_batches)} ticker batches with batch size {local_batch_size} for YahooQueryScraper - total symbols: {len(self.symbols)}")
-            local_ticker_batches = [Ticker(symbol_batch, progress=True, asynchronous=True) for symbol_batch in local_symbol_batches]
-        
+            local_ticker_batches = _get_ticker_batches(symbols, local_batch_size, self.retries, asynchronous=True)
             for ticker_batch in local_ticker_batches:
                 logger.info(f"({batch}/{len(local_ticker_batches)}) Batch")
                 batch += 1
@@ -146,12 +141,8 @@ class YahooQueryScraper:
             return df
 
     def get_historical_prices(self, period="1d"):
-        # , max_workers=2
-        # Symbole in 2000er-Pakete aufteilen
-        local_batch_size = 200
-        local_symbol_batches = [self.symbols[i:i + local_batch_size] for i in range(0, len(self.symbols), local_batch_size)]
-        logger.info(f"Initializing {len(local_symbol_batches)} ticker batches with batch size {local_batch_size} for YahooQueryScraper - total symbols: {len(self.symbols)}")
-        local_ticker_batches = [Ticker(symbol_batch, progress=True, asynchronous=True) for symbol_batch in local_symbol_batches]
+        local_batch_size = 2000
+        local_ticker_batches = _get_ticker_batches(self.symbols, local_batch_size, self.retries, asynchronous=True)
         batch = 1
         for ticker_batch in local_ticker_batches:
             logger.info(f"({batch}/{len(local_ticker_batches)}) Batch")
@@ -204,3 +195,24 @@ class YahooQueryScraper:
                 symbols_to_be_deleted.append(symbol)
         for symbol in symbols_to_be_deleted:
             del module_data[symbol]
+
+def _get_ticker_batches(symbols, batch_size, retries, asynchronous=False):
+    local_symbol_batches = [symbols[i:i + batch_size] for i in range(0, len(symbols), batch_size)]
+    logger.info(f"Initializing {len(local_symbol_batches)} ticker batches with batch size {batch_size} for YahooQueryScraper - total symbols: {len(symbols)}")
+    for attempt in range(retries):
+        try:
+            ticker_batches = [Ticker(symbol_batch, progress=True, asynchronous=asynchronous) for symbol_batch in local_symbol_batches]
+        except Exception as e:
+                logger.error(f"ERROR: Error fetching historical prices - {str(e)}")
+                logger.error(f"{attempt} failed -> Retry after 10s")
+                time.sleep(10)
+        else:
+                # Success - exit the retry loop
+                break
+    else:
+            logger.error(" ! " * 80)
+            logger.error("RETRY LIMIT REACHED")
+            logger.error(" ! " * 80)
+            raise Exception("RETRY LIMIT REACHED")
+    
+    return ticker_batches

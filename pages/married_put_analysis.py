@@ -4,7 +4,7 @@ import sys
 import os
 
 from config import PATH_DATABASE_QUERY_FOLDER
-from src.page_display_dataframe import page_display_dataframe
+from src.documentation_renderer import render_married_put_analysis_documentation
 
 # Add src directory to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
@@ -15,29 +15,67 @@ from src.database import select_into_dataframe
 st.subheader("Married Put Analysis")
 
 # Filter Controls
-col1, col2, col3, col4 = st.columns(4)
+col1, col2, col3, col4, col5 = st.columns(5)
 
 with col1:
     max_results = st.number_input("Max Results", min_value=10, max_value=1000, value=50, step=10)
 
 with col2:
-    min_roi = st.number_input("Min ROI %", min_value=0.0, max_value=100.0, value=0.0, step=1.0)
+    min_roi = st.number_input("Min ROI %", min_value=0.0, max_value=100.0, value=3.0, step=1.0)
 
 with col3:
     max_roi = st.number_input("Max ROI %", min_value=0.0, max_value=100.0, value=7.0, step=1.0)
 
 with col4:
+    strike_multiplier = st.number_input("Strike > Stock ×", min_value=1.0, max_value=2.0, value=1.2, step=0.05, format="%.2f",
+                                         help="Strike muss größer sein als Aktienkurs × dieser Faktor (z.B. 1.0 = ITM, 1.2 = Deep ITM)")
+
+with col5:
     days_range = st.slider("Days to Expiration", min_value=30, max_value=720, value=(30, 500), step=30)
 
-# Row 2 for Status Filter
+# Row 2 for Status Filter (Checkboxes)
 st.write("---")
-all_statuses = ["Dividend Champion", "Dividend Contender", "Dividend Challenger", "Dividend Achiever", "Dividend King", "Dividend Aristocrat"]
-default_statuses = ["Dividend Champion", "Dividend Contender", "Dividend Challenger"]
-selected_statuses = st.multiselect("Dividend Growth Status", options=all_statuses, default=default_statuses)
+st.caption("Dividend Growth Status")
+
+def _on_click_alle():
+    """Callback – runs BEFORE next rerun, so widget keys can still be set."""
+    st.session_state["chk_contender"] = False
+    st.session_state["chk_challenger"] = False
+    st.session_state["chk_champion"] = False
+    st.session_state["chk_show_all"] = True
+
+cb_cols = st.columns([1, 1, 1, 0.8])
+
+with cb_cols[0]:
+    chk_contender = st.checkbox("Contender", value=True, key="chk_contender")
+with cb_cols[1]:
+    chk_challenger = st.checkbox("Challenger", value=True, key="chk_challenger")
+with cb_cols[2]:
+    chk_champion = st.checkbox("Champion", value=True, key="chk_champion")
+with cb_cols[3]:
+    st.button("Alle (kein Filter)", key="btn_select_all", on_click=_on_click_alle)
+
+# "Alle" means no classification filter at all
+show_all = st.session_state.get("chk_show_all", False)
+
+# If any individual checkbox is toggled, deactivate "show all"
+if any([chk_contender, chk_challenger, chk_champion]):
+    show_all = False
+    st.session_state["chk_show_all"] = False
+
+# Build selected statuses list from checkboxes
+selected_statuses = []
+if not show_all:
+    if chk_contender:
+        selected_statuses.append("Dividend Contender")
+    if chk_challenger:
+        selected_statuses.append("Dividend Challenger")
+    if chk_champion:
+        selected_statuses.append("Dividend Champion")
 
 # Auto-load data on page load or when filters change
 # Using session state to track if data needs to be reloaded
-filter_key = f"{max_results}_{min_roi}_{max_roi}_{days_range}_{selected_statuses}"
+filter_key = f"{max_results}_{min_roi}_{max_roi}_{strike_multiplier}_{days_range}_{selected_statuses}_{show_all}"
 if 'last_filter_key' not in st.session_state or st.session_state['last_filter_key'] != filter_key:
     st.session_state['last_filter_key'] = filter_key
     
@@ -45,7 +83,7 @@ if 'last_filter_key' not in st.session_state or st.session_state['last_filter_ke
         try:
             # Execute SQL query
             sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'married_put.sql'
-            df = select_into_dataframe(sql_file_path=sql_file_path)
+            df = select_into_dataframe(sql_file_path=sql_file_path, params={"strike_multiplier": strike_multiplier})
             
             if df is not None and not df.empty:
                 # Apply ROI filters
@@ -60,8 +98,8 @@ if 'last_filter_key' not in st.session_state or st.session_state['last_filter_ke
                     (df['days_to_expiration'] <= days_range[1])
                 ]
 
-                # Apply Status Filter
-                if selected_statuses:
+                # Apply Status Filter (skip if "Alle" is active)
+                if not show_all and selected_statuses:
                      # 'Classification' is the column name in the DF (aliased from dividend_classification)
                     df = df[df['Classification'].isin(selected_statuses)]
                 
@@ -90,24 +128,36 @@ if 'married_put_df' in st.session_state and not st.session_state['married_put_df
     # Apply symbol filter
     display_df = df if selected_symbol == 'All' else df[df['symbol'] == selected_symbol]
     
-    # Key columns for display (removed symbol_option_rank)
+    # All columns for display (matching SQL query output)
     key_columns = [
-        'symbol', 'Company', 'expiration_date', 'days_to_expiration',
-        'strike_price', 'live_stock_price', 'premium_option_price', 'extrinsic_value',
-        'total_investment', 'minimum_potential_profit', 'roi_pct', 'roi_annualized_pct',
-        'delta', 'iv', 'open_interest', 'Classification', 'Current-Div',
-        'dividends_to_expiration', 'dividend_sum_to_expiration'
+        'symbol', 'Company', 'Sector', 'Industry',
+        'expiration_date', 'days_to_expiration',
+        'strike_price', 'live_stock_price', 'premium_option_price',
+        'intrinsic_value', 'extrinsic_value',
+        'total_investment', 'minimum_potential_profit',
+        'roi_pct', 'roi_annualized_pct',
+        'max_loss_total', 'total_return',
+        'delta', 'impliedVolatility', 'open_interest',
+        'Classification', 'No-Years', 'Current-Div',
+        'Payouts/-Year', 'dividends_to_expiration', 'dividend_sum_to_expiration',
+        'dividends_to_break_even',
+        'earnings_date', 'days_to_earnings',
+        'analyst_mean_target_price_year',
+        'spread_ptc',
+        'strike_stock_price_difference', 'strike_stock_price_difference_ptc',
     ]
     
     # Filter columns that actually exist in the dataframe
     available_columns = [col for col in key_columns if col in display_df.columns]
 
-    # show final dataframe
-    event = page_display_dataframe(
-        df=display_df[available_columns],
-        symbol_column='symbol',
-        on_select="rerun",
+    # show final dataframe with row selection for documentation
+    event = st.dataframe(
+        display_df[available_columns],
+        use_container_width=True,
+        height=min(800, 40 + 35 * len(display_df)),
         selection_mode="single-row",
+        on_select="rerun",
+        key="married_put_table",
         column_config={
             "roi_annualized_pct": st.column_config.NumberColumn(
                 "ROI % (Annual)",
@@ -125,6 +175,14 @@ if 'married_put_df' in st.session_state and not st.session_state['married_put_df
                 "Min Profit",
                 format="$%.2f"
             ),
+            "max_loss_total": st.column_config.NumberColumn(
+                "Max Loss",
+                format="$%.2f"
+            ),
+            "total_return": st.column_config.NumberColumn(
+                "Total Return",
+                format="$%.2f"
+            ),
             "live_stock_price": st.column_config.NumberColumn(
                 "Stock Price",
                 format="$%.2f"
@@ -136,48 +194,56 @@ if 'married_put_df' in st.session_state and not st.session_state['married_put_df
             "premium_option_price": st.column_config.NumberColumn(
                 "Option Premium",
                 format="$%.2f"
-            )
+            ),
+            "intrinsic_value": st.column_config.NumberColumn(
+                "Intrinsic Value",
+                format="$%.2f"
+            ),
+            "extrinsic_value": st.column_config.NumberColumn(
+                "Extrinsic Value",
+                format="$%.2f"
+            ),
+            "impliedVolatility": st.column_config.NumberColumn(
+                "IV",
+                format="%.2f"
+            ),
+            "spread_ptc": st.column_config.NumberColumn(
+                "Spread %",
+                format="%.2f%%"
+            ),
+            "strike_stock_price_difference": st.column_config.NumberColumn(
+                "Strike-Stock Diff",
+                format="$%.2f"
+            ),
+            "strike_stock_price_difference_ptc": st.column_config.NumberColumn(
+                "Strike-Stock Diff %",
+                format="%.2f%%"
+            ),
+            "dividend_sum_to_expiration": st.column_config.NumberColumn(
+                "Div Sum to Exp",
+                format="$%.2f"
+            ),
+            "analyst_mean_target_price_year": st.column_config.NumberColumn(
+                "Analyst Target",
+                format="$%.2f"
+            ),
+            "Classification": st.column_config.TextColumn(
+                "Dividend Status"
+            ),
         }
     )
 
-    if event and len(event.selection.rows) > 0:
-        selected_idx = event.selection.rows[0]
-        # Important: use display_df.iloc because the dataframe index might not match the visual index
-        row = display_df.iloc[selected_idx]
-        
-        st.markdown("---")
-        st.subheader(f"🔍 Calculation Details for {row['symbol']}")
-        st.write(f"**Company:** `{row['Company']}` | **Expiration:** `{row['expiration_date']}` ({row['days_to_expiration']} days) | **Strike:** `${row.get('strike_price', 0):.2f}`")
+    # ── Inline Documentation on row click ──────────────────────────
+    selected_rows = event.selection.rows if hasattr(event, "selection") else []
+    if selected_rows and not display_df.empty:
+        selected_idx = selected_rows[0]
+        selected_row = display_df.iloc[selected_idx]
 
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Stock Price", f"${row['live_stock_price']:.2f}")
-        c2.metric("Put Premium", f"${row['premium_option_price']:.2f}")
-        c3.metric("Extrinsic Value", f"${row.get('extrinsic_value', 0):.2f}")
-        c4.metric("Ann. Dividend", f"${row.get('Current-Div', 0):.2f}")
-
-        st.markdown(f'''
-        #### 🧮 How is this calculated?
-        
-        **1. Total Investment**: `${row['total_investment']:,.2f}`  
-        *Math*: `100 * (Stock Price + Put Premium) + $3.50 (Fees)`  
-        *Calculation*: `100 * (${row['live_stock_price']:.2f} + ${row['premium_option_price']:.2f}) + $3.50 = ${row['total_investment']:,.2f}`
-        
-        **2. Dividend Sum to Expiration**: `${row.get('dividend_sum_to_expiration', 0):,.2f}`  
-        *Math*: `Annual Dividend * (Days to Expiration / 365) * 100`  
-        *Calculation*: `${row.get('Current-Div', 0):.2f} * ({row['days_to_expiration']} / 365) * 100 = ${row.get('dividend_sum_to_expiration', 0):,.2f}`
-        
-        **3. Minimum Potential Profit**: `${row['minimum_potential_profit']:,.2f}`  
-        *Math*: `Dividend Sum - (100 * Extrinsic Value of Put) - $3.50 (Fees)`  
-        *Calculation*: `${row.get('dividend_sum_to_expiration', 0):,.2f} - ${row.get('extrinsic_value', 0) * 100:.2f} - $3.50 = ${row['minimum_potential_profit']:,.2f}`
-        
-        **4. Return on Investment (ROI)**: `{row['roi_pct']:.2f}%`  
-        *Math*: `Minimum Potential Profit / Total Investment * 100`  
-        *Calculation*: `${row['minimum_potential_profit']:,.2f} / ${row['total_investment']:,.2f} * 100 = {row['roi_pct']:.2f}%`
-        
-        **5. Annualized ROI**: `{row['roi_annualized_pct']:.2f}%`  
-        *Math*: `ROI % / (Days to Expiration) * 365`  
-        *Calculation*: `{row['roi_pct']:.2f}% / {row['days_to_expiration']} * 365 = {row['roi_annualized_pct']:.2f}%`
-        ''')
+        st.divider()
+        doc_md = render_married_put_analysis_documentation(row=selected_row)
+        st.markdown(doc_md)
+    else:
+        st.caption("💡 Klicke auf eine Zeile in der Tabelle, um die vollständige Berechnung für diese Option zu sehen.")
 
 else:
     st.info("No data available")

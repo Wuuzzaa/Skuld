@@ -49,7 +49,6 @@ jobs:
         run: |
           rsync -avz --delete \
             -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectionAttempts=1" \
-            --exclude 'financial_data.db' \
             --exclude 'logs/' \
             --exclude '.git/' \
             --exclude '.github/' \
@@ -193,18 +192,10 @@ jobs:
             mysudo docker rm -f skuld-frontend 2>/dev/null || true
             mysudo docker rm -f skuld-backend 2>/dev/null || true
             mysudo docker rm -f authelia 2>/dev/null || true
+            # Also remove containers by partial name match (catches prefixed names)
+            mysudo docker ps -a --filter "name=authelia" -q | xargs -r mysudo docker rm -f 2>/dev/null || true
+            mysudo docker ps -a --filter "name=skuld" -q | xargs -r mysudo docker rm -f 2>/dev/null || true
             mysudo docker compose down --remove-orphans
-            
-            echo "=== Ensuring financial_data.db is a file ==="
-            if [ -d "financial_data.db" ]; then
-              echo "⚠️  financial_data.db is a directory, converting to file using Docker..."
-              # Use docker to remove the directory since it was created by docker (root)
-              mysudo docker run --rm -v $(pwd):/work -w /work alpine rm -rf financial_data.db
-              touch financial_data.db
-            elif [ ! -f "financial_data.db" ]; then
-              echo "📝 Creating empty financial_data.db..."
-              touch financial_data.db
-            fi
             
             echo "=== Ensuring logs directory exists ==="
             mkdir -p logs
@@ -224,4 +215,36 @@ jobs:
             echo "=== Container logs ==="
             mysudo docker compose logs --tail=30
           ENDSSH
+
+      # ── Telegram: Deploy Success Notification ──
+      - name: Notify deploy success via Telegram
+        if: success()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          COMMIT_MSG=$(git log -1 --format='%s')
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          TEXT="✅ <b>[Production] Deploy erfolgreich</b>%0A%0A📝 <code>${SHORT_SHA}</code>: ${COMMIT_MSG}"
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d text="${TEXT}" \
+            -d parse_mode=HTML >/dev/null 2>&1 || true
+
+      # ── Telegram: Deploy Failure Notification ──
+      - name: Notify deploy failure via Telegram
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          ACTOR="${{ github.actor }}"
+          COMMIT_MSG=$(git log -1 --format='%s')
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          TEXT="❌ <b>[Production] Deploy fehlgeschlagen!</b>%0A%0A👤 ${ACTOR}%0A📝 <code>${SHORT_SHA}</code>: ${COMMIT_MSG}%0A🔗 <a href=\"${RUN_URL}\">Build Logs ansehen</a>"
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d text="${TEXT}" \
+            -d parse_mode=HTML >/dev/null 2>&1 || true
 

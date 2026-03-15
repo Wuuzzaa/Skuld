@@ -28,9 +28,9 @@ WITH BaseData AS (
         days_to_earnings,
         dividend_growth_years AS "No-Years",
         dividend_classification AS "Classification",
-        4 AS "Payouts/-Year",
+        NO_DIVIDEND_PAYOUTS_LAST_YEAR AS "Payouts/-Year",
         "Summary_dividendRate" AS "Current-Div",
-        CAST(FLOOR(days_to_expiration / 91.25) AS INTEGER) AS dividends_to_expiration
+        CAST(FLOOR(days_to_expiration / NULLIF(365.0 / NULLIF(NO_DIVIDEND_PAYOUTS_LAST_YEAR, 0), 0)) AS INTEGER) AS dividends_to_expiration
     FROM
         "OptionDataMerged"
     WHERE
@@ -38,13 +38,15 @@ WITH BaseData AS (
         AND contract_type = 'put'
         AND open_interest > 0
         AND extrinsic_value > 0
-        AND strike_price > live_stock_price * 1.2
+        AND strike_price > live_stock_price * :strike_multiplier
+        AND days_to_expiration > 0
+        AND NO_DIVIDEND_PAYOUTS_LAST_YEAR > 0
 ),
 CalculatedData AS (
     SELECT
         *,
         ROUND(extrinsic_value * number_of_stocks + 3.5, 2) as max_loss_total,
-        CAST(ceil(extrinsic_value / NULLIF("Current-Div" / 4.0, 0)) as Integer) as dividends_to_break_even,
+        CAST(ceil(extrinsic_value / NULLIF("Current-Div" / NULLIF("Payouts/-Year", 0), 0)) as Integer) as dividends_to_break_even,
         ROUND(CAST("Current-Div" * (days_to_expiration / 365.0) AS NUMERIC), 2) * number_of_stocks AS dividend_sum_to_expiration
     FROM
         BaseData
@@ -70,9 +72,7 @@ RoiData AS (
         (total_investment + minimum_potential_profit) as total_return,
         minimum_potential_profit / NULLIF(total_investment, 0) * 100 as roi_pct,
         round(
-            CAST(
-                ( (minimum_potential_profit / NULLIF(total_investment, 0)) / NULLIF(days_to_expiration, 0) ) * 365 * 100
-            AS NUMERIC),
+            CAST((minimum_potential_profit / NULLIF(total_investment, 0) * 100) / NULLIF(days_to_expiration, 0) * 365 AS NUMERIC),
             2
         ) as roi_annualized_pct
     FROM

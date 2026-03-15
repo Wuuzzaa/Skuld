@@ -150,17 +150,6 @@ jobs:
             # Removes containers and networks, but PRESERVES volumes.
             docker compose down --remove-orphans || true
             
-            echo "=== Ensuring financial_data.db file structure ==="
-            # Fix for Docker creating a directory instead of file if it doesn't exist
-            if [ -d "financial_data.db" ]; then
-              echo "⚠️  financial_data.db is a directory, removing and recreating as file..."
-              rm -rf financial_data.db
-              touch financial_data.db
-            elif [ ! -f "financial_data.db" ]; then
-              echo "📝 Creating new financial_data.db..."
-              touch financial_data.db
-            fi
-            
             echo "=== Building Image Explicitly (Avoiding Parallel Build Race) ==="
             # Build image once to prevent race condition when multiple services share the same build context
             docker build -t skuld-app-image .
