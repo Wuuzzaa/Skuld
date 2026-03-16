@@ -540,7 +540,11 @@ SELECT
     j."STOCHd_14_3_1",
     j."STOCHh_14_3_1",
     j."RSI_14",
-    j."RSL"
+    j."RSL",
+
+	-- Additional calculated fields
+	ROUND((c.analyst_mean_target - a.close)::numeric,2) as "target-close$",
+	ROUND((ROUND((c.analyst_mean_target - a.close)::numeric,2) / a.close * 100.0)::numeric, 2) as "target-close%"
 FROM
 	"StockPricesYahoo" AS A
 	LEFT OUTER JOIN (

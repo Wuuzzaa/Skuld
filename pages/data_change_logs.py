@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 @log_function
 def get_data():
     try:
-        df = select_into_dataframe('SELECT * FROM "DataChangeLogs"')
+        df = select_into_dataframe('SELECT * FROM "DataChangeLogs" ORDER BY timestamp DESC')
         return df
     except Exception as e:
         st.error(f"Fehler beim Laden der Daten: {e}")
