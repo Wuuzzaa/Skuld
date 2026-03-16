@@ -1,4 +1,4 @@
-SELECT DISTINCT
+SELECT
     symbol,
     live_stock_price as close,
     analyst_mean_target,
@@ -7,4 +7,4 @@ SELECT DISTINCT
     "target-close$",
     "target-close%"
 FROM
-    "OptionDataMerged";
+    "StockData";
