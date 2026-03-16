@@ -1,6 +1,6 @@
 WITH BaseData AS (
     SELECT
-        100 as number_of_stocks,
+        shares_per_contract as number_of_stocks,
         symbol,
         company_name AS "Company",
         company_sector AS "Sector",
@@ -8,9 +8,6 @@ WITH BaseData AS (
         expiration_date,
         days_to_expiration,
         open_interest,
-       -- NULL AS bid,
-       -- NULL AS ask,
-        spread_ptc,
         premium_option_price,
         intrinsic_value,
         extrinsic_value,
@@ -38,8 +35,10 @@ WITH BaseData AS (
         AND open_interest > 0
         AND extrinsic_value > 0
         AND strike_price > live_stock_price * :strike_multiplier
-        AND days_to_expiration > 0
-        AND NO_DIVIDEND_PAYOUTS_LAST_YEAR > 0
+        --AND days_to_expiration BETWEEN 90 AND 720
+        AND expiration_date BETWEEN CURRENT_DATE + INTERVAL '90 day' AND CURRENT_DATE + INTERVAL '720 day'
+        AND dividend_growth_years >= 10
+        AND NO_DIVIDEND_PAYOUTS_LAST_YEAR > 0 -- still paying dividend
 ),
 CalculatedData AS (
     SELECT

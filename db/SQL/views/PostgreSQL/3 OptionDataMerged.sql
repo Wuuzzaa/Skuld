@@ -29,8 +29,6 @@ SELECT
 	-- OptionPricingMetrics
 	a.days_to_expiration,
 	a.premium_option_price,
-	a.spread,
-    a.spread_ptc,
 	a.intrinsic_value,
 	a.extrinsic_value,
 	a.strike_stock_price_difference,
