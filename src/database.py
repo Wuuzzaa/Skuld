@@ -377,17 +377,15 @@ def _run_migrations_for_engine(engine):
             connection.commit()  # Ensure any pending transactions are committed before
             return
 
-        if label == "PostgreSQL":
-            drop_all_views(engine)
+        drop_all_views(engine)
+        # with connection.begin():
+        #     for table in HISTORY_ENABLED_TABLES:
+        #         pass
+        #         change_column_data_types(connection, table)
 
         for migration_file in pending_migrations:
             logger.info(f"[{label}] Applying migration {migration_file}...")
             last_migration_version = int(pending_migrations[-1].split(".")[0])
-            if label == "PostgreSQL" and last_migration_version == 19:
-                with connection.begin():
-                    for table in HISTORY_ENABLED_TABLES:
-                        pass
-                        # change_column_data_types(connection, table)
 
             try:
                 with open(os.path.join(migrations_path, migration_file), "r") as f:
@@ -669,15 +667,15 @@ def change_column_data_types(conn, table):
                                                                                                                 ELSE "{col}" 
                                                                                                             END
                                                                                                         )::real'''
-                    execute_sql(conn, alter_statement, massive_table, 'ALTER', f"Change {col} column data type from double precision to real {massive_table}")
+                    # execute_sql(conn, alter_statement, massive_table, 'ALTER', f"Change {col} column data type from double precision to real {massive_table}")
                 # Bigint to int
                 for col in ["open_interest"]:
                     alter_statement = f'ALTER TABLE "{massive_table}" ALTER COLUMN "{col}" TYPE integer'
-                    execute_sql(conn, alter_statement, massive_table, 'ALTER', f"Change {col} column data type from bigint to int {massive_table}")
+                    # execute_sql(conn, alter_statement, massive_table, 'ALTER', f"Change {col} column data type from bigint to int {massive_table}")
                 # Bigint to smallint
                 for col in ["shares_per_contract"]:
                     alter_statement = f'ALTER TABLE "{massive_table}" ALTER COLUMN "{col}" TYPE smallint'
-                    execute_sql(conn, alter_statement, massive_table, 'ALTER', f"Change {col} column data type from bigint to smallint {massive_table}")
+                    # execute_sql(conn, alter_statement, massive_table, 'ALTER', f"Change {col} column data type from bigint to smallint {massive_table}")
                 # text to date
                 for col in ["expiration_date"]:
                     alter_statement = f'ALTER TABLE "{massive_table}" ALTER COLUMN "{col}" TYPE date USING expiration_date::date'
@@ -692,12 +690,12 @@ def change_column_data_types(conn, table):
             # int to smallint
             for col in ["isoyear", "week"]:
                 alter_statement = f'ALTER TABLE "{hist_table}" ALTER COLUMN "{col}" TYPE smallint'
-                execute_sql(conn, alter_statement, hist_table, 'ALTER', f"Change {col} column data type from int to smallint {hist_table}")
+                # execute_sql(conn, alter_statement, hist_table, 'ALTER', f"Change {col} column data type from int to smallint {hist_table}")
         for hist_table in ["DatesHistory", f"{table}HistoryMonthly"]:
             # int to smallint
             for col in ["year", "month"]:
                 alter_statement = f'ALTER TABLE "{hist_table}" ALTER COLUMN "{col}" TYPE smallint'
-                execute_sql(conn, alter_statement, hist_table, 'ALTER', f"Change {col} column data type from int to smallint {hist_table}")
+                # execute_sql(conn, alter_statement, hist_table, 'ALTER', f"Change {col} column data type from int to smallint {hist_table}")
     except Exception as e:
         logger.warning(f"Error during column data type change: {e}")
         raise e
