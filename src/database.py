@@ -266,6 +266,8 @@ def select_into_dataframe_pg(query: str = None, sql_file_path: str = None, param
         if pg_engine:
             start_pg = time.time()
             with pg_engine.connect() as conn:
+                conn.execute(text("SET jit = off;"))
+                conn.execute(text("SET enable_nestloop = off;"))
                 if params:
                     df = pd.read_sql(text(str(sql)), conn, params=params)
                 else:
