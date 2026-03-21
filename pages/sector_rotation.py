@@ -35,11 +35,29 @@ with st.expander("Parameter", expanded=True):
             index=0,
             help="adjclose ist fuer ETF-Historien robuster bei Dividenden und Splits.",
         )
-        short_window = st.slider("Kurzer WMA", min_value=3, max_value=12, value=5)
+        short_window = st.slider(
+            "Kurzer WMA",
+            min_value=3,
+            max_value=12,
+            value=5,
+            help="Kurze Glaettung fuer RS-Ratio und RS-Momentum. Kleinere Werte reagieren schneller, groessere Werte stabilisieren das Signal.",
+        )
 
     with col2:
-        long_window = st.slider("Langer WMA", min_value=8, max_value=30, value=15)
-        volatility_window = st.slider("HV-Fenster", min_value=10, max_value=30, value=20)
+        long_window = st.slider(
+            "Langer WMA",
+            min_value=8,
+            max_value=30,
+            value=15,
+            help="Langfristige Referenz fuer die Normierung des RS-Signals. Hoehere Werte machen die Matrix traeger, aber robuster.",
+        )
+        volatility_window = st.slider(
+            "HV-Fenster",
+            min_value=10,
+            max_value=30,
+            value=20,
+            help="Anzahl der Handelstage fuer die historische Volatilitaet. Kleinere Fenster machen die Farbgebung nervoeser.",
+        )
 
     with col3:
         volatility_threshold_low = st.number_input(
@@ -49,6 +67,7 @@ with st.expander("Parameter", expanded=True):
             value=0.15,
             step=0.01,
             format="%.2f",
+            help="Unterhalb dieser annualisierten Volatilitaet wird ein Sektor als ruhig beziehungsweise Gruen markiert.",
         )
         volatility_threshold_high = st.number_input(
             "HV Schwelle Orange/Rot",
@@ -57,11 +76,25 @@ with st.expander("Parameter", expanded=True):
             value=0.30,
             step=0.01,
             format="%.2f",
+            help="Oberhalb dieser annualisierten Volatilitaet wird der Sektor rot dargestellt. Dazwischen liegt Orange.",
         )
 
     with col4:
-        lookback_days = st.slider("Lookback Tage", min_value=50, max_value=240, value=120, step=10)
-        tail_days = st.slider("Tail im Chart", min_value=3, max_value=12, value=6)
+        lookback_days = st.slider(
+            "Lookback Tage",
+            min_value=50,
+            max_value=240,
+            value=120,
+            step=10,
+            help="So weit wird aus dem History-View geladen. Mehr Lookback hilft nur, wenn die Datenhistorie im Backend auch wirklich vorhanden ist.",
+        )
+        tail_days = st.slider(
+            "Tail im Chart",
+            min_value=3,
+            max_value=12,
+            value=6,
+            help="Wie viele der letzten Beobachtungen je Sektor als Spur im Koordinatensystem gezeigt werden.",
+        )
 
 parameters = RotationParameters(
     price_column=price_column,
@@ -166,3 +199,63 @@ st.markdown(
     - Kreisfarbe: annualisierte historische Volatilitaet aus logarithmischen Tagesrenditen ueber ein rollierendes Fenster.
     """
 )
+
+with st.expander("Erklaerung der Stellschrauben", expanded=False):
+    st.markdown(
+        f"""
+        **1. Kursbasis**
+
+        - `adjclose`: um Dividenden und Splits bereinigter Schlusskurs. Fuer ETFs in der Regel die bessere Wahl.
+        - `close`: roher Schlusskurs. Kann sinnvoll sein, wenn du bewusst ohne Adjustments arbeiten willst.
+
+        **2. Kurzer WMA ({short_window})**
+
+        - Das ist die schnelle Glaettung im Signal.
+        - Kleinere Werte: schneller, aber unruhiger.
+        - Groessere Werte: ruhiger, aber traeger.
+        - Bei nur etwa 50 Tagen Historie sollte dieser Wert eher klein bleiben.
+
+        **3. Langer WMA ({long_window})**
+
+        - Dieser Wert definiert den langsameren Vergleichsmassstab fuer die Normierung des RS-Signals.
+        - Wenn du ihn erhoehst, wird die Matrix stabiler, braucht aber mehr Historie.
+        - Fachlich ist das die wichtigste Stellschraube fuer den Trade-off zwischen Robustheit und Fruehindikator.
+
+        **4. HV-Fenster ({volatility_window})**
+
+        - Bestimmt, ueber wie viele Tage die historische Volatilitaet berechnet wird.
+        - Kurzes Fenster: die Farbe springt schneller.
+        - Langes Fenster: die Farbe ist stabiler, reagiert aber spaeter auf Stressphasen.
+
+        **5. HV-Schwellen ({volatility_threshold_low:.0%} / {volatility_threshold_high:.0%})**
+
+        - Unter der unteren Schwelle: Gruen.
+        - Zwischen beiden Schwellen: Orange.
+        - Oberhalb der oberen Schwelle: Rot.
+        - Das veraendert nicht die Position im Quadranten, sondern nur die Risikofarbe.
+
+        **6. Lookback Tage ({lookback_days})**
+
+        - Das ist nur die Laenge des geladenen Datenfensters.
+        - Mehr Lookback heisst nicht automatisch bessere Signale, wenn die echte Historie im View ohnehin kurz ist.
+        - Mit eurer aktuellen Datenlage ist dieser Parameter vor allem eine technische Obergrenze.
+
+        **7. Tail im Chart ({tail_days})**
+
+        - Zeigt die letzten Bewegungspunkte pro Sektor als Spur.
+        - Kleinerer Wert: saubereres Chartbild.
+        - Groesserer Wert: mehr Bewegungshistorie, aber schneller unuebersichtlich.
+
+        **8. Mindesthistorie**
+
+        - Fuer die aktuelle Parametrisierung braucht die Seite mindestens `{min_history_needed}` Handelstage.
+        - Dieser Wert ergibt sich aus langer WMA plus mehrfacher kurzer Glaettung fuer RS-Ratio und RS-Momentum.
+        - Wenn weniger Daten vorhanden sind, wird die Matrix absichtlich gestoppt statt scheinbar praezise, aber instabile Werte zu zeigen.
+
+        **Praktische Empfehlung fuer eure aktuelle Datenlage**
+
+        - Bei rund 50 Tagen Historie sind kleine Fenster wie `5 / 15` sinnvoll.
+        - Wenn spaeter mehr Historie verfuegbar ist, kann man sich schrittweise Richtung `10 / 30` bewegen.
+        - Fuer den Start ist Stabilitaet wichtiger als maximale Naehe zur Langfrist-Spezifikation.
+        """
+    )
