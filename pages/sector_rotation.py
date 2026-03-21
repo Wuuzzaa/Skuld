@@ -126,6 +126,22 @@ history_lengths = (
 )
 benchmark_history = int(history_lengths.get(parameters.benchmark_symbol, 0))
 
+benchmark_dates = (
+    price_history.loc[price_history["symbol"] == parameters.benchmark_symbol, "date"]
+    if not price_history.empty
+    else []
+)
+benchmark_start_date = benchmark_dates.min() if len(benchmark_dates) else None
+benchmark_end_date = benchmark_dates.max() if len(benchmark_dates) else None
+
+available_sector_symbols = [symbol for symbol in SECTOR_ETFS if symbol in available_symbols]
+relevant_symbols = [parameters.benchmark_symbol, *available_sector_symbols]
+common_available_history = (
+    min(int(history_lengths.get(symbol, 0)) for symbol in relevant_symbols)
+    if relevant_symbols
+    else 0
+)
+
 if price_history.empty:
     st.error("Es wurden keine Daten aus dem View StockPricesYahooHistory geladen.")
     st.stop()
@@ -150,6 +166,13 @@ if rotation_data.empty:
     )
     st.stop()
 
+signal_history_by_symbol = rotation_data.groupby("symbol")["date"].nunique().to_dict()
+effective_signal_history = (
+    min(int(signal_history_by_symbol.get(symbol, 0)) for symbol in signal_history_by_symbol)
+    if signal_history_by_symbol
+    else 0
+)
+
 latest_snapshot = build_latest_sector_snapshot(rotation_data)
 latest_date = latest_snapshot["date"].max()
 
@@ -157,7 +180,21 @@ metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
 metric_col1.metric("Stand", latest_date.strftime("%Y-%m-%d"))
 metric_col2.metric("Benchmark", parameters.benchmark_symbol)
 metric_col3.metric("Sektoren mit Signal", int(latest_snapshot["symbol"].nunique()))
-metric_col4.metric("Min. Historie", f"{min_history_needed} Tage")
+metric_col4.metric("Verwendeter Lookback", f"{benchmark_history} Tage", delta=f"angefordert {lookback_days}")
+
+if lookback_days > benchmark_history:
+    start_text = benchmark_start_date.strftime("%Y-%m-%d") if benchmark_start_date is not None else "unbekannt"
+    end_text = benchmark_end_date.strftime("%Y-%m-%d") if benchmark_end_date is not None else "unbekannt"
+    st.info(
+        f"Lookback angefordert: {lookback_days} Tage. Im View fuer {parameters.benchmark_symbol} verfuegbar: "
+        f"{benchmark_history} Handelstage. Verwendet wurde daher die tatsaechlich vorhandene Historie von "
+        f"{start_text} bis {end_text}."
+    )
+
+st.caption(
+    f"Historie im View: angefordert {lookback_days} Tage, Benchmark verfuegbar {benchmark_history} Tage, "
+    f"gemeinsam verfuegbar {common_available_history} Tage, nach Berechnungs-Warmup effektiv nutzbar {effective_signal_history} Tage."
+)
 
 figure = build_rotation_figure(rotation_data, parameters)
 st.plotly_chart(figure, use_container_width=True)
@@ -239,6 +276,7 @@ with st.expander("Erklaerung der Stellschrauben", expanded=False):
         - Das ist nur die Laenge des geladenen Datenfensters.
         - Mehr Lookback heisst nicht automatisch bessere Signale, wenn die echte Historie im View ohnehin kurz ist.
         - Mit eurer aktuellen Datenlage ist dieser Parameter vor allem eine technische Obergrenze.
+        - Beispiel: Wenn 400 Tage angefordert werden, im View aber nur 100 Handelstage vorhanden sind, zeigt die Seite explizit an, dass effektiv nur diese 100 Tage verwendet wurden.
 
         **7. Tail im Chart ({tail_days})**
 
@@ -251,6 +289,7 @@ with st.expander("Erklaerung der Stellschrauben", expanded=False):
         - Fuer die aktuelle Parametrisierung braucht die Seite mindestens `{min_history_needed}` Handelstage.
         - Dieser Wert ergibt sich aus langer WMA plus mehrfacher kurzer Glaettung fuer RS-Ratio und RS-Momentum.
         - Wenn weniger Daten vorhanden sind, wird die Matrix absichtlich gestoppt statt scheinbar praezise, aber instabile Werte zu zeigen.
+        - Zusaetzlich unterscheidet die Seite jetzt zwischen angefordertem Lookback, tatsaechlich verfuegbarer Historie im View und nach Warmup wirklich nutzbarer Historie.
 
         **Praktische Empfehlung fuer eure aktuelle Datenlage**
 
