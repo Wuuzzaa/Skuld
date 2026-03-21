@@ -40,13 +40,17 @@ QUADRANT_LABELS = {
 class RotationParameters:
     benchmark_symbol: str = "SPY"
     price_column: str = "adjclose"
-    short_window: int = 10
-    long_window: int = 30
+    short_window: int = 5
+    long_window: int = 15
     volatility_window: int = 20
     volatility_threshold_low: float = 0.15
     volatility_threshold_high: float = 0.30
-    lookback_days: int = 400
-    tail_days: int = 8
+    lookback_days: int = 120
+    tail_days: int = 6
+
+
+def required_history_length(parameters: RotationParameters) -> int:
+    return parameters.long_window + (3 * parameters.short_window) - 2
 
 
 def build_sector_rotation_query(symbols: list[str], lookback_days: int) -> str:
@@ -305,7 +309,7 @@ def build_rotation_figure(rotation_data: pd.DataFrame, parameters: RotationParam
             "Sektor: %{customdata[0]}<br>"
             "RS-Ratio: %{x:.2f}<br>"
             "RS-Momentum: %{y:.2f}<br>"
-            "HV 20d: %{customdata[1]:.2f}%<br>"
+            f"HV {parameters.volatility_window}d: %{{customdata[1]:.2f}}%<br>"
             "Quadrant: %{customdata[2]}<extra></extra>"
         )
 

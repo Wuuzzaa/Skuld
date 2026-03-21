@@ -7,6 +7,7 @@ from src.sector_rotation import (
     build_rotation_figure,
     calculate_sector_rotation,
     load_sector_rotation_price_history,
+    required_history_length,
 )
 
 
@@ -19,6 +20,10 @@ def load_rotation_dataset(parameters: RotationParameters):
 
 st.subheader("S&P 500 Sektorrotation")
 st.caption("Benchmark: SPY. Sektoren werden ueber die SPDR Sector ETFs abgebildet.")
+st.info(
+    "Aktuell ist nur eine kurze Historie verfuegbar. Deshalb nutzt die Seite standardmaessig kuerzere Fenster "
+    "(WMA 5 / 15), damit RS-Ratio und RS-Momentum mit etwa 50 Handelstagen berechenbar bleiben."
+)
 
 with st.expander("Parameter", expanded=True):
     col1, col2, col3, col4 = st.columns(4)
@@ -30,11 +35,11 @@ with st.expander("Parameter", expanded=True):
             index=0,
             help="adjclose ist fuer ETF-Historien robuster bei Dividenden und Splits.",
         )
-        short_window = st.slider("Kurzer WMA", min_value=5, max_value=20, value=10)
+        short_window = st.slider("Kurzer WMA", min_value=3, max_value=12, value=5)
 
     with col2:
-        long_window = st.slider("Langer WMA", min_value=20, max_value=60, value=30)
-        volatility_window = st.slider("HV-Fenster", min_value=10, max_value=40, value=20)
+        long_window = st.slider("Langer WMA", min_value=8, max_value=30, value=15)
+        volatility_window = st.slider("HV-Fenster", min_value=10, max_value=30, value=20)
 
     with col3:
         volatility_threshold_low = st.number_input(
@@ -55,8 +60,8 @@ with st.expander("Parameter", expanded=True):
         )
 
     with col4:
-        lookback_days = st.slider("Lookback Tage", min_value=120, max_value=800, value=400, step=20)
-        tail_days = st.slider("Tail im Chart", min_value=3, max_value=20, value=8)
+        lookback_days = st.slider("Lookback Tage", min_value=50, max_value=240, value=120, step=10)
+        tail_days = st.slider("Tail im Chart", min_value=3, max_value=12, value=6)
 
 parameters = RotationParameters(
     price_column=price_column,
@@ -69,11 +74,24 @@ parameters = RotationParameters(
     tail_days=tail_days,
 )
 
+min_history_needed = required_history_length(parameters)
+
+if parameters.long_window <= parameters.short_window:
+    st.error("Der lange WMA muss groesser als der kurze WMA sein.")
+    st.stop()
+
 with st.spinner("Lade Kursdaten und berechne RS-Ratio / RS-Momentum..."):
     price_history, rotation_data = load_rotation_dataset(parameters)
 
 available_symbols = set(price_history["symbol"].unique()) if not price_history.empty else set()
 missing_symbols = [symbol for symbol in SECTOR_ETFS if symbol not in available_symbols]
+
+history_lengths = (
+    price_history.groupby("symbol")["date"].nunique().to_dict()
+    if not price_history.empty and "date" in price_history.columns
+    else {}
+)
+benchmark_history = int(history_lengths.get(parameters.benchmark_symbol, 0))
 
 if price_history.empty:
     st.error("Es wurden keine Daten aus dem View StockPricesYahooHistory geladen.")
@@ -85,8 +103,18 @@ if missing_symbols:
         + ", ".join(missing_symbols)
     )
 
+if benchmark_history < min_history_needed:
+    st.error(
+        f"Fuer {parameters.benchmark_symbol} stehen nur {benchmark_history} Handelstage zur Verfuegung. "
+        f"Mit den aktuellen Parametern werden mindestens {min_history_needed} Tage benoetigt."
+    )
+    st.stop()
+
 if rotation_data.empty:
-    st.error("Es gibt nicht genug Historie fuer die gewaehlten WMA- und Volatilitaetsparameter.")
+    st.error(
+        "Es gibt nicht genug gemeinsame Historie fuer Benchmark und Sector-ETFs mit den gewaehlten Parametern. "
+        "Mit etwa 50 Tagen funktionieren typischerweise eher kurze Fenster wie 5 / 15."
+    )
     st.stop()
 
 latest_snapshot = build_latest_sector_snapshot(rotation_data)
@@ -96,7 +124,7 @@ metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
 metric_col1.metric("Stand", latest_date.strftime("%Y-%m-%d"))
 metric_col2.metric("Benchmark", parameters.benchmark_symbol)
 metric_col3.metric("Sektoren mit Signal", int(latest_snapshot["symbol"].nunique()))
-metric_col4.metric("Kursbasis", parameters.price_column)
+metric_col4.metric("Min. Historie", f"{min_history_needed} Tage")
 
 figure = build_rotation_figure(rotation_data, parameters)
 st.plotly_chart(figure, use_container_width=True)

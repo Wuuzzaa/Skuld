@@ -7,6 +7,7 @@ from src.sector_rotation import (
     calculate_sector_rotation,
     classify_quadrant,
     classify_volatility_signal,
+    required_history_length,
     weighted_moving_average,
 )
 
@@ -27,6 +28,11 @@ def test_quadrant_classification_matches_rrg_logic():
     assert classify_quadrant(101, 99) == "Weakening"
     assert classify_quadrant(99, 99) == "Lagging"
     assert classify_quadrant(99, 101) == "Improving"
+
+
+def test_required_history_length_supports_short_history_setup():
+    parameters = RotationParameters(short_window=5, long_window=15)
+    assert required_history_length(parameters) == 28
 
 
 def test_calculate_sector_rotation_returns_latest_snapshot_with_expected_columns():
