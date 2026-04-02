@@ -20,13 +20,13 @@ services:
     command:
       - postgres
       - -c
-      - shared_buffers=768MB
+      - shared_buffers=1536MB
       - -c
-      - effective_cache_size=2GB
+      - effective_cache_size=4GB
       - -c
       - work_mem=16MB
       - -c
-      - maintenance_work_mem=256MB
+      - maintenance_work_mem=512MB
       - -c
       - max_connections=80
       - -c
@@ -41,16 +41,16 @@ services:
       - postgres_data_local:/var/lib/postgresql/data
     restart: unless-stopped
     cpus: 2.0
-    mem_limit: 3g
-    mem_reservation: 1g
+    mem_limit: 6g
+    mem_reservation: 2g
     deploy:
       resources:
         limits:
           cpus: '2.0'
-          memory: 3G
+          memory: 6G
         reservations:
           cpus: '0.5'
-          memory: 1G
+          memory: 2G
     networks:
       - skuld-local-net
 
