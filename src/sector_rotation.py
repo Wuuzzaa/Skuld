@@ -226,31 +226,47 @@ def build_latest_sector_snapshot(rotation_data: pd.DataFrame) -> pd.DataFrame:
 def build_rotation_figure(rotation_data: pd.DataFrame, parameters: RotationParameters) -> go.Figure:
     figure = go.Figure()
 
-    axis_min = 94
-    axis_max = 106
+    x_axis_min = 94
+    x_axis_max = 106
+
+    if not rotation_data.empty:
+        tail = (
+            rotation_data.sort_values(["symbol", "date"])
+            .groupby("symbol", as_index=False)
+            .tail(parameters.tail_days)
+        )
+        y_data_min = tail["rs_momentum"].min()
+        y_data_max = tail["rs_momentum"].max()
+        y_data_range = y_data_max - y_data_min
+        y_padding = max(y_data_range * 0.25, 0.5)
+        y_axis_min = min(y_data_min - y_padding, 94)
+        y_axis_max = max(y_data_max + y_padding, 106)
+    else:
+        y_axis_min = 94
+        y_axis_max = 106
 
     figure.add_shape(
         type="rect",
         x0=100,
         y0=100,
-        x1=axis_max,
-        y1=axis_max,
+        x1=x_axis_max,
+        y1=y_axis_max,
         fillcolor="rgba(46, 139, 87, 0.10)",
         line_width=0,
     )
     figure.add_shape(
         type="rect",
         x0=100,
-        y0=axis_min,
-        x1=axis_max,
+        y0=y_axis_min,
+        x1=x_axis_max,
         y1=100,
         fillcolor="rgba(241, 196, 15, 0.10)",
         line_width=0,
     )
     figure.add_shape(
         type="rect",
-        x0=axis_min,
-        y0=axis_min,
+        x0=x_axis_min,
+        y0=y_axis_min,
         x1=100,
         y1=100,
         fillcolor="rgba(192, 57, 43, 0.10)",
@@ -258,10 +274,10 @@ def build_rotation_figure(rotation_data: pd.DataFrame, parameters: RotationParam
     )
     figure.add_shape(
         type="rect",
-        x0=axis_min,
+        x0=x_axis_min,
         y0=100,
         x1=100,
-        y1=axis_max,
+        y1=y_axis_max,
         fillcolor="rgba(52, 152, 219, 0.10)",
         line_width=0,
     )
@@ -270,10 +286,10 @@ def build_rotation_figure(rotation_data: pd.DataFrame, parameters: RotationParam
     figure.add_hline(y=100, line_width=1, line_dash="dash", line_color="#4a4a4a")
 
     quadrant_annotations = [
-        (103.5, 105.4, "Leading"),
-        (103.5, 94.6, "Weakening"),
-        (96.5, 94.6, "Lagging"),
-        (96.5, 105.4, "Improving"),
+        (103.5, y_axis_max - 0.6, "Leading"),
+        (103.5, y_axis_min + 0.6, "Weakening"),
+        (96.5, y_axis_min + 0.6, "Lagging"),
+        (96.5, y_axis_max - 0.6, "Improving"),
     ]
     for x_position, y_position, label in quadrant_annotations:
         figure.add_annotation(
@@ -356,15 +372,13 @@ def build_rotation_figure(rotation_data: pd.DataFrame, parameters: RotationParam
         margin={"l": 20, "r": 20, "t": 60, "b": 20},
         xaxis={
             "title": "JdK RS-Ratio (X-Achse)",
-            "range": [axis_min, axis_max],
+            "range": [x_axis_min, x_axis_max],
             "zeroline": False,
         },
         yaxis={
             "title": "JdK RS-Momentum (Y-Achse)",
-            "range": [axis_min, axis_max],
+            "range": [y_axis_min, y_axis_max],
             "zeroline": False,
-            "scaleanchor": "x",
-            "scaleratio": 1,
         },
     )
     return figure

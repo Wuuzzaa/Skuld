@@ -199,6 +199,21 @@ st.caption(
 figure = build_rotation_figure(rotation_data, parameters)
 st.plotly_chart(figure, use_container_width=True)
 
+with st.expander("RS-Zeitreihen exportieren (zur Validierung)", expanded=False):
+    export_data = rotation_data[
+        ["date", "symbol", "sector_name", "price", "benchmark_price", "rs_raw", "rs_ratio", "rs_momentum"]
+    ].copy()
+    export_data["date"] = export_data["date"].dt.strftime("%Y-%m-%d")
+    export_data = export_data.sort_values(["symbol", "date"]).reset_index(drop=True)
+    st.dataframe(export_data, use_container_width=True, hide_index=True)
+    csv_data = export_data.to_csv(index=False).encode("utf-8")
+    st.download_button(
+        label="CSV herunterladen",
+        data=csv_data,
+        file_name="rs_zeitreihen_export.csv",
+        mime="text/csv",
+    )
+
 display_snapshot = latest_snapshot[
     [
         "symbol",
