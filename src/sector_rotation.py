@@ -151,9 +151,11 @@ def calculate_sector_rotation(
         sector_prices = pivot[symbol]
         rs_raw = sector_prices / benchmark_prices
         rs_smooth = rolling_wma(rs_raw, parameters.short_window)
-        rs_norm = rs_smooth / rolling_wma(rs_smooth, parameters.long_window)
+        rs_smooth_long = rolling_wma(rs_smooth, parameters.long_window)
+        rs_norm = rs_smooth / rs_smooth_long
         rs_ratio = rolling_wma(rs_norm, parameters.short_window) * 100
-        rs_momentum = (rs_ratio / rolling_wma(rs_ratio, parameters.short_window)) * 100
+        rs_ratio_smooth = rolling_wma(rs_ratio, parameters.short_window)
+        rs_momentum = (rs_ratio / rs_ratio_smooth) * 100
 
         log_returns = np.log(sector_prices / sector_prices.shift(1))
         historical_volatility = log_returns.rolling(
@@ -170,7 +172,11 @@ def calculate_sector_rotation(
                 "price": sector_prices,
                 "benchmark_price": benchmark_prices,
                 "rs_raw": rs_raw,
+                "rs_smooth": rs_smooth,
+                "rs_smooth_long": rs_smooth_long,
+                "rs_norm": rs_norm,
                 "rs_ratio": rs_ratio,
+                "rs_ratio_smooth": rs_ratio_smooth,
                 "rs_momentum": rs_momentum,
                 "historical_volatility": historical_volatility,
             }
@@ -195,7 +201,11 @@ def calculate_sector_rotation(
                 "price",
                 "benchmark_price",
                 "rs_raw",
+                "rs_smooth",
+                "rs_smooth_long",
+                "rs_norm",
                 "rs_ratio",
+                "rs_ratio_smooth",
                 "rs_momentum",
                 "historical_volatility",
                 "volatility_signal",

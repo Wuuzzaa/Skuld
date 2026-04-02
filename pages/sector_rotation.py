@@ -200,8 +200,59 @@ figure = build_rotation_figure(rotation_data, parameters)
 st.plotly_chart(figure, use_container_width=True)
 
 with st.expander("RS-Zeitreihen exportieren (zur Validierung)", expanded=False):
+    st.markdown(
+        f"""
+        **Berechnungsgrundlage – Schritt fuer Schritt**
+
+        Alle Glaettungen nutzen einen **Weighted Moving Average (WMA)** mit linear aufsteigenden Gewichten.
+
+        ---
+
+        **WMA-Formel** (Fenster der Laenge n ueber die letzten n Werte $x_1, x_2, \\ldots, x_n$):
+
+        $$
+        WMA(n) = \\frac{{1 \\cdot x_1 + 2 \\cdot x_2 + \\ldots + n \\cdot x_n}}{{1 + 2 + \\ldots + n}} = \\frac{{\\sum_{{i=1}}^{{n}} i \\cdot x_i}}{{\\frac{{n(n+1)}}{{2}}}}
+        $$
+
+        Der juengste Wert ($x_n$) bekommt das hoechste Gewicht $n$, der aelteste ($x_1$) das Gewicht $1$.
+
+        ---
+
+        **Berechnungskette** (pro Sektor-ETF, Benchmark = SPY):
+
+        | Schritt | Spalte | Formel | Erlaeuterung |
+        |:---:|---|---|---|
+        | 1 | `rs_raw` | price / benchmark_price | Relative Staerke des Sektors gegenueber SPY |
+        | 2 | `rs_smooth` | WMA(rs_raw, **{short_window}**) | Kurzfristig geglaettete RS |
+        | 3 | `rs_smooth_long` | WMA(rs_smooth, **{long_window}**) | Langfristig geglaettete RS (Referenzlinie) |
+        | 4 | `rs_norm` | rs_smooth / rs_smooth_long | Normierung: liegt rs_smooth ueber oder unter seinem Trend? |
+        | 5 | `rs_ratio` | WMA(rs_norm, **{short_window}**) × 100 | Nochmals geglaettet und auf 100 zentriert → **X-Achse im Chart** |
+        | 6 | `rs_ratio_smooth` | WMA(rs_ratio, **{short_window}**) | Geglaettetes RS-Ratio als Momentum-Referenz |
+        | 7 | `rs_momentum` | (rs_ratio / rs_ratio_smooth) × 100 | Dynamik des RS-Ratio → **Y-Achse im Chart** |
+
+        ---
+
+        **Rechenbeispiel WMA mit Fenster {short_window}:**
+
+        Bei {short_window} Werten $[v_1, v_2, \\ldots, v_{{{short_window}}}]$ und Gewichten $[1, 2, \\ldots, {short_window}]$:
+
+        $$
+        WMA = \\frac{{1 \\cdot v_1 + 2 \\cdot v_2 + \\ldots + {short_window} \\cdot v_{{{short_window}}}}}  {{{int(short_window * (short_window + 1) / 2)}}}
+        $$
+
+        **Interpretation der Achsen:**
+        - **rs_ratio > 100**: Sektor ist staerker als der Benchmark-Trend → rechte Haelfte.
+        - **rs_ratio < 100**: Sektor ist schwaecher als der Benchmark-Trend → linke Haelfte.
+        - **rs_momentum > 100**: RS-Ratio steigt (relative Staerke nimmt zu) → obere Haelfte.
+        - **rs_momentum < 100**: RS-Ratio faellt (relative Staerke nimmt ab) → untere Haelfte.
+        """
+    )
     export_data = rotation_data[
-        ["date", "symbol", "sector_name", "price", "benchmark_price", "rs_raw", "rs_ratio", "rs_momentum"]
+        [
+            "date", "symbol", "sector_name", "price", "benchmark_price",
+            "rs_raw", "rs_smooth", "rs_smooth_long", "rs_norm",
+            "rs_ratio", "rs_ratio_smooth", "rs_momentum",
+        ]
     ].copy()
     export_data["date"] = export_data["date"].dt.strftime("%Y-%m-%d")
     export_data = export_data.sort_values(["symbol", "date"]).reset_index(drop=True)
