@@ -16,18 +16,18 @@ flowchart LR
     subgraph PROD[Hetzner Production - SKULD-2 / Helsinki]
         direction TB
 
-        subgraph PROD_APP[/opt/skuld app stack/]
+        subgraph PROD_APP["/opt/skuld app stack"]
             direction TB
             TRAEFIK[Traefik]
             AUTHELIA[Authelia]
-            FRONTEND[skuld-frontend\nStreamlit UI]
-            BACKEND[skuld-backend\nJobs / Scraper / Cron]
+            FRONTEND["skuld-frontend<br/>Streamlit UI"]
+            BACKEND["skuld-backend<br/>Jobs / Scraper / Cron"]
         end
 
-        subgraph PROD_DB[/opt/postgres_setup db stack/]
+        subgraph PROD_DB["/opt/postgres_setup db stack"]
             direction TB
-            PG[(postgres_setup-db-1\nPostgreSQL)]
-            PGADMIN[postgres_setup-pgadmin-1\npgAdmin]
+            PG[("postgres_setup-db-1<br/>PostgreSQL")]
+            PGADMIN["postgres_setup-pgadmin-1<br/>pgAdmin"]
         end
 
         subgraph PROD_MON[monitoring stack on host]
@@ -46,21 +46,21 @@ flowchart LR
 
     subgraph DEV[Hetzner Dev - Skuld-dev / Falkenstein]
         direction TB
-        DEVAPP[/opt/skuld via deploy-dev.yml/]
-        DEVDB[(External PostgreSQL target\nvia POSTGRES_HOST)]
+        DEVAPP["/opt/skuld via deploy-dev.yml"]
+        DEVDB[("External PostgreSQL target<br/>via POSTGRES_HOST")]
         DEVAPP --> DEVDB
     end
 
     subgraph STAGE[Home Server Staging / Testsystem]
         direction TB
 
-        subgraph STAGE_STACK[docker-compose.yml + docker-compose.testing.yml]
+        subgraph STAGE_STACK["docker-compose.yml + docker-compose.testing.yml"]
             direction TB
             STRAEFIK[traefik_staging]
             SAUTHELIA[authelia]
             SFRONTEND[skuld-frontend]
             SBACKEND[skuld-backend]
-            SPG[(skuld_staging_db\nPostgreSQL)]
+            SPG[("skuld_staging_db<br/>PostgreSQL")]
             SPGA[skuld_staging_pgadmin]
         end
 
