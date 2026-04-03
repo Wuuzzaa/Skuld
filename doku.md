@@ -1,3 +1,5 @@
+```mermaid
+
 graph TB
     %% 1. Source & CI Layer
     subgraph VCS [Source Control & CI Layer]
@@ -72,3 +74,4 @@ graph TB
     style Dev_Env fill:#e1d5e7,stroke:#9673a6
     style Prod_Env fill:#d5e8d4,stroke:#82b366
     style Ops fill:#f8cecc,stroke:#b85450
+```
