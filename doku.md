@@ -1,54 +1,74 @@
 graph TB
-    %% Definition der externen Layer
-    subgraph VCS [Source & CI Layer]
-        GH[GitHub Repo] --> CI[CI Pipeline]
+    %% 1. Source & CI Layer
+    subgraph VCS [Source Control & CI Layer]
+        direction LR
+        GH[GitHub Repository] --> CI[CI Pipeline]
         CI --> Reg[Container Registry]
     end
 
-    subgraph Control [Deployment Control]
-        K[Kamal Control]
+    %% 2. Control & Secrets
+    subgraph Control [Deployment & Secrets]
+        K[Kamal Control Host]
         S[Secret Manager]
     end
 
-    %% Environments als logische Gruppierung
+    %% 3. Development Environment
     subgraph Dev_Env [Development Environment]
         direction TB
-        subgraph Dev_Host [Dev App Host]
+        subgraph Dev_Edge [Edge]
+            D_T[Traefik]
+        end
+        subgraph Dev_App [App Host]
             D_Web[app-web]
-            D_Redis[Redis]
+            D_Work[app-worker]
         end
-        subgraph Dev_DB [Dev Data Host]
+        subgraph Dev_Data [Data Host]
             D_PG[(PostgreSQL)]
+            D_Red[(Redis)]
         end
+        D_T --> D_Web
+        D_Web --> D_PG & D_Red
     end
 
+    %% 4. Production Environment
     subgraph Prod_Env [Production Environment]
         direction TB
-        subgraph P_Edge [Prod Edge Hosts]
-            T1[Traefik 1]
-            T2[Traefik 2]
+        subgraph P_Edge [Edge Layer]
+            T1[Traefik Host 1]
+            T2[Traefik Host 2]
         end
-        subgraph P_App1 [Prod App Host 1]
-            W1[app-web]
-            WR1[app-worker]
+        subgraph P_App [App Layer]
+            W1[Prod App 1: web/worker]
+            W2[Prod App 2: web/worker]
         end
-        subgraph P_App2 [Prod App Host 2]
-            W2[app-web]
-            WR2[app-worker]
-        end
-        subgraph P_Data [Prod Data Layer]
+        subgraph P_Data [Data Layer]
             PG_P[(PostgreSQL Primary)]
             PG_R[(PostgreSQL Replica)]
         end
+        T1 & T2 --> W1 & W2
+        W1 & W2 --> PG_P
+        PG_P -.->|replication| PG_R
     end
 
-    %% Verbindungen (Flows)
-    Reg -.-> K
-    K -- deploys to --> Dev_Env
-    K -- deploys to --> Prod_Env
-    S -- provides secrets --> K
+    %% 5. Shared Operations (Monitoring & Admin)
+    subgraph Ops [Shared Operations Layer]
+        M[Monitoring: Prometheus/Grafana]
+        B[Backup Runner]
+        VPN[VPN / Tailscale Admin]
+    end
 
-    T1 --> W1
-    T2 --> W2
-    W1 & W2 --> PG_P
-    PG_P -.-> PG_R
+    %% Globale Verbindungen (Flows)
+    Reg -.-> K
+    S -.-> K
+    K -- "kamal deploy" --> Dev_Env
+    K -- "kamal deploy" --> Prod_Env
+    
+    Ops -.->|monitoring / backup| Dev_Env
+    Ops -.->|monitoring / backup| Prod_Env
+
+    %% Styling für die Übersicht
+    style VCS fill:#f5f5f5,stroke:#666
+    style Control fill:#fff2cc,stroke:#d6b656
+    style Dev_Env fill:#e1d5e7,stroke:#9673a6
+    style Prod_Env fill:#d5e8d4,stroke:#82b366
+    style Ops fill:#f8cecc,stroke:#b85450
