@@ -23,8 +23,16 @@ jobs:
       - name: Prepare remote directory
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
-            "echo '${{ secrets.DEPLOY_PASSWORD }}' | sudo -S mkdir -p /opt/monitoring-hetzner && echo '${{ secrets.DEPLOY_PASSWORD }}' | sudo -S chown -R ${{ secrets.DEPLOY_USER }} /opt/monitoring-hetzner"
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'ENDSSH'
+            _DEPLOY_PASS='${{ secrets.DEPLOY_PASSWORD }}'
+            if [ -n "$_DEPLOY_PASS" ]; then
+              mysudo() { echo "$_DEPLOY_PASS" | sudo -S "$@"; }
+            else
+              mysudo() { sudo "$@"; }
+            fi
+            mysudo mkdir -p /opt/monitoring-hetzner
+            mysudo chown -R $(whoami) /opt/monitoring-hetzner
+          ENDSSH
 
       - name: Sync files to Hetzner server
         run: |
@@ -37,12 +45,14 @@ jobs:
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'ENDSSH'
             set -euo pipefail
-            
-            # Define sudo helper with password
-            DEPLOY_PASS="${{ secrets.DEPLOY_PASSWORD }}"
-            function mysudo() {
-                echo "$DEPLOY_PASS" | sudo -S "$@"
-            }
+
+            # Flexible sudo: password if DEPLOY_PASSWORD exists, plain sudo otherwise
+            _DEPLOY_PASS='${{ secrets.DEPLOY_PASSWORD }}'
+            if [ -n "$_DEPLOY_PASS" ]; then
+              mysudo() { echo "$_DEPLOY_PASS" | sudo -S "$@"; }
+            else
+              mysudo() { sudo "$@"; }
+            fi
 
             cd /opt/monitoring-hetzner
             mysudo docker compose pull

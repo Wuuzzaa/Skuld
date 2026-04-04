@@ -42,8 +42,16 @@ jobs:
       - name: Pre-cleanup on server to free space
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
-            "echo '${{ secrets.DEPLOY_PASSWORD }}' | sudo -S docker system prune -af || true && echo '${{ secrets.DEPLOY_PASSWORD }}' | sudo -S chown -R ${{ secrets.DEPLOY_USER }} /opt/skuld"
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'ENDSSH'
+            _DEPLOY_PASS='${{ secrets.DEPLOY_PASSWORD }}'
+            if [ -n "$_DEPLOY_PASS" ]; then
+              mysudo() { echo "$_DEPLOY_PASS" | sudo -S "$@"; }
+            else
+              mysudo() { sudo "$@"; }
+            fi
+            mysudo docker system prune -af || true
+            mysudo chown -R $(whoami) /opt/skuld
+          ENDSSH
 
       - name: Sync files to server (Production deployment)
         run: |
@@ -75,13 +83,15 @@ jobs:
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'ENDSSH'
             set -euo pipefail
-            
-            # Define sudo helper with password
-            DEPLOY_PASS="${{ secrets.DEPLOY_PASSWORD }}"
-            function mysudo() {
-                echo "$DEPLOY_PASS" | sudo -S "$@"
-            }
 
+            # Flexible sudo: password if DEPLOY_PASSWORD exists, plain sudo otherwise
+            _DEPLOY_PASS='${{ secrets.DEPLOY_PASSWORD }}'
+            if [ -n "$_DEPLOY_PASS" ]; then
+              mysudo() { echo "$_DEPLOY_PASS" | sudo -S "$@"; }
+            else
+              mysudo() { sudo "$@"; }
+            fi
+            
             cd /opt/skuld
             
             # Create .env file with secrets (disable xtrace to avoid logging secrets)

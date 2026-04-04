@@ -149,13 +149,15 @@ jobs:
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'ENDSSH'
             set -euo pipefail
 
-            DEPLOY_PASS="${{ secrets.DEPLOY_PASSWORD }}"
-            DUMP_FILE="${{ needs.find-backup-on-source.outputs.dump_file }}"
+            # Flexible sudo: password if DEPLOY_PASSWORD exists, plain sudo otherwise
+            _DEPLOY_PASS='${{ secrets.DEPLOY_PASSWORD }}'
+            if [ -n "$_DEPLOY_PASS" ]; then
+              mysudo() { echo "$_DEPLOY_PASS" | sudo -S "$@"; }
+            else
+              mysudo() { sudo "$@"; }
+            fi
 
-            mysudo() {
-              echo "$DEPLOY_PASS" | sudo -S -v >/dev/null 2>&1
-              sudo "$@"
-            }
+            DUMP_FILE="${{ needs.find-backup-on-source.outputs.dump_file }}"
 
             mkdir -p ~/backups/migration
 
@@ -180,9 +182,8 @@ jobs:
               psql -U admin -d postgres -c "CREATE DATABASE \"Skuld\" OWNER admin;"
 
             echo "=== Restore backup ==="
-            mysudo true
             gunzip -c ~/backups/migration/${DUMP_FILE} | \
-              sudo docker exec -i postgres_setup-db-1 psql -U admin -d Skuld --quiet
+              mysudo docker exec -i postgres_setup-db-1 psql -U admin -d Skuld --quiet
 
             echo "=== Restart app containers and rebuild views ==="
             if [ -d /opt/skuld ]; then

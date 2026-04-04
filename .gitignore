@@ -198,6 +198,7 @@ authelia/users_database.yml
 authelia/jwt_secret
 authelia/session_secret
 authelia/db.sqlite3
+ops/provision.local.json
 authelia/notification.txt
 authelia/emails.txt
 /identifier.sqlite

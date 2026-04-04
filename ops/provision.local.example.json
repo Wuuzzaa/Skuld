@@ -1,0 +1,10 @@
+{
+  "HetznerApiToken": "",
+  "TailscaleAuthKey": "",
+  "AccessMode": "Tailscale",
+  "ServerName": "skuld-prod",
+  "ServerType": "cx23",
+  "Location": "fsn1",
+  "Image": "ubuntu-24.04",
+  "SshPublicKeyPath": "C:\\Users\\YOUR_USER\\.ssh\\id_ed25519.pub"
+}
