@@ -17,22 +17,22 @@ flowchart LR
     Admins[Operators] --> GHE[GitHub Environments]
     GHE --> GHA
 
-    subgraph CONTRACT[Standard Server Contract]
+    subgraph CONTRACT["Standard Server Contract"]
         direction TB
         U[deploy user]
-        P[/opt/skuld and /opt/postgres_setup]
+        P["/opt/skuld and /opt/postgres_setup"]
         N[Docker networks: web and postgres_setup_default]
         B[Cloud-init bootstrap]
     end
 
-    subgraph TARGETS[Deployment Targets]
+    subgraph TARGETS["Deployment Targets"]
         direction TB
         PROD[Helsinki Production]
         DEV[Falkenstein Development]
         STAGE[Staging or Home Server]
     end
 
-    subgraph RUNTIME[Runtime Components]
+    subgraph RUNTIME["Runtime Components"]
         direction TB
         TRAEFIK[Traefik]
         APP[Skuld App Containers]
@@ -74,23 +74,23 @@ flowchart LR
     Devs[Developers] --> GH[GitHub Repository]
     GH --> GHA[GitHub Actions]
 
-    subgraph PROD[Production: Helsinki]
+    subgraph PROD["Production: Helsinki"]
         direction TB
         PUSER[deploy user<br/>password sudo legacy]
-        PAPP[/opt/skuld]
-        PDB[/opt/postgres_setup]
+        PAPP["/opt/skuld"]
+        PDB["/opt/postgres_setup"]
         PTRAEFIK[Traefik and Authelia]
     end
 
-    subgraph DEV[Development: Falkenstein]
+    subgraph DEV["Development: Falkenstein"]
         direction TB
         DUSER[deploy and holu users<br/>cloud-init variant]
-        DAPP[/opt/skuld]
-        DDB[/opt/postgres_setup]
+        DAPP["/opt/skuld"]
+        DDB["/opt/postgres_setup"]
         DTRAEFIK[Traefik setup in progress]
     end
 
-    subgraph CONTROL[Control Plane Today]
+    subgraph CONTROL["Control Plane Today"]
         direction TB
         ENV[GitHub Secrets and Environments]
         WF1[Production Workflow]
@@ -121,7 +121,7 @@ This diagram shows the recommended order of change.
 
 ```mermaid
 flowchart LR
-    subgraph PHASE1[Phase 1: Stabilize]
+    subgraph PHASE1["Phase 1: Stabilize"]
         direction TB
         A1[Unify deploy user]
         A2[Unify paths and networks]
@@ -129,7 +129,7 @@ flowchart LR
         A4[Make workflows follow one schema]
     end
 
-    subgraph PHASE2[Phase 2: Standardize Deployment]
+    subgraph PHASE2["Phase 2: Standardize Deployment"]
         direction TB
         B1[Separate app, db, monitoring concerns]
         B2[Reduce SSH special cases]
@@ -137,7 +137,7 @@ flowchart LR
         B4[Document server contract]
     end
 
-    subgraph PHASE3[Phase 3: Optional Platform Upgrade]
+    subgraph PHASE3["Phase 3: Optional Platform Upgrade"]
         direction TB
         C1[Evaluate Kamal for app rollout]
         C2[Evaluate Infisical or Doppler]
