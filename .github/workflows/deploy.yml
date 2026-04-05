@@ -86,7 +86,7 @@ jobs:
             else
               mysudo() { sudo "$@"; }
             fi
-            mysudo docker system prune -af || true
+            mysudo docker image prune -af || true
             mysudo mkdir -p /opt/skuld
             mysudo chown -R $(whoami) /opt/skuld
           ENDSSH
