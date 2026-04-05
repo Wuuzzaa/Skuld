@@ -1,19 +1,57 @@
-name: Deploy SKULD Production to Hetzner
+name: Deploy SKULD
+
+# ============================================================================
+# Unified deployment workflow for all environments.
+#
+# Triggers:
+#   - push to master  → auto-deploy to production
+#   - workflow_dispatch → choose target (production / dev) + git ref
+#
+# Each target maps to a GitHub Environment that holds its own
+# secrets (DEPLOY_HOST, DEPLOY_SSH_KEY, ...) and variables
+# (DOMAIN_NAME, AUTH_DOMAIN, ...).
+#
+# Environments:
+#   production  → Helsinki / Falkenstein (whichever is current prod)
+#   dev-hetzner → Dev server
+# ============================================================================
 
 on:
   push:
-    branches: [ master ]
-    paths-ignore:
-      - 'monitoring/**'
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Deploy target"
+        required: true
+        type: choice
+        options:
+          - production
+          - dev
+        default: production
+      ref:
+        description: "Git ref to deploy (branch, tag, or SHA)"
+        required: false
+        default: master
+
+concurrency:
+  group: deploy-${{ inputs.target || 'production' }}
+  cancel-in-progress: false
 
 jobs:
   deploy:
+    name: "Deploy to ${{ inputs.target || 'production' }}"
     runs-on: ubuntu-latest
+    environment: ${{ (github.event_name == 'push' || inputs.target == 'production') && 'production' || 'dev-hetzner' }}
+    env:
+      DEPLOY_LABEL: ${{ (github.event_name == 'push' || inputs.target == 'production') && 'Production' || 'Dev' }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || '' }}
 
-      # ── Telegram: Deploy Notification (self-contained, safe to remove) ──
       - name: Notify deploy started via Telegram
         if: always()
         env:
@@ -21,25 +59,24 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           ACTOR="${{ github.actor }}"
-          BRANCH="${{ github.ref_name }}"
+          REF="${{ inputs.ref || github.ref_name }}"
           COMMIT_MSG=$(git log -1 --format='%s')
           SHORT_SHA=$(git rev-parse --short HEAD)
           REPO="${{ github.repository }}"
-          TEXT="🚀 <b>[Production] Deploy gestartet</b>%0A%0A👤 <b>${ACTOR}</b> hat eine neue Version auf <code>${BRANCH}</code> gepusht.%0A📝 <code>${SHORT_SHA}</code>: ${COMMIT_MSG}%0A📦 ${REPO}"
+          LABEL="${{ env.DEPLOY_LABEL }}"
+          TEXT="🚀 <b>[${LABEL}] Deploy gestartet</b>%0A%0A👤 <b>${ACTOR}</b> deployed <code>${REF}</code>.%0A📝 <code>${SHORT_SHA}</code>: ${COMMIT_MSG}%0A📦 ${REPO}"
           curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TELEGRAM_CHAT_ID}" \
             -d text="${TEXT}" \
             -d parse_mode=HTML >/dev/null 2>&1 || true
-      # ── End Telegram Notification ───────────────────────────────────────
 
       - name: Setup SSH Key
         run: |
           mkdir -p ~/.ssh
           printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" | tr -d '\r' > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          # ssh-keyscan removed to avoid failures, we use StrictHostKeyChecking=no later anyway
 
-      - name: Pre-cleanup on server to free space
+      - name: Prepare remote server
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'ENDSSH'
@@ -50,10 +87,11 @@ jobs:
               mysudo() { sudo "$@"; }
             fi
             mysudo docker system prune -af || true
+            mysudo mkdir -p /opt/skuld
             mysudo chown -R $(whoami) /opt/skuld
           ENDSSH
 
-      - name: Sync files to server (Production deployment)
+      - name: Sync files to server
         run: |
           rsync -avz --delete \
             -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectionAttempts=1" \
@@ -78,56 +116,48 @@ jobs:
           DATE=$(git log -1 --format=%cd --date=format:'%Y-%m-%d %H:%M')
           echo "VERSION=${COUNT}-${HASH} (${DATE})" >> $GITHUB_OUTPUT
 
-      - name: Build and deploy Docker container (Production)
+      - name: Build and deploy
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'ENDSSH'
             set -euo pipefail
 
-            # Flexible sudo: password if DEPLOY_PASSWORD exists, plain sudo otherwise
             _DEPLOY_PASS='${{ secrets.DEPLOY_PASSWORD }}'
             if [ -n "$_DEPLOY_PASS" ]; then
               mysudo() { echo "$_DEPLOY_PASS" | sudo -S "$@"; }
             else
               mysudo() { sudo "$@"; }
             fi
-            
-            cd /opt/skuld
-            
-            # Create .env file with secrets (disable xtrace to avoid logging secrets)
-            echo "=== Creating .env file ==="
-            echo "DOMAIN_NAME=app.skuld-options.com" > .env
-            echo "AUTH_DOMAIN=auth.skuld-options.com" >> .env
-            
-            # Traefik Configuration (Prod = HTTPS / LetsEncrypt)
-            echo "TRAEFIK_ENTRYPOINT=websecure" >> .env
-            echo "TRAEFIK_CERTRESOLVER_LABEL_SKULD=traefik.http.routers.skuld.tls.certresolver=letsencrypt" >> .env
-            echo "TRAEFIK_CERTRESOLVER_LABEL_AUTHELIA=traefik.http.routers.authelia.tls.certresolver=letsencrypt" >> .env
-            echo "AUTH_SCHEME=https" >> .env
 
+            cd /opt/skuld
+
+            # ── Create .env from GitHub Environment vars/secrets ──
+            echo "=== Creating .env file ==="
+            echo "DOMAIN_NAME=${{ vars.DOMAIN_NAME }}" > .env
+            echo "AUTH_DOMAIN=${{ vars.AUTH_DOMAIN }}" >> .env
+            echo "TRAEFIK_ENTRYPOINT=${{ vars.TRAEFIK_ENTRYPOINT }}" >> .env
+            echo "TRAEFIK_CERTRESOLVER_LABEL_SKULD=${{ vars.TRAEFIK_CERTRESOLVER_LABEL_SKULD }}" >> .env
+            echo "TRAEFIK_CERTRESOLVER_LABEL_AUTHELIA=${{ vars.TRAEFIK_CERTRESOLVER_LABEL_AUTHELIA }}" >> .env
+            echo "AUTH_SCHEME=${{ vars.AUTH_SCHEME }}" >> .env
             echo "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" >> .env
             echo "TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}" >> .env
             echo "MASSIVE_API_KEY=${{ secrets.MASSIVE_API_KEY }}" >> .env
             echo "MASSIVE_API_KEY_FLAT_FILES=${{ secrets.MASSIVE_API_KEY_FLAT_FILES }}" >> .env
             echo "SKULD_VERSION=${{ steps.get_version.outputs.VERSION }}" >> .env
-            echo "POSTGRES_HOST=postgres_setup-db-1" >> .env
-            echo "POSTGRES_DB=Skuld" >> .env
-            echo "POSTGRES_USER=admin" >> .env
+            echo "POSTGRES_HOST=${{ vars.POSTGRES_HOST }}" >> .env
+            echo "POSTGRES_DB=${{ vars.POSTGRES_DB }}" >> .env
+            echo "POSTGRES_USER=${{ vars.POSTGRES_USER }}" >> .env
             echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env
-            echo "POSTGRES_PORT=5432" >> .env
-            
-            # Create Authelia secrets and configuration
+            echo "POSTGRES_PORT=${{ vars.POSTGRES_PORT }}" >> .env
+
+            # ── Authelia secrets ──
             echo "=== Creating Authelia configuration ==="
             mkdir -p authelia
-            
             echo "${{ secrets.AUTHELIA_JWT_SECRET }}" > authelia/jwt_secret
             echo "${{ secrets.AUTHELIA_SESSION_SECRET }}" > authelia/session_secret
             echo "${{ secrets.AUTHELIA_STORAGE_ENCRYPTION_KEY }}" > authelia/storage_encryption_key
-            
-            # Store password hash in variable with single quotes to prevent expansion
+
             AUTHELIA_HASH='${{ secrets.AUTHELIA_PASSWORD_HASH }}'
-            
-            # Create users_database.yml using echo to avoid YAML syntax issues with heredocs
             echo "users:" > authelia/users_database.yml
             echo "  admin:" >> authelia/users_database.yml
             echo "    displayname: \"Admin\"" >> authelia/users_database.yml
@@ -136,20 +166,15 @@ jobs:
             echo "    groups:" >> authelia/users_database.yml
             echo "      - admins" >> authelia/users_database.yml
             echo "      - dev" >> authelia/users_database.yml
-            
-            set -x # Enable xtrace for the rest of the script
-            
-            echo "=== Current container status ==="
-            mysudo docker compose ps
-            
-            echo "=== Current images ==="
-            mysudo docker images | grep skuld || echo "No skuld images"
-            
-            # ── Safe Deploy: wait for running jobs ──────────────────────
+
+            set -x
+            mkdir -p logs
+
+            # ── Safe Deploy: wait for running data-collection jobs ──
             echo "=== Checking for running jobs in skuld-backend ==="
             TELEGRAM_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
             TELEGRAM_CHAT="${{ secrets.TELEGRAM_CHAT_ID }}"
-            MAX_WAIT=3600   # max 60 minutes
+            MAX_WAIT=3600
             POLL_INTERVAL=30
             WAITED=0
             NOTIFIED=0
@@ -163,10 +188,6 @@ jobs:
             }
 
             is_job_running() {
-              # Check for any data collection process:
-              # - python main.py (any --mode)
-              # - run_data_collection.sh wrapper
-              # - timeout wrapper around main.py
               mysudo docker exec skuld-backend sh -c \
                 'pgrep -f "python.*main\.py" || pgrep -f "run_data_collection\.sh"' \
                 >/dev/null 2>&1
@@ -174,59 +195,52 @@ jobs:
 
             while is_job_running; do
               if [ "$NOTIFIED" -eq 0 ]; then
-                echo "⏳ main.py is running – waiting for job to finish before deploy..."
-                send_telegram "⏳ <b>Deploy triggered</b> but <code>main.py</code> is still running in skuld-backend. Waiting for the job to finish before rebuilding containers..."
+                echo "⏳ main.py is running – waiting for job to finish..."
+                send_telegram "⏳ <b>Deploy triggered</b> but <code>main.py</code> is still running. Waiting..."
                 NOTIFIED=1
               fi
-
               if [ "$WAITED" -ge "$MAX_WAIT" ]; then
-                echo "⚠️ Timeout after ${MAX_WAIT}s – proceeding with deploy anyway"
-                send_telegram "⚠️ <b>Deploy timeout</b>: waited ${MAX_WAIT}s for main.py to finish. Proceeding with deploy now."
+                echo "⚠️ Timeout after ${MAX_WAIT}s – proceeding anyway"
+                send_telegram "⚠️ <b>Deploy timeout</b>: waited ${MAX_WAIT}s. Proceeding."
                 break
               fi
-
               sleep $POLL_INTERVAL
               WAITED=$((WAITED + POLL_INTERVAL))
               echo "   … still waiting (${WAITED}s / ${MAX_WAIT}s)"
             done
 
             if [ "$NOTIFIED" -eq 1 ] && [ "$WAITED" -lt "$MAX_WAIT" ]; then
-              echo "✅ Job finished after ${WAITED}s – proceeding with deploy"
-              send_telegram "✅ <b>Job finished</b> after ${WAITED}s. Starting deploy now..."
+              echo "✅ Job finished after ${WAITED}s – proceeding"
+              send_telegram "✅ <b>Job finished</b> after ${WAITED}s. Deploying..."
             fi
-            # ────────────────────────────────────────────────────────────
-            
-            echo "=== Stopping old container ==="
-            # Force-remove any leftover containers (handles restart policies & orphans)
+
+            # ── Stop old containers ──
+            echo "=== Stopping old containers ==="
             mysudo docker rm -f skuld-streamlit 2>/dev/null || true
             mysudo docker rm -f skuld-frontend 2>/dev/null || true
             mysudo docker rm -f skuld-backend 2>/dev/null || true
             mysudo docker rm -f authelia 2>/dev/null || true
-            # Also remove containers by partial name match (catches prefixed names)
             mysudo docker ps -a --filter "name=authelia" -q | xargs -r mysudo docker rm -f 2>/dev/null || true
             mysudo docker ps -a --filter "name=skuld" -q | xargs -r mysudo docker rm -f 2>/dev/null || true
-            mysudo docker compose down --remove-orphans
-            
-            echo "=== Ensuring logs directory exists ==="
-            mkdir -p logs
-            
-            echo "=== Building new image ==="
+            mysudo docker compose down --remove-orphans || true
+
+            # ── Build & start ──
+            echo "=== Building image ==="
             mysudo docker compose build --pull --no-cache
-            
-            echo "=== Starting new container ==="
+
+            echo "=== Starting containers ==="
             mysudo docker compose up -d --remove-orphans
-            
-            echo "=== Cleaning up old images ==="
+
+            echo "=== Cleaning old images ==="
             mysudo docker image prune -f
-            
-            echo "=== New container status ==="
+
+            echo "=== Container status ==="
             mysudo docker compose ps
-            
+
             echo "=== Container logs ==="
             mysudo docker compose logs --tail=30
           ENDSSH
 
-      # ── Telegram: Deploy Success Notification ──
       - name: Notify deploy success via Telegram
         if: success()
         env:
@@ -235,13 +249,13 @@ jobs:
         run: |
           COMMIT_MSG=$(git log -1 --format='%s')
           SHORT_SHA=$(git rev-parse --short HEAD)
-          TEXT="✅ <b>[Production] Deploy erfolgreich</b>%0A%0A📝 <code>${SHORT_SHA}</code>: ${COMMIT_MSG}"
+          LABEL="${{ env.DEPLOY_LABEL }}"
+          TEXT="✅ <b>[${LABEL}] Deploy erfolgreich</b>%0A%0A📝 <code>${SHORT_SHA}</code>: ${COMMIT_MSG}"
           curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TELEGRAM_CHAT_ID}" \
             -d text="${TEXT}" \
             -d parse_mode=HTML >/dev/null 2>&1 || true
 
-      # ── Telegram: Deploy Failure Notification ──
       - name: Notify deploy failure via Telegram
         if: failure()
         env:
@@ -252,7 +266,8 @@ jobs:
           COMMIT_MSG=$(git log -1 --format='%s')
           SHORT_SHA=$(git rev-parse --short HEAD)
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          TEXT="❌ <b>[Production] Deploy fehlgeschlagen!</b>%0A%0A👤 ${ACTOR}%0A📝 <code>${SHORT_SHA}</code>: ${COMMIT_MSG}%0A🔗 <a href=\"${RUN_URL}\">Build Logs ansehen</a>"
+          LABEL="${{ env.DEPLOY_LABEL }}"
+          TEXT="❌ <b>[${LABEL}] Deploy fehlgeschlagen!</b>%0A%0A👤 ${ACTOR}%0A📝 <code>${SHORT_SHA}</code>: ${COMMIT_MSG}%0A🔗 <a href=\"${RUN_URL}\">Build Logs ansehen</a>"
           curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TELEGRAM_CHAT_ID}" \
             -d text="${TEXT}" \

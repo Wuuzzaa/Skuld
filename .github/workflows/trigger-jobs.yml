@@ -1,17 +1,15 @@
-name: "⚡ Trigger Jobs"
+name: "Trigger Jobs"
 
 # ============================================================================
-# Manual trigger for production & staging jobs (cron jobs & DB backup)
+# Manual trigger for remote jobs (data collection, DB backup, healthcheck).
 #
-# - Production (Hetzner): SSHs into the server and runs commands remotely
-# - Staging (Home Server): Runs directly on the self-hosted runner
-#
-# It does NOT modify the crontab — it simply executes the same scripts
-# that cron would.
+# SSHs into the target server and runs commands remotely.
+# Uses the same GitHub Environments as deploy.yml (production / dev-hetzner).
 #
 # Available jobs:
 #   - Data collection modes (run inside skuld-backend container)
 #   - PostgreSQL database backup (pg_dump on postgres container)
+#   - Database healthcheck
 #
 # Progress & results are reported via GitHub Job Summary + Telegram.
 # ============================================================================
@@ -19,17 +17,16 @@ name: "⚡ Trigger Jobs"
 on:
   workflow_dispatch:
     inputs:
-      environment:
-        description: "🌍 Environment"
+      target:
+        description: "Deploy target"
         required: true
         type: choice
         options:
           - production
-          - helsinki
-          - staging
+          - dev
         default: production
       job:
-        description: "🎯 Job to trigger"
+        description: "Job to trigger"
         required: true
         type: choice
         options:
@@ -45,48 +42,24 @@ on:
         type: boolean
         default: false
 
-# =====================================================================
-# PRODUCTION JOB (runs on ubuntu-latest, connects via SSH to Hetzner)
-# =====================================================================
 jobs:
-  resolve-target:
-    if: ${{ inputs.environment == 'production' || inputs.environment == 'helsinki' }}
+  trigger:
+    name: "${{ inputs.target }}: ${{ inputs.job }}"
     runs-on: ubuntu-latest
-    outputs:
-      target: ${{ steps.map.outputs.target }}
-      label: ${{ steps.map.outputs.label }}
-    steps:
-      - name: Map remote target
-        id: map
-        run: |
-          if [ "${{ inputs.environment }}" = "production" ]; then
-            echo "target=skuld-1" >> $GITHUB_OUTPUT
-            echo "label=Production (Skuld-1)" >> $GITHUB_OUTPUT
-          else
-            echo "target=skuld-2" >> $GITHUB_OUTPUT
-            echo "label=Helsinki (Skuld-2)" >> $GITHUB_OUTPUT
-          fi
-
-  trigger-production:
-    name: "Remote: ${{ inputs.job }}"
-    needs: resolve-target
-    if: ${{ inputs.environment == 'production' || inputs.environment == 'helsinki' }}
-    runs-on: ubuntu-latest
-    environment: ${{ needs.resolve-target.outputs.target }}
+    environment: ${{ inputs.target == 'production' && 'production' || 'dev-hetzner' }}
     timeout-minutes: 360
+    env:
+      TARGET_LABEL: ${{ inputs.target == 'production' && 'Production' || 'Dev' }}
 
     steps:
-      # ── Summary Header ──
-      - name: "📋 Initialize"
+      - name: "Initialize"
         id: init
         run: |
-          TARGET_LABEL="${{ needs.resolve-target.outputs.label }}"
-          echo "## ⚡ Trigger Job — ${TARGET_LABEL}" >> $GITHUB_STEP_SUMMARY
+          echo "## Trigger Job — ${{ env.TARGET_LABEL }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Setting | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|---------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| **Environment** | \`${{ inputs.environment }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Target** | \`${{ needs.resolve-target.outputs.target }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Target** | \`${{ inputs.target }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Job** | \`${{ inputs.job }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Dry Run** | \`${{ inputs.dry_run }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Triggered by** | \`${{ github.actor }}\` |" >> $GITHUB_STEP_SUMMARY
@@ -94,8 +67,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "start_time=$(date +%s)" >> $GITHUB_OUTPUT
 
-      # ── Telegram: Start Notification ──
-      - name: "📨 Notify start via Telegram"
+      - name: "Notify start via Telegram"
         if: ${{ inputs.dry_run == false }}
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -103,21 +75,19 @@ jobs:
         run: |
           JOB="${{ inputs.job }}"
           ACTOR="${{ github.actor }}"
-          TARGET_LABEL="${{ needs.resolve-target.outputs.label }}"
-          TEXT="⚡ <b>[${TARGET_LABEL}] Manual Job gestartet</b>%0A%0A👤 <b>${ACTOR}</b>%0A🎯 Job: <code>${JOB}</code>"
+          LABEL="${{ env.TARGET_LABEL }}"
+          TEXT="⚡ <b>[${LABEL}] Manual Job gestartet</b>%0A%0A👤 <b>${ACTOR}</b>%0A🎯 Job: <code>${JOB}</code>"
           curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TELEGRAM_CHAT_ID}" \
             -d text="${TEXT}" \
             -d parse_mode=HTML >/dev/null 2>&1 || true
 
-      # ── SSH Setup ──
       - name: "Setup SSH Key"
         run: |
           mkdir -p ~/.ssh
           printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" | tr -d '\r' > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
 
-      # ── Build Remote Command ──
       - name: "Prepare command"
         id: cmd
         run: |
@@ -134,13 +104,12 @@ jobs:
           docker exec postgres_setup-db-1 pg_dump -U admin -d Skuld | gzip > "$BACKUP_FILE"
           FILESIZE=$(du -h "$BACKUP_FILE" | cut -f1)
           echo "Backup complete: $BACKUP_FILE ($FILESIZE)"
-          # Cleanup: keep only the 2 most recent manual backups
           ls -t "$BACKUP_DIR"/skuld_manual_*.sql.gz 2>/dev/null | tail -n +3 | xargs rm -f 2>/dev/null || true
           echo "BACKUP_FILE=$BACKUP_FILE"
           echo "BACKUP_SIZE=$FILESIZE"
           CMD
           )
-            DESCRIPTION="Database Backup (pg_dump → ~/backups/postgres/)"
+            DESCRIPTION="Database Backup (pg_dump)"
           elif [ "$JOB" = "db_healthcheck" ]; then
             REMOTE_CMD=$(cat <<'CMD'
           set -euo pipefail
@@ -154,7 +123,7 @@ jobs:
           docker exec postgres_setup-db-1 psql -U admin -d Skuld -tAc "select 1 from pg_views where viewname = 'OptionDataMerged';"
           echo ""
           echo "=== View list filter ==="
-          docker exec postgres_setup-db-1 psql -U admin -d Skuld -c "\\dv" | grep OptionDataMerged
+          docker exec postgres_setup-db-1 psql -U admin -d Skuld -c "\dv" | grep OptionDataMerged
           CMD
           )
             DESCRIPTION="Database Healthcheck"
@@ -173,15 +142,13 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-      # ── Dry Run: Stop Here ──
       - name: "Dry run - skipping execution"
         if: ${{ inputs.dry_run == true }}
         run: |
           echo "### Dry Run Complete" >> $GITHUB_STEP_SUMMARY
           echo "No command was executed on the server." >> $GITHUB_STEP_SUMMARY
 
-      # ── Execute on Production ──
-      - name: "Execute on Remote Server"
+      - name: "Execute on remote server"
         if: ${{ inputs.dry_run == false }}
         id: execute
         run: |
@@ -228,7 +195,6 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
           echo "</details>" >> $GITHUB_STEP_SUMMARY
 
-      # ── Duration ──
       - name: "Calculate duration"
         if: always()
         run: |
@@ -241,8 +207,7 @@ jobs:
           echo "---" >> $GITHUB_STEP_SUMMARY
           echo "**Total duration:** ${MINS}m ${SECS}s" >> $GITHUB_STEP_SUMMARY
 
-      # ── Telegram: Result Notification ──
-      - name: "📨 Notify result via Telegram"
+      - name: "Notify result via Telegram"
         if: ${{ always() && inputs.dry_run == false }}
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -252,7 +217,7 @@ jobs:
           ACTOR="${{ github.actor }}"
           STATUS="${{ job.status }}"
           DESCRIPTION="${{ steps.cmd.outputs.description }}"
-          TARGET_LABEL="${{ needs.resolve-target.outputs.label }}"
+          LABEL="${{ env.TARGET_LABEL }}"
 
           if [ "$STATUS" = "success" ]; then ICON="✅"; else ICON="❌"; fi
 
@@ -262,160 +227,7 @@ jobs:
           MINS=$((DURATION / 60))
           SECS=$((DURATION % 60))
 
-          TEXT="${ICON} <b>[${TARGET_LABEL}] Manual Job ${STATUS}</b>%0A%0A👤 <b>${ACTOR}</b>%0A🎯 ${DESCRIPTION}%0A⏱️ ${MINS}m ${SECS}s"
-          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-            -d chat_id="${TELEGRAM_CHAT_ID}" \
-            -d text="${TEXT}" \
-            -d parse_mode=HTML >/dev/null 2>&1 || true
-
-  # =====================================================================
-  # STAGING JOB (runs on self-hosted runner = Home Server, direct Docker)
-  # =====================================================================
-  trigger-staging:
-    name: "Staging: ${{ inputs.job }}"
-    if: ${{ inputs.environment == 'staging' }}
-    runs-on: self-hosted
-    timeout-minutes: 360
-
-    steps:
-      # ── Summary Header ──
-      - name: "📋 Initialize"
-        id: init
-        run: |
-          echo "## ⚡ Trigger Job — Staging (Home Server)" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Setting | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|---------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| **Environment** | \`staging\` 🟡 |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Job** | \`${{ inputs.job }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Dry Run** | \`${{ inputs.dry_run }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Triggered by** | \`${{ github.actor }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Started at** | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "start_time=$(date +%s)" >> $GITHUB_OUTPUT
-
-      # ── Telegram: Start Notification ──
-      - name: "📨 Notify start via Telegram"
-        if: ${{ inputs.dry_run == false }}
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID_STAGING }}
-        run: |
-          JOB="${{ inputs.job }}"
-          ACTOR="${{ github.actor }}"
-          TEXT="⚡ <b>[Staging] Manual Job gestartet</b>%0A%0A👤 <b>${ACTOR}</b>%0A🎯 Job: <code>${JOB}</code>"
-          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-            -d chat_id="${TELEGRAM_CHAT_ID}" \
-            -d text="${TEXT}" \
-            -d parse_mode=HTML >/dev/null 2>&1 || true
-
-      # ── Build Command ──
-      - name: "Prepare command"
-        id: cmd
-        run: |
-          JOB="${{ inputs.job }}"
-
-          if [ "$JOB" = "db_backup" ]; then
-            DESCRIPTION="Database Backup (pg_dump skuld_staging_db)"
-            echo "description=${DESCRIPTION}" >> $GITHUB_OUTPUT
-
-            cat <<'CMD' > /tmp/remote_cmd.sh
-          set -euo pipefail
-          TIMESTAMP=$(date -u '+%Y%m%d_%H%M%S')
-          BACKUP_DIR=~/backups/postgres
-          mkdir -p "$BACKUP_DIR"
-          BACKUP_FILE="$BACKUP_DIR/skuld_staging_manual_${TIMESTAMP}.sql.gz"
-          echo "Starting pg_dump on staging..."
-          docker exec skuld_staging_db pg_dump -U admin -d Skuld | gzip > "$BACKUP_FILE"
-          FILESIZE=$(du -h "$BACKUP_FILE" | cut -f1)
-          echo "Backup complete: $BACKUP_FILE ($FILESIZE)"
-          # Cleanup: keep only the 2 most recent manual staging backups
-          ls -t "$BACKUP_DIR"/skuld_staging_manual_*.sql.gz 2>/dev/null | tail -n +3 | xargs rm -f 2>/dev/null || true
-          echo "BACKUP_FILE=$BACKUP_FILE"
-          echo "BACKUP_SIZE=$FILESIZE"
-          CMD
-          else
-            DESCRIPTION="Data Collection: ${JOB}"
-            echo "description=${DESCRIPTION}" >> $GITHUB_OUTPUT
-            echo "docker exec skuld-backend /bin/bash /app/Skuld/run_data_collection.sh ${JOB}" > /tmp/remote_cmd.sh
-          fi
-
-          echo "### Command to execute" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo '```bash' >> $GITHUB_STEP_SUMMARY
-          cat /tmp/remote_cmd.sh >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-      # ── Dry Run: Stop Here ──
-      - name: "Dry run - skipping execution"
-        if: ${{ inputs.dry_run == true }}
-        run: |
-          echo "### Dry Run Complete" >> $GITHUB_STEP_SUMMARY
-          echo "No command was executed on the server." >> $GITHUB_STEP_SUMMARY
-
-      # ── Execute on Staging (direct Docker access) ──
-      - name: "Execute on Staging Server"
-        if: ${{ inputs.dry_run == false }}
-        id: execute
-        run: |
-          echo "### Execution" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          OUTPUT=$(bash /tmp/remote_cmd.sh 2>&1) || {
-            EXIT_CODE=$?
-            echo "exit_code=${EXIT_CODE}" >> $GITHUB_OUTPUT
-            echo "Command failed with exit code ${EXIT_CODE}" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            echo "$OUTPUT" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            exit $EXIT_CODE
-          }
-
-          echo "exit_code=0" >> $GITHUB_OUTPUT
-          echo "Command completed successfully" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "<details><summary>Output (click to expand)</summary>" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "$OUTPUT" | tail -100 >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "</details>" >> $GITHUB_STEP_SUMMARY
-
-      # ── Duration ──
-      - name: "Calculate duration"
-        if: always()
-        run: |
-          START=${{ steps.init.outputs.start_time }}
-          END=$(date +%s)
-          DURATION=$((END - START))
-          MINS=$((DURATION / 60))
-          SECS=$((DURATION % 60))
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "---" >> $GITHUB_STEP_SUMMARY
-          echo "**Total duration:** ${MINS}m ${SECS}s" >> $GITHUB_STEP_SUMMARY
-
-      # ── Telegram: Result Notification ──
-      - name: "📨 Notify result via Telegram"
-        if: ${{ always() && inputs.dry_run == false }}
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID_STAGING }}
-        run: |
-          JOB="${{ inputs.job }}"
-          ACTOR="${{ github.actor }}"
-          STATUS="${{ job.status }}"
-          DESCRIPTION="${{ steps.cmd.outputs.description }}"
-
-          if [ "$STATUS" = "success" ]; then ICON="✅"; else ICON="❌"; fi
-
-          START=${{ steps.init.outputs.start_time }}
-          END=$(date +%s)
-          DURATION=$((END - START))
-          MINS=$((DURATION / 60))
-          SECS=$((DURATION % 60))
-
-          TEXT="${ICON} <b>[Staging] Manual Job ${STATUS}</b>%0A%0A👤 <b>${ACTOR}</b>%0A🎯 ${DESCRIPTION}%0A⏱️ ${MINS}m ${SECS}s"
+          TEXT="${ICON} <b>[${LABEL}] Manual Job ${STATUS}</b>%0A%0A👤 <b>${ACTOR}</b>%0A🎯 ${DESCRIPTION}%0A⏱️ ${MINS}m ${SECS}s"
           curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TELEGRAM_CHAT_ID}" \
             -d text="${TEXT}" \
