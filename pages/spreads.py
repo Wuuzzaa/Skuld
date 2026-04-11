@@ -2,6 +2,7 @@ import logging
 import os
 import streamlit as st
 import pandas as pd
+from pandas.tseries.holiday import AbstractHolidayCalendar, Holiday, nearest_workday, GoodFriday
 from config import PATH_DATABASE_QUERY_FOLDER
 from pages.documentation_text.spreads_page_doc import get_spreads_documentation
 from src.database import select_into_dataframe
@@ -14,23 +15,57 @@ pd.set_option('display.max_columns', None)
 pd.set_option('display.width', None)
 
 
+
+class USOptionHolidayCalendar(AbstractHolidayCalendar):
+    rules = [
+        Holiday("New Years Day", month=1, day=1, observance=nearest_workday),
+        Holiday("Martin Luther King Jr. Day", month=1, day=1, offset=pd.DateOffset(weekday=0, weeks=2)),
+        Holiday("Presidents Day", month=2, day=1, offset=pd.DateOffset(weekday=0, weeks=2)),
+        GoodFriday,
+        Holiday("Memorial Day", month=5, day=31, offset=pd.DateOffset(weekday=0, weeks=-1)),
+        Holiday("Juneteenth", month=6, day=19, observance=nearest_workday),
+        Holiday("July 4th", month=7, day=4, observance=nearest_workday),
+        Holiday("Labor Day", month=9, day=1, offset=pd.DateOffset(weekday=0, weeks=0)),
+        Holiday("Thanksgiving", month=11, day=1, offset=pd.DateOffset(weekday=3, weeks=3)),
+        Holiday("Christmas", month=12, day=25, observance=nearest_workday),
+    ]
+
+
 def get_expiration_type(expiration_date):
     date = pd.to_datetime(expiration_date)
-    day_of_week = date.dayofweek  # 4 = Freitag
 
-    if day_of_week == 4:  # Freitag
-        # Prüfe, ob es der dritte Freitag im Monat ist
-        first_day_of_month = date.replace(day=1)
-        # Finde alle Freitage im Monat
-        offset = (4 - first_day_of_month.dayofweek) % 7
-        third_friday = first_day_of_month + pd.Timedelta(days=offset + 14)
+    # 1. Berechne den theoretischen 3. Freitag im Monat
+    first_day_of_month = date.replace(day=1)
+    # offset zum ersten Freitag
+    offset = (4 - first_day_of_month.dayofweek) % 7
+    third_friday = first_day_of_month + pd.Timedelta(days=offset + 14)
 
-        if date.day == third_friday.day:
-            return "Monthly"
-        else:
-            return "Weekly"
+    # 2. Prüfe auf Feiertage (NYSE)
+    cal = USOptionHolidayCalendar()
+    # NYSE Feiertage sind fix, wir prüfen das Jahr des aktuellen Datums
+    holidays = cal.holidays(start=date.replace(month=1, day=1), end=date.replace(month=12, day=31))
+
+    # Wenn der 3. Freitag ein Feiertag ist, verschiebt sich der Monthly auf den Werktag davor (Donnerstag)
+    if third_friday in holidays:
+        actual_monthly_expiry = third_friday - pd.Timedelta(days=1)
     else:
-        return "Daily"
+        actual_monthly_expiry = third_friday
+
+    if date == actual_monthly_expiry:
+        return "Monthly"
+
+    # Wenn es kein Monthly ist, prüfen ob es ein Freitag ist (Standard Weekly)
+    # ODER ein Donnerstag, falls der Freitag ein Feiertag ist
+    if date.dayofweek == 4:
+        return "Weekly"
+
+    # Wenn es ein Donnerstag ist, prüfe ob der Freitag darauf ein Feiertag ist
+    if date.dayofweek == 3:
+        next_day = date + pd.Timedelta(days=1)
+        if next_day in holidays:
+            return "Weekly"
+
+    return "Daily"
 
 
 # enable logging
@@ -144,7 +179,7 @@ with st.expander("Configuration and Filters", expanded=True):
         min_day_volume = st.number_input(
             "Min dayvolume",
             min_value=0,
-            value=80,
+            value=20,
             step=1
         )
 
