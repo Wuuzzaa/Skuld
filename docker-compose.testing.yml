@@ -78,18 +78,19 @@ services:
   postgres:
     image: postgres:15-alpine
     container_name: skuld_staging_db
+    shm_size: 2g
     env_file:
       - .env
     command:
       - postgres
       - -c
-      - shared_buffers=1536MB
+      - shared_buffers=1024MB
       - -c
-      - effective_cache_size=4GB
+      - effective_cache_size=3GB
       - -c
-      - work_mem=16MB
+      - work_mem=8MB
       - -c
-      - maintenance_work_mem=512MB
+      - maintenance_work_mem=256MB
       - -c
       - max_connections=80
       - -c
