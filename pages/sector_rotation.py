@@ -24,6 +24,17 @@ def load_rotation_dataset(parameters: RotationParameters):
     return price_history, rotation_data
 
 
+def format_date_series(date_series: pd.Series) -> pd.Series:
+    return pd.to_datetime(date_series, errors="coerce").dt.strftime("%Y-%m-%d").fillna("")
+
+
+def format_date_value(date_value) -> str:
+    parsed = pd.to_datetime(date_value, errors="coerce")
+    if pd.isna(parsed):
+        return ""
+    return parsed.strftime("%Y-%m-%d")
+
+
 st.subheader("S&P 500 Sektorrotation")
 st.caption("Benchmark: SPY. Sektoren werden ueber die SPDR Sector ETFs abgebildet.")
 st.info(
@@ -183,7 +194,7 @@ latest_snapshot = build_latest_sector_snapshot(rotation_data)
 latest_date = latest_snapshot["date"].max()
 
 raw_input_data = price_history[["date", "symbol", "close", "adjclose"]].copy()
-raw_input_data["date"] = raw_input_data["date"].dt.strftime("%Y-%m-%d")
+raw_input_data["date"] = format_date_series(raw_input_data["date"])
 raw_input_data = raw_input_data.sort_values(["symbol", "date"]).reset_index(drop=True)
 
 export_data = rotation_data[
@@ -194,7 +205,7 @@ export_data = rotation_data[
         "historical_volatility", "volatility_signal", "quadrant",
     ]
 ].copy()
-export_data["date"] = export_data["date"].dt.strftime("%Y-%m-%d")
+export_data["date"] = format_date_series(export_data["date"])
 export_data = export_data.sort_values(["symbol", "date"]).reset_index(drop=True)
 
 snapshot_export = latest_snapshot[
@@ -211,7 +222,7 @@ snapshot_export = latest_snapshot[
         "volatility_signal",
     ]
 ].copy()
-snapshot_export["date"] = snapshot_export["date"].dt.strftime("%Y-%m-%d")
+snapshot_export["date"] = format_date_series(snapshot_export["date"])
 snapshot_export["historical_volatility"] = (snapshot_export["historical_volatility"] * 100).round(4)
 snapshot_export = snapshot_export.sort_values(["rs_ratio", "symbol"], ascending=[False, True]).reset_index(drop=True)
 
@@ -226,8 +237,8 @@ for symbol in [parameters.benchmark_symbol, *SECTOR_ETFS.keys()]:
             "sector_name": "Benchmark" if symbol == parameters.benchmark_symbol else SECTOR_ETFS[symbol],
             "rows_loaded": int(len(symbol_history)),
             "trading_days_loaded": int(history_lengths.get(symbol, 0)),
-            "start_date": symbol_dates.min().strftime("%Y-%m-%d") if len(symbol_dates) else "",
-            "end_date": symbol_dates.max().strftime("%Y-%m-%d") if len(symbol_dates) else "",
+            "start_date": format_date_value(symbol_dates.min()) if len(symbol_dates) else "",
+            "end_date": format_date_value(symbol_dates.max()) if len(symbol_dates) else "",
             "used_in_calculation": symbol in available_symbols,
         }
     )
@@ -252,7 +263,7 @@ parameter_export = {
     "benchmark_history_available": benchmark_history,
     "common_history_available": common_available_history,
     "effective_signal_history": effective_signal_history,
-    "latest_snapshot_date": latest_date.strftime("%Y-%m-%d"),
+    "latest_snapshot_date": format_date_value(latest_date),
     "missing_symbols": missing_symbols,
 }
 
@@ -300,14 +311,14 @@ parameter_json = json.dumps(parameter_export, indent=2, ensure_ascii=True).encod
 sql_query_bytes = (sql_query + "\n").encode("utf-8")
 
 metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
-metric_col1.metric("Stand", latest_date.strftime("%Y-%m-%d"))
+metric_col1.metric("Stand", format_date_value(latest_date))
 metric_col2.metric("Benchmark", parameters.benchmark_symbol)
 metric_col3.metric("Sektoren mit Signal", int(latest_snapshot["symbol"].nunique()))
 metric_col4.metric("Verwendeter Lookback", f"{benchmark_history} Tage", delta=f"angefordert {lookback_days}")
 
 if lookback_days > benchmark_history:
-    start_text = benchmark_start_date.strftime("%Y-%m-%d") if benchmark_start_date is not None else "unbekannt"
-    end_text = benchmark_end_date.strftime("%Y-%m-%d") if benchmark_end_date is not None else "unbekannt"
+    start_text = format_date_value(benchmark_start_date) or "unbekannt"
+    end_text = format_date_value(benchmark_end_date) or "unbekannt"
     st.info(
         f"Lookback angefordert: {lookback_days} Tage. Im View fuer {parameters.benchmark_symbol} verfuegbar: "
         f"{benchmark_history} Handelstage. Verwendet wurde daher die tatsaechlich vorhandene Historie von "
