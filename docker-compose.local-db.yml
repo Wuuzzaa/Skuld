@@ -13,6 +13,7 @@ services:
   db:
     image: postgres:15
     container_name: skuld-local-db
+    shm_size: 2g
     environment:
       POSTGRES_USER: ${DB_USER:-dev}
       POSTGRES_PASSWORD: ${DB_PASS:-dev}
@@ -20,11 +21,11 @@ services:
     command:
       - postgres
       - -c
-      - shared_buffers=768MB
+      - shared_buffers=1024MB
       - -c
-      - effective_cache_size=2GB
+      - effective_cache_size=3GB
       - -c
-      - work_mem=16MB
+      - work_mem=8MB
       - -c
       - maintenance_work_mem=256MB
       - -c
@@ -41,16 +42,16 @@ services:
       - postgres_data_local:/var/lib/postgresql/data
     restart: unless-stopped
     cpus: 2.0
-    mem_limit: 3g
-    mem_reservation: 1g
+    mem_limit: 6g
+    mem_reservation: 2g
     deploy:
       resources:
         limits:
           cpus: '2.0'
-          memory: 3G
+          memory: 6G
         reservations:
           cpus: '0.5'
-          memory: 1G
+          memory: 2G
     networks:
       - skuld-local-net
 

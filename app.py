@@ -31,6 +31,7 @@ spreads = st.Page("pages/spreads.py", title="Spreads")
 marrieds = st.Page("pages/married_put_analysis.py", title="Married Puts")
 position_insurance = st.Page("pages/position_insurance_tool.py", title="Position Insurance Tool")
 multifactor_swingtrading = st.Page('pages/multifactor_swingtrading.py', title="Multifactor Swingtrading")
+sector_rotation = st.Page('pages/sector_rotation.py', title="Sector Rotation")
 expected_value = st.Page('pages/expected_value.py', title="Expected Value")
 data_logs = st.Page("pages/data_change_logs.py", title="Data Logs")
 symbolpage = st.Page("pages/symbolpage.py", title="Symbol Page")
@@ -43,6 +44,7 @@ page = st.navigation(
         marrieds,
         position_insurance,
         multifactor_swingtrading,
+        sector_rotation,
         expected_value,
         data_logs,
         symbolpage

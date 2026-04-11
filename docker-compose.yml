@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # --- AUTHELIA AUTHENTICATION SERVICE ---
   authelia:
@@ -117,6 +115,11 @@ services:
     networks:
       - web
       - postgres_setup_default
+
+    # The image defines a Streamlit HTTP healthcheck for the frontend.
+    # The backend runs cron jobs and does not expose an HTTP endpoint.
+    healthcheck:
+      disable: true
 
     logging:
       driver: "json-file"
