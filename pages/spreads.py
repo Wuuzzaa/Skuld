@@ -8,55 +8,118 @@ from src.database import select_into_dataframe
 from src.logger_config import setup_logging
 from src.page_display_dataframe import page_display_dataframe
 from src.spreads_calculation import get_page_spreads
+from src.utils.option_utils import get_expiration_type
 
-# ensure logfile gets all columns of wide dataframes
+# Ensure logfile gets all columns of wide dataframes
 pd.set_option('display.max_columns', None)
 pd.set_option('display.width', None)
 
-
-def get_expiration_type(expiration_date):
-    date = pd.to_datetime(expiration_date)
-    day_of_week = date.dayofweek  # 4 = Freitag
-
-    if day_of_week == 4:  # Freitag
-        # Prüfe, ob es der dritte Freitag im Monat ist
-        first_day_of_month = date.replace(day=1)
-        # Finde alle Freitage im Monat
-        offset = (4 - first_day_of_month.dayofweek) % 7
-        third_friday = first_day_of_month + pd.Timedelta(days=offset + 14)
-
-        if date.day == third_friday.day:
-            return "Monthly"
-        else:
-            return "Weekly"
-    else:
-        return "Daily"
-
-
-# enable logging
+# Setup logging
 setup_logging(component="streamlit", log_level=logging.DEBUG, console_output=True)
 logger = logging.getLogger(os.path.basename(__file__))
 logger.debug(f"Start Page: {os.path.basename(__file__)}")
 
+# Constants for default values
+DEFAULT_SHOW_MONTHLY = True
+DEFAULT_SHOW_WEEKLY = False
+DEFAULT_SHOW_DAILY = False
+DEFAULT_SHOW_ONLY_POSITIV_EXPECTED_VALUE = True
+DEFAULT_SHOW_ONLY_SPREADS_WITH_NO_EARNINGS_TILL_EXPIRATION = True
+DEFAULT_DELTA_TARGET = 0.2
+DEFAULT_SPREAD_WIDTH = 5
+DEFAULT_OPTION_TYPE = "put"
+DEFAULT_MIN_DAY_VOLUME = 20
+DEFAULT_MIN_OPEN_INTEREST = 100
+DEFAULT_MIN_SELL_IV = 0.3
+DEFAULT_MAX_SELL_IV = 0.9
+DEFAULT_MIN_MAX_PROFIT = 80.0
+DEFAULT_MIN_IV_RANK = 0
+DEFAULT_MIN_IV_PERCENTILE = 0
+
 # Page header
 st.title("Spreads")
 
-# filter with expander section
+# Initialize session state for checkboxes and filters
+if 'show_monthly' not in st.session_state:
+    st.session_state.show_monthly = DEFAULT_SHOW_MONTHLY
+if 'show_weekly' not in st.session_state:
+    st.session_state.show_weekly = DEFAULT_SHOW_WEEKLY
+if 'show_daily' not in st.session_state:
+    st.session_state.show_daily = DEFAULT_SHOW_DAILY
+if 'show_only_positiv_expected_value' not in st.session_state:
+    st.session_state.show_only_positiv_expected_value = DEFAULT_SHOW_ONLY_POSITIV_EXPECTED_VALUE
+if 'show_only_spreads_with_no_earnings_till_expiration' not in st.session_state:
+    st.session_state.show_only_spreads_with_no_earnings_till_expiration = DEFAULT_SHOW_ONLY_SPREADS_WITH_NO_EARNINGS_TILL_EXPIRATION
+if 'delta_target' not in st.session_state:
+    st.session_state.delta_target = DEFAULT_DELTA_TARGET
+if 'spread_width' not in st.session_state:
+    st.session_state.spread_width = DEFAULT_SPREAD_WIDTH
+if 'option_type' not in st.session_state:
+    st.session_state.option_type = DEFAULT_OPTION_TYPE
+if 'min_day_volume' not in st.session_state:
+    st.session_state.min_day_volume = DEFAULT_MIN_DAY_VOLUME
+if 'min_open_interest' not in st.session_state:
+    st.session_state.min_open_interest = DEFAULT_MIN_OPEN_INTEREST
+if 'min_sell_iv' not in st.session_state:
+    st.session_state.min_sell_iv = DEFAULT_MIN_SELL_IV
+if 'max_sell_iv' not in st.session_state:
+    st.session_state.max_sell_iv = DEFAULT_MAX_SELL_IV
+if 'min_max_profit' not in st.session_state:
+    st.session_state.min_max_profit = DEFAULT_MIN_MAX_PROFIT
+if 'min_iv_rank' not in st.session_state:
+    st.session_state.min_iv_rank = DEFAULT_MIN_IV_RANK
+if 'min_iv_percentile' not in st.session_state:
+    st.session_state.min_iv_percentile = DEFAULT_MIN_IV_PERCENTILE
+
+
+def reset_to_defaults():
+    st.session_state.show_monthly = DEFAULT_SHOW_MONTHLY
+    st.session_state.show_weekly = DEFAULT_SHOW_WEEKLY
+    st.session_state.show_daily = DEFAULT_SHOW_DAILY
+    st.session_state.show_only_positiv_expected_value = DEFAULT_SHOW_ONLY_POSITIV_EXPECTED_VALUE
+    st.session_state.show_only_spreads_with_no_earnings_till_expiration = DEFAULT_SHOW_ONLY_SPREADS_WITH_NO_EARNINGS_TILL_EXPIRATION
+    st.session_state.delta_target = DEFAULT_DELTA_TARGET
+    st.session_state.spread_width = DEFAULT_SPREAD_WIDTH
+    st.session_state.option_type = DEFAULT_OPTION_TYPE
+    st.session_state.min_day_volume = DEFAULT_MIN_DAY_VOLUME
+    st.session_state.min_open_interest = DEFAULT_MIN_OPEN_INTEREST
+    st.session_state.min_sell_iv = DEFAULT_MIN_SELL_IV
+    st.session_state.max_sell_iv = DEFAULT_MAX_SELL_IV
+    st.session_state.min_max_profit = DEFAULT_MIN_MAX_PROFIT
+    st.session_state.min_iv_rank = DEFAULT_MIN_IV_RANK
+    st.session_state.min_iv_percentile = DEFAULT_MIN_IV_PERCENTILE
+
+
+def clear_all_filters():
+    """
+    Clears all filters to show all possible results.
+    """
+    st.session_state.show_monthly = True
+    st.session_state.show_weekly = True
+    st.session_state.show_daily = True
+    st.session_state.show_only_positiv_expected_value = False
+    st.session_state.show_only_spreads_with_no_earnings_till_expiration = False
+    st.session_state.delta_target = DEFAULT_DELTA_TARGET
+    st.session_state.spread_width = DEFAULT_SPREAD_WIDTH
+    st.session_state.min_day_volume = 0
+    st.session_state.min_open_interest = 0
+    st.session_state.min_sell_iv = 0.0
+    st.session_state.max_sell_iv = 999.0
+    st.session_state.min_max_profit = 0.0
+    st.session_state.min_iv_rank = 0
+    st.session_state.min_iv_percentile = 0
+
+
+# Filter with expander section
 with st.expander("Configuration and Filters", expanded=True):
-    # Initialize session state for checkboxes
-    if 'show_monthly' not in st.session_state:
-        st.session_state.show_monthly = True
-    if 'show_weekly' not in st.session_state:
-        st.session_state.show_weekly = False
-    if 'show_daily' not in st.session_state:
-        st.session_state.show_daily = False
-    if 'show_only_positiv_expected_value' not in st.session_state:
-        st.session_state.show_only_positiv_expected_value = True
-    if 'show_only_spreads_with_no_earnings_till_expiration' not in st.session_state:
-        st.session_state.show_only_spreads_with_no_earnings_till_expiration = True
+    # Action buttons
+    btn_col1, btn_col2 = st.columns(2)
+    with btn_col1:
+        st.button("Reset to Defaults", on_click=reset_to_defaults, use_container_width=True)
+    with btn_col2:
+        st.button("Clear All Filters (Show All)", on_click=clear_all_filters, use_container_width=True)
 
-
-    # first row
+    # First row
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
@@ -74,7 +137,7 @@ with st.expander("Configuration and Filters", expanded=True):
                             axis=1) & st.session_state.show_daily)
             ]
 
-        # dte labels ("5 DTE - Friday 2026-01-16 - Monthly/Weekly/Daily")
+        # DTE labels ("5 DTE - Friday 2026-01-16 - Monthly/Weekly/Daily")
         dte_labels = [
             (
                 f"{int(row['days_to_expiration'])} DTE - "
@@ -89,21 +152,21 @@ with st.expander("Configuration and Filters", expanded=True):
             st.warning("No expiration dates match the selected filters.")
             st.stop()
 
-        # selectbox with dte labels
+        # Selectbox with DTE labels
         selected_label = st.selectbox("Expiration Date", dte_labels)
 
-        # extract selected expiration date from dte label
+        # Extract selected expiration date from DTE label
         selected_index = dte_labels.index(selected_label)
         expiration_date = filtered_dates_df.iloc[selected_index]['expiration_date']
-        logging.debug(f"extract selected expiration date from dte label expiration_date: {expiration_date}")
+        logging.debug(f"Extracted selected expiration date: {expiration_date}")
 
     with col2:
         delta_target = st.number_input(
             "Delta Target",
             min_value=0.0,
             max_value=1.0,
-            value=0.2,
-            step=0.01
+            step=0.01,
+            key="delta_target"
         )
 
     with col3:
@@ -111,14 +174,14 @@ with st.expander("Configuration and Filters", expanded=True):
             "Spread Width",
             min_value=1,
             max_value=20,
-            value=5,
-            step=1
+            step=1,
+            key="spread_width"
         )
 
     with col4:
-        option_type = st.selectbox("Option Type", ["put", "call"])
+        option_type = st.selectbox("Option Type", ["put", "call"], key="option_type")
 
-    # second row
+    # Second row
     col5, col6, col7, col8 = st.columns(4)
 
     with col5:
@@ -136,47 +199,45 @@ with st.expander("Configuration and Filters", expanded=True):
             key="show_only_positiv_expected_value"
         )
 
-
-    # third row
+    # Third row
     col9, col10, col11, col12 = st.columns(4)
 
     with col9:
         min_day_volume = st.number_input(
             "Min dayvolume",
             min_value=0,
-            value=80,
-            step=1
+            step=1,
+            key="min_day_volume"
         )
 
     with col10:
         min_open_interest = st.number_input(
             "Min Open Interest",
             min_value=0,
-            value=100,
-            step=100
+            step=100,
+            key="min_open_interest"
         )
 
     with col11:
         min_sell_iv = st.number_input(
             "Min sell iv",
             min_value=0.0,
-            value=0.3,
             step=0.05,
-            format="%.2f"
+            format="%.2f",
+            key="min_sell_iv"
         )
 
     with col12:
         max_sell_iv = st.number_input(
             "Max sell iv",
             min_value=0.0,
-            value=0.9,
             step=0.05,
-            format="%.2f"
+            format="%.2f",
+            key="max_sell_iv"
         )
 
-    # fourth row
+    # Fourth row
     col13, col14, col15, col16 = st.columns(4)
-    #col13 = st.columns(1)[0] # [0] because TypeError: 'list' object does not support the context manager protocol when only one column is used access the element directly
 
     with col13:
         st.checkbox(
@@ -188,9 +249,9 @@ with st.expander("Configuration and Filters", expanded=True):
         min_max_profit = st.number_input(
             "Min Max Profit",
             min_value=0.0,
-            value=80.0,
             step=1.0,
-            format="%.2f"
+            format="%.2f",
+            key="min_max_profit"
         )
 
     with col15:
@@ -198,8 +259,8 @@ with st.expander("Configuration and Filters", expanded=True):
             "Min iv rank",
             min_value=0,
             max_value=100,
-            value=0,
-            step=1
+            step=1,
+            key="min_iv_rank"
         )
 
     with col16:
@@ -207,11 +268,11 @@ with st.expander("Configuration and Filters", expanded=True):
             "Min iv percentile",
             min_value=0,
             max_value=100,
-            value=0,
-            step=1
+            step=1,
+            key="min_iv_percentile"
         )
 
-# calculate the spread values with a loading indicator
+# Calculate the spread values with a loading indicator
 with st.spinner("Calculating spreads..."):
     params = {
         "expiration_date": expiration_date,
@@ -224,28 +285,26 @@ with st.spinner("Calculating spreads..."):
         "min_iv_percentile": min_iv_percentile
     }
 
-    logging.debug(f"params: {params}")
+    logging.debug(f"Params for database query: {params}")
 
     sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'spreads_input.sql'
     df = select_into_dataframe(sql_file_path=sql_file_path, params=params)
-    logging.debug(f"df: {df.head()}")
+    logging.debug(f"Input data head: {df.head()}")
 
     spreads_df = get_page_spreads(df)
-    logging.debug(f"spreads_df: {spreads_df.head()}")
+    logging.debug(f"Calculated spreads head: {spreads_df.head()}")
 
-# Apply spreadfilter
+# Apply spread filters
 filtered_df = spreads_df.copy()
 
-# min_max_profit
+# Min max profit
 filtered_df = filtered_df[filtered_df['max_profit'] >= min_max_profit]
 
-# only positive expected value
+# Only positive expected value
 if st.session_state.show_only_positiv_expected_value:
     filtered_df = filtered_df[filtered_df['expected_value'] >= 0]
 
-# only spreads with no earnings till expiration
-
-# helper variables
+# Only spreads with no earnings till expiration
 today = pd.Timestamp.now().normalize()
 expiration_date_ts = pd.Timestamp(expiration_date)
 
@@ -257,24 +316,22 @@ if st.session_state.show_only_spreads_with_no_earnings_till_expiration:
         )
     ]
 
-    # Konvertiere die 'earnings_date'-Spalte in ein datetime-Objekt
-    filtered_df['earnings_date'] = pd.to_datetime(filtered_df['earnings_date'])
+# Convert 'earnings_date' to datetime and format it
+filtered_df['earnings_date'] = pd.to_datetime(filtered_df['earnings_date'])
+filtered_df['earnings_date'] = filtered_df['earnings_date'].dt.strftime('%d.%m.%Y')
 
-    # Formatiere die 'earnings_date'-Spalte im gewünschten Format
-    filtered_df['earnings_date'] = filtered_df['earnings_date'].dt.strftime('%d.%m.%Y')
-
-# min_sell_iv
+# Min sell IV
 filtered_df = filtered_df[filtered_df['sell_iv'] >= min_sell_iv]
 
-# max_sell_iv
+# Max sell IV
 filtered_df = filtered_df[filtered_df['sell_iv'] <= max_sell_iv]
 
-# After the filters reset the index to ensure the zebra style works on the dataframe
+# Reset index to ensure the zebra style works on the dataframe
 filtered_df.reset_index(drop=True, inplace=True)
 
 st.markdown(f"### {len(filtered_df)} Results")
 
-# optionstrat_url is only on the spread page so declare it here
+# Optionstrat URL configuration
 column_config = {
     "optionstrat_url": st.column_config.LinkColumn(
         label="",
@@ -283,10 +340,9 @@ column_config = {
     )
 }
 
-# show final dataframe
+# Display final dataframe
 page_display_dataframe(filtered_df, page='spreads', symbol_column='symbol', column_config=column_config)
 
-
-# show documentation
-with st.expander("📖 Dokumentation - Feldübersicht", expanded=False):
+# Show documentation
+with st.expander("📖 Documentation - Fields Overview", expanded=False):
     st.markdown(get_spreads_documentation())

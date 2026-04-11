@@ -514,56 +514,6 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     logger.info("Start Massiv API test")
 
-    #symbols = get_symbols("all")
-
-    a =  asyncio.run(get_all_stocks_and_indices())
-
-    #all_tickers = asyncio.run(get_all_stocks_and_indices())
-    # tickers_with_options = asyncio.run(get_active_tickers_with_options())
-    # df = get_option_chains_df(tickers=tickers_with_options)
+    symbols = load_symbols()
     pass
-
-
-"""
-https://massive.com/docs/rest/options/snapshots/option-chain-snapshot 
-
-all_tickers["stocks"] enthält alle aktien -> brauchen wir
-
-tickers_with_options enthält alle ticker(aktien, index, rohstoffe etc.) mit optionen -> brauchen wir
-
-Set aus den beiden bilden. 
-Benötigt Flag für Symbole mit Optionen um bei Strategien schnell filtern zu können.
-
-get_option_chains_df(tickers=tickers_with_options) -> Liefert Optionspreise und Griechen
-
-Benötigt täglich:
-'implied_volatility', 
-'open_interest', 
-'greeks.delta', 
-'greeks.gamma', 
-'greeks.theta', 
-'greeks.vega',
-'day.close', (optionspreis aktuell)
-'day.volume', 
-
-Stammdaten benötigt
-'details.contract_type',
-'details.exercise_style', 
-'details.expiration_date',
-'details.shares_per_contract', 
-'details.strike_price', 
-'details.ticker', (enthält OPRA)
-'underlying_asset.ticker',  (Symbol)
-
-Aktuell nicht benötigt:
-'day.change', 
-'day.change_percent',
-'day.high', 
-'day.last_updated',  (Timestamp)
-'day.low', 
-'day.open',
-'day.previous_close', 
-'day.vwap',
-'day.last_updated_humanreadable'
-"""
 
