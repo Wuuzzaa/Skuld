@@ -73,22 +73,102 @@ setup_logging(component="streamlit", log_level=logging.DEBUG, console_output=Tru
 logger = logging.getLogger(os.path.basename(__file__))
 logger.debug(f"Start Page: {os.path.basename(__file__)}")
 
+# Constants for default values
+DEFAULT_SHOW_MONTHLY = True
+DEFAULT_SHOW_WEEKLY = False
+DEFAULT_SHOW_DAILY = False
+DEFAULT_SHOW_ONLY_POSITIV_EXPECTED_VALUE = True
+DEFAULT_SHOW_ONLY_SPREADS_WITH_NO_EARNINGS_TILL_EXPIRATION = True
+DEFAULT_DELTA_TARGET = 0.2
+DEFAULT_SPREAD_WIDTH = 5
+DEFAULT_OPTION_TYPE = "put"
+DEFAULT_MIN_DAY_VOLUME = 20
+DEFAULT_MIN_OPEN_INTEREST = 100
+DEFAULT_MIN_SELL_IV = 0.3
+DEFAULT_MAX_SELL_IV = 0.9
+DEFAULT_MIN_MAX_PROFIT = 80.0
+DEFAULT_MIN_IV_RANK = 0
+DEFAULT_MIN_IV_PERCENTILE = 0
+
 # Page header
 st.title("Spreads")
 
+# Initialize session state for checkboxes and filters
+if 'show_monthly' not in st.session_state:
+    st.session_state.show_monthly = DEFAULT_SHOW_MONTHLY
+if 'show_weekly' not in st.session_state:
+    st.session_state.show_weekly = DEFAULT_SHOW_WEEKLY
+if 'show_daily' not in st.session_state:
+    st.session_state.show_daily = DEFAULT_SHOW_DAILY
+if 'show_only_positiv_expected_value' not in st.session_state:
+    st.session_state.show_only_positiv_expected_value = DEFAULT_SHOW_ONLY_POSITIV_EXPECTED_VALUE
+if 'show_only_spreads_with_no_earnings_till_expiration' not in st.session_state:
+    st.session_state.show_only_spreads_with_no_earnings_till_expiration = DEFAULT_SHOW_ONLY_SPREADS_WITH_NO_EARNINGS_TILL_EXPIRATION
+if 'delta_target' not in st.session_state:
+    st.session_state.delta_target = DEFAULT_DELTA_TARGET
+if 'spread_width' not in st.session_state:
+    st.session_state.spread_width = DEFAULT_SPREAD_WIDTH
+if 'option_type' not in st.session_state:
+    st.session_state.option_type = DEFAULT_OPTION_TYPE
+if 'min_day_volume' not in st.session_state:
+    st.session_state.min_day_volume = DEFAULT_MIN_DAY_VOLUME
+if 'min_open_interest' not in st.session_state:
+    st.session_state.min_open_interest = DEFAULT_MIN_OPEN_INTEREST
+if 'min_sell_iv' not in st.session_state:
+    st.session_state.min_sell_iv = DEFAULT_MIN_SELL_IV
+if 'max_sell_iv' not in st.session_state:
+    st.session_state.max_sell_iv = DEFAULT_MAX_SELL_IV
+if 'min_max_profit' not in st.session_state:
+    st.session_state.min_max_profit = DEFAULT_MIN_MAX_PROFIT
+if 'min_iv_rank' not in st.session_state:
+    st.session_state.min_iv_rank = DEFAULT_MIN_IV_RANK
+if 'min_iv_percentile' not in st.session_state:
+    st.session_state.min_iv_percentile = DEFAULT_MIN_IV_PERCENTILE
+
+
+def reset_to_defaults():
+    st.session_state.show_monthly = DEFAULT_SHOW_MONTHLY
+    st.session_state.show_weekly = DEFAULT_SHOW_WEEKLY
+    st.session_state.show_daily = DEFAULT_SHOW_DAILY
+    st.session_state.show_only_positiv_expected_value = DEFAULT_SHOW_ONLY_POSITIV_EXPECTED_VALUE
+    st.session_state.show_only_spreads_with_no_earnings_till_expiration = DEFAULT_SHOW_ONLY_SPREADS_WITH_NO_EARNINGS_TILL_EXPIRATION
+    st.session_state.delta_target = DEFAULT_DELTA_TARGET
+    st.session_state.spread_width = DEFAULT_SPREAD_WIDTH
+    st.session_state.option_type = DEFAULT_OPTION_TYPE
+    st.session_state.min_day_volume = DEFAULT_MIN_DAY_VOLUME
+    st.session_state.min_open_interest = DEFAULT_MIN_OPEN_INTEREST
+    st.session_state.min_sell_iv = DEFAULT_MIN_SELL_IV
+    st.session_state.max_sell_iv = DEFAULT_MAX_SELL_IV
+    st.session_state.min_max_profit = DEFAULT_MIN_MAX_PROFIT
+    st.session_state.min_iv_rank = DEFAULT_MIN_IV_RANK
+    st.session_state.min_iv_percentile = DEFAULT_MIN_IV_PERCENTILE
+
+
+def clear_all_filters():
+    st.session_state.show_monthly = True
+    st.session_state.show_weekly = True
+    st.session_state.show_daily = True
+    st.session_state.show_only_positiv_expected_value = False
+    st.session_state.show_only_spreads_with_no_earnings_till_expiration = False
+    st.session_state.delta_target = 0.2  # bleibt bei Standard, da kein min/max angegeben für delta?
+    st.session_state.spread_width = 5    # bleibt bei Standard
+    st.session_state.min_day_volume = 0
+    st.session_state.min_open_interest = 0
+    st.session_state.min_sell_iv = 0.0
+    st.session_state.max_sell_iv = 999.0
+    st.session_state.min_max_profit = 0.0
+    st.session_state.min_iv_rank = 0
+    st.session_state.min_iv_percentile = 0
+
+
 # filter with expander section
 with st.expander("Configuration and Filters", expanded=True):
-    # Initialize session state for checkboxes
-    if 'show_monthly' not in st.session_state:
-        st.session_state.show_monthly = True
-    if 'show_weekly' not in st.session_state:
-        st.session_state.show_weekly = False
-    if 'show_daily' not in st.session_state:
-        st.session_state.show_daily = False
-    if 'show_only_positiv_expected_value' not in st.session_state:
-        st.session_state.show_only_positiv_expected_value = True
-    if 'show_only_spreads_with_no_earnings_till_expiration' not in st.session_state:
-        st.session_state.show_only_spreads_with_no_earnings_till_expiration = True
+    # Action buttons
+    btn_col1, btn_col2 = st.columns(2)
+    with btn_col1:
+        st.button("Reset to Defaults", on_click=reset_to_defaults, use_container_width=True)
+    with btn_col2:
+        st.button("Clear All Filters (Show All)", on_click=clear_all_filters, use_container_width=True)
 
 
     # first row
@@ -137,8 +217,8 @@ with st.expander("Configuration and Filters", expanded=True):
             "Delta Target",
             min_value=0.0,
             max_value=1.0,
-            value=0.2,
-            step=0.01
+            step=0.01,
+            key="delta_target"
         )
 
     with col3:
@@ -146,12 +226,12 @@ with st.expander("Configuration and Filters", expanded=True):
             "Spread Width",
             min_value=1,
             max_value=20,
-            value=5,
-            step=1
+            step=1,
+            key="spread_width"
         )
 
     with col4:
-        option_type = st.selectbox("Option Type", ["put", "call"])
+        option_type = st.selectbox("Option Type", ["put", "call"], key="option_type")
 
     # second row
     col5, col6, col7, col8 = st.columns(4)
@@ -179,34 +259,34 @@ with st.expander("Configuration and Filters", expanded=True):
         min_day_volume = st.number_input(
             "Min dayvolume",
             min_value=0,
-            value=20,
-            step=1
+            step=1,
+            key="min_day_volume"
         )
 
     with col10:
         min_open_interest = st.number_input(
             "Min Open Interest",
             min_value=0,
-            value=100,
-            step=100
+            step=100,
+            key="min_open_interest"
         )
 
     with col11:
         min_sell_iv = st.number_input(
             "Min sell iv",
             min_value=0.0,
-            value=0.3,
             step=0.05,
-            format="%.2f"
+            format="%.2f",
+            key="min_sell_iv"
         )
 
     with col12:
         max_sell_iv = st.number_input(
             "Max sell iv",
             min_value=0.0,
-            value=0.9,
             step=0.05,
-            format="%.2f"
+            format="%.2f",
+            key="max_sell_iv"
         )
 
     # fourth row
@@ -223,9 +303,9 @@ with st.expander("Configuration and Filters", expanded=True):
         min_max_profit = st.number_input(
             "Min Max Profit",
             min_value=0.0,
-            value=80.0,
             step=1.0,
-            format="%.2f"
+            format="%.2f",
+            key="min_max_profit"
         )
 
     with col15:
@@ -233,8 +313,8 @@ with st.expander("Configuration and Filters", expanded=True):
             "Min iv rank",
             min_value=0,
             max_value=100,
-            value=0,
-            step=1
+            step=1,
+            key="min_iv_rank"
         )
 
     with col16:
@@ -242,8 +322,8 @@ with st.expander("Configuration and Filters", expanded=True):
             "Min iv percentile",
             min_value=0,
             max_value=100,
-            value=0,
-            step=1
+            step=1,
+            key="min_iv_percentile"
         )
 
 # calculate the spread values with a loading indicator
