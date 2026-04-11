@@ -1,9 +1,15 @@
+import io
+import json
+import zipfile
+
+import pandas as pd
 import streamlit as st
 
 from src.sector_rotation import (
     RotationParameters,
     SECTOR_ETFS,
     build_latest_sector_snapshot,
+    build_sector_rotation_query,
     build_rotation_figure,
     calculate_sector_rotation,
     load_sector_rotation_price_history,
@@ -176,6 +182,123 @@ effective_signal_history = (
 latest_snapshot = build_latest_sector_snapshot(rotation_data)
 latest_date = latest_snapshot["date"].max()
 
+raw_input_data = price_history[["date", "symbol", "close", "adjclose"]].copy()
+raw_input_data["date"] = raw_input_data["date"].dt.strftime("%Y-%m-%d")
+raw_input_data = raw_input_data.sort_values(["symbol", "date"]).reset_index(drop=True)
+
+export_data = rotation_data[
+    [
+        "date", "symbol", "sector_name", "price", "benchmark_price",
+        "rs_raw", "rs_smooth", "rs_smooth_long", "rs_norm",
+        "rs_ratio", "rs_ratio_smooth", "rs_momentum",
+        "historical_volatility", "volatility_signal", "quadrant",
+    ]
+].copy()
+export_data["date"] = export_data["date"].dt.strftime("%Y-%m-%d")
+export_data = export_data.sort_values(["symbol", "date"]).reset_index(drop=True)
+
+snapshot_export = latest_snapshot[
+    [
+        "date",
+        "symbol",
+        "sector_name",
+        "price",
+        "benchmark_price",
+        "rs_ratio",
+        "rs_momentum",
+        "quadrant",
+        "historical_volatility",
+        "volatility_signal",
+    ]
+].copy()
+snapshot_export["date"] = snapshot_export["date"].dt.strftime("%Y-%m-%d")
+snapshot_export["historical_volatility"] = (snapshot_export["historical_volatility"] * 100).round(4)
+snapshot_export = snapshot_export.sort_values(["rs_ratio", "symbol"], ascending=[False, True]).reset_index(drop=True)
+
+history_coverage_rows = []
+for symbol in [parameters.benchmark_symbol, *SECTOR_ETFS.keys()]:
+    symbol_history = price_history.loc[price_history["symbol"] == symbol].copy()
+    symbol_dates = symbol_history["date"] if not symbol_history.empty else []
+    history_coverage_rows.append(
+        {
+            "symbol": symbol,
+            "role": "Benchmark" if symbol == parameters.benchmark_symbol else "Sektor",
+            "sector_name": "Benchmark" if symbol == parameters.benchmark_symbol else SECTOR_ETFS[symbol],
+            "rows_loaded": int(len(symbol_history)),
+            "trading_days_loaded": int(history_lengths.get(symbol, 0)),
+            "start_date": symbol_dates.min().strftime("%Y-%m-%d") if len(symbol_dates) else "",
+            "end_date": symbol_dates.max().strftime("%Y-%m-%d") if len(symbol_dates) else "",
+            "used_in_calculation": symbol in available_symbols,
+        }
+    )
+
+history_coverage_data = (
+    pd.DataFrame(history_coverage_rows)
+    .sort_values(["role", "symbol"], ascending=[True, True])
+    .reset_index(drop=True)
+)
+
+parameter_export = {
+    "benchmark_symbol": parameters.benchmark_symbol,
+    "price_column": parameters.price_column,
+    "short_window": parameters.short_window,
+    "long_window": parameters.long_window,
+    "volatility_window": parameters.volatility_window,
+    "volatility_threshold_low": parameters.volatility_threshold_low,
+    "volatility_threshold_high": parameters.volatility_threshold_high,
+    "lookback_days_requested": parameters.lookback_days,
+    "tail_days": parameters.tail_days,
+    "required_history_length": min_history_needed,
+    "benchmark_history_available": benchmark_history,
+    "common_history_available": common_available_history,
+    "effective_signal_history": effective_signal_history,
+    "latest_snapshot_date": latest_date.strftime("%Y-%m-%d"),
+    "missing_symbols": missing_symbols,
+}
+
+sql_query = build_sector_rotation_query(
+    symbols=[parameters.benchmark_symbol, *SECTOR_ETFS.keys()],
+    lookback_days=parameters.lookback_days,
+).strip()
+
+parameter_export_data = pd.DataFrame(
+    [{"parameter": key, "value": json.dumps(value, ensure_ascii=True) if isinstance(value, (list, dict)) else value}
+     for key, value in parameter_export.items()]
+)
+
+sql_query_export_data = pd.DataFrame(
+    [{"query_name": "sector_rotation_source_query", "sql": sql_query}]
+)
+
+excel_workbook = io.BytesIO()
+with pd.ExcelWriter(excel_workbook, engine="openpyxl") as writer:
+    raw_input_data.to_excel(writer, sheet_name="input_price_history", index=False)
+    history_coverage_data.to_excel(writer, sheet_name="history_coverage", index=False)
+    export_data.to_excel(writer, sheet_name="rotation_timeseries", index=False)
+    snapshot_export.to_excel(writer, sheet_name="latest_snapshot", index=False)
+    parameter_export_data.to_excel(writer, sheet_name="parameters", index=False)
+    sql_query_export_data.to_excel(writer, sheet_name="source_query", index=False)
+
+excel_workbook_bytes = excel_workbook.getvalue()
+
+audit_package = io.BytesIO()
+with zipfile.ZipFile(audit_package, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+    archive.writestr("parameters.json", json.dumps(parameter_export, indent=2, ensure_ascii=True))
+    archive.writestr("source_query.sql", sql_query + "\n")
+    archive.writestr("input_price_history.csv", raw_input_data.to_csv(index=False))
+    archive.writestr("input_history_coverage.csv", history_coverage_data.to_csv(index=False))
+    archive.writestr("rotation_timeseries.csv", export_data.to_csv(index=False))
+    archive.writestr("latest_snapshot.csv", snapshot_export.to_csv(index=False))
+    archive.writestr("sector_rotation_audit.xlsx", excel_workbook_bytes)
+
+audit_package_bytes = audit_package.getvalue()
+raw_input_csv = raw_input_data.to_csv(index=False).encode("utf-8")
+history_coverage_csv = history_coverage_data.to_csv(index=False).encode("utf-8")
+rotation_timeseries_csv = export_data.to_csv(index=False).encode("utf-8")
+snapshot_csv = snapshot_export.to_csv(index=False).encode("utf-8")
+parameter_json = json.dumps(parameter_export, indent=2, ensure_ascii=True).encode("utf-8")
+sql_query_bytes = (sql_query + "\n").encode("utf-8")
+
 metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
 metric_col1.metric("Stand", latest_date.strftime("%Y-%m-%d"))
 metric_col2.metric("Benchmark", parameters.benchmark_symbol)
@@ -198,6 +321,74 @@ st.caption(
 
 figure = build_rotation_figure(rotation_data, parameters)
 st.plotly_chart(figure, use_container_width=True)
+
+with st.expander("Audit-Trail: alle verwendeten Daten herunterladen", expanded=True):
+    st.markdown(
+        """
+        Diese Sektion stellt die komplette Nachvollziehbarkeit der Berechnung bereit:
+
+        - Rohkurse aus dem Backend-View, exakt wie sie geladen wurden
+        - Historienabdeckung je Ticker inklusive Start- und Enddatum
+        - komplette RS-Zeitreihen mit allen Zwischenstufen
+        - aktueller Snapshot der zuletzt angezeigten Ergebnisse
+        - verwendete Parameter und die SQL-Abfrage
+        """
+    )
+
+    download_col1, download_col2, download_col3 = st.columns(3)
+    download_col1.download_button(
+        label="Audit-Paket (.zip)",
+        data=audit_package_bytes,
+        file_name="sector_rotation_audit_package.zip",
+        mime="application/zip",
+    )
+    download_col2.download_button(
+        label="Rohkurse als CSV",
+        data=raw_input_csv,
+        file_name="sector_rotation_input_price_history.csv",
+        mime="text/csv",
+    )
+    download_col3.download_button(
+        label="SQL + Parameter",
+        data=sql_query_bytes,
+        file_name="sector_rotation_source_query.sql",
+        mime="text/plain",
+    )
+
+    extra_download_col1, extra_download_col2, extra_download_col3, extra_download_col4 = st.columns(4)
+    extra_download_col1.download_button(
+        label="Historienabdeckung CSV",
+        data=history_coverage_csv,
+        file_name="sector_rotation_history_coverage.csv",
+        mime="text/csv",
+    )
+    extra_download_col2.download_button(
+        label="Audit-Workbook (.xlsx)",
+        data=excel_workbook_bytes,
+        file_name="sector_rotation_audit.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    extra_download_col3.download_button(
+        label="Parameter JSON",
+        data=parameter_json,
+        file_name="sector_rotation_parameters.json",
+        mime="application/json",
+    )
+    extra_download_col4.download_button(
+        label="Snapshot CSV",
+        data=snapshot_csv,
+        file_name="sector_rotation_latest_snapshot.csv",
+        mime="text/csv",
+    )
+
+    with st.expander("Geladene Rohkurse", expanded=False):
+        st.dataframe(raw_input_data, use_container_width=True, hide_index=True)
+
+    with st.expander("Historienabdeckung je Ticker", expanded=False):
+        st.dataframe(history_coverage_data, use_container_width=True, hide_index=True)
+
+    with st.expander("Verwendete SQL-Abfrage", expanded=False):
+        st.code(sql_query, language="sql")
 
 with st.expander("RS-Zeitreihen exportieren (zur Validierung)", expanded=False):
     st.markdown(
@@ -247,20 +438,10 @@ with st.expander("RS-Zeitreihen exportieren (zur Validierung)", expanded=False):
         - **rs_momentum < 100**: RS-Ratio faellt (relative Staerke nimmt ab) → untere Haelfte.
         """
     )
-    export_data = rotation_data[
-        [
-            "date", "symbol", "sector_name", "price", "benchmark_price",
-            "rs_raw", "rs_smooth", "rs_smooth_long", "rs_norm",
-            "rs_ratio", "rs_ratio_smooth", "rs_momentum",
-        ]
-    ].copy()
-    export_data["date"] = export_data["date"].dt.strftime("%Y-%m-%d")
-    export_data = export_data.sort_values(["symbol", "date"]).reset_index(drop=True)
     st.dataframe(export_data, use_container_width=True, hide_index=True)
-    csv_data = export_data.to_csv(index=False).encode("utf-8")
     st.download_button(
         label="CSV herunterladen",
-        data=csv_data,
+        data=rotation_timeseries_csv,
         file_name="rs_zeitreihen_export.csv",
         mime="text/csv",
     )
