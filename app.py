@@ -11,10 +11,10 @@ logger.info("Start SKULD Flask App")
 app = Flask(__name__)
 app.secret_key = "skuld-secret-key-change-in-production"
 
-# Inject version into all templates
+# Inject version + builtins into all templates
 @app.context_processor
 def inject_globals():
-    return {"version": VERSION}
+    return {"version": VERSION, "zip": zip}
 
 # Register blueprints
 from flask_pages.analyst_prices import bp as analyst_prices_bp

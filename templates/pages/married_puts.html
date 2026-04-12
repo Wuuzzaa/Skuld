@@ -3,58 +3,68 @@
 {% block content %}
 
 <div class="page-header">
-    <div class="page-header-icon">💍</div>
-    <div class="page-header-text">
+    <div class="page-header-icon">🛡</div>
+    <div>
         <div class="page-title">Married Puts</div>
-        <div class="page-subtitle">Protective put analysis for long stock positions</div>
+        <div class="page-subtitle">Dividend stock + protective put — annualized ROI screener</div>
     </div>
 </div>
 
-<form method="get" action="{{ url_for('married_puts.index') }}">
-<div class="filter-panel">
-    <div class="filter-row">
-        <div class="filter-group" style="min-width:160px">
-            <span class="filter-label">Symbol</span>
-            <select name="symbol" class="form-select skuld-select2">
-                <option value="">— All —</option>
-                {% for s in symbols %}
-                    <option value="{{ s }}" {% if s == params.symbol %}selected{% endif %}>{{ s }}</option>
-                {% endfor %}
-            </select>
+<form method="get" class="auto-submit">
+    <div class="cmd-bar">
+        <span class="cmd-label">Classification</span>
+        <div class="chip-group">
+            <label class="chip {% if params.chk_champion %}active{% endif %}">
+                <input class="chip-input" type="checkbox" name="chk_champion" value="true" {% if params.chk_champion %}checked{% endif %}>Champion
+            </label>
+            <label class="chip {% if params.chk_contender %}active{% endif %}">
+                <input class="chip-input" type="checkbox" name="chk_contender" value="true" {% if params.chk_contender %}checked{% endif %}>Contender
+            </label>
+            <label class="chip {% if params.chk_challenger %}active{% endif %}">
+                <input class="chip-input" type="checkbox" name="chk_challenger" value="true" {% if params.chk_challenger %}checked{% endif %}>Challenger
+            </label>
+            <label class="chip active-gold {% if params.show_all %}active-gold active{% endif %}">
+                <input class="chip-input" type="checkbox" name="show_all" value="true" {% if params.show_all %}checked{% endif %}>All
+            </label>
         </div>
-        <div class="filter-group">
-            <span class="filter-label">Max DTE</span>
-            <input type="number" name="max_dte" class="form-control"
-                   value="{{ params.max_dte }}" min="1" step="1">
-        </div>
-        <div class="filter-group">
-            <span class="filter-label">Min Delta</span>
-            <input type="number" name="min_delta" class="form-control"
-                   value="{{ params.min_delta }}" min="0" max="1" step="0.01">
-        </div>
-        <div class="filter-group">
-            <span class="filter-label">Max Delta</span>
-            <input type="number" name="max_delta" class="form-control"
-                   value="{{ params.max_delta }}" min="0" max="1" step="0.01">
-        </div>
-        <div style="margin-left:auto; display:flex; gap:0.5rem; align-self:flex-end;">
-            <button type="submit" class="btn-skuld">Apply</button>
-            <a href="{{ url_for('married_puts.index') }}" class="btn-skuld-ghost">Reset</a>
-        </div>
+
+        <div class="cmd-sep"></div>
+        <span class="cmd-label">ROI % ann.</span>
+        <input class="cmd-input narrow" type="number" name="min_roi" value="{{ params.min_roi }}" step="0.5" min="0" placeholder="min">
+        <span style="color:var(--t-4);font-size:0.7rem">–</span>
+        <input class="cmd-input narrow" type="number" name="max_roi" value="{{ params.max_roi }}" step="0.5" min="0" placeholder="max">
+
+        <div class="cmd-sep"></div>
+        <span class="cmd-label">DTE</span>
+        <input class="cmd-input narrow" type="number" name="min_dte" value="{{ params.min_dte }}" step="10" min="0" placeholder="min">
+        <span style="color:var(--t-4);font-size:0.7rem">–</span>
+        <input class="cmd-input narrow" type="number" name="max_dte" value="{{ params.max_dte }}" step="30" min="0" placeholder="max">
+
+        <div class="cmd-sep"></div>
+        <span class="cmd-label">Strike ×</span>
+        <input class="cmd-input narrow" type="number" name="strike_multiplier" value="{{ params.strike_multiplier }}" step="0.05" min="1">
+
+        <div class="cmd-sep"></div>
+        <span class="cmd-label">Top N</span>
+        <input class="cmd-input narrow" type="number" name="max_results" value="{{ params.max_results }}" step="10" min="1">
+
+        <div class="cmd-sep"></div>
+        <button type="submit" class="btn-run">▶ Run</button>
+        <a href="{{ url_for('married_puts.index') }}" class="btn-ghost">Reset</a>
     </div>
-</div>
 </form>
 
 {% if error_msg %}
     <div class="alert alert-danger">{{ error_msg }}</div>
-{% endif %}
-{% if table_html %}
-    <div class="result-bar">
-        <span class="result-count"><strong>{{ result_count }}</strong> results</span>
+{% elif table_html %}
+    <div class="stat-strip">
+        <div class="stat-pill"><span class="dot dot-green"></span><strong id="result-count-live">{{ result_count }}</strong>&nbsp;results</div>
+        <div class="stat-pill">ROI {{ params.min_roi }}–{{ params.max_roi }}%</div>
+        <div class="stat-pill">DTE {{ params.min_dte }}–{{ params.max_dte }}</div>
     </div>
-    <div class="table-wrapper">{{ table_html | safe }}</div>
-{% elif not error_msg %}
-    <div class="alert alert-info">Select filters and apply to see results.</div>
+    <div class="data-surface">{{ table_html | safe }}</div>
+{% else %}
+    <div class="alert alert-info">Adjust filters and click Run.</div>
 {% endif %}
 
 {% endblock %}

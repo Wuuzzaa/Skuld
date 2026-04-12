@@ -3,124 +3,130 @@
 {% block content %}
 
 <div class="page-header">
-    <div class="page-header-icon">📉</div>
-    <div class="page-header-text">
+    <div class="page-header-icon">⚡</div>
+    <div>
         <div class="page-title">Spreads</div>
-        <div class="page-subtitle">Bull put &amp; bear call spread scanner with EV filter</div>
+        <div class="page-subtitle">Credit & debit spread scanner — delta-targeted, EV-filtered</div>
     </div>
 </div>
 
-<form method="get" action="{{ url_for('spreads.index') }}">
-<div class="filter-panel">
-    <div class="filter-row">
-        <div class="filter-group" style="min-width:180px">
-            <span class="filter-label">Expiration Date</span>
-            <select name="expiration_date" class="form-select skuld-select2">
-                {% for i in range(dte_labels | length) %}
-                    <option value="{{ filtered_dates_values[i] }}"
-                        {% if filtered_dates_values[i] == params.expiration_date %}selected{% endif %}>
-                        {{ dte_labels[i] }}
-                    </option>
+<form method="get" class="auto-submit" id="spreads-form">
+
+    <!-- Row 1: Expiry type chips + expiration date + option type -->
+    <div class="cmd-bar">
+        <span class="cmd-label">Expiry</span>
+        <div class="chip-group">
+            <label class="chip {% if params.show_monthly %}active{% endif %}">
+                <input class="chip-input" type="checkbox" name="show_monthly" value="true" {% if params.show_monthly %}checked{% endif %}>
+                Monthly
+            </label>
+            <label class="chip {% if params.show_weekly %}active{% endif %}">
+                <input class="chip-input" type="checkbox" name="show_weekly" value="true" {% if params.show_weekly %}checked{% endif %}>
+                Weekly
+            </label>
+            <label class="chip {% if params.show_daily %}active{% endif %}">
+                <input class="chip-input" type="checkbox" name="show_daily" value="true" {% if params.show_daily %}checked{% endif %}>
+                Daily
+            </label>
+        </div>
+
+        <div class="cmd-sep"></div>
+
+        <span class="cmd-label">Date</span>
+        <div class="cmd-group">
+            <select name="expiration_date" class="cmd-select wide" onchange="this.form.submit()">
+                {% for label, val in zip(dte_labels, filtered_dates_values) %}
+                    <option value="{{ val }}" {% if val == expiration_date %}selected{% endif %}>{{ label }}</option>
                 {% endfor %}
             </select>
         </div>
-        <div class="filter-group">
-            <span class="filter-label">Option Type</span>
-            <select name="option_type" class="form-select">
+
+        <div class="cmd-sep"></div>
+
+        <span class="cmd-label">Type</span>
+        <div class="cmd-group">
+            <select name="option_type" class="cmd-select" onchange="this.form.submit()">
                 <option value="put"  {% if params.option_type == 'put'  %}selected{% endif %}>Put</option>
                 <option value="call" {% if params.option_type == 'call' %}selected{% endif %}>Call</option>
             </select>
         </div>
-        <div class="filter-group">
-            <span class="filter-label">Delta Target</span>
-            <input type="number" name="delta_target" class="form-control"
-                   value="{{ params.delta_target }}" min="0" max="1" step="0.01">
-        </div>
-        <div class="filter-group">
-            <span class="filter-label">Spread Width</span>
-            <input type="number" name="spread_width" class="form-control"
-                   value="{{ params.spread_width }}" min="1" max="20" step="1">
-        </div>
-        <div class="filter-group">
-            <span class="filter-label">Min Max Profit</span>
-            <input type="number" name="min_max_profit" class="form-control"
-                   value="{{ params.min_max_profit }}" min="0" step="1">
-        </div>
-        <div class="filter-group">
-            <span class="filter-label">Min Day Volume</span>
-            <input type="number" name="min_day_volume" class="form-control"
-                   value="{{ params.min_day_volume }}" min="0" step="1">
-        </div>
-        <div class="filter-group">
-            <span class="filter-label">Min Open Interest</span>
-            <input type="number" name="min_open_interest" class="form-control"
-                   value="{{ params.min_open_interest }}" min="0" step="100">
-        </div>
-        <div class="filter-group">
-            <span class="filter-label">Min Sell IV</span>
-            <input type="number" name="min_sell_iv" class="form-control"
-                   value="{{ params.min_sell_iv }}" min="0" step="0.05">
-        </div>
-        <div class="filter-group">
-            <span class="filter-label">Max Sell IV</span>
-            <input type="number" name="max_sell_iv" class="form-control"
-                   value="{{ params.max_sell_iv }}" min="0" step="0.05">
-        </div>
-        <div class="filter-group">
-            <span class="filter-label">Min IV Rank</span>
-            <input type="number" name="min_iv_rank" class="form-control"
-                   value="{{ params.min_iv_rank }}" min="0" max="100" step="1">
-        </div>
-        <div class="filter-group">
-            <span class="filter-label">Min IV Pct</span>
-            <input type="number" name="min_iv_percentile" class="form-control"
-                   value="{{ params.min_iv_percentile }}" min="0" max="100" step="1">
+
+        <div class="cmd-sep"></div>
+
+        <span class="cmd-label">Filters</span>
+        <div class="chip-group">
+            <label class="chip active-green {% if params.show_only_positive_ev %}active-green active{% endif %}">
+                <input class="chip-input" type="checkbox" name="show_only_positive_ev" value="true" {% if params.show_only_positive_ev %}checked{% endif %}>
+                +EV only
+            </label>
+            <label class="chip {% if params.show_no_earnings %}active{% endif %}">
+                <input class="chip-input" type="checkbox" name="show_no_earnings" value="true" {% if params.show_no_earnings %}checked{% endif %}>
+                No earnings
+            </label>
         </div>
     </div>
-    <div class="filter-row" style="margin-top:0.85rem; align-items:center; gap:1.25rem;">
-        <div class="form-check">
-            <input class="form-check-input" type="checkbox" name="show_monthly" value="true"
-                   id="show_monthly" {% if params.show_monthly %}checked{% endif %}>
-            <label class="form-check-label" for="show_monthly">Monthly</label>
-        </div>
-        <div class="form-check">
-            <input class="form-check-input" type="checkbox" name="show_weekly" value="true"
-                   id="show_weekly" {% if params.show_weekly %}checked{% endif %}>
-            <label class="form-check-label" for="show_weekly">Weekly</label>
-        </div>
-        <div class="form-check">
-            <input class="form-check-input" type="checkbox" name="show_daily" value="true"
-                   id="show_daily" {% if params.show_daily %}checked{% endif %}>
-            <label class="form-check-label" for="show_daily">Daily</label>
-        </div>
-        <div class="form-check">
-            <input class="form-check-input" type="checkbox" name="show_only_positive_ev" value="true"
-                   id="show_only_positive_ev" {% if params.show_only_positive_ev %}checked{% endif %}>
-            <label class="form-check-label" for="show_only_positive_ev">Only positive EV</label>
-        </div>
-        <div class="form-check">
-            <input class="form-check-input" type="checkbox" name="show_no_earnings" value="true"
-                   id="show_no_earnings" {% if params.show_no_earnings %}checked{% endif %}>
-            <label class="form-check-label" for="show_no_earnings">No earnings till expiry</label>
-        </div>
-        <div style="margin-left:auto; display:flex; gap:0.5rem;">
-            <button type="submit" class="btn-skuld">Apply</button>
-            <a href="{{ url_for('spreads.index') }}" class="btn-skuld-ghost">Reset</a>
-        </div>
+
+    <!-- Row 2: Numeric params -->
+    <div class="cmd-bar">
+        <span class="cmd-label">Δ Target</span>
+        <input class="cmd-input narrow" type="number" name="delta_target" value="{{ params.delta_target }}" step="0.05" min="0" max="1">
+
+        <div class="cmd-sep"></div>
+        <span class="cmd-label">Width $</span>
+        <input class="cmd-input narrow" type="number" name="spread_width" value="{{ params.spread_width }}" step="1" min="1">
+
+        <div class="cmd-sep"></div>
+        <span class="cmd-label">Min Profit</span>
+        <input class="cmd-input" type="number" name="min_max_profit" value="{{ params.min_max_profit }}" step="5" min="0">
+
+        <div class="cmd-sep"></div>
+        <span class="cmd-label">IV Range</span>
+        <input class="cmd-input narrow" type="number" name="min_sell_iv" value="{{ params.min_sell_iv }}" step="0.05" min="0" max="1" placeholder="min">
+        <span style="color:var(--t-4);font-size:0.7rem">–</span>
+        <input class="cmd-input narrow" type="number" name="max_sell_iv" value="{{ params.max_sell_iv }}" step="0.05" min="0" max="1" placeholder="max">
+
+        <div class="cmd-sep"></div>
+        <span class="cmd-label">IV Rank ≥</span>
+        <input class="cmd-input narrow" type="number" name="min_iv_rank" value="{{ params.min_iv_rank }}" step="5" min="0" max="100">
+
+        <div class="cmd-sep"></div>
+        <span class="cmd-label">OI ≥</span>
+        <input class="cmd-input" type="number" name="min_open_interest" value="{{ params.min_open_interest }}" step="50" min="0">
+
+        <div class="cmd-sep"></div>
+        <span class="cmd-label">Vol ≥</span>
+        <input class="cmd-input" type="number" name="min_day_volume" value="{{ params.min_day_volume }}" step="5" min="0">
+
+        <div class="cmd-sep"></div>
+        <button type="submit" class="btn-run">▶ Run</button>
+        <a href="{{ url_for('spreads.index') }}" class="btn-ghost">Reset</a>
     </div>
-</div>
+
 </form>
 
 {% if error_msg %}
     <div class="alert alert-danger">{{ error_msg }}</div>
-{% endif %}
-{% if table_html %}
-    <div class="result-bar">
-        <span class="result-count"><strong>{{ result_count }}</strong> results</span>
+{% elif table_html %}
+    <div class="stat-strip">
+        <div class="stat-pill"><span class="dot"></span><strong id="result-count-live">{{ result_count }}</strong>&nbsp;spreads</div>
+        <div class="stat-pill"><span class="dot dot-gold"></span>{{ expiration_date }}</div>
+        <div class="stat-pill">{{ params.option_type | upper }}</div>
+        <div class="stat-pill">Δ {{ params.delta_target }}</div>
     </div>
-    <div class="table-wrapper">{{ table_html | safe }}</div>
+    <div class="data-surface">{{ table_html | safe }}</div>
 {% elif not error_msg %}
-    <div class="alert alert-info">Select filters and apply to see results.</div>
+    <div class="alert alert-info">Select filters above and click Run.</div>
 {% endif %}
 
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Make zip available in Jinja — handled server-side, but expose date select width
+document.querySelector('select[name="expiration_date"]') && (function(){
+    var s = document.querySelector('select[name="expiration_date"]');
+    s.style.width = 'auto';
+    s.style.maxWidth = '320px';
+})();
+</script>
 {% endblock %}

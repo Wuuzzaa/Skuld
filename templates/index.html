@@ -2,76 +2,75 @@
 {% block title %}Home{% endblock %}
 {% block content %}
 
-<div class="hero-section">
-    <div class="hero-eyebrow">Options Terminal · 2026</div>
-    <div class="hero-logo">⚔ SKULD</div>
-    <div class="hero-tagline">Professional data analysis for option trading strategies</div>
-    <div class="hero-divider"></div>
+<div class="hero">
+    <div class="hero-kicker">Options Terminal · 2026</div>
+    <h1 class="hero-title">SKULD</h1>
+    <p class="hero-sub">Quantitative analysis for options strategies. Data-driven. Fast. Precise.</p>
 </div>
 
 <div class="module-grid">
 
     <a href="{{ url_for('analyst_prices.index') }}" class="module-card">
-        <div class="module-card-icon">📊</div>
-        <div class="module-card-title">Analyst Prices</div>
-        <div class="module-card-desc">Price targets and consensus ratings per symbol</div>
-        <div class="module-card-arrow">→</div>
+        <div class="mc-icon">📊</div>
+        <div class="mc-title">Analyst Prices</div>
+        <div class="mc-desc">Analyst consensus targets vs. current price. Spot divergence at a glance.</div>
+        <span class="mc-arrow">→</span>
     </a>
 
     <a href="{{ url_for('spreads.index') }}" class="module-card">
-        <div class="module-card-icon">📉</div>
-        <div class="module-card-title">Spreads</div>
-        <div class="module-card-desc">Bull put &amp; bear call spread scanner with EV filter</div>
-        <div class="module-card-arrow">→</div>
+        <div class="mc-icon">⚡</div>
+        <div class="mc-title">Spreads</div>
+        <div class="mc-desc">Credit & debit spread scanner with EV filter, IV rank and delta targeting.</div>
+        <span class="mc-arrow">→</span>
     </a>
 
     <a href="{{ url_for('married_puts.index') }}" class="module-card">
-        <div class="module-card-icon">💍</div>
-        <div class="module-card-title">Married Puts</div>
-        <div class="module-card-desc">Protective put analysis for long stock positions</div>
-        <div class="module-card-arrow">→</div>
+        <div class="mc-icon">🛡</div>
+        <div class="mc-title">Married Puts</div>
+        <div class="mc-desc">Protective put analysis — hedge cost vs. downside protection for long positions.</div>
+        <span class="mc-arrow">→</span>
     </a>
 
     <a href="{{ url_for('position_insurance.index') }}" class="module-card">
-        <div class="module-card-icon">🛡</div>
-        <div class="module-card-title">Position Insurance</div>
-        <div class="module-card-desc">Hedge existing positions with put options</div>
-        <div class="module-card-arrow">→</div>
+        <div class="mc-icon">🔒</div>
+        <div class="mc-title">Position Insurance</div>
+        <div class="mc-desc">Find optimal put protection for existing equity positions by cost and coverage.</div>
+        <span class="mc-arrow">→</span>
     </a>
 
     <a href="{{ url_for('multifactor.index') }}" class="module-card">
-        <div class="module-card-icon">📈</div>
-        <div class="module-card-title">Multifactor</div>
-        <div class="module-card-desc">Multi-factor swing trading signal scanner</div>
-        <div class="module-card-arrow">→</div>
+        <div class="mc-icon">🧮</div>
+        <div class="mc-title">Multifactor</div>
+        <div class="mc-desc">Swing-trading stock screener combining value, momentum and quality factors.</div>
+        <span class="mc-arrow">→</span>
     </a>
 
     <a href="{{ url_for('sector_rotation.index') }}" class="module-card">
-        <div class="module-card-icon">🔄</div>
-        <div class="module-card-title">Sector Rotation</div>
-        <div class="module-card-desc">Relative strength and momentum across sectors</div>
-        <div class="module-card-arrow">→</div>
+        <div class="mc-icon">🔄</div>
+        <div class="mc-title">Sector Rotation</div>
+        <div class="mc-desc">Relative strength across sectors — identify where capital is flowing.</div>
+        <span class="mc-arrow">→</span>
     </a>
 
     <a href="{{ url_for('expected_value.index') }}" class="module-card">
-        <div class="module-card-icon">🎲</div>
-        <div class="module-card-title">Expected Value</div>
-        <div class="module-card-desc">Monte Carlo simulation for option expected value</div>
-        <div class="module-card-arrow">→</div>
+        <div class="mc-icon">🎲</div>
+        <div class="mc-title">Expected Value</div>
+        <div class="mc-desc">Monte Carlo simulation for multi-leg option strategies. P&L distribution at expiry.</div>
+        <span class="mc-arrow">→</span>
     </a>
 
     <a href="{{ url_for('symbol_page.index') }}" class="module-card">
-        <div class="module-card-icon">🔎</div>
-        <div class="module-card-title">Symbols</div>
-        <div class="module-card-desc">Symbol overview — type, exchange, options availability</div>
-        <div class="module-card-arrow">→</div>
+        <div class="mc-icon">🔍</div>
+        <div class="mc-title">Symbol Lookup</div>
+        <div class="mc-desc">Deep-dive into a single ticker — chains, IV surface, analyst data and more.</div>
+        <span class="mc-arrow">→</span>
     </a>
 
     <a href="{{ url_for('data_logs.index') }}" class="module-card">
-        <div class="module-card-icon">📋</div>
-        <div class="module-card-title">Data Logs</div>
-        <div class="module-card-desc">Pipeline run history and data change audit log</div>
-        <div class="module-card-arrow">→</div>
+        <div class="mc-icon">📋</div>
+        <div class="mc-title">Data Logs</div>
+        <div class="mc-desc">Pipeline audit trail — track data collection runs, errors and coverage gaps.</div>
+        <span class="mc-arrow">→</span>
     </a>
 
 </div>

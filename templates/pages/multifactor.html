@@ -3,58 +3,51 @@
 {% block content %}
 
 <div class="page-header">
-    <div class="page-header-icon">📈</div>
-    <div class="page-header-text">
-        <div class="page-title">Multifactor Swingtrading</div>
-        <div class="page-subtitle">Multi-factor signal scanner for swing trading setups</div>
+    <div class="page-header-icon">🧮</div>
+    <div>
+        <div class="page-title">Multifactor</div>
+        <div class="page-subtitle">Swing-trading screener — value, momentum & quality factors combined</div>
     </div>
 </div>
 
-<form method="get" action="{{ url_for('multifactor.index') }}">
-<div class="filter-panel">
-    <div class="filter-row">
-        <div class="filter-group">
-            <span class="filter-label">Min Score</span>
-            <input type="number" name="min_score" class="form-control"
-                   value="{{ params.min_score }}" min="0" max="100" step="1">
+<form method="get" class="auto-submit">
+    <div class="cmd-bar">
+        <span class="cmd-label">Value Score Top %</span>
+        <input class="cmd-input" type="number" name="top_percentile_value_score" value="{{ params.top_percentile_value_score }}" step="5" min="1" max="100">
+
+        <div class="cmd-sep"></div>
+        <span class="cmd-label">Top N</span>
+        <input class="cmd-input narrow" type="number" name="top_n" value="{{ params.top_n }}" step="10" min="1">
+
+        <div class="cmd-sep"></div>
+        <div class="chip-group">
+            <label class="chip {% if params.drop_missing_values %}active{% endif %}">
+                <input class="chip-input" type="checkbox" name="drop_missing_values" value="true" {% if params.drop_missing_values %}checked{% endif %}>
+                Drop missing
+            </label>
+            <label class="chip {% if params.drop_weak_value_factors %}active{% endif %}">
+                <input class="chip-input" type="checkbox" name="drop_weak_value_factors" value="true" {% if params.drop_weak_value_factors %}checked{% endif %}>
+                Drop weak value
+            </label>
         </div>
-        <div class="filter-group">
-            <span class="filter-label">Min IV Rank</span>
-            <input type="number" name="min_iv_rank" class="form-control"
-                   value="{{ params.min_iv_rank }}" min="0" max="100" step="1">
-        </div>
-        <div class="filter-group">
-            <span class="filter-label">Min IV Percentile</span>
-            <input type="number" name="min_iv_percentile" class="form-control"
-                   value="{{ params.min_iv_percentile }}" min="0" max="100" step="1">
-        </div>
-        <div class="filter-group" style="min-width:180px">
-            <span class="filter-label">Sector</span>
-            <select name="sector" class="form-select skuld-select2">
-                <option value="">— All Sectors —</option>
-                {% for sec in sectors %}
-                    <option value="{{ sec }}" {% if sec == params.sector %}selected{% endif %}>{{ sec }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div style="margin-left:auto; display:flex; gap:0.5rem; align-self:flex-end;">
-            <button type="submit" class="btn-skuld">Apply</button>
-            <a href="{{ url_for('multifactor.index') }}" class="btn-skuld-ghost">Reset</a>
-        </div>
+
+        <div class="cmd-sep"></div>
+        <button type="submit" class="btn-run">▶ Run</button>
+        <a href="{{ url_for('multifactor.index') }}" class="btn-ghost">Reset</a>
     </div>
-</div>
 </form>
 
 {% if error_msg %}
     <div class="alert alert-danger">{{ error_msg }}</div>
-{% endif %}
-{% if table_html %}
-    <div class="result-bar">
-        <span class="result-count"><strong>{{ result_count }}</strong> results</span>
+{% elif table_html %}
+    <div class="stat-strip">
+        <div class="stat-pill"><span class="dot dot-green"></span><strong id="result-count-live">{{ result_count }}</strong>&nbsp;stocks</div>
+        <div class="stat-pill">Top {{ params.top_percentile_value_score }}% value</div>
+        <div class="stat-pill">Top {{ params.top_n }} results</div>
     </div>
-    <div class="table-wrapper">{{ table_html | safe }}</div>
-{% elif not error_msg %}
-    <div class="alert alert-info">Select filters and apply to see results.</div>
+    <div class="data-surface">{{ table_html | safe }}</div>
+{% else %}
+    <div class="alert alert-info">Adjust parameters and click Run.</div>
 {% endif %}
 
 {% endblock %}

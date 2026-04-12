@@ -4,130 +4,124 @@
 
 <div class="page-header">
     <div class="page-header-icon">🎲</div>
-    <div class="page-header-text">
+    <div>
         <div class="page-title">Expected Value</div>
-        <div class="page-subtitle">Monte Carlo simulation for multi-leg option strategies</div>
+        <div class="page-subtitle">Monte Carlo simulation — P&L distribution for multi-leg option strategies</div>
     </div>
 </div>
 
-<form method="post" action="{{ url_for('expected_value.index') }}">
-<div class="filter-panel">
-    <div class="filter-row">
-        <div class="filter-group">
-            <span class="filter-label">Current Price ($)</span>
-            <input type="number" name="current_price" class="form-control"
-                   value="{{ sim_params.current_price }}" min="0" step="0.01">
-        </div>
-        <div class="filter-group">
-            <span class="filter-label">DTE</span>
-            <input type="number" name="dte" class="form-control"
-                   value="{{ sim_params.dte }}" min="1" step="1">
-        </div>
-        <div class="filter-group">
-            <span class="filter-label">Volatility (IV)</span>
-            <input type="number" name="volatility" class="form-control"
-                   value="{{ sim_params.volatility }}" min="0" max="5" step="0.01">
-        </div>
-        <div class="filter-group">
-            <span class="filter-label">Risk-Free Rate</span>
-            <input type="number" name="risk_free_rate" class="form-control"
-                   value="{{ sim_params.risk_free_rate }}" min="0" max="1" step="0.001">
-        </div>
-        <div class="filter-group">
-            <span class="filter-label">Dividend Yield</span>
-            <input type="number" name="dividend_yield" class="form-control"
-                   value="{{ sim_params.dividend_yield }}" min="0" max="1" step="0.001">
-        </div>
-        <div class="filter-group">
-            <span class="filter-label">Simulations</span>
-            <input type="number" name="num_simulations" class="form-control"
-                   value="{{ sim_params.num_simulations }}" min="1000" max="1000000" step="1000">
-        </div>
-        <div class="filter-group">
-            <span class="filter-label">IV Correction</span>
-            <select name="iv_correction" class="form-select">
-                <option value="auto" {% if sim_params.iv_correction == 'auto' %}selected{% endif %}>Auto</option>
-                <option value="none" {% if sim_params.iv_correction == 'none' %}selected{% endif %}>None</option>
-            </select>
-        </div>
-        <div class="filter-group">
-            <span class="filter-label">Random Seed</span>
-            <input type="number" name="random_seed" class="form-control"
-                   value="{{ sim_params.random_seed }}" min="0" step="1">
-        </div>
+<form method="post">
+
+    <!-- Simulation Parameters -->
+    <div class="cmd-bar">
+        <span class="cmd-label">Price $</span>
+        <input class="cmd-input" type="number" name="current_price" value="{{ sim_params.current_price }}" step="0.01" min="0">
+
+        <div class="cmd-sep"></div>
+        <span class="cmd-label">DTE</span>
+        <input class="cmd-input narrow" type="number" name="dte" value="{{ sim_params.dte }}" step="1" min="1">
+
+        <div class="cmd-sep"></div>
+        <span class="cmd-label">IV</span>
+        <input class="cmd-input narrow" type="number" name="volatility" value="{{ sim_params.volatility }}" step="0.01" min="0" max="5">
+
+        <div class="cmd-sep"></div>
+        <span class="cmd-label">RFR</span>
+        <input class="cmd-input narrow" type="number" name="risk_free_rate" value="{{ sim_params.risk_free_rate }}" step="0.001" min="0">
+
+        <div class="cmd-sep"></div>
+        <span class="cmd-label">Div Yield</span>
+        <input class="cmd-input narrow" type="number" name="dividend_yield" value="{{ sim_params.dividend_yield }}" step="0.001" min="0">
+
+        <div class="cmd-sep"></div>
+        <span class="cmd-label">Simulations</span>
+        <input class="cmd-input" type="number" name="num_simulations" value="{{ sim_params.num_simulations }}" step="10000" min="1000">
+
+        <div class="cmd-sep"></div>
+        <span class="cmd-label">Seed</span>
+        <input class="cmd-input narrow" type="number" name="random_seed" value="{{ sim_params.random_seed }}" step="1" min="0">
+
+        <div class="cmd-sep"></div>
+        <span class="cmd-label">IV Correction</span>
+        <select name="iv_correction" class="cmd-select">
+            <option value="auto" {% if sim_params.iv_correction == 'auto' %}selected{% endif %}>Auto</option>
+            <option value="none" {% if sim_params.iv_correction == 'none' %}selected{% endif %}>None</option>
+        </select>
+
+        <div class="cmd-sep"></div>
+        <span class="cmd-label">Tx Cost $</span>
+        <input class="cmd-input narrow" type="number" name="transaction_cost_per_contract" value="{{ sim_params.transaction_cost_per_contract }}" step="0.5" min="0">
     </div>
 
-    <div style="margin: 1rem 0 0.6rem; font-size:0.68rem; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-muted);">
-        Option Legs
-    </div>
-
-    {% for opt in options %}
-    <div class="filter-row" style="margin-bottom:0.5rem;">
-        <div class="filter-group">
-            <span class="filter-label">Strike ($)</span>
-            <input type="number" name="strike" class="form-control"
-                   value="{{ opt.strike }}" min="0" step="0.5">
+    <!-- Option Legs -->
+    <div class="cmd-bar" style="flex-direction:column;align-items:flex-start;gap:0.5rem" id="legs-container">
+        <div style="display:flex;align-items:center;justify-content:space-between;width:100%">
+            <span class="cmd-label">Option Legs</span>
+            <button type="button" class="btn-ghost" id="add-leg-btn" style="height:24px;font-size:0.68rem">+ Add Leg</button>
         </div>
-        <div class="filter-group">
-            <span class="filter-label">Premium ($)</span>
-            <input type="number" name="premium" class="form-control"
-                   value="{{ opt.premium }}" min="0" step="0.01">
-        </div>
-        <div class="filter-group">
-            <span class="filter-label">Type</span>
-            <select name="option_type" class="form-select">
-                {% for ot in option_types %}
-                    <option value="{{ ot }}" {% if ot == opt.type %}selected{% endif %}>{{ ot }}</option>
+        {% for opt in options %}
+        <div class="cmd-group leg-row" style="gap:0.5rem;flex-wrap:wrap">
+            <select name="option_type" class="cmd-select">
+                {% for t in option_types %}
+                <option value="{{ t }}" {% if t == opt.type %}selected{% endif %}>{{ t }}</option>
                 {% endfor %}
             </select>
+            <span class="cmd-label">Strike</span>
+            <input class="cmd-input" type="number" name="strike" value="{{ opt.strike }}" step="0.5" min="0">
+            <span class="cmd-label">Premium</span>
+            <input class="cmd-input" type="number" name="premium" value="{{ opt.premium }}" step="0.01" min="0">
+            <button type="button" class="btn-ghost remove-leg" style="height:24px;font-size:0.68rem;color:var(--red)">✕</button>
         </div>
+        {% endfor %}
     </div>
-    {% endfor %}
 
-    <div style="margin-top:0.85rem; display:flex; gap:0.5rem;">
-        <button type="submit" name="simulate" value="1" class="btn-skuld">Run Simulation</button>
-        <a href="{{ url_for('expected_value.index') }}" class="btn-skuld-ghost">Reset</a>
+    <div style="display:flex;gap:0.5rem;margin-bottom:1.25rem">
+        <button type="submit" name="simulate" value="1" class="btn-run">▶ Simulate</button>
     </div>
-</div>
+
 </form>
 
 {% if error_msg %}
     <div class="alert alert-danger">{{ error_msg }}</div>
+{% elif result %}
+    <div class="stat-strip">
+        <div class="stat-pill">
+            {% if result.expected_value >= 0 %}
+            <span class="dot dot-green"></span>
+            EV <strong class="text-green">${{ "%.2f"|format(result.expected_value) }}</strong>
+            {% else %}
+            <span class="dot" style="background:var(--red);box-shadow:0 0 6px var(--red)"></span>
+            EV <strong class="text-red">${{ "%.2f"|format(result.expected_value) }}</strong>
+            {% endif %}
+        </div>
+        <div class="stat-pill">IV corrected <strong>{{ "%.1f"|format(result.corrected_volatility * 100) }}%</strong></div>
+        <div class="stat-pill">{{ "{:,}".format(result.num_simulations) }} simulations</div>
+        <div class="stat-pill">{{ result.dte }}d to expiry</div>
+    </div>
 {% endif %}
 
-{% if result %}
-<div class="skuld-card" style="margin-top:1.5rem;">
-    <div style="font-size:0.68rem; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-muted); margin-bottom:1rem;">
-        Simulation Result
-    </div>
-    <div class="filter-row" style="gap:2rem;">
-        <div class="filter-group">
-            <span class="filter-label">Expected Value</span>
-            <span style="font-family:var(--font-mono); font-size:1.4rem; font-weight:600;
-                {% if result.expected_value >= 0 %}color:var(--color-positive){% else %}color:var(--color-negative){% endif %}">
-                ${{ "%.4f"|format(result.expected_value) }}
-            </span>
-        </div>
-        <div class="filter-group">
-            <span class="filter-label">Corrected Volatility</span>
-            <span style="font-family:var(--font-mono); color:var(--text-primary)">{{ "%.4f"|format(result.corrected_volatility) }}</span>
-        </div>
-        <div class="filter-group">
-            <span class="filter-label">IV Correction Factor</span>
-            <span style="font-family:var(--font-mono); color:var(--text-primary)">{{ "%.4f"|format(result.iv_correction_factor) }}</span>
-        </div>
-        <div class="filter-group">
-            <span class="filter-label">Time to Expiration</span>
-            <span style="font-family:var(--font-mono); color:var(--text-primary)">{{ "%.4f"|format(result.time_to_expiration) }} yr</span>
-        </div>
-        <div class="filter-group">
-            <span class="filter-label">Simulations</span>
-            <span style="font-family:var(--font-mono); color:var(--text-muted)">{{ "{:,}".format(result.num_simulations) }}</span>
-        </div>
-    </div>
-</div>
-{% elif not error_msg %}
-    <div class="alert alert-info">Configure parameters and run the simulation.</div>
-{% endif %}
+{% endblock %}
 
+{% block scripts %}
+<script>
+// Add / remove option legs dynamically
+document.getElementById('add-leg-btn').addEventListener('click', function () {
+    var types = JSON.parse('{{ option_types | tojson | safe }}');
+    var row = document.createElement('div');
+    row.className = 'cmd-group leg-row';
+    row.style.cssText = 'gap:0.5rem;flex-wrap:wrap';
+    var sel = '<select name="option_type" class="cmd-select">' + types.map(function(t){ return '<option value="'+t+'">'+t+'</option>'; }).join('') + '</select>';
+    row.innerHTML = sel +
+        '<span class="cmd-label">Strike</span><input class="cmd-input" type="number" name="strike" value="150" step="0.5" min="0">' +
+        '<span class="cmd-label">Premium</span><input class="cmd-input" type="number" name="premium" value="1.00" step="0.01" min="0">' +
+        '<button type="button" class="btn-ghost remove-leg" style="height:24px;font-size:0.68rem;color:var(--red)">✕</button>';
+    document.getElementById('legs-container').appendChild(row);
+});
+
+document.getElementById('legs-container').addEventListener('click', function (e) {
+    if (e.target.classList.contains('remove-leg')) {
+        e.target.closest('.leg-row').remove();
+    }
+});
+</script>
 {% endblock %}

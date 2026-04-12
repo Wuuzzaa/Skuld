@@ -1,58 +1,49 @@
 {% extends "base.html" %}
-{% block title %}Symbols{% endblock %}
+{% block title %}Symbol Lookup{% endblock %}
 {% block content %}
 
 <div class="page-header">
-    <div class="page-header-icon">🔎</div>
-    <div class="page-header-text">
-        <div class="page-title">Symbols</div>
-        <div class="page-subtitle">Symbol overview — fundamentals, IV history &amp; technical indicators</div>
+    <div class="page-header-icon">🔍</div>
+    <div>
+        <div class="page-title">Symbol Lookup</div>
+        <div class="page-subtitle">Fundamentals, IV history & technical indicators for a single ticker</div>
     </div>
 </div>
 
-<form method="get" action="{{ url_for('symbol_page.index') }}">
-<div class="filter-panel">
-    <div class="filter-row">
-        <div class="filter-group" style="min-width:200px">
-            <span class="filter-label">Symbol</span>
-            <select name="symbol" class="form-select skuld-select2">
-                <option value="">— Select Symbol —</option>
-                {% for s in symbol_list %}
-                    <option value="{{ s }}" {% if s == selected_symbol %}selected{% endif %}>{{ s }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div style="align-self:flex-end;">
-            <button type="submit" class="btn-skuld">Load</button>
-        </div>
+<form method="get" class="auto-submit">
+    <div class="cmd-bar">
+        <span class="cmd-label">Symbol</span>
+        <select name="symbol" class="cmd-select skuld-select2" style="min-width:160px" onchange="this.form.submit()">
+            <option value="">— select —</option>
+            {% for s in symbol_list %}
+                <option value="{{ s }}" {% if s == selected_symbol %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="btn-run">▶ Load</button>
     </div>
-</div>
 </form>
 
 {% if selected_symbol %}
     {% if fundamental_html %}
-        <div style="font-size:0.72rem; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-muted); margin:1.25rem 0 0.5rem;">
-            Fundamentals — {{ selected_symbol }}
-        </div>
-        <div class="table-wrapper mb-3">{{ fundamental_html | safe }}</div>
+        <div class="page-subtitle" style="margin-bottom:0.5rem;color:var(--t-3);font-size:0.72rem;letter-spacing:0.06em;text-transform:uppercase">Fundamentals — {{ selected_symbol }}</div>
+        <div class="data-surface" style="margin-bottom:1rem">{{ fundamental_html | safe }}</div>
     {% endif %}
+
     {% if iv_html %}
-        <div style="font-size:0.72rem; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-muted); margin:1.25rem 0 0.5rem;">
-            IV History — {{ selected_symbol }}
-        </div>
-        <div class="table-wrapper mb-3">{{ iv_html | safe }}</div>
+        <div class="page-subtitle" style="margin-bottom:0.5rem;color:var(--t-3);font-size:0.72rem;letter-spacing:0.06em;text-transform:uppercase">IV History</div>
+        <div class="data-surface" style="margin-bottom:1rem">{{ iv_html | safe }}</div>
     {% endif %}
+
     {% if technical_html %}
-        <div style="font-size:0.72rem; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-muted); margin:1.25rem 0 0.5rem;">
-            Technical Indicators — {{ selected_symbol }}
-        </div>
-        <div class="table-wrapper mb-3">{{ technical_html | safe }}</div>
+        <div class="page-subtitle" style="margin-bottom:0.5rem;color:var(--t-3);font-size:0.72rem;letter-spacing:0.06em;text-transform:uppercase">Technical Indicators</div>
+        <div class="data-surface">{{ technical_html | safe }}</div>
     {% endif %}
+
     {% if not fundamental_html and not iv_html and not technical_html %}
-        <div class="alert alert-warning mt-3">No data available for <strong>{{ selected_symbol }}</strong>.</div>
+        <div class="alert alert-warning">No data found for <strong>{{ selected_symbol }}</strong>.</div>
     {% endif %}
 {% else %}
-    <div class="alert alert-info">Select a symbol to view details.</div>
+    <div class="alert alert-info">Select a symbol above to load data.</div>
 {% endif %}
 
 {% endblock %}

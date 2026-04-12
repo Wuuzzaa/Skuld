@@ -4,49 +4,61 @@
 
 <div class="page-header">
     <div class="page-header-icon">🔄</div>
-    <div class="page-header-text">
+    <div>
         <div class="page-title">Sector Rotation</div>
-        <div class="page-subtitle">Relative strength &amp; momentum across market sectors</div>
+        <div class="page-subtitle">Relative momentum across S&P 500 sectors — follow the capital flow</div>
     </div>
 </div>
 
-<form method="get" action="{{ url_for('sector_rotation.index') }}">
-<div class="filter-panel">
-    <div class="filter-row">
-        <div class="filter-group">
-            <span class="filter-label">Lookback (days)</span>
-            <input type="number" name="lookback_days" class="form-control"
-                   value="{{ params.lookback_days }}" min="5" max="365" step="1">
-        </div>
-        <div class="filter-group">
-            <span class="filter-label">Top N Sectors</span>
-            <input type="number" name="top_n" class="form-control"
-                   value="{{ params.top_n }}" min="1" max="20" step="1">
-        </div>
-        <div class="filter-group">
-            <span class="filter-label">Min Momentum</span>
-            <input type="number" name="min_momentum" class="form-control"
-                   value="{{ params.min_momentum }}" step="0.01">
-        </div>
-        <div style="margin-left:auto; display:flex; gap:0.5rem; align-self:flex-end;">
-            <button type="submit" class="btn-skuld">Apply</button>
-            <a href="{{ url_for('sector_rotation.index') }}" class="btn-skuld-ghost">Reset</a>
-        </div>
+<form method="get" class="auto-submit">
+    <div class="cmd-bar">
+        <span class="cmd-label">MA Windows</span>
+        <input class="cmd-input narrow" type="number" name="short_window" value="{{ params.short_window }}" step="1" min="1" placeholder="short">
+        <span style="color:var(--t-4);font-size:0.7rem">/</span>
+        <input class="cmd-input narrow" type="number" name="long_window" value="{{ params.long_window }}" step="1" min="1" placeholder="long">
+
+        <div class="cmd-sep"></div>
+        <span class="cmd-label">Vol Window</span>
+        <input class="cmd-input narrow" type="number" name="volatility_window" value="{{ params.volatility_window }}" step="1" min="1">
+
+        <div class="cmd-sep"></div>
+        <span class="cmd-label">Vol Thresholds</span>
+        <input class="cmd-input narrow" type="number" name="volatility_threshold_low" value="{{ params.volatility_threshold_low }}" step="0.01" min="0" placeholder="low">
+        <span style="color:var(--t-4);font-size:0.7rem">–</span>
+        <input class="cmd-input narrow" type="number" name="volatility_threshold_high" value="{{ params.volatility_threshold_high }}" step="0.01" min="0" placeholder="high">
+
+        <div class="cmd-sep"></div>
+        <span class="cmd-label">Lookback</span>
+        <input class="cmd-input narrow" type="number" name="lookback_days" value="{{ params.lookback_days }}" step="10" min="10">
+
+        <div class="cmd-sep"></div>
+        <span class="cmd-label">Tail Days</span>
+        <input class="cmd-input narrow" type="number" name="tail_days" value="{{ params.tail_days }}" step="1" min="1">
+
+        <div class="cmd-sep"></div>
+        <span class="cmd-label">Price</span>
+        <select name="price_column" class="cmd-select" onchange="this.form.submit()">
+            <option value="adjclose" {% if params.price_column == 'adjclose' %}selected{% endif %}>Adj Close</option>
+            <option value="close"    {% if params.price_column == 'close'    %}selected{% endif %}>Close</option>
+        </select>
+
+        <div class="cmd-sep"></div>
+        <button type="submit" class="btn-run">▶ Run</button>
+        <a href="{{ url_for('sector_rotation.index') }}" class="btn-ghost">Reset</a>
     </div>
-</div>
 </form>
 
 {% if error_msg %}
     <div class="alert alert-danger">{{ error_msg }}</div>
-{% endif %}
-
-{% if table_html %}
-    <div class="result-bar">
-        <span class="result-count"><strong>{{ result_count }}</strong> results</span>
+{% elif table_html %}
+    <div class="stat-strip">
+        <div class="stat-pill"><span class="dot dot-green"></span><strong id="result-count-live">{{ result_count }}</strong>&nbsp;sectors</div>
+        <div class="stat-pill">MA {{ params.short_window }}/{{ params.long_window }}</div>
+        <div class="stat-pill">{{ params.lookback_days }}d lookback</div>
     </div>
-    <div class="table-wrapper">{{ table_html | safe }}</div>
-{% elif not error_msg %}
-    <div class="alert alert-info">Select parameters and apply to see results.</div>
+    <div class="data-surface">{{ table_html | safe }}</div>
+{% else %}
+    <div class="alert alert-info">Adjust parameters and click Run.</div>
 {% endif %}
 
 {% endblock %}

@@ -3,89 +3,71 @@
 {% block content %}
 
 <div class="page-header">
-    <div class="page-header-icon">🛡</div>
-    <div class="page-header-text">
+    <div class="page-header-icon">🔒</div>
+    <div>
         <div class="page-title">Position Insurance</div>
-        <div class="page-subtitle">Hedge existing positions with protective puts &amp; collars</div>
+        <div class="page-subtitle">Collar & protective put analysis for existing equity positions</div>
     </div>
 </div>
 
-<form method="post" action="{{ url_for('position_insurance.index') }}">
-<div class="filter-panel">
-    <div class="filter-row">
-        <div class="filter-group">
-            <span class="filter-label">Symbol</span>
-            <input type="text" name="symbol" class="form-control"
-                   value="{{ symbol }}" placeholder="e.g. AAPL" style="text-transform:uppercase">
-        </div>
-        <div class="filter-group">
-            <span class="filter-label">Cost Basis ($)</span>
-            <input type="number" name="cost_basis" class="form-control"
-                   value="{{ cost_basis }}" min="0" step="0.01">
-        </div>
-        <div class="filter-group" style="min-width:150px">
-            <span class="filter-label">Put Expiration</span>
-            <select name="put_month" class="form-select">
-                <option value="">— All —</option>
-                {% for opt in put_month_options %}
-                    <option value="{{ opt.value }}" {% if opt.value == selected_put_month %}selected{% endif %}>
-                        {{ opt.label }}
-                    </option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="filter-group" style="min-width:150px">
-            <span class="filter-label">Call Expiration</span>
-            <select name="call_month" class="form-select">
-                <option value="">— All —</option>
-                {% for opt in call_month_options %}
-                    <option value="{{ opt.value }}" {% if opt.value == selected_call_month %}selected{% endif %}>
-                        {{ opt.label }}
-                    </option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="filter-group">
-            <span class="filter-label">Moneyness</span>
-            <select name="moneyness" class="form-select">
-                <option value="all" {% if moneyness == 'all' %}selected{% endif %}>All</option>
-                <option value="itm" {% if moneyness == 'itm' %}selected{% endif %}>ITM</option>
-                <option value="otm" {% if moneyness == 'otm' %}selected{% endif %}>OTM</option>
-                <option value="atm" {% if moneyness == 'atm' %}selected{% endif %}>ATM</option>
-            </select>
-        </div>
-        <div style="align-self:flex-end;">
-            <button type="submit" class="btn-skuld">Calculate</button>
-        </div>
+<form method="post">
+    <div class="cmd-bar">
+        <span class="cmd-label">Symbol</span>
+        <input class="cmd-input wide" type="text" name="symbol" value="{{ symbol }}" placeholder="e.g. AAPL" style="text-transform:uppercase">
+
+        <div class="cmd-sep"></div>
+        <span class="cmd-label">Cost Basis $</span>
+        <input class="cmd-input" type="number" name="cost_basis" value="{{ cost_basis if cost_basis else '' }}" step="0.01" min="0" placeholder="0.00">
+
+        <div class="cmd-sep"></div>
+        <span class="cmd-label">Put Expiry</span>
+        <select name="put_month" class="cmd-select" style="width:auto;max-width:200px">
+            {% for opt in put_month_options %}
+                <option value="{{ opt }}" {% if opt == selected_put_month %}selected{% endif %}>{{ opt }}</option>
+            {% endfor %}
+        </select>
+
+        <div class="cmd-sep"></div>
+        <span class="cmd-label">Call Expiry</span>
+        <select name="call_month" class="cmd-select" style="width:auto;max-width:200px">
+            {% for opt in call_month_options %}
+                <option value="{{ opt }}" {% if opt == selected_call_month %}selected{% endif %}>{{ opt }}</option>
+            {% endfor %}
+        </select>
+
+        <div class="cmd-sep"></div>
+        <span class="cmd-label">Moneyness</span>
+        <select name="moneyness" class="cmd-select">
+            <option value="all"  {% if moneyness == 'all'  %}selected{% endif %}>All</option>
+            <option value="itm"  {% if moneyness == 'itm'  %}selected{% endif %}>ITM</option>
+            <option value="otm"  {% if moneyness == 'otm'  %}selected{% endif %}>OTM</option>
+            <option value="atm"  {% if moneyness == 'atm'  %}selected{% endif %}>ATM</option>
+        </select>
+
+        <div class="cmd-sep"></div>
+        <button type="submit" class="btn-run">▶ Analyze</button>
     </div>
-    {% if current_price %}
-    <div style="margin-top:0.6rem; font-size:0.72rem; color:var(--text-muted); font-family:var(--font-mono)">
-        Current Price: <span style="color:var(--accent-blue)">${{ "%.2f"|format(current_price) }}</span>
-    </div>
-    {% endif %}
-</div>
 </form>
 
 {% if error_msg %}
-    <div class="alert alert-danger">{{ error_msg }}</div>
-{% endif %}
-
-{% if puts_html %}
-    <div style="font-size:0.72rem; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-muted); margin:1.25rem 0 0.5rem;">
-        Protective Puts — {{ symbol }}
+    <div class="alert alert-danger mt-3">{{ error_msg }}</div>
+{% elif puts_html or calls_html %}
+    <div class="stat-strip">
+        {% if current_price %}<div class="stat-pill"><span class="dot dot-gold"></span>{{ symbol }} @ ${{ "%.2f"|format(current_price) }}</div>{% endif %}
+        {% if cost_basis %}<div class="stat-pill">Basis ${{ "%.2f"|format(cost_basis) }}</div>{% endif %}
     </div>
-    <div class="table-wrapper mb-3">{{ puts_html | safe }}</div>
-{% endif %}
 
-{% if calls_html %}
-    <div style="font-size:0.72rem; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-muted); margin:1.25rem 0 0.5rem;">
-        Collar Calls — {{ symbol }}
-    </div>
-    <div class="table-wrapper mb-3">{{ calls_html | safe }}</div>
-{% endif %}
+    {% if puts_html %}
+    <div class="page-subtitle mb-2" style="margin-bottom:0.5rem;color:var(--t-3);font-size:0.75rem;letter-spacing:0.05em;text-transform:uppercase">Protective Puts</div>
+    <div class="data-surface mb-3" style="margin-bottom:1rem">{{ puts_html | safe }}</div>
+    {% endif %}
 
-{% if not puts_html and not calls_html and not error_msg %}
-    <div class="alert alert-info">Enter a symbol and cost basis, then click Calculate.</div>
+    {% if calls_html %}
+    <div class="page-subtitle mb-2" style="margin-bottom:0.5rem;color:var(--t-3);font-size:0.75rem;letter-spacing:0.05em;text-transform:uppercase">Covered Calls (Collar)</div>
+    <div class="data-surface">{{ calls_html | safe }}</div>
+    {% endif %}
+{% else %}
+    <div class="alert alert-info mt-3">Enter a symbol and cost basis, then click Analyze.</div>
 {% endif %}
 
 {% endblock %}

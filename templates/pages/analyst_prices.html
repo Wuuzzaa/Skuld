@@ -4,22 +4,24 @@
 
 <div class="page-header">
     <div class="page-header-icon">📊</div>
-    <div class="page-header-text">
+    <div>
         <div class="page-title">Analyst Prices</div>
-        <div class="page-subtitle">Price targets &amp; consensus ratings per symbol</div>
+        <div class="page-subtitle">Consensus targets vs. current market price</div>
     </div>
 </div>
 
-{% if error_msg %}
-    <div class="alert alert-danger">{{ error_msg }}</div>
+{% if result_count %}
+<div class="stat-strip">
+    <div class="stat-pill"><span class="dot dot-green"></span><strong id="result-count-live">{{ result_count }}</strong>&nbsp;symbols</div>
+</div>
 {% endif %}
+
 {% if table_html %}
-    <div class="result-bar">
-        <span class="result-count"><strong>{{ result_count }}</strong> results</span>
-    </div>
-    <div class="table-wrapper">{{ table_html | safe }}</div>
+<div class="data-surface">
+    {{ table_html | safe }}
+</div>
 {% else %}
-    <div class="alert alert-info">No data available.</div>
+<div class="alert alert-info mt-3">No data available.</div>
 {% endif %}
 
 {% endblock %}
