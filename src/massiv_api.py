@@ -514,6 +514,6 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     logger.info("Start Massiv API test")
 
-    symbols = load_symbols()
+    chains = get_option_chains_df()
     pass
 
