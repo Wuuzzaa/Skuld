@@ -66,10 +66,9 @@ def main(args):
 
         symbols = get_symbols()
 
-        # select the data collection tasks to run
-        parallel_tasks = None
-        if args.mode == "all":
-            parallel_tasks = [
+        # define the data collection tasks to run based on the mode
+        task_map = {
+            "all": [
                 ("Massive Option Chains", load_option_chains, (symbols["options"],)),
                 ("Fetch Current Stock Day Prices", load_stock_prices, (symbols["stocks"],)),
                 ("Yahoo Finance Analyst Price Targets", scrape_yahoo_finance_analyst_price_targets, (symbols["stocks"],)),
@@ -79,40 +78,39 @@ def main(args):
                 ("Yahoo Dividends", calculate_dividend_classification, ()),
                 ("Yahoo Asset Profiles", load_asset_profile, (symbols["stocks"],)),
                 ("Technical Indicators", calc_technical_indicators, (symbols["stocks"],)),
-            ]
-        elif args.mode == "saturday_night":
-            parallel_tasks = [
+            ],
+            "saturday_night": [
                 ("Yahoo Dividends", calculate_dividend_classification, ()),
                 ("Yahoo Query Fundamentals", generate_fundamental_data, (symbols["stocks"],)),
                 ("Yahoo Finance Analyst Price Targets", scrape_yahoo_finance_analyst_price_targets, (symbols["stocks"],)),
                 ("Earning Dates", scrape_earning_dates, (symbols["stocks"],)),
                 ("Yahoo Asset Profiles", load_asset_profile, (symbols["stocks"],)),
-            ]
-        elif args.mode == "market_start_mid_end":
-            parallel_tasks = [
+            ],
+            "market_start_mid_end": [
                 ("Fetch Current Stock Day Prices", load_stock_prices, (symbols["stocks"],)),
-            ]
-        elif args.mode == "stock_data_daily":
-            parallel_tasks = [
+            ],
+            "stock_data_daily": [
                 ("Technical Indicators", calc_technical_indicators, (symbols["stocks"],)),
-            ]
-        elif args.mode == "option_data":
-            parallel_tasks = [
+            ],
+            "option_data": [
                 ("Massive Option Chains", load_option_chains, (symbols["options"],)),
-            ]
-        elif args.mode == "historical_prices":
+            ],
+            "historical_technical_indicators": [
+                ("Technical Indicators History", calc_technical_indicators_history, (symbols["stocks"],)),
+            ],
+        }
+
+        parallel_tasks = task_map.get(args.mode)
+
+        if args.mode == "historical_prices":
             parallel_tasks = []
             load_historical_prices(symbols["stocks"])
         elif args.mode == "historical_iv":
             parallel_tasks = []
             calculate_and_store_stock_implied_volatility_history()
-        elif args.mode == "historical_technical_indicators":
-            parallel_tasks = [
-                ("Technical Indicators History", calc_technical_indicators_history, (symbols["stocks"],)),
-            ]
         elif args.mode == "historization":
-            pass
-        else:
+            parallel_tasks = []
+        elif args.mode not in task_map:
             raise ValueError(f"Unknown mode: {args.mode}")
 
         if parallel_tasks:
