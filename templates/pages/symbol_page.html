@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Symbols{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <div class="page-header-icon">🔎</div>
+    <div class="page-header-text">
+        <div class="page-title">Symbols</div>
+        <div class="page-subtitle">Symbol overview — fundamentals, IV history &amp; technical indicators</div>
+    </div>
+</div>
+
+<form method="get" action="{{ url_for('symbol_page.index') }}">
+<div class="filter-panel">
+    <div class="filter-row">
+        <div class="filter-group" style="min-width:200px">
+            <span class="filter-label">Symbol</span>
+            <select name="symbol" class="form-select skuld-select2">
+                <option value="">— Select Symbol —</option>
+                {% for s in symbol_list %}
+                    <option value="{{ s }}" {% if s == selected_symbol %}selected{% endif %}>{{ s }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div style="align-self:flex-end;">
+            <button type="submit" class="btn-skuld">Load</button>
+        </div>
+    </div>
+</div>
+</form>
+
+{% if selected_symbol %}
+    {% if fundamental_html %}
+        <div style="font-size:0.72rem; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-muted); margin:1.25rem 0 0.5rem;">
+            Fundamentals — {{ selected_symbol }}
+        </div>
+        <div class="table-wrapper mb-3">{{ fundamental_html | safe }}</div>
+    {% endif %}
+    {% if iv_html %}
+        <div style="font-size:0.72rem; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-muted); margin:1.25rem 0 0.5rem;">
+            IV History — {{ selected_symbol }}
+        </div>
+        <div class="table-wrapper mb-3">{{ iv_html | safe }}</div>
+    {% endif %}
+    {% if technical_html %}
+        <div style="font-size:0.72rem; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-muted); margin:1.25rem 0 0.5rem;">
+            Technical Indicators — {{ selected_symbol }}
+        </div>
+        <div class="table-wrapper mb-3">{{ technical_html | safe }}</div>
+    {% endif %}
+    {% if not fundamental_html and not iv_html and not technical_html %}
+        <div class="alert alert-warning mt-3">No data available for <strong>{{ selected_symbol }}</strong>.</div>
+    {% endif %}
+{% else %}
+    <div class="alert alert-info">Select a symbol to view details.</div>
+{% endif %}
+
+{% endblock %}

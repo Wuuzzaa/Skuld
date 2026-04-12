@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Position Insurance{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <div class="page-header-icon">🛡</div>
+    <div class="page-header-text">
+        <div class="page-title">Position Insurance</div>
+        <div class="page-subtitle">Hedge existing positions with protective puts &amp; collars</div>
+    </div>
+</div>
+
+<form method="post" action="{{ url_for('position_insurance.index') }}">
+<div class="filter-panel">
+    <div class="filter-row">
+        <div class="filter-group">
+            <span class="filter-label">Symbol</span>
+            <input type="text" name="symbol" class="form-control"
+                   value="{{ symbol }}" placeholder="e.g. AAPL" style="text-transform:uppercase">
+        </div>
+        <div class="filter-group">
+            <span class="filter-label">Cost Basis ($)</span>
+            <input type="number" name="cost_basis" class="form-control"
+                   value="{{ cost_basis }}" min="0" step="0.01">
+        </div>
+        <div class="filter-group" style="min-width:150px">
+            <span class="filter-label">Put Expiration</span>
+            <select name="put_month" class="form-select">
+                <option value="">— All —</option>
+                {% for opt in put_month_options %}
+                    <option value="{{ opt.value }}" {% if opt.value == selected_put_month %}selected{% endif %}>
+                        {{ opt.label }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="filter-group" style="min-width:150px">
+            <span class="filter-label">Call Expiration</span>
+            <select name="call_month" class="form-select">
+                <option value="">— All —</option>
+                {% for opt in call_month_options %}
+                    <option value="{{ opt.value }}" {% if opt.value == selected_call_month %}selected{% endif %}>
+                        {{ opt.label }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="filter-group">
+            <span class="filter-label">Moneyness</span>
+            <select name="moneyness" class="form-select">
+                <option value="all" {% if moneyness == 'all' %}selected{% endif %}>All</option>
+                <option value="itm" {% if moneyness == 'itm' %}selected{% endif %}>ITM</option>
+                <option value="otm" {% if moneyness == 'otm' %}selected{% endif %}>OTM</option>
+                <option value="atm" {% if moneyness == 'atm' %}selected{% endif %}>ATM</option>
+            </select>
+        </div>
+        <div style="align-self:flex-end;">
+            <button type="submit" class="btn-skuld">Calculate</button>
+        </div>
+    </div>
+    {% if current_price %}
+    <div style="margin-top:0.6rem; font-size:0.72rem; color:var(--text-muted); font-family:var(--font-mono)">
+        Current Price: <span style="color:var(--accent-blue)">${{ "%.2f"|format(current_price) }}</span>
+    </div>
+    {% endif %}
+</div>
+</form>
+
+{% if error_msg %}
+    <div class="alert alert-danger">{{ error_msg }}</div>
+{% endif %}
+
+{% if puts_html %}
+    <div style="font-size:0.72rem; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-muted); margin:1.25rem 0 0.5rem;">
+        Protective Puts — {{ symbol }}
+    </div>
+    <div class="table-wrapper mb-3">{{ puts_html | safe }}</div>
+{% endif %}
+
+{% if calls_html %}
+    <div style="font-size:0.72rem; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-muted); margin:1.25rem 0 0.5rem;">
+        Collar Calls — {{ symbol }}
+    </div>
+    <div class="table-wrapper mb-3">{{ calls_html | safe }}</div>
+{% endif %}
+
+{% if not puts_html and not calls_html and not error_msg %}
+    <div class="alert alert-info">Enter a symbol and cost basis, then click Calculate.</div>
+{% endif %}
+
+{% endblock %}

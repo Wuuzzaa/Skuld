@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}Expected Value{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <div class="page-header-icon">🎲</div>
+    <div class="page-header-text">
+        <div class="page-title">Expected Value</div>
+        <div class="page-subtitle">Monte Carlo simulation for multi-leg option strategies</div>
+    </div>
+</div>
+
+<form method="post" action="{{ url_for('expected_value.index') }}">
+<div class="filter-panel">
+    <div class="filter-row">
+        <div class="filter-group">
+            <span class="filter-label">Current Price ($)</span>
+            <input type="number" name="current_price" class="form-control"
+                   value="{{ sim_params.current_price }}" min="0" step="0.01">
+        </div>
+        <div class="filter-group">
+            <span class="filter-label">DTE</span>
+            <input type="number" name="dte" class="form-control"
+                   value="{{ sim_params.dte }}" min="1" step="1">
+        </div>
+        <div class="filter-group">
+            <span class="filter-label">Volatility (IV)</span>
+            <input type="number" name="volatility" class="form-control"
+                   value="{{ sim_params.volatility }}" min="0" max="5" step="0.01">
+        </div>
+        <div class="filter-group">
+            <span class="filter-label">Risk-Free Rate</span>
+            <input type="number" name="risk_free_rate" class="form-control"
+                   value="{{ sim_params.risk_free_rate }}" min="0" max="1" step="0.001">
+        </div>
+        <div class="filter-group">
+            <span class="filter-label">Dividend Yield</span>
+            <input type="number" name="dividend_yield" class="form-control"
+                   value="{{ sim_params.dividend_yield }}" min="0" max="1" step="0.001">
+        </div>
+        <div class="filter-group">
+            <span class="filter-label">Simulations</span>
+            <input type="number" name="num_simulations" class="form-control"
+                   value="{{ sim_params.num_simulations }}" min="1000" max="1000000" step="1000">
+        </div>
+        <div class="filter-group">
+            <span class="filter-label">IV Correction</span>
+            <select name="iv_correction" class="form-select">
+                <option value="auto" {% if sim_params.iv_correction == 'auto' %}selected{% endif %}>Auto</option>
+                <option value="none" {% if sim_params.iv_correction == 'none' %}selected{% endif %}>None</option>
+            </select>
+        </div>
+        <div class="filter-group">
+            <span class="filter-label">Random Seed</span>
+            <input type="number" name="random_seed" class="form-control"
+                   value="{{ sim_params.random_seed }}" min="0" step="1">
+        </div>
+    </div>
+
+    <div style="margin: 1rem 0 0.6rem; font-size:0.68rem; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-muted);">
+        Option Legs
+    </div>
+
+    {% for opt in options %}
+    <div class="filter-row" style="margin-bottom:0.5rem;">
+        <div class="filter-group">
+            <span class="filter-label">Strike ($)</span>
+            <input type="number" name="strike" class="form-control"
+                   value="{{ opt.strike }}" min="0" step="0.5">
+        </div>
+        <div class="filter-group">
+            <span class="filter-label">Premium ($)</span>
+            <input type="number" name="premium" class="form-control"
+                   value="{{ opt.premium }}" min="0" step="0.01">
+        </div>
+        <div class="filter-group">
+            <span class="filter-label">Type</span>
+            <select name="option_type" class="form-select">
+                {% for ot in option_types %}
+                    <option value="{{ ot }}" {% if ot == opt.type %}selected{% endif %}>{{ ot }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+    {% endfor %}
+
+    <div style="margin-top:0.85rem; display:flex; gap:0.5rem;">
+        <button type="submit" name="simulate" value="1" class="btn-skuld">Run Simulation</button>
+        <a href="{{ url_for('expected_value.index') }}" class="btn-skuld-ghost">Reset</a>
+    </div>
+</div>
+</form>
+
+{% if error_msg %}
+    <div class="alert alert-danger">{{ error_msg }}</div>
+{% endif %}
+
+{% if result %}
+<div class="skuld-card" style="margin-top:1.5rem;">
+    <div style="font-size:0.68rem; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-muted); margin-bottom:1rem;">
+        Simulation Result
+    </div>
+    <div class="filter-row" style="gap:2rem;">
+        <div class="filter-group">
+            <span class="filter-label">Expected Value</span>
+            <span style="font-family:var(--font-mono); font-size:1.4rem; font-weight:600;
+                {% if result.expected_value >= 0 %}color:var(--color-positive){% else %}color:var(--color-negative){% endif %}">
+                ${{ "%.4f"|format(result.expected_value) }}
+            </span>
+        </div>
+        <div class="filter-group">
+            <span class="filter-label">Corrected Volatility</span>
+            <span style="font-family:var(--font-mono); color:var(--text-primary)">{{ "%.4f"|format(result.corrected_volatility) }}</span>
+        </div>
+        <div class="filter-group">
+            <span class="filter-label">IV Correction Factor</span>
+            <span style="font-family:var(--font-mono); color:var(--text-primary)">{{ "%.4f"|format(result.iv_correction_factor) }}</span>
+        </div>
+        <div class="filter-group">
+            <span class="filter-label">Time to Expiration</span>
+            <span style="font-family:var(--font-mono); color:var(--text-primary)">{{ "%.4f"|format(result.time_to_expiration) }} yr</span>
+        </div>
+        <div class="filter-group">
+            <span class="filter-label">Simulations</span>
+            <span style="font-family:var(--font-mono); color:var(--text-muted)">{{ "{:,}".format(result.num_simulations) }}</span>
+        </div>
+    </div>
+</div>
+{% elif not error_msg %}
+    <div class="alert alert-info">Configure parameters and run the simulation.</div>
+{% endif %}
+
+{% endblock %}

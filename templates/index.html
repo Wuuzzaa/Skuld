@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Home{% endblock %}
+{% block content %}
+
+<div class="hero-section">
+    <div class="hero-eyebrow">Options Terminal · 2026</div>
+    <div class="hero-logo">⚔ SKULD</div>
+    <div class="hero-tagline">Professional data analysis for option trading strategies</div>
+    <div class="hero-divider"></div>
+</div>
+
+<div class="module-grid">
+
+    <a href="{{ url_for('analyst_prices.index') }}" class="module-card">
+        <div class="module-card-icon">📊</div>
+        <div class="module-card-title">Analyst Prices</div>
+        <div class="module-card-desc">Price targets and consensus ratings per symbol</div>
+        <div class="module-card-arrow">→</div>
+    </a>
+
+    <a href="{{ url_for('spreads.index') }}" class="module-card">
+        <div class="module-card-icon">📉</div>
+        <div class="module-card-title">Spreads</div>
+        <div class="module-card-desc">Bull put &amp; bear call spread scanner with EV filter</div>
+        <div class="module-card-arrow">→</div>
+    </a>
+
+    <a href="{{ url_for('married_puts.index') }}" class="module-card">
+        <div class="module-card-icon">💍</div>
+        <div class="module-card-title">Married Puts</div>
+        <div class="module-card-desc">Protective put analysis for long stock positions</div>
+        <div class="module-card-arrow">→</div>
+    </a>
+
+    <a href="{{ url_for('position_insurance.index') }}" class="module-card">
+        <div class="module-card-icon">🛡</div>
+        <div class="module-card-title">Position Insurance</div>
+        <div class="module-card-desc">Hedge existing positions with put options</div>
+        <div class="module-card-arrow">→</div>
+    </a>
+
+    <a href="{{ url_for('multifactor.index') }}" class="module-card">
+        <div class="module-card-icon">📈</div>
+        <div class="module-card-title">Multifactor</div>
+        <div class="module-card-desc">Multi-factor swing trading signal scanner</div>
+        <div class="module-card-arrow">→</div>
+    </a>
+
+    <a href="{{ url_for('sector_rotation.index') }}" class="module-card">
+        <div class="module-card-icon">🔄</div>
+        <div class="module-card-title">Sector Rotation</div>
+        <div class="module-card-desc">Relative strength and momentum across sectors</div>
+        <div class="module-card-arrow">→</div>
+    </a>
+
+    <a href="{{ url_for('expected_value.index') }}" class="module-card">
+        <div class="module-card-icon">🎲</div>
+        <div class="module-card-title">Expected Value</div>
+        <div class="module-card-desc">Monte Carlo simulation for option expected value</div>
+        <div class="module-card-arrow">→</div>
+    </a>
+
+    <a href="{{ url_for('symbol_page.index') }}" class="module-card">
+        <div class="module-card-icon">🔎</div>
+        <div class="module-card-title">Symbols</div>
+        <div class="module-card-desc">Symbol overview — type, exchange, options availability</div>
+        <div class="module-card-arrow">→</div>
+    </a>
+
+    <a href="{{ url_for('data_logs.index') }}" class="module-card">
+        <div class="module-card-icon">📋</div>
+        <div class="module-card-title">Data Logs</div>
+        <div class="module-card-desc">Pipeline run history and data change audit log</div>
+        <div class="module-card-arrow">→</div>
+    </a>
+
+</div>
+{% endblock %}

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Data Logs{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <div class="page-header-icon">📋</div>
+    <div class="page-header-text">
+        <div class="page-title">Data Logs</div>
+        <div class="page-subtitle">Pipeline run history &amp; data change audit log</div>
+    </div>
+</div>
+
+{% if error_msg %}
+    <div class="alert alert-danger">{{ error_msg }}</div>
+{% endif %}
+{% if table_html %}
+    <div class="result-bar">
+        <span class="result-count"><strong>{{ result_count }}</strong> log entries</span>
+    </div>
+    <div class="table-wrapper">{{ table_html | safe }}</div>
+{% else %}
+    <div class="alert alert-info">No log entries available.</div>
+{% endif %}
+
+{% endblock %}

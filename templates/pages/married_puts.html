@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Married Puts{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <div class="page-header-icon">💍</div>
+    <div class="page-header-text">
+        <div class="page-title">Married Puts</div>
+        <div class="page-subtitle">Protective put analysis for long stock positions</div>
+    </div>
+</div>
+
+<form method="get" action="{{ url_for('married_puts.index') }}">
+<div class="filter-panel">
+    <div class="filter-row">
+        <div class="filter-group" style="min-width:160px">
+            <span class="filter-label">Symbol</span>
+            <select name="symbol" class="form-select skuld-select2">
+                <option value="">— All —</option>
+                {% for s in symbols %}
+                    <option value="{{ s }}" {% if s == params.symbol %}selected{% endif %}>{{ s }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="filter-group">
+            <span class="filter-label">Max DTE</span>
+            <input type="number" name="max_dte" class="form-control"
+                   value="{{ params.max_dte }}" min="1" step="1">
+        </div>
+        <div class="filter-group">
+            <span class="filter-label">Min Delta</span>
+            <input type="number" name="min_delta" class="form-control"
+                   value="{{ params.min_delta }}" min="0" max="1" step="0.01">
+        </div>
+        <div class="filter-group">
+            <span class="filter-label">Max Delta</span>
+            <input type="number" name="max_delta" class="form-control"
+                   value="{{ params.max_delta }}" min="0" max="1" step="0.01">
+        </div>
+        <div style="margin-left:auto; display:flex; gap:0.5rem; align-self:flex-end;">
+            <button type="submit" class="btn-skuld">Apply</button>
+            <a href="{{ url_for('married_puts.index') }}" class="btn-skuld-ghost">Reset</a>
+        </div>
+    </div>
+</div>
+</form>
+
+{% if error_msg %}
+    <div class="alert alert-danger">{{ error_msg }}</div>
+{% endif %}
+{% if table_html %}
+    <div class="result-bar">
+        <span class="result-count"><strong>{{ result_count }}</strong> results</span>
+    </div>
+    <div class="table-wrapper">{{ table_html | safe }}</div>
+{% elif not error_msg %}
+    <div class="alert alert-info">Select filters and apply to see results.</div>
+{% endif %}
+
+{% endblock %}
