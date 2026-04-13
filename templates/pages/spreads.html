@@ -17,15 +17,15 @@
         <span class="cmd-label">Expiry</span>
         <div class="chip-group">
             <label class="chip {% if params.show_monthly %}active{% endif %}">
-                <input class="chip-input" type="checkbox" name="show_monthly" value="true" {% if params.show_monthly %}checked{% endif %}>
+                <input class="chip-input" type="checkbox" name="show_monthly" value="true" {% if params.show_monthly %}checked{% endif %} onchange="this.form.expiration_date.value=''">
                 Monthly
             </label>
             <label class="chip {% if params.show_weekly %}active{% endif %}">
-                <input class="chip-input" type="checkbox" name="show_weekly" value="true" {% if params.show_weekly %}checked{% endif %}>
+                <input class="chip-input" type="checkbox" name="show_weekly" value="true" {% if params.show_weekly %}checked{% endif %} onchange="this.form.expiration_date.value=''">
                 Weekly
             </label>
             <label class="chip {% if params.show_daily %}active{% endif %}">
-                <input class="chip-input" type="checkbox" name="show_daily" value="true" {% if params.show_daily %}checked{% endif %}>
+                <input class="chip-input" type="checkbox" name="show_daily" value="true" {% if params.show_daily %}checked{% endif %} onchange="this.form.expiration_date.value=''">
                 Daily
             </label>
         </div>
@@ -55,7 +55,7 @@
 
         <span class="cmd-label">Filters</span>
         <div class="chip-group">
-            <label class="chip active-green {% if params.show_only_positive_ev %}active-green active{% endif %}">
+            <label class="chip chip-green {% if params.show_only_positive_ev %}active-green active{% endif %}">
                 <input class="chip-input" type="checkbox" name="show_only_positive_ev" value="true" {% if params.show_only_positive_ev %}checked{% endif %}>
                 +EV only
             </label>

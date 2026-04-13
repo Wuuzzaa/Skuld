@@ -307,9 +307,6 @@ def get_page_spreads(df: pd.DataFrame) -> pd.DataFrame:
             'expiration_date',
     ]
     df = df[columns]
-    pass
-
-
     return df
 
 

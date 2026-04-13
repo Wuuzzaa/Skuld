@@ -22,18 +22,36 @@ document.querySelectorAll('.chip').forEach(function (chip) {
     if (!input) return;
 
     // Sync initial state
-    if (input.checked) chip.classList.add('active');
+    if (input.checked) {
+        chip.classList.add('active');
+        if (chip.classList.contains('chip-green')) chip.classList.add('active-green');
+    }
 
     chip.addEventListener('click', function (e) {
         if (e.target === input) return; // native toggle already happened
         input.checked = !input.checked;
-        chip.classList.toggle('active', input.checked);
+        
+        // Handle normal .active chips and special .chip-green chips
+        if (chip.classList.contains('chip-green')) {
+            chip.classList.toggle('active-green', input.checked);
+            chip.classList.toggle('active', input.checked);
+        } else {
+            chip.classList.toggle('active', input.checked);
+        }
+        
+        // Manual dispatch to trigger onchange/global listeners
+        input.dispatchEvent(new Event('change', { bubbles: true }));
         // Ripple
         _ripple(chip);
     });
 
     input.addEventListener('change', function () {
-        chip.classList.toggle('active', input.checked);
+        if (chip.classList.contains('chip-green')) {
+            chip.classList.toggle('active-green', input.checked);
+            chip.classList.toggle('active', input.checked);
+        } else {
+            chip.classList.toggle('active', input.checked);
+        }
     });
 });
 

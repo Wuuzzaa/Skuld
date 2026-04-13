@@ -268,7 +268,7 @@ body {
     color: var(--gold);
 }
 
-.chip.active-green {
+.chip.active-green, .chip-green.active {
     background: rgba(34,197,94,0.1);
     border-color: rgba(34,197,94,0.3);
     color: var(--green);

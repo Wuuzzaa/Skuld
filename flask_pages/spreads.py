@@ -17,7 +17,7 @@ DEFAULTS = {
     "show_only_positive_ev": True,
     "show_no_earnings": True,
     "delta_target": 0.2,
-    "spread_width": 5,
+    "spread_width": 5.0,
     "option_type": "put",
     "min_day_volume": 20,
     "min_open_interest": 100,
@@ -26,94 +26,111 @@ DEFAULTS = {
     "min_max_profit": 80.0,
     "min_iv_rank": 0,
     "min_iv_percentile": 0,
+    "expiration_date": "",
 }
 
-
 def _get_params():
-    """Read filter params from GET request, falling back to defaults."""
-    def gbool(key):
-        return request.args.get(key, str(DEFAULTS[key])).lower() in ("true", "1", "on")
-    def gfloat(key):
+    """Liest Filter-Parameter aus dem GET-Request mit Fallback auf Standardwerte."""
+    params = DEFAULTS.copy()
+    
+    # Checkboxen/Booleans
+    for key in ["show_monthly", "show_weekly", "show_daily", "show_only_positive_ev", "show_no_earnings"]:
+        val = request.args.get(key)
+        if val is not None:
+            params[key] = val.lower() in ("true", "1", "on", "yes")
+            
+    # Floats
+    for key in ["delta_target", "spread_width", "min_sell_iv", "max_sell_iv", "min_max_profit"]:
         try:
-            return float(request.args.get(key, DEFAULTS[key]))
+            val = request.args.get(key)
+            if val:
+                params[key] = float(val)
         except (ValueError, TypeError):
-            return DEFAULTS[key]
-    def gint(key):
+            pass
+            
+    # Integers
+    for key in ["min_day_volume", "min_open_interest", "min_iv_rank", "min_iv_percentile"]:
         try:
-            return int(request.args.get(key, DEFAULTS[key]))
+            val = request.args.get(key)
+            if val:
+                params[key] = int(val)
         except (ValueError, TypeError):
-            return DEFAULTS[key]
-    def gstr(key):
-        return request.args.get(key, DEFAULTS[key])
-
-    return {
-        "show_monthly": gbool("show_monthly"),
-        "show_weekly": gbool("show_weekly"),
-        "show_daily": gbool("show_daily"),
-        "show_only_positive_ev": gbool("show_only_positive_ev"),
-        "show_no_earnings": gbool("show_no_earnings"),
-        "delta_target": gfloat("delta_target"),
-        "spread_width": gint("spread_width"),
-        "option_type": gstr("option_type"),
-        "min_day_volume": gint("min_day_volume"),
-        "min_open_interest": gint("min_open_interest"),
-        "min_sell_iv": gfloat("min_sell_iv"),
-        "max_sell_iv": gfloat("max_sell_iv"),
-        "min_max_profit": gfloat("min_max_profit"),
-        "min_iv_rank": gint("min_iv_rank"),
-        "min_iv_percentile": gint("min_iv_percentile"),
-        "expiration_date": request.args.get("expiration_date", ""),
-    }
-
+            pass
+            
+    # Strings
+    if request.args.get("option_type"):
+        params["option_type"] = request.args.get("option_type")
+    if request.args.get("expiration_date"):
+        params["expiration_date"] = request.args.get("expiration_date")
+        
+    return params
 
 @bp.route("/")
 def index():
     params = _get_params()
+    
+    # 1. Alle verfügbaren Ablaufdaten laden
+    try:
+        sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'expiration_dte_asc.sql'
+        dates_df = select_into_dataframe(sql_file_path=sql_file_path)
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Ablaufdaten: {e}")
+        return render_template("pages/spreads.html", error_msg=f"Datenbankfehler: {e}", params=params, defaults=DEFAULTS)
 
-    # Load expiration dates
-    sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'expiration_dte_asc.sql'
-    dates_df = select_into_dataframe(sql_file_path=sql_file_path)
+    if dates_df.empty:
+        return render_template("pages/spreads.html", error_msg="Keine Ablaufdaten in der Datenbank gefunden.", params=params, defaults=DEFAULTS)
 
-    # Filter dates by expiration type checkboxes
-    def keep_row(row):
+    # 2. Ablaufdaten basierend auf Typ (Monthly, Weekly, Daily) filtern
+    def is_date_allowed(row):
         t = get_expiration_type(row['expiration_date'])
-        return (
-            (t == "Monthly" and params["show_monthly"]) or
-            (t == "Weekly" and params["show_weekly"]) or
-            (t == "Daily" and params["show_daily"])
-        )
+        if t == "Monthly" and params["show_monthly"]: return True
+        if t == "Weekly" and params["show_weekly"]: return True
+        if t == "Daily" and params["show_daily"]: return True
+        return False
 
-    filtered_dates = dates_df[dates_df.apply(keep_row, axis=1)].copy()
+    filtered_dates = dates_df[dates_df.apply(is_date_allowed, axis=1)].copy()
+    
+    # 3. Dropdown-Labels und Werte vorbereiten
+    dte_labels = []
+    filtered_dates_values = []
+    for _, row in filtered_dates.iterrows():
+        date_str = str(row['expiration_date'])
+        dte = int(row['days_to_expiration'])
+        day_name = pd.to_datetime(date_str).strftime('%A')
+        ext_type = get_expiration_type(date_str)
+        
+        label = f"{dte} DTE - {day_name} {date_str} - {ext_type}"
+        dte_labels.append(label)
+        filtered_dates_values.append(date_str)
 
-    # Build DTE label list
-    dte_labels = [
-        (
-            f"{int(row['days_to_expiration'])} DTE - "
-            f"{pd.to_datetime(row['expiration_date']).strftime('%A')}  "
-            f"{row['expiration_date']} - "
-            f"{get_expiration_type(row['expiration_date'])}"
-        )
-        for _, row in filtered_dates.iterrows()
-    ]
-
-    # Determine selected expiration date
+    # 4. Aktuell ausgewähltes Datum bestimmen
     expiration_date = params["expiration_date"]
-    selected_label = ""
-    if expiration_date and expiration_date in filtered_dates['expiration_date'].astype(str).values:
-        idx = filtered_dates[filtered_dates['expiration_date'].astype(str) == expiration_date].index[0]
-        pos = filtered_dates.index.get_loc(idx)
-        selected_label = dte_labels[pos]
-    elif len(dte_labels) > 0:
-        selected_label = dte_labels[0]
-        expiration_date = str(filtered_dates.iloc[0]['expiration_date'])
+    
+    # Wenn Expiry-Filter geändert wurden (erkannt daran, dass expiration_date leer ist oder nicht in Liste),
+    # wählen wir das erste verfügbare Datum.
+    if expiration_date not in filtered_dates_values:
+        if filtered_dates_values:
+            expiration_date = filtered_dates_values[0]
+        else:
+            expiration_date = ""
 
+    selected_label = ""
+    if expiration_date:
+        try:
+            idx = filtered_dates_values.index(expiration_date)
+            selected_label = dte_labels[idx]
+        except ValueError:
+            pass
+
+    # 5. Spreads berechnen/laden
     table_html = None
     result_count = 0
     error_msg = None
 
-    if not dte_labels:
-        error_msg = "No expiration dates match the selected filters."
-    elif expiration_date:
+    if not expiration_date:
+        if not dte_labels:
+            error_msg = "Keine Ablaufdaten entsprechen den gewählten Filtern (Monthly/Weekly/Daily)."
+    else:
         try:
             query_params = {
                 "expiration_date": expiration_date,
@@ -125,38 +142,61 @@ def index():
                 "min_iv_rank": params["min_iv_rank"],
                 "min_iv_percentile": params["min_iv_percentile"],
             }
+            
             sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'spreads_input.sql'
             df = select_into_dataframe(sql_file_path=sql_file_path, params=query_params)
-            spreads_df = get_page_spreads(df)
-
-            # Apply filters
-            filtered_df = spreads_df.copy()
-            filtered_df = filtered_df[filtered_df['max_profit'] >= params["min_max_profit"]]
-            if params["show_only_positive_ev"]:
-                filtered_df = filtered_df[filtered_df['expected_value'] >= 0]
-
-            today = pd.Timestamp.now().normalize()
-            exp_ts = pd.Timestamp(expiration_date)
-            if params["show_no_earnings"]:
-                filtered_df = filtered_df[
-                    ~(
-                        (filtered_df['earnings_date'] > today) &
-                        (filtered_df['earnings_date'] < exp_ts)
+            
+            if df.empty:
+                result_count = 0
+                table_html = None
+            else:
+                spreads_df = get_page_spreads(df)
+                
+                # Python-seitige Filter anwenden
+                # Max Profit
+                spreads_df = spreads_df[spreads_df['max_profit'] >= params["min_max_profit"]]
+                
+                # No Earnings
+                if params["show_no_earnings"]:
+                    today = pd.Timestamp.now().normalize()
+                    exp_ts = pd.Timestamp(expiration_date).normalize()
+                    
+                    # Debug-Logging (optional, falls Konsole einsehbar)
+                    # logger.debug(f"Filtering earnings between {today} and {exp_ts}")
+                    
+                    # Filter: Behalte nur die, bei denen earnings_date NICHT zwischen heute und expiration liegt
+                    # Oder earnings_date NaT ist (keine Earnings bekannt)
+                    mask = (
+                        (spreads_df['earnings_date'] > today) & 
+                        (spreads_df['earnings_date'] <= exp_ts)
                     )
-                ]
+                    before_count = len(spreads_df)
+                    spreads_df = spreads_df[~mask]
+                    logger.info(f"No Earnings Filter: {before_count} -> {len(spreads_df)} (today: {today}, exp: {exp_ts})")
+                
+                # Positive EV
+                if params["show_only_positive_ev"]:
+                    before_count = len(spreads_df)
+                    spreads_df = spreads_df[spreads_df['expected_value'] >= 0]
+                    logger.info(f"+EV Filter: {before_count} -> {len(spreads_df)}")
+                
+                # IV Range
+                spreads_df = spreads_df[(spreads_df['sell_iv'] >= params["min_sell_iv"]) & 
+                                      (spreads_df['sell_iv'] <= params["max_sell_iv"])]
+                
+                # Ergebnisse formatieren
+                result_count = len(spreads_df)
+                
+                # Datum für Anzeige formatieren
+                display_df = spreads_df.copy()
+                if not display_df.empty:
+                    display_df['earnings_date'] = pd.to_datetime(display_df['earnings_date']).dt.strftime('%d.%m.%Y')
+                
+                table_html = dataframe_to_html(display_df, symbol_column='symbol', page='spreads')
 
-            filtered_df['earnings_date'] = pd.to_datetime(filtered_df['earnings_date']).dt.strftime('%d.%m.%Y')
-            filtered_df = filtered_df[filtered_df['sell_iv'] >= params["min_sell_iv"]]
-            filtered_df = filtered_df[filtered_df['sell_iv'] <= params["max_sell_iv"]]
-            filtered_df.reset_index(drop=True, inplace=True)
-
-            result_count = len(filtered_df)
-            table_html = dataframe_to_html(filtered_df, symbol_column='symbol', page='spreads')
         except Exception as e:
-            logger.exception("Error calculating spreads")
-            error_msg = f"Error calculating spreads: {e}"
-
-    filtered_dates_values = filtered_dates['expiration_date'].astype(str).tolist()
+            logger.exception("Fehler bei der Spread-Berechnung")
+            error_msg = f"Fehler bei der Berechnung: {e}"
 
     return render_template(
         "pages/spreads.html",
