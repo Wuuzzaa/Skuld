@@ -904,3 +904,112 @@ table.dataTable tbody td a:hover { color: var(--cyan); }
     .module-grid { grid-template-columns: 1fr; }
     .stat-strip { gap: 0.5rem; }
 }
+
+/* ── Table Row Selection ──────────────────────────────────── */
+.skuld-table tbody tr {
+    cursor: pointer;
+    transition: background-color 0.15s;
+}
+
+.skuld-table tbody tr:hover {
+    background-color: rgba(255, 255, 255, 0.03) !important;
+}
+
+.skuld-table tbody tr.selected-row td {
+    background-color: rgba(74, 158, 255, 0.12) !important;
+    border-top: 1px solid var(--blue-d);
+    border-bottom: 1px solid var(--blue-d);
+}
+
+/* ── Details Surface ───────────────────────────────────────── */
+.details-surface {
+    margin-top: 1.5rem;
+    background: var(--surface-1);
+    border: 1px solid var(--line-2);
+    border-radius: var(--r-md);
+    padding: 1.25rem;
+    backdrop-filter: blur(10px);
+    animation: slide-up 0.3s var(--ease-out);
+}
+
+@keyframes slide-up {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.details-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.25rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--line-1);
+}
+
+.details-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--t-1);
+    letter-spacing: 0.02em;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.btn-close-details {
+    background: transparent;
+    border: none;
+    color: var(--t-3);
+    font-size: 1.5rem;
+    cursor: pointer;
+    line-height: 1;
+    transition: color 0.2s;
+}
+
+.btn-close-details:hover {
+    color: var(--t-1);
+}
+
+.details-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1.5rem;
+}
+
+.details-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.details-group-title {
+    font-size: 0.75rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: var(--t-3);
+    letter-spacing: 0.1em;
+    margin-bottom: 0.25rem;
+}
+
+.detail-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 0.25rem 0;
+    border-bottom: 1px solid var(--line-1);
+}
+
+.detail-label {
+    font-size: 0.8rem;
+    color: var(--t-2);
+}
+
+.detail-value {
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--t-1);
+}
+
+.detail-value.val-positive { color: var(--green) !important; }
+.detail-value.val-negative { color: var(--red) !important; }

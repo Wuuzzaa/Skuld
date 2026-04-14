@@ -133,6 +133,76 @@ $(document).ready(function () {
 
         // Color numbers after each draw
         dt.on('draw', colorNumbers);
+
+        // Row click handler for details
+        $t.find('tbody').on('click', 'tr', function (e) {
+            // Don't trigger if clicking on a link
+            if ($(e.target).closest('a').length) return;
+            
+            var rowData = dt.row(this).data();
+            if (!rowData) return;
+
+            // Highlight selected row
+            $t.find('tr').removeClass('selected-row');
+            $(this).addClass('selected-row');
+
+            var $details = $('#row-details');
+            var $content = $('#details-content');
+            if (!$details.length || !$content.length) return;
+
+            // Get headers and subheaders
+            var headers = [];
+            $t.find('thead tr:last-child th').each(function() {
+                headers.push($(this).text().trim());
+            });
+
+            var subheaders = [];
+            $t.find('thead tr:first-child th').each(function() {
+                subheaders.push({
+                    name: $(this).text().trim(),
+                    colspan: parseInt($(this).attr('colspan') || 1)
+                });
+            });
+
+            // Build details grouped by subheaders
+            var html = '';
+            var colIdx = 0;
+
+            subheaders.forEach(function(sh) {
+                html += '<div class="details-group">';
+                html += '<div class="details-group-title">' + (sh.name || 'General') + '</div>';
+                
+                for (var i = 0; i < sh.colspan; i++) {
+                    var header = headers[colIdx];
+                    var val = rowData[colIdx];
+                    
+                    // Skip link columns (emojis) in details if desired, or keep them
+                    // Let's keep them but maybe filter out if they are just icons
+                    if (header && !['📊', '📈', '🤖', '🔗'].includes(header)) {
+                        var valClass = '';
+                        // Simple coloring for the detail view
+                        var cleanVal = val.replace(/<[^>]*>?/gm, '').trim();
+                        if (/^-/.test(cleanVal)) valClass = 'val-negative';
+                        else if (/^\+/.test(cleanVal)) valClass = 'val-positive';
+
+                        html += '<div class="detail-item">';
+                        html += '<span class="detail-label">' + header + '</span>';
+                        html += '<span class="detail-value ' + valClass + '">' + val + '</span>';
+                        html += '</div>';
+                    }
+                    colIdx++;
+                }
+                html += '</div>';
+            });
+
+            $content.html(html);
+            $details.fadeIn(200);
+            
+            // Scroll to details
+            $('html, body').animate({
+                scrollTop: $details.offset().top - 100
+            }, 400);
+        });
     });
 
     // Initial coloring for non-DataTable tables

@@ -108,6 +108,15 @@
     <div class="alert alert-danger">{{ error_msg }}</div>
 {% elif table_html %}
     <div class="data-surface">{{ table_html | safe }}</div>
+    <div id="row-details" class="details-surface" style="display: none;">
+        <div class="details-header">
+            <div class="details-title"><span>🔍</span> Spread Details</div>
+            <button type="button" class="btn-close-details" onclick="$('#row-details').fadeOut(200); $('.selected-row').removeClass('selected-row');">&times;</button>
+        </div>
+        <div id="details-content" class="details-grid">
+            <!-- Details will be injected here via JS -->
+        </div>
+    </div>
 {% elif not error_msg %}
     <div class="alert alert-info">Select filters above and click Run.</div>
 {% endif %}
