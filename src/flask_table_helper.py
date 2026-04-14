@@ -82,7 +82,9 @@ def dataframe_to_html(
         df: pd.DataFrame,
         symbol_column: str = 'symbol',
         page: str = None,
-        drop_columns: list = None
+        drop_columns: list = None,
+        subheaders: list = None,
+        column_rename: dict = None
 ) -> Markup:
     """
     Convert a DataFrame to an HTML table string with TradingView/Claude links,
@@ -98,25 +100,57 @@ def dataframe_to_html(
         for col in ['option_type', 'expiration_date', 'optionstrat_url']:
             if col in df.columns:
                 df = df.drop(columns=[col])
+        
+        # Reorder columns for better grouping if it's the spreads page
+        # This ensures links are next to the symbol
+        cols = df.columns.tolist()
+        link_cols = ['📊', '📈', '🤖', '🔗']
+        for lc in link_cols:
+            if lc in cols:
+                cols.remove(lc)
+        
+        if symbol_column in cols:
+            idx = cols.index(symbol_column) + 1
+            for lc in reversed(link_cols):
+                if lc in df.columns:
+                    cols.insert(idx, lc)
+        df = df[cols]
+
+    if column_rename:
+        df = df.rename(columns=column_rename)
 
     if drop_columns:
         df = df.drop(columns=[c for c in drop_columns if c in df.columns])
 
     # Build HTML table
     headers = df.columns.tolist()
+    
+    # Subheader row
+    subheader_html = ""
+    if subheaders:
+        cells = []
+        for sh in subheaders:
+            name = sh.get('name', '')
+            colspan = sh.get('colspan', 1)
+            cells.append(f'<th colspan="{colspan}" class="text-center subheader-cell">{name}</th>')
+        subheader_html = f'<tr class="subheader-row">{"".join(cells)}</tr>'
+
+    header_html = "".join(f"<th>{h}</th>" for h in headers)
+
     rows_html = []
     for _, row in df.iterrows():
         cells = "".join(
-            f"<td>{_format_cell(row[col])}</td>" for col in headers
+            f"<td>{_format_cell(row.iloc[i])}</td>" for i in range(len(headers))
         )
         rows_html.append(f"<tr>{cells}</tr>")
-
-    header_html = "".join(f"<th>{h}</th>" for h in headers)
 
     table = f"""
 <div class="table-responsive">
   <table class="table table-sm skuld-table w-100">
-    <thead><tr>{header_html}</tr></thead>
+    <thead>
+      {subheader_html}
+      <tr>{header_html}</tr>
+    </thead>
     <tbody>{"".join(rows_html)}</tbody>
   </table>
 </div>

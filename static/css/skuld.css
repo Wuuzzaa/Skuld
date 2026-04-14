@@ -516,13 +516,13 @@ table.dataTable {
 table.dataTable thead th {
     background: rgba(0,0,0,0.2) !important;
     color: var(--t-4) !important;
-    font-size: 0.65rem !important;
+    font-size: 0.6rem !important;
     font-weight: 600 !important;
-    letter-spacing: 0.1em !important;
+    letter-spacing: 0.05em !important;
     text-transform: uppercase !important;
     border-bottom: 1px solid var(--line-2) !important;
     border-top: none !important;
-    padding: 0.6rem 0.85rem !important;
+    padding: 0.4rem 0.35rem !important;
     white-space: nowrap;
     cursor: pointer;
     user-select: none;
@@ -545,8 +545,8 @@ table.dataTable tbody tr:hover td { background: rgba(74,158,255,0.05) !important
 
 table.dataTable tbody td {
     color: var(--t-1) !important;
-    font-size: 0.8rem !important;
-    padding: 0.5rem 0.85rem !important;
+    font-size: 0.72rem !important;
+    padding: 0.35rem 0.4rem !important;
     border: none !important;
     font-family: var(--mono);
 }
@@ -558,6 +558,20 @@ table.dataTable tbody td a {
 }
 
 table.dataTable tbody td a:hover { color: var(--cyan); }
+
+/* Subheader Styling */
+.subheader-row th {
+    background: rgba(0,0,0,0.3) !important;
+    color: var(--t-3) !important;
+    font-size: 0.55rem !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.12em !important;
+    text-transform: uppercase !important;
+    padding: 0.25rem 0.4rem !important;
+    border-bottom: 1px solid var(--line-1) !important;
+    border-top: none !important;
+    text-align: center;
+}
 
 /* Value coloring */
 .val-positive { color: var(--green) !important; font-weight: 500; }

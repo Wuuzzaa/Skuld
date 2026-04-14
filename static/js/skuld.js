@@ -116,8 +116,8 @@ $(document).ready(function () {
             pageLength: pageLen,
             lengthMenu: [10, 25, 50, 100, 250],
             order: [],
-            scrollX: true,
-            autoWidth: false,
+            scrollX: false,
+            autoWidth: true,
             dom: '<"dt-top-bar"lf>t<"dt-bottom-bar"ip>',
             language: {
                 search: '',

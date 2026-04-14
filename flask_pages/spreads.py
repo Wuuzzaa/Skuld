@@ -196,7 +196,52 @@ def index():
                 if not display_df.empty:
                     display_df['earnings_date'] = pd.to_datetime(display_df['earnings_date']).dt.strftime('%d.%m.%Y')
                 
-                table_html = dataframe_to_html(display_df, symbol_column='symbol', page='spreads')
+                # Subheader definition
+                subheaders = [
+                    {'name': 'Underlying', 'colspan': 15},
+                    {'name': 'Short Leg', 'colspan': 7},
+                    {'name': 'Long Leg', 'colspan': 3},
+                    {'name': 'Analysis', 'colspan': 6}
+                ]
+                
+                # Spaltennamen kürzen (Kontext durch Subheader gegeben)
+                column_rename = {
+                    'symbol': 'Sym',
+                    'earnings_date': 'Date',
+                    'earnings_warning': '⚠️',
+                    'close': 'Close',
+                    'analyst_mean_target': 'Target',
+                    'company_industry': 'Industry',
+                    'company_sector': 'Sector',
+                    'historical_volatility_30d': 'HV30',
+                    'iv_rank': 'IVR',
+                    'iv_percentile': 'IV%',
+                    'days_to_earnings': 'DTE',
+                    'sell_strike': 'Strike',
+                    'sell_last_option_price': 'Price',
+                    'sell_delta': 'Delta',
+                    'sell_iv': 'IV',
+                    '%_otm': 'OTM%',
+                    'sell_expected_move': 'ExpM',
+                    'sell_day_volume': 'Vol',
+                    'buy_strike': 'Strike',
+                    'buy_last_option_price': 'Price',
+                    'buy_delta': 'Delta',
+                    'max_profit': 'Profit',
+                    'bpr': 'BPR',
+                    'profit_to_bpr': 'P/BPR',
+                    'expected_value': 'EV',
+                    'APDI': 'APDI',
+                    'APDI_EV': 'APDI EV'
+                }
+                
+                table_html = dataframe_to_html(
+                    display_df, 
+                    symbol_column='symbol', 
+                    page='spreads',
+                    subheaders=subheaders,
+                    column_rename=column_rename
+                )
 
         except Exception as e:
             logger.exception("Fehler bei der Spread-Berechnung")
