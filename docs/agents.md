@@ -81,3 +81,6 @@ Wenn du an Skuld arbeitest, beachte:
 - **Filter-Pattern:** GET-Parameter für Filter (Checkboxes, Inputs) mit Fallback auf `DEFAULTS`-Dict im Blueprint.
 - **Tabellen-Rendering:** Nutze `src/flask_table_helper.py` → `dataframe_to_html()` für alle DataFrame-Ausgaben.
 - **Zustands-Management:** Kein `st.session_state` mehr – Filter-Zustand wird über GET-Parameter in der URL gehalten.
+
+## Junie (PyCharm Agent) Variante
+Siehe [docs/junie.md](junie.md) für spezifische Arbeitsanweisungen und Workflows für den PyCharm-Agenten Junie.
