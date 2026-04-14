@@ -52,9 +52,16 @@ Format: Prägnant, faktenbasiert, keine Füllwörter, max. eine Seite.
         url = f"https://claude.ai/new?q={encoded}"
         return Markup(f'<a href="{url}" target="_blank" class="icon-link" title="Claude AI">🤖</a>')
 
+    def optionstrat_link(row):
+        url = row.get('optionstrat_url')
+        if not url:
+            return ""
+        return Markup(f'<a href="{url}" target="_blank" class="icon-link" title="OptionStrat">🔗</a>')
+
     if symbol_column in df.columns:
         df['📊'] = df[symbol_column].apply(tv_link)
         df['📈'] = df[symbol_column].apply(chart_link)
+        df['🔗'] = df.apply(optionstrat_link, axis=1)
         df['🤖'] = df.apply(claude_link, axis=1)
 
     return df
@@ -88,7 +95,7 @@ def dataframe_to_html(
     df = _add_links(df, symbol_column=symbol_column, page=page)
 
     if page == 'spreads':
-        for col in ['option_type', 'expiration_date']:
+        for col in ['option_type', 'expiration_date', 'optionstrat_url']:
             if col in df.columns:
                 df = df.drop(columns=[col])
 

@@ -107,12 +107,6 @@
 {% if error_msg %}
     <div class="alert alert-danger">{{ error_msg }}</div>
 {% elif table_html %}
-    <div class="stat-strip">
-        <div class="stat-pill"><span class="dot"></span><strong id="result-count-live">{{ result_count }}</strong>&nbsp;spreads</div>
-        <div class="stat-pill"><span class="dot dot-gold"></span>{{ expiration_date }}</div>
-        <div class="stat-pill">{{ params.option_type | upper }}</div>
-        <div class="stat-pill">Δ {{ params.delta_target }}</div>
-    </div>
     <div class="data-surface">{{ table_html | safe }}</div>
 {% elif not error_msg %}
     <div class="alert alert-info">Select filters above and click Run.</div>
