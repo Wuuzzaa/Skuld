@@ -17,15 +17,15 @@
         <span class="cmd-label">Expiry</span>
         <div class="chip-group">
             <label class="chip {% if params.show_monthly %}active{% endif %}">
-                <input class="chip-input" type="checkbox" name="show_monthly" value="true" {% if params.show_monthly %}checked{% endif %} onchange="this.form.expiration_date.value=''">
+                <input class="chip-input" type="checkbox" name="show_monthly" value="true" {% if params.show_monthly %}checked{% endif %} onchange="this.form.expiration_date.value=''; this.form.submit()">
                 Monthly
             </label>
             <label class="chip {% if params.show_weekly %}active{% endif %}">
-                <input class="chip-input" type="checkbox" name="show_weekly" value="true" {% if params.show_weekly %}checked{% endif %} onchange="this.form.expiration_date.value=''">
+                <input class="chip-input" type="checkbox" name="show_weekly" value="true" {% if params.show_weekly %}checked{% endif %} onchange="this.form.expiration_date.value=''; this.form.submit()">
                 Weekly
             </label>
             <label class="chip {% if params.show_daily %}active{% endif %}">
-                <input class="chip-input" type="checkbox" name="show_daily" value="true" {% if params.show_daily %}checked{% endif %} onchange="this.form.expiration_date.value=''">
+                <input class="chip-input" type="checkbox" name="show_daily" value="true" {% if params.show_daily %}checked{% endif %} onchange="this.form.expiration_date.value=''; this.form.submit()">
                 Daily
             </label>
         </div>
@@ -46,7 +46,7 @@
         <span class="cmd-label">Type</span>
         <div class="cmd-group">
             <select name="option_type" class="cmd-select" onchange="this.form.submit()">
-                <option value="put"  {% if params.option_type == 'put'  %}selected{% endif %}>Put</option>
+                <option value="put" {% if params.option_type == 'put' %}selected{% endif %}>Put</option>
                 <option value="call" {% if params.option_type == 'call' %}selected{% endif %}>Call</option>
             </select>
         </div>
@@ -55,11 +55,11 @@
 
         <span class="cmd-label">Filters</span>
         <div class="chip-group">
-            <label class="chip chip-green {% if params.show_only_positive_ev %}active-green active{% endif %}">
+            <label class="chip chip-green {% if params.show_only_positive_ev %}active-green active{% endif %}" onclick="toggleChip(this)">
                 <input class="chip-input" type="checkbox" name="show_only_positive_ev" value="true" {% if params.show_only_positive_ev %}checked{% endif %}>
                 +EV only
             </label>
-            <label class="chip {% if params.show_no_earnings %}active{% endif %}">
+            <label class="chip {% if params.show_no_earnings %}active{% endif %}" onclick="toggleChip(this)">
                 <input class="chip-input" type="checkbox" name="show_no_earnings" value="true" {% if params.show_no_earnings %}checked{% endif %}>
                 No earnings
             </label>
@@ -122,6 +122,16 @@
 
 {% block scripts %}
 <script>
+function toggleChip(label) {
+    const input = label.querySelector('input');
+    // We don't toggle manually because the browser already does it when clicking the label.
+    // But we ensure the form is submitted.
+    // Use a small timeout to let the browser update the 'checked' state.
+    setTimeout(() => {
+        label.closest('form').submit();
+    }, 10);
+}
+
 // Make zip available in Jinja — handled server-side, but expose date select width
 document.querySelector('select[name="expiration_date"]') && (function(){
     var s = document.querySelector('select[name="expiration_date"]');

@@ -33,11 +33,17 @@ def _get_params():
     """Liest Filter-Parameter aus dem GET-Request mit Fallback auf Standardwerte."""
     params = DEFAULTS.copy()
     
+    # Prüfen, ob überhaupt Parameter im Request sind (Formular wurde abgeschickt)
+    is_form_submitted = len(request.args) > 0
+    
     # Checkboxen/Booleans
     for key in ["show_monthly", "show_weekly", "show_daily", "show_only_positive_ev", "show_no_earnings"]:
         val = request.args.get(key)
         if val is not None:
             params[key] = val.lower() in ("true", "1", "on", "yes")
+        elif is_form_submitted:
+            # Falls das Formular abgeschickt wurde, aber das Feld fehlt, ist die Checkbox "aus"
+            params[key] = False
             
     # Floats
     for key in ["delta_target", "spread_width", "min_sell_iv", "max_sell_iv", "min_max_profit"]:
@@ -161,23 +167,21 @@ def index():
                     today = pd.Timestamp.now().normalize()
                     exp_ts = pd.Timestamp(expiration_date).normalize()
                     
-                    # Debug-Logging (optional, falls Konsole einsehbar)
-                    # logger.debug(f"Filtering earnings between {today} and {exp_ts}")
-                    
                     # Filter: Behalte nur die, bei denen earnings_date NICHT zwischen heute und expiration liegt
                     # Oder earnings_date NaT ist (keine Earnings bekannt)
+                    # Wir verwenden eine explizite Kopie um SettingWithCopy-Warnungen zu vermeiden
                     mask = (
-                        (spreads_df['earnings_date'] > today) & 
+                        (spreads_df['earnings_date'] >= today) & 
                         (spreads_df['earnings_date'] <= exp_ts)
                     )
                     before_count = len(spreads_df)
-                    spreads_df = spreads_df[~mask]
+                    spreads_df = spreads_df[~mask].copy()
                     logger.info(f"No Earnings Filter: {before_count} -> {len(spreads_df)} (today: {today}, exp: {exp_ts})")
                 
                 # Positive EV
                 if params["show_only_positive_ev"]:
                     before_count = len(spreads_df)
-                    spreads_df = spreads_df[spreads_df['expected_value'] >= 0]
+                    spreads_df = spreads_df[spreads_df['expected_value'] >= 0].copy()
                     logger.info(f"+EV Filter: {before_count} -> {len(spreads_df)}")
                 
                 # IV Range
