@@ -54,7 +54,7 @@ async def _fetch_paginated_data(url: str, params: Dict[str, Union[str, int]], se
         logger.exception(f"Exception fetching {description}: {e}")
         return all_results
 
-async def _fetch_tickers(market: str, session: aiohttp.ClientSession, include_exchange: bool = False) -> Union[List[str], Dict[str, str]]:
+async def _fetch_tickers(market: str, session: aiohttp.ClientSession, include_exchange: bool = False) -> Union[List[str], Dict[str, Dict[str, str]]]:
     """
     Fetches tickers from Massive API for a specific market.
     """
@@ -70,8 +70,17 @@ async def _fetch_tickers(market: str, session: aiohttp.ClientSession, include_ex
 
     results = await _fetch_paginated_data(url, params, session, description=f"tickers for {market}")
     
+    if market == "stocks":
+        results = [item for item in results if item.get('type') in ['CS', 'ETF']]
+
     if include_exchange:
-        return {item.get('ticker'): item.get('primary_exchange') for item in results if item.get('ticker')}
+        return {
+            item.get('ticker'): {
+                'primary_exchange': item.get('primary_exchange'),
+                'type': item.get('type')
+            } 
+            for item in results if item.get('ticker')
+        }
     else:
         return [item.get('ticker') for item in results if item.get('ticker')]
 
@@ -319,9 +328,15 @@ def load_symbols():
     all_data = asyncio.run(get_all_stocks_and_indices())
     symbols_with_options = asyncio.run(get_active_tickers_with_options())
 
-    # Stocks DF
-    df_stocks = pd.DataFrame(all_data["stocks_with_exchange"].items(), columns=["symbol", "exchange_mic"])
-    df_stocks["type"] = "stock"
+    # Stocks & ETFs
+    stocks_data = []
+    for symbol, info in all_data["stocks_with_exchange"].items():
+        stocks_data.append({
+            "symbol": symbol,
+            "exchange_mic": info["primary_exchange"],
+            "type": "stock" if info["type"] == "CS" else "etf"
+        })
+    df_stocks = pd.DataFrame(stocks_data)
 
     # Indices DF
     df_indices = pd.DataFrame(all_data["indices"], columns=["symbol"])
