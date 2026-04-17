@@ -21,9 +21,42 @@ def get_session(connector_limit: int = DEFAULT_CONNECTOR_LIMIT, timeout: aiohttp
     connector = aiohttp.TCPConnector(limit=connector_limit)
     return aiohttp.ClientSession(connector=connector, timeout=timeout)
 
+async def _fetch_paginated_data(url: str, params: Dict[str, Union[str, int]], session: aiohttp.ClientSession, description: str = "data") -> List[dict]:
+    """
+    General helper to fetch paginated data from Massive API.
+    """
+    all_results = []
+    current_url = url
+    current_params = params.copy()
+
+    try:
+        while current_url:
+            async with session.get(current_url, params=current_params) as response:
+                data = await response.json()
+
+                if data.get('status') != 'OK':
+                    logger.error(f"Error fetching {description}: {data.get('error')}")
+                    break
+
+                results = data.get('results', [])
+                all_results.extend(results)
+
+                next_url = data.get('next_url')
+                if next_url:
+                    current_url = next_url
+                    current_params = {"apiKey": MASSIVE_API_KEY}
+                else:
+                    current_url = None
+
+        return all_results
+
+    except Exception as e:
+        logger.exception(f"Exception fetching {description}: {e}")
+        return all_results
+
 async def _fetch_tickers(market: str, session: aiohttp.ClientSession, include_exchange: bool = False) -> Union[List[str], Dict[str, str]]:
     """
-    General helper to fetch tickers from Massive API for a specific market.
+    Fetches tickers from Massive API for a specific market.
     """
     url = f"{BASE_URL}/reference/tickers"
     params = {
@@ -35,36 +68,12 @@ async def _fetch_tickers(market: str, session: aiohttp.ClientSession, include_ex
         "apiKey": MASSIVE_API_KEY
     }
 
-    results_data = {} if include_exchange else []
+    results = await _fetch_paginated_data(url, params, session, description=f"tickers for {market}")
     
-    while url:
-        async with session.get(url, params=params) as response:
-            data = await response.json()
-
-            if data.get('status') != 'OK':
-                logger.error(f"Error fetching tickers for {market}: {data.get('error')}")
-                break
-
-            results = data.get('results', [])
-
-            for ticker_data in results:
-                ticker = ticker_data.get('ticker')
-                if not ticker:
-                    continue
-                
-                if include_exchange:
-                    results_data[ticker] = ticker_data.get('primary_exchange')
-                else:
-                    results_data.append(ticker)
-
-            next_url = data.get('next_url')
-            if next_url:
-                url = next_url
-                params = {"apiKey": MASSIVE_API_KEY}
-            else:
-                url = None
-
-    return results_data
+    if include_exchange:
+        return {item.get('ticker'): item.get('primary_exchange') for item in results if item.get('ticker')}
+    else:
+        return [item.get('ticker') for item in results if item.get('ticker')]
 
 @log_function
 async def get_all_stocks_and_indices():
@@ -94,37 +103,12 @@ async def _fetch_option_chain_chunk(ticker: str, session: aiohttp.ClientSession,
     """
     Fetches all option chains for a specific ticker from the Massive API.
     """
-    all_results = []
     url = f"{BASE_URL}/snapshot/options/{ticker}"
     params = {
         "limit": limit,
         "apiKey": MASSIVE_API_KEY
     }
-
-    try:
-        while url:
-            async with session.get(url, params=params) as response:
-                data = await response.json()
-
-                if data.get('status') != 'OK':
-                    logger.error(f"{ticker}: Error fetching option chains - {data.get('error')}")
-                    break
-
-                results = data.get('results', [])
-                all_results.extend(results)
-
-                next_url = data.get('next_url')
-                if next_url:
-                    url = next_url
-                    params = {"apiKey": MASSIVE_API_KEY}
-                else:
-                    url = None
-
-        return all_results
-
-    except Exception as e:
-        logger.exception(f"Exception fetching options for {ticker}: {e}")
-        return []
+    return await _fetch_paginated_data(url, params, session, description=f"option chains for {ticker}")
 
 async def _check_has_options(ticker: str, session: aiohttp.ClientSession) -> Optional[str]:
     """Check if a single ticker has any options."""
@@ -145,7 +129,7 @@ async def get_active_tickers_with_options():
     Retrieves a list of all active stock and index tickers that have available option chains.
     """
     async with get_session(timeout=aiohttp.ClientTimeout(total=1800)) as session:
-        # Fetch active tickers for stocks and indices parallel
+        # Fetch active tickers for stocks and indices in parallel
         stocks_task = _fetch_tickers("stocks", session)
         indices_task = _fetch_tickers("indices", session)
         
@@ -153,7 +137,7 @@ async def get_active_tickers_with_options():
         all_tickers = stocks + indices
 
         # Check in batches if they have options
-        batch_size = 20
+        batch_size = 50  # Increased batch size
         tickers_with_options = []
 
         for i in range(0, len(all_tickers), batch_size):
@@ -248,36 +232,38 @@ def load_option_chains(symbols: List[str]):
     """
     Loads option data for given symbols from Massive API and saves to database.
     """
-    logger.info(f"Loading for {len(symbols)} symbols option data from Massive API")
+    logger.info(f"Loading option data for {len(symbols)} symbols from Massive API")
 
-    conn = get_postgres_engine().raw_connection()
-    try:
-        truncate_table(conn, TABLE_OPTION_DATA_MASSIVE)
+    engine = get_postgres_engine()
+    with engine.raw_connection() as conn:
+        try:
+            truncate_table(conn, TABLE_OPTION_DATA_MASSIVE)
 
-        batch_size = 1000
-        total_options = 0
-        symbol_batches = [symbols[i:i + batch_size] for i in range(0, len(symbols), batch_size)]
-        
-        for idx, symbol_batch in enumerate(symbol_batches, 1):
-            if len(symbols) > batch_size:
-                logger.info(f"({idx}/{len(symbol_batches)}) Fetching Massive API option data for batch of {len(symbol_batch)} symbols...")
+            batch_size = 1000
+            total_options = 0
             
-            df = get_option_chains_df(tickers=symbol_batch)
+            for i in range(0, len(symbols), batch_size):
+                symbol_batch = symbols[i:i + batch_size]
+                logger.info(f"Fetching Massive API option data for batch {i//batch_size + 1}...")
+                
+                df = get_option_chains_df(tickers=symbol_batch)
 
-            if not df.empty:
-                insert_into_table_bulk(
-                    conn,
-                    table_name=TABLE_OPTION_DATA_MASSIVE,
-                    dataframe=df,
-                    if_exists="append"
-                )
-                total_options += len(df)
-        
-        conn.commit()
-    finally:
-        conn.close()
-    
-    logger.info(f"Total options collected and saved from Massive API: {total_options}")
+                if not df.empty:
+                    insert_into_table_bulk(
+                        conn,
+                        table_name=TABLE_OPTION_DATA_MASSIVE,
+                        dataframe=df,
+                        if_exists="append"
+                    )
+                    total_options += len(df)
+            
+            conn.commit()
+            logger.info(f"Successfully saved {total_options} options to {TABLE_OPTION_DATA_MASSIVE}")
+        except Exception as e:
+            conn.rollback()
+            logger.error(f"Failed to load option chains: {e}")
+            raise
+
     calculate_and_store_stock_implied_volatility()
 
 def get_symbols(include: Optional[str] = None) -> Union[List[str], Dict[str, List[str]]]:
@@ -346,7 +332,7 @@ def load_symbols():
     df = pd.concat([df_stocks, df_indices], ignore_index=True).drop_duplicates(subset=["symbol"])
     df["has_options"] = df["symbol"].isin(symbols_with_options)
 
-    #todo index haben prefix z.B. I:SPX
+    # Note: Indices might have prefixes like I:SPX (handled by Massive API)
 
     with get_postgres_engine().begin() as connection:
         truncate_table(connection, TABLE_STOCK_SYMBOLS_MASSIVE)
