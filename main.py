@@ -8,7 +8,6 @@ from src.logger_config import setup_logging
 from src.database import run_migrations
 from src.send_alert import send_telegram_message
 from src.massiv_api import load_option_chains
-from src.price_and_technical_analysis_data_scrapper import scrape_and_save_price_and_technical_indicators
 from src.stock_volatility import calculate_and_store_stock_implied_volatility_history
 from src.technical_indicators import calc_technical_indicators, calc_technical_indicators_history
 from src.yahoo_asset_profile import load_asset_profile

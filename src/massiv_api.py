@@ -297,28 +297,6 @@ def get_symbols(include: Optional[str] = None) -> Union[List[str], Dict[str, Lis
         return sorted(list(set(result[include])))
     return result
 
-def get_symbols_with_exchange() -> pd.DataFrame:
-    """
-    Fetches symbols with exchange mappings from the database.
-    """
-    query = f"""
-        SELECT 
-            symbol,
-            CASE 
-                WHEN exchange_mic = 'XNAS' THEN 'NASDAQ'
-                WHEN exchange_mic = 'XNYS' THEN 'NYSE'
-                WHEN exchange_mic = 'ARCX' THEN 'AMEX'
-                WHEN exchange_mic = 'XASE' THEN 'AMEX'
-                ELSE exchange_mic
-            END AS exchange
-        FROM "{TABLE_STOCK_SYMBOLS_MASSIVE}"
-        WHERE symbol IN (SELECT symbol FROM "TechnicalIndicatorsMasterData" WHERE from_date < '2026-02-16')
-        ORDER BY symbol
-    """
-    symbols_exchange = select_into_dataframe(query)
-    logger.info(f"Loaded {len(symbols_exchange)} symbols with exchange from the database.")
-    return symbols_exchange
-
 def load_symbols():
     """
     Refreshes the symbols database from the Massive API.
@@ -357,7 +335,7 @@ def load_symbols():
             dataframe=df,
             if_exists="append"
         )
-    logger.info(f"Loaded {len(df)} symbols with exchange and options info into the database.")
+    logger.info(f"Loaded {len(df)} symbols with exchange and options into the database.")
 
 if __name__ == "__main__":
     setup_logging(log_level=logging.DEBUG, console_output=True)
