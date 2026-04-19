@@ -243,35 +243,36 @@ def load_option_chains(symbols: List[str]):
     """
     logger.info(f"Loading option data for {len(symbols)} symbols from Massive API")
 
-    engine = get_postgres_engine()
-    with engine.raw_connection() as conn:
-        try:
-            truncate_table(conn, TABLE_OPTION_DATA_MASSIVE)
+    conn = get_postgres_engine().raw_connection()
+    try:
+        truncate_table(conn, TABLE_OPTION_DATA_MASSIVE)
 
-            batch_size = 1000
-            total_options = 0
+        batch_size = 1000
+        total_options = 0
+        
+        for i in range(0, len(symbols), batch_size):
+            symbol_batch = symbols[i:i + batch_size]
+            logger.info(f"Fetching Massive API option data for batch {i//batch_size + 1}...")
             
-            for i in range(0, len(symbols), batch_size):
-                symbol_batch = symbols[i:i + batch_size]
-                logger.info(f"Fetching Massive API option data for batch {i//batch_size + 1}...")
-                
-                df = get_option_chains_df(tickers=symbol_batch)
+            df = get_option_chains_df(tickers=symbol_batch)
 
-                if not df.empty:
-                    insert_into_table_bulk(
-                        conn,
-                        table_name=TABLE_OPTION_DATA_MASSIVE,
-                        dataframe=df,
-                        if_exists="append"
-                    )
-                    total_options += len(df)
-            
-            conn.commit()
-            logger.info(f"Successfully saved {total_options} options to {TABLE_OPTION_DATA_MASSIVE}")
-        except Exception as e:
-            conn.rollback()
-            logger.error(f"Failed to load option chains: {e}")
-            raise
+            if not df.empty:
+                insert_into_table_bulk(
+                    conn,
+                    table_name=TABLE_OPTION_DATA_MASSIVE,
+                    dataframe=df,
+                    if_exists="append"
+                )
+                total_options += len(df)
+        
+        conn.commit()
+        logger.info(f"Successfully saved {total_options} options to {TABLE_OPTION_DATA_MASSIVE}")
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Failed to load option chains: {e}")
+        raise
+    finally:
+        conn.close()
 
     calculate_and_store_stock_implied_volatility()
 
@@ -285,7 +286,7 @@ def get_symbols(include: Optional[str] = None) -> Union[List[str], Dict[str, Lis
     if df.empty:
         load_symbols()
         df = select_into_dataframe(f'SELECT symbol, has_options, type FROM "{TABLE_STOCK_SYMBOLS_MASSIVE}" ORDER BY symbol')
-    
+
     result = {
         "all": df["symbol"].tolist(),
         "stocks": df[df["type"] == "stock"]["symbol"].tolist(),
