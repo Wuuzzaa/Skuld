@@ -1,26 +1,67 @@
 # Workflow Overview
 
+## Zielmodell
+
+- Ein Push auf `master` deployt immer nur nach `production`.
+- Der Homeserver wird niemals automatisch durch einen normalen `master`-Push getroffen.
+- Homeserver-Operationen sind immer explizit manuell.
+
 ## Workflows
 
-| File | Purpose | Trigger | Target |
+| File | Purpose | Trigger | Targets |
 |---|---|---|---|
-| `deploy.yml` | App deploy | push auf `master` (auto → production) ODER manuell `workflow_dispatch` (production / dev) | Hetzner via GitHub Environment |
-| `trigger-jobs.yml` | Manuelle Jobs (Data Collection, DB Backup, Healthcheck) | manuell via `workflow_dispatch` | production / dev |
+| `deploy.yml` | App deploy | Push auf `master` oder manueller `workflow_dispatch` | `production`, `dev-hetzner`, `home-server` |
+| `trigger-jobs.yml` | Jobs auf genau einem Zielsystem ausfuehren | Manueller `workflow_dispatch` | `production`, `dev-hetzner`, `home-server` |
+| `replicate-db-to-home.yml` | Backup aus einer Quell-Umgebung auf Homeserver-Datenbank wiederherstellen | Manueller `workflow_dispatch` | `production` oder `dev-hetzner` -> `home-server` |
 
-## Deployment-Modell
+## Was verwende ich wofuer?
 
-- **Ein Workflow fuer alle Environments** – deploy.yml entscheidet anhand `inputs.target` (oder auto bei push).
-- GitHub Environments steuern Secrets und Variablen pro Server.
-- `mysudo`-Funktion fuer sudo-Kompatibilitaet (NOPASSWD oder Passwort).
+### 1. Normaler Production Deploy
+
+- Aktion: Push auf `master`
+- Ergebnis: Deploy nach `production`
+- Wichtig: Kein automatischer Deploy auf den Homeserver
+
+### 2. Branch oder Commit auf Homeserver deployen
+
+- Workflow: `deploy.yml`
+- `target`: `home-server`
+- `ref`: Branch, Tag oder SHA
+- Ergebnis: Gewaehlter Code wird auf den Homeserver deployed
+
+### 3. Datenbank auf Homeserver kopieren
+
+- Workflow: `replicate-db-to-home.yml`
+- `source_environment`: `production` oder `dev-hetzner`
+- Zweck: Neuestes Backup der gewaehlten Quell-Umgebung laden und in `skuld_staging_db` auf dem Homeserver restoren
+- Schutz: Workflow verlangt die Bestaetigung `RESTORE_HOME_DB`
+
+### 4. Einzelne Jobs auf einem bestimmten Server ausfuehren
+
+- Workflow: `trigger-jobs.yml`
+- Beispiele:
+  - `db_backup` auf `production`
+  - `db_healthcheck` auf `home-server`
+  - `stock_data_daily` auf `dev-hetzner`
+- Wichtig: Dieser Workflow kopiert keine Datenbank zwischen Servern. Das macht nur `replicate-db-to-home.yml`.
 
 ## GitHub Environments
 
 ### `production`
 
-**Secrets:** `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, `DEPLOY_PASSWORD` (optional, nur bei Passwort-sudo), `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `MASSIVE_API_KEY`, `MASSIVE_API_KEY_FLAT_FILES`, `POSTGRES_PASSWORD`, `AUTHELIA_JWT_SECRET`, `AUTHELIA_SESSION_SECRET`, `AUTHELIA_STORAGE_ENCRYPTION_KEY`, `AUTHELIA_PASSWORD_HASH`
+Secrets: `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, `DEPLOY_PASSWORD`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `MASSIVE_API_KEY`, `MASSIVE_API_KEY_FLAT_FILES`, `POSTGRES_PASSWORD`, `AUTHELIA_JWT_SECRET`, `AUTHELIA_SESSION_SECRET`, `AUTHELIA_STORAGE_ENCRYPTION_KEY`, `AUTHELIA_PASSWORD_HASH`
 
-**Variables:** `DOMAIN_NAME`, `AUTH_DOMAIN`, `TRAEFIK_ENTRYPOINT`, `TRAEFIK_CERTRESOLVER_LABEL_SKULD`, `TRAEFIK_CERTRESOLVER_LABEL_AUTHELIA`, `AUTH_SCHEME`, `POSTGRES_HOST`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PORT`
+Variables: `DOMAIN_NAME`, `AUTH_DOMAIN`, `TRAEFIK_ENTRYPOINT`, `TRAEFIK_CERTRESOLVER_LABEL_SKULD`, `TRAEFIK_CERTRESOLVER_LABEL_AUTHELIA`, `AUTH_SCHEME`, `POSTGRES_HOST`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PORT`
 
 ### `dev-hetzner`
 
-Gleiche Secrets und Variables wie `production`, aber mit Dev-spezifischen Werten (anderer Host, ggf. andere Domain).
+Gleiche Struktur wie `production`, aber mit Dev-spezifischen Werten.
+
+### `home-server`
+
+Gleiche Struktur wie `production`, aber mit Werten fuer den Homeserver / das Testsystem.
+
+Besonderheiten:
+
+- `deploy.yml` nutzt fuer `home-server` automatisch `docker-compose.yml` plus `docker-compose.testing.yml`.
+- `trigger-jobs.yml` und `replicate-db-to-home.yml` nutzen auf dem Homeserver den Postgres-Container `skuld_staging_db`.

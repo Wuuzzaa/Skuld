@@ -4,16 +4,17 @@ name: Deploy SKULD
 # Unified deployment workflow for all environments.
 #
 # Triggers:
-#   - push to master  → auto-deploy to production
-#   - workflow_dispatch → choose target (production / dev) + git ref
+#   - push to master  -> auto-deploy to production only
+#   - workflow_dispatch -> choose target (production / dev-hetzner / home-server) + git ref
 #
 # Each target maps to a GitHub Environment that holds its own
 # secrets (DEPLOY_HOST, DEPLOY_SSH_KEY, ...) and variables
 # (DOMAIN_NAME, AUTH_DOMAIN, ...).
 #
 # Environments:
-#   production  → Helsinki / Falkenstein (whichever is current prod)
-#   dev-hetzner → Dev server
+#   production  -> Helsinki / Falkenstein (whichever is current prod)
+#   dev-hetzner -> Dev server
+#   home-server -> Home server / staging
 # ============================================================================
 
 on:
@@ -27,7 +28,8 @@ on:
         type: choice
         options:
           - production
-          - dev
+          - dev-hetzner
+          - home-server
         default: production
       ref:
         description: "Git ref to deploy (branch, tag, or SHA)"
@@ -35,16 +37,18 @@ on:
         default: master
 
 concurrency:
-  group: deploy-${{ inputs.target || 'production' }}
+  group: deploy-${{ github.event_name == 'push' && 'production' || inputs.target }}
   cancel-in-progress: false
 
 jobs:
   deploy:
-    name: "Deploy to ${{ inputs.target || 'production' }}"
+    name: "Deploy to ${{ github.event_name == 'push' && 'production' || inputs.target }}"
     runs-on: ubuntu-latest
-    environment: ${{ (github.event_name == 'push' || inputs.target == 'production') && 'production' || 'dev-hetzner' }}
+    environment: ${{ github.event_name == 'push' && 'production' || inputs.target }}
     env:
-      DEPLOY_LABEL: ${{ (github.event_name == 'push' || inputs.target == 'production') && 'Production' || 'Dev' }}
+      DEPLOY_TARGET: ${{ github.event_name == 'push' && 'production' || inputs.target }}
+      DEPLOY_LABEL: ${{ github.event_name == 'push' && 'Production' || inputs.target == 'production' && 'Production' || inputs.target == 'home-server' && 'Home Server' || 'Dev Hetzner' }}
+      COMPOSE_ARGS: ${{ github.event_name == 'push' && '-f docker-compose.yml' || inputs.target == 'home-server' && '-f docker-compose.yml -f docker-compose.testing.yml' || '-f docker-compose.yml' }}
 
     steps:
       - name: Checkout code
@@ -222,23 +226,29 @@ jobs:
             mysudo docker rm -f authelia 2>/dev/null || true
             mysudo docker ps -a --filter "name=authelia" -q | xargs -r mysudo docker rm -f 2>/dev/null || true
             mysudo docker ps -a --filter "name=skuld" -q | xargs -r mysudo docker rm -f 2>/dev/null || true
-            mysudo docker compose down --remove-orphans || true
+            if [ "${{ env.DEPLOY_TARGET }}" = "home-server" ]; then
+              mysudo docker rm -f traefik_staging 2>/dev/null || true
+              mysudo docker rm -f skuld_staging_db 2>/dev/null || true
+              mysudo docker rm -f schuld_staging_db 2>/dev/null || true
+              mysudo docker rm -f skuld_staging_pgadmin 2>/dev/null || true
+            fi
+            mysudo docker compose ${{ env.COMPOSE_ARGS }} down --remove-orphans || true
 
             # ── Build & start ──
             echo "=== Building image ==="
-            mysudo docker compose build --pull --no-cache
+            mysudo docker compose ${{ env.COMPOSE_ARGS }} build --pull --no-cache
 
             echo "=== Starting containers ==="
-            mysudo docker compose up -d --remove-orphans
+            mysudo docker compose ${{ env.COMPOSE_ARGS }} up -d --remove-orphans
 
             echo "=== Cleaning old images ==="
             mysudo docker image prune -f
 
             echo "=== Container status ==="
-            mysudo docker compose ps
+            mysudo docker compose ${{ env.COMPOSE_ARGS }} ps
 
             echo "=== Container logs ==="
-            mysudo docker compose logs --tail=30
+            mysudo docker compose ${{ env.COMPOSE_ARGS }} logs --tail=30
           ENDSSH
 
       - name: Notify deploy success via Telegram
