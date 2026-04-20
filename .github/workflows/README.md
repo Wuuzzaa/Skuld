@@ -65,3 +65,9 @@ Besonderheiten:
 
 - `deploy.yml` nutzt fuer `home-server` automatisch `docker-compose.yml` plus `docker-compose.testing.yml`.
 - `trigger-jobs.yml` und `replicate-db-to-home.yml` nutzen auf dem Homeserver den Postgres-Container `skuld_staging_db`.
+
+Wichtig fuer Branch-Deploys:
+
+- Der Workflow `deploy.yml` akzeptiert fuer `ref` grundsaetzlich Branch, Tag oder SHA.
+- Wenn ein beliebiger Branch nicht auf `home-server` deployed werden kann, liegt das nicht am YAML, sondern an den GitHub-Environment-Einstellungen.
+- In GitHub unter `Settings -> Environments -> home-server -> Deployment branches and tags` muss dafuer `No restriction` gesetzt sein. Bei `Selected branches and tags` blockiert GitHub den Job bereits vor dem eigentlichen Deploy.
