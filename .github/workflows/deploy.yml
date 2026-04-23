@@ -144,7 +144,7 @@ jobs:
 
   restore_db_on_home:
     name: Restore DB on home-server
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: fetch_db_backup
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.target == 'home-server' && inputs.restore_db_from_source }}
     environment: home-server
@@ -170,19 +170,19 @@ jobs:
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} 'bash -s' <<EOF
-          set -euo pipefail
+            set -euo pipefail
 
-          BACKUP_FILE="/tmp/${{ needs.fetch_db_backup.outputs.backup_file_name }}"
+            BACKUP_FILE="/tmp/${{ needs.fetch_db_backup.outputs.backup_file_name }}"
 
-          docker stop skuld-frontend skuld-backend 2>/dev/null || true
+            docker stop skuld-frontend skuld-backend 2>/dev/null || true
 
-          echo 'DROP DATABASE IF EXISTS "Skuld"; CREATE DATABASE "Skuld";' | \
-            docker exec -i skuld_staging_db psql -U admin -d postgres
+            echo 'DROP DATABASE IF EXISTS "Skuld"; CREATE DATABASE "Skuld";' | \
+              docker exec -i skuld_staging_db psql -U admin -d postgres
 
-          gzip -dc "$BACKUP_FILE" | docker exec -i skuld_staging_db psql -U admin -d Skuld
+            gzip -dc "$BACKUP_FILE" | docker exec -i skuld_staging_db psql -U admin -d Skuld
 
-          rm -f "$BACKUP_FILE"
-EOF
+            rm -f "$BACKUP_FILE"
+          EOF
 
   deploy:
     name: "Deploy to ${{ github.event_name == 'push' && 'production' || inputs.target }}"
