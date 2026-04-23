@@ -5,6 +5,7 @@
 - Ein Push auf `master` deployt immer nur nach `production`.
 - Der Homeserver wird niemals automatisch durch einen normalen `master`-Push getroffen.
 - Homeserver-Operationen sind immer explizit manuell.
+- Homeserver-Operationen laufen auf dem self-hosted Runner `heimserver`.
 
 ## Workflows
 
@@ -13,6 +14,17 @@
 | `deploy.yml` | App deploy | Push auf `master` oder manueller `workflow_dispatch` | `production`, `dev-hetzner`, `home-server` |
 | `trigger-jobs.yml` | Jobs auf genau einem Zielsystem ausfuehren | Manueller `workflow_dispatch` | `production`, `dev-hetzner`, `home-server` |
 | `replicate-db-to-home.yml` | Backup aus einer Quell-Umgebung auf Homeserver-Datenbank wiederherstellen | Manueller `workflow_dispatch` | `production` oder `dev-hetzner` -> `home-server` |
+
+## Runner-Modell
+
+- `production` und `dev-hetzner`: `ubuntu-latest` (GitHub-hosted)
+- `home-server` in `deploy.yml`: `self-hosted`
+- `home-server` in `trigger-jobs.yml`: `self-hosted`
+- Restore-Job in `replicate-db-to-home.yml`: `self-hosted`
+
+Wichtig:
+
+- Der self-hosted Runner auf dem Homeserver muss online sein, sonst bleiben Home-Jobs in `queued`.
 
 ## Was verwende ich wofuer?
 
