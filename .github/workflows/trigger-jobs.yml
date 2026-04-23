@@ -101,39 +101,39 @@ jobs:
           if [ "$JOB" = "db_backup" ]; then
             DESCRIPTION="Database backup"
             cat > /tmp/remote_cmd.sh <<EOF
-set -euo pipefail
-TIMESTAMP=\$(date -u '+%Y%m%d_%H%M%S')
-BACKUP_DIR=\$HOME/backups/postgres
-BACKUP_FILE="\${BACKUP_DIR}/skuld_manual_\${TIMESTAMP}.sql.gz"
-mkdir -p "\${BACKUP_DIR}"
-echo "Starting pg_dump from ${DB_CONTAINER}..."
-docker exec ${DB_CONTAINER} pg_dump -U admin -d Skuld | gzip > "\${BACKUP_FILE}"
-FILESIZE=\$(du -h "\${BACKUP_FILE}" | cut -f1)
-echo "Backup complete: \${BACKUP_FILE} (\${FILESIZE})"
-ls -t "\${BACKUP_DIR}"/skuld_manual_*.sql.gz 2>/dev/null | tail -n +4 | xargs -r rm -f
-EOF
+            set -euo pipefail
+            TIMESTAMP=\$(date -u '+%Y%m%d_%H%M%S')
+            BACKUP_DIR=\$HOME/backups/postgres
+            BACKUP_FILE="\${BACKUP_DIR}/skuld_manual_\${TIMESTAMP}.sql.gz"
+            mkdir -p "\${BACKUP_DIR}"
+            echo "Starting pg_dump from ${DB_CONTAINER}..."
+            docker exec ${DB_CONTAINER} pg_dump -U admin -d Skuld | gzip > "\${BACKUP_FILE}"
+            FILESIZE=\$(du -h "\${BACKUP_FILE}" | cut -f1)
+            echo "Backup complete: \${BACKUP_FILE} (\${FILESIZE})"
+            ls -t "\${BACKUP_DIR}"/skuld_manual_*.sql.gz 2>/dev/null | tail -n +4 | xargs -r rm -f
+            EOF
           elif [ "$JOB" = "db_healthcheck" ]; then
             DESCRIPTION="Database healthcheck"
             cat > /tmp/remote_cmd.sh <<EOF
-set -euo pipefail
-echo "=== Docker containers ==="
-${COMPOSE_CMD} ps || true
-echo
-echo "=== PostgreSQL ping ==="
-docker exec ${DB_CONTAINER} psql -U admin -d Skuld -c "select now() as db_time, current_database() as db_name;"
-echo
-echo "=== Required view check ==="
-docker exec ${DB_CONTAINER} psql -U admin -d Skuld -tAc "select 1 from pg_views where viewname = 'OptionDataMerged';"
-echo
-echo "=== View list filter ==="
-docker exec ${DB_CONTAINER} psql -U admin -d Skuld -c "\\dv" | grep OptionDataMerged
-EOF
+            set -euo pipefail
+            echo "=== Docker containers ==="
+            ${COMPOSE_CMD} ps || true
+            echo
+            echo "=== PostgreSQL ping ==="
+            docker exec ${DB_CONTAINER} psql -U admin -d Skuld -c "select now() as db_time, current_database() as db_name;"
+            echo
+            echo "=== Required view check ==="
+            docker exec ${DB_CONTAINER} psql -U admin -d Skuld -tAc "select 1 from pg_views where viewname = 'OptionDataMerged';"
+            echo
+            echo "=== View list filter ==="
+            docker exec ${DB_CONTAINER} psql -U admin -d Skuld -c "\\dv" | grep OptionDataMerged
+            EOF
           else
             DESCRIPTION="Data collection: ${JOB}"
             cat > /tmp/remote_cmd.sh <<EOF
-set -euo pipefail
-docker exec skuld-backend /bin/bash /app/Skuld/run_data_collection.sh ${JOB}
-EOF
+            set -euo pipefail
+            docker exec skuld-backend /bin/bash /app/Skuld/run_data_collection.sh ${JOB}
+            EOF
           fi
 
           chmod 700 /tmp/remote_cmd.sh
