@@ -4,16 +4,17 @@ name: Deploy SKULD
 # Unified deployment workflow for all environments.
 #
 # Triggers:
-#   - push to master  → auto-deploy to production
-#   - workflow_dispatch → choose target (production / dev) + git ref
+#   - push to master  -> auto-deploy to production only
+#   - workflow_dispatch -> choose target (production / dev-hetzner / home-server) + git ref
 #
 # Each target maps to a GitHub Environment that holds its own
 # secrets (DEPLOY_HOST, DEPLOY_SSH_KEY, ...) and variables
 # (DOMAIN_NAME, AUTH_DOMAIN, ...).
 #
 # Environments:
-#   production  → Helsinki / Falkenstein (whichever is current prod)
-#   dev-hetzner → Dev server
+#   production  -> Helsinki / Falkenstein (whichever is current prod)
+#   dev-hetzner -> Dev server
+#   home-server -> Home server / staging
 # ============================================================================
 
 on:
@@ -27,7 +28,8 @@ on:
         type: choice
         options:
           - production
-          - dev
+          - dev-hetzner
+          - home-server
         default: production
       ref:
         description: "Git ref to deploy (branch, tag, or SHA)"
@@ -35,16 +37,18 @@ on:
         default: master
 
 concurrency:
-  group: deploy-${{ inputs.target || 'production' }}
+  group: deploy-${{ github.event_name == 'push' && 'production' || inputs.target }}
   cancel-in-progress: false
 
 jobs:
   deploy:
-    name: "Deploy to ${{ inputs.target || 'production' }}"
+    name: "Deploy to ${{ github.event_name == 'push' && 'production' || inputs.target }}"
     runs-on: ubuntu-latest
-    environment: ${{ (github.event_name == 'push' || inputs.target == 'production') && 'production' || 'dev-hetzner' }}
+    environment: ${{ github.event_name == 'push' && 'production' || inputs.target }}
     env:
-      DEPLOY_LABEL: ${{ (github.event_name == 'push' || inputs.target == 'production') && 'Production' || 'Dev' }}
+      DEPLOY_TARGET: ${{ github.event_name == 'push' && 'production' || inputs.target }}
+      DEPLOY_LABEL: ${{ github.event_name == 'push' && 'Production' || inputs.target == 'production' && 'Production' || inputs.target == 'home-server' && 'Home Server' || 'Dev Hetzner' }}
+      COMPOSE_ARGS: ${{ github.event_name == 'push' && '-f docker-compose.yml' || inputs.target == 'home-server' && '-f docker-compose.yml -f docker-compose.testing.yml' || '-f docker-compose.yml' }}
 
     steps:
       - name: Checkout code
@@ -133,6 +137,21 @@ jobs:
 
             # ── Create .env from GitHub Environment vars/secrets ──
             echo "=== Creating .env file ==="
+
+            POSTGRES_HOST_VALUE='${{ vars.POSTGRES_HOST }}'
+            POSTGRES_DB_VALUE='${{ vars.POSTGRES_DB }}'
+            POSTGRES_USER_VALUE='${{ vars.POSTGRES_USER }}'
+            POSTGRES_PORT_VALUE='${{ vars.POSTGRES_PORT }}'
+
+            # Home server runs the staging DB from docker-compose.testing.yml.
+            # Ensure sane defaults even if environment vars are missing.
+            if [ "${{ env.DEPLOY_TARGET }}" = "home-server" ]; then
+              [ -n "$POSTGRES_HOST_VALUE" ] || POSTGRES_HOST_VALUE="postgres"
+              [ -n "$POSTGRES_DB_VALUE" ] || POSTGRES_DB_VALUE="Skuld"
+              [ -n "$POSTGRES_USER_VALUE" ] || POSTGRES_USER_VALUE="admin"
+              [ -n "$POSTGRES_PORT_VALUE" ] || POSTGRES_PORT_VALUE="5432"
+            fi
+
             echo "DOMAIN_NAME=${{ vars.DOMAIN_NAME }}" > .env
             echo "AUTH_DOMAIN=${{ vars.AUTH_DOMAIN }}" >> .env
             echo "TRAEFIK_ENTRYPOINT=${{ vars.TRAEFIK_ENTRYPOINT }}" >> .env
@@ -144,11 +163,20 @@ jobs:
             echo "MASSIVE_API_KEY=${{ secrets.MASSIVE_API_KEY }}" >> .env
             echo "MASSIVE_API_KEY_FLAT_FILES=${{ secrets.MASSIVE_API_KEY_FLAT_FILES }}" >> .env
             echo "SKULD_VERSION=${{ steps.get_version.outputs.VERSION }}" >> .env
-            echo "POSTGRES_HOST=${{ vars.POSTGRES_HOST }}" >> .env
-            echo "POSTGRES_DB=${{ vars.POSTGRES_DB }}" >> .env
-            echo "POSTGRES_USER=${{ vars.POSTGRES_USER }}" >> .env
+            echo "POSTGRES_HOST=${POSTGRES_HOST_VALUE}" >> .env
+            echo "POSTGRES_DB=${POSTGRES_DB_VALUE}" >> .env
+            echo "POSTGRES_USER=${POSTGRES_USER_VALUE}" >> .env
             echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env
-            echo "POSTGRES_PORT=${{ vars.POSTGRES_PORT }}" >> .env
+            echo "POSTGRES_PORT=${POSTGRES_PORT_VALUE}" >> .env
+
+            # Fail fast on missing critical DB vars.
+            REQUIRED_DB_VARS="POSTGRES_HOST POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD POSTGRES_PORT"
+            for k in $REQUIRED_DB_VARS; do
+              if ! grep -q "^${k}=.\+" .env; then
+                echo "Missing required DB setting: ${k}" >&2
+                exit 1
+              fi
+            done
 
             # ── Authelia secrets ──
             echo "=== Creating Authelia configuration ==="
@@ -169,6 +197,10 @@ jobs:
 
             set -x
             mkdir -p logs
+
+            # Ensure external networks exist before compose (especially on fresh home-server installs).
+            mysudo docker network create web >/dev/null 2>&1 || true
+            mysudo docker network create postgres_setup_default >/dev/null 2>&1 || true
 
             # ── Safe Deploy: wait for running data-collection jobs ──
             echo "=== Checking for running jobs in skuld-backend ==="
@@ -222,23 +254,38 @@ jobs:
             mysudo docker rm -f authelia 2>/dev/null || true
             mysudo docker ps -a --filter "name=authelia" -q | xargs -r mysudo docker rm -f 2>/dev/null || true
             mysudo docker ps -a --filter "name=skuld" -q | xargs -r mysudo docker rm -f 2>/dev/null || true
-            mysudo docker compose down --remove-orphans || true
+            if [ "${{ env.DEPLOY_TARGET }}" = "home-server" ]; then
+              mysudo docker rm -f traefik_staging 2>/dev/null || true
+              mysudo docker rm -f skuld_staging_db 2>/dev/null || true
+              mysudo docker rm -f schuld_staging_db 2>/dev/null || true
+              mysudo docker rm -f skuld_staging_pgadmin 2>/dev/null || true
+            fi
+            mysudo docker compose ${{ env.COMPOSE_ARGS }} down --remove-orphans || true
 
             # ── Build & start ──
             echo "=== Building image ==="
-            mysudo docker compose build --pull --no-cache
+            mysudo docker compose ${{ env.COMPOSE_ARGS }} build --pull --no-cache
 
             echo "=== Starting containers ==="
-            mysudo docker compose up -d --remove-orphans
+            mysudo docker compose ${{ env.COMPOSE_ARGS }} up -d --remove-orphans
 
             echo "=== Cleaning old images ==="
             mysudo docker image prune -f
 
             echo "=== Container status ==="
-            mysudo docker compose ps
+            mysudo docker compose ${{ env.COMPOSE_ARGS }} ps
+
+            # Verify DB connectivity from the runtime stack so branch choice cannot break DB wiring silently.
+            echo "=== Verifying DB connectivity ==="
+            if [ "${{ env.DEPLOY_TARGET }}" = "home-server" ]; then
+              mysudo docker exec skuld_staging_db psql -U "${POSTGRES_USER_VALUE}" -d "${POSTGRES_DB_VALUE}" -c 'select 1;' >/dev/null
+            else
+              mysudo docker exec postgres_setup-db-1 psql -U "${POSTGRES_USER_VALUE}" -d "${POSTGRES_DB_VALUE}" -c 'select 1;' >/dev/null
+            fi
+            echo "DB connectivity check passed"
 
             echo "=== Container logs ==="
-            mysudo docker compose logs --tail=30
+            mysudo docker compose ${{ env.COMPOSE_ARGS }} logs --tail=30
           ENDSSH
 
       - name: Notify deploy success via Telegram
