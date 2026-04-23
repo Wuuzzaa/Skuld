@@ -3,7 +3,6 @@ import logging
 import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from src.massiv_api import get_symbols
-from src.live_stock_price_collector import fetch_current_prices
 from src.logger_config import setup_logging
 from src.database import run_migrations
 from src.send_alert import send_telegram_message
@@ -19,7 +18,7 @@ from config import *
 from src.historization import run_historization_pipeline
 from src.pipeline_monitor import PipelineMonitor
 
-setup_logging(component="data_collector", log_level=logging.DEBUG, console_output=True)
+setup_logging(component="data_collector", log_level=logging.INFO, console_output=True)
 logger = logging.getLogger(__name__)
 logger.info("data_collector")
 
@@ -69,33 +68,32 @@ def main(args):
         task_map = {
             "all": [
                 ("Massive Option Chains", load_option_chains, (symbols["options"],)),
-                ("Fetch Current Stock Day Prices", load_stock_prices, (symbols["stocks"],)),
+                ("Fetch Current Stock Day Prices", load_stock_prices, (symbols["all"],)),
                 ("Yahoo Finance Analyst Price Targets", scrape_yahoo_finance_analyst_price_targets, (symbols["stocks"],)),
                 ("Earning Dates", scrape_earning_dates, (symbols["stocks"],)),
                 ("Yahoo Query Fundamentals", generate_fundamental_data, (symbols["stocks"],)),
-                ("Fetch Current Stock Prices", fetch_current_prices, (symbols["stocks"],)),
                 ("Yahoo Dividends", calculate_dividend_classification, ()),
-                ("Yahoo Asset Profiles", load_asset_profile, (symbols["stocks"],)),
-                ("Technical Indicators", calc_technical_indicators, (symbols["stocks"],)),
+                ("Yahoo Asset Profiles", load_asset_profile, (symbols["all"],)),
+                ("Technical Indicators", calc_technical_indicators, (symbols["all"],)),
             ],
             "saturday_night": [
                 ("Yahoo Dividends", calculate_dividend_classification, ()),
                 ("Yahoo Query Fundamentals", generate_fundamental_data, (symbols["stocks"],)),
                 ("Yahoo Finance Analyst Price Targets", scrape_yahoo_finance_analyst_price_targets, (symbols["stocks"],)),
                 ("Earning Dates", scrape_earning_dates, (symbols["stocks"],)),
-                ("Yahoo Asset Profiles", load_asset_profile, (symbols["stocks"],)),
+                ("Yahoo Asset Profiles", load_asset_profile, (symbols["all"],)),
             ],
             "market_start_mid_end": [
-                ("Fetch Current Stock Day Prices", load_stock_prices, (symbols["stocks"],)),
+                ("Fetch Current Stock Day Prices", load_stock_prices, (symbols["all"],)),
             ],
             "stock_data_daily": [
-                ("Technical Indicators", calc_technical_indicators, (symbols["stocks"],)),
+                ("Technical Indicators", calc_technical_indicators, (symbols["all"],)),
             ],
             "option_data": [
                 ("Massive Option Chains", load_option_chains, (symbols["options"],)),
             ],
             "historical_technical_indicators": [
-                ("Technical Indicators History", calc_technical_indicators_history, (symbols["stocks"],)),
+                ("Technical Indicators History", calc_technical_indicators_history, (symbols["all"],)),
             ],
         }
 
@@ -103,7 +101,7 @@ def main(args):
 
         if args.mode == "historical_prices":
             parallel_tasks = []
-            load_historical_prices(symbols["stocks"])
+            load_historical_prices(symbols["all"])
         elif args.mode == "historical_iv":
             parallel_tasks = []
             calculate_and_store_stock_implied_volatility_history()

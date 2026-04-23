@@ -21,6 +21,8 @@ MODULES = 'calendarEvents summaryDetail financialData earningsTrend defaultKeySt
 @Singleton
 class YahooQueryScraper:
     def __init__(self, symbols):
+        # replace symbol prefix I: with ^ for indices to match yahoo format
+        symbols = [symbol.replace('I:', '^') for symbol in symbols]
         self.symbols = symbols
         self.retries = 5
         self._module_data_cache = None

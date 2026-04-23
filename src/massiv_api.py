@@ -281,11 +281,11 @@ def get_symbols(include: Optional[str] = None) -> Union[List[str], Dict[str, Lis
     Returns a list or dictionary of stock symbols, indices, and symbols with options.
     """
     logger.info("Loading symbols from database...")
-    df = select_into_dataframe(f'SELECT symbol, has_options, type FROM "{TABLE_STOCK_SYMBOLS_MASSIVE}" ORDER BY symbol')
+    df = select_into_dataframe(f'SELECT symbol, has_options, type FROM "{TABLE_STOCK_SYMBOLS_MASSIVE}" WHERE type <> \'index\' OR has_options = TRUE ORDER BY symbol')
     
     if df.empty:
         load_symbols()
-        df = select_into_dataframe(f'SELECT symbol, has_options, type FROM "{TABLE_STOCK_SYMBOLS_MASSIVE}" ORDER BY symbol')
+        df = select_into_dataframe(f'SELECT symbol, has_options, type FROM "{TABLE_STOCK_SYMBOLS_MASSIVE}" WHERE type <> \'index\' OR has_options = TRUE ORDER BY symbol')
 
     result = {
         "all": df["symbol"].tolist(),

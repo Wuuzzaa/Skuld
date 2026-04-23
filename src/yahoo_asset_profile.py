@@ -12,6 +12,8 @@ logger = logging.getLogger(__name__)
 
 def load_asset_profile(symbols):
     logger.info("Loading Yahoo Asset Profiles")
+    # replace symbol prefix I: with ^ for indices to match yahoo format
+    symbols = [symbol.replace('I:', '^') for symbol in symbols]
     yahoo_query = YahooQueryScraper.instance(symbols)
     data = yahoo_query.get_modules(modules='assetProfile price')
 
@@ -41,6 +43,8 @@ def load_asset_profile(symbols):
     # --- Database Persistence ---
     with get_postgres_engine().begin() as connection:
         truncate_table(connection, TABLE_STOCK_ASSET_PROFILES_YAHOO)
+        # replace symbol prefix ^ with I: for indices to match symbols table
+        df['symbol'] = df['symbol'].str.replace('^', 'I:')
         insert_into_table(
             connection,
             table_name=TABLE_STOCK_ASSET_PROFILES_YAHOO,
