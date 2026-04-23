@@ -35,15 +35,167 @@ on:
         description: "Git ref to deploy (branch, tag, or SHA)"
         required: false
         default: master
+      restore_db_from_source:
+        description: "Only for home-server: restore DB from source before deploy"
+        type: boolean
+        required: false
+        default: false
+      db_source_environment:
+        description: "Source environment for DB restore"
+        required: false
+        type: choice
+        options:
+          - production
+          - dev-hetzner
+        default: production
+      db_backup_path:
+        description: "Optional absolute backup path on source server (default: latest)"
+        required: false
+        default: ""
+      confirm_db_restore:
+        description: "Type RESTORE_HOME_DB to confirm destructive restore"
+        required: false
+        default: ""
 
 concurrency:
   group: deploy-${{ github.event_name == 'push' && 'production' || inputs.target }}
   cancel-in-progress: false
 
 jobs:
+  validate_restore_request:
+    name: Validate optional DB restore
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    steps:
+      - name: Validate restore parameters
+        run: |
+          set -euo pipefail
+
+          TARGET="${{ inputs.target }}"
+          RESTORE="${{ inputs.restore_db_from_source }}"
+
+          if [ "$RESTORE" != "true" ]; then
+            echo "DB restore not requested."
+            exit 0
+          fi
+
+          if [ "$TARGET" != "home-server" ]; then
+            echo "DB restore from source is only allowed when target=home-server." >&2
+            exit 1
+          fi
+
+          if [ "${{ inputs.confirm_db_restore }}" != "RESTORE_HOME_DB" ]; then
+            echo "Confirmation missing. Set confirm_db_restore=RESTORE_HOME_DB." >&2
+            exit 1
+          fi
+
+          echo "Restore request validated."
+
+  fetch_db_backup:
+    name: Fetch source DB backup
+    runs-on: ubuntu-latest
+    needs: validate_restore_request
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.target == 'home-server' && inputs.restore_db_from_source }}
+    environment: ${{ inputs.db_source_environment }}
+    outputs:
+      backup_file_name: ${{ steps.select_backup.outputs.backup_file_name }}
+      backup_remote_path: ${{ steps.select_backup.outputs.backup_remote_path }}
+    steps:
+      - name: Setup source SSH key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" | tr -d '\r' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: Select backup on source server
+        id: select_backup
+        run: |
+          REQUESTED_PATH="${{ inputs.db_backup_path }}"
+
+          if [ -n "$REQUESTED_PATH" ]; then
+            BACKUP_PATH="$REQUESTED_PATH"
+          else
+            BACKUP_PATH=$(ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+              ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+              'ls -t ~/backups/postgres/skuld_*.sql.gz ~/backups/postgres/skuld_manual_*.sql.gz 2>/dev/null | head -n 1')
+          fi
+
+          if [ -z "$BACKUP_PATH" ]; then
+            echo "No backup found on source environment ${{ inputs.db_source_environment }}." >&2
+            exit 1
+          fi
+
+          echo "backup_remote_path=$BACKUP_PATH" >> $GITHUB_OUTPUT
+          echo "backup_file_name=$(basename "$BACKUP_PATH")" >> $GITHUB_OUTPUT
+
+      - name: Download backup from source server
+        run: |
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ steps.select_backup.outputs.backup_remote_path }} \
+            ./${{ steps.select_backup.outputs.backup_file_name }}
+
+      - name: Upload backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-db-backup
+          path: ./${{ steps.select_backup.outputs.backup_file_name }}
+          if-no-files-found: error
+          retention-days: 1
+
+  restore_db_on_home:
+    name: Restore DB on home-server
+    runs-on: ubuntu-latest
+    needs: fetch_db_backup
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.target == 'home-server' && inputs.restore_db_from_source }}
+    environment: home-server
+    steps:
+      - name: Download backup artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: source-db-backup
+
+      - name: Setup home SSH key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" | tr -d '\r' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: Copy backup to home server
+        run: |
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ./${{ needs.fetch_db_backup.outputs.backup_file_name }} \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/${{ needs.fetch_db_backup.outputs.backup_file_name }}
+
+      - name: Restore backup on home server
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} 'bash -s' <<EOF
+          set -euo pipefail
+
+          BACKUP_FILE="/tmp/${{ needs.fetch_db_backup.outputs.backup_file_name }}"
+
+          docker stop skuld-frontend skuld-backend 2>/dev/null || true
+
+          echo 'DROP DATABASE IF EXISTS "Skuld"; CREATE DATABASE "Skuld";' | \
+            docker exec -i skuld_staging_db psql -U admin -d postgres
+
+          gzip -dc "$BACKUP_FILE" | docker exec -i skuld_staging_db psql -U admin -d Skuld
+
+          rm -f "$BACKUP_FILE"
+EOF
+
   deploy:
     name: "Deploy to ${{ github.event_name == 'push' && 'production' || inputs.target }}"
-    runs-on: ubuntu-latest
+    needs:
+      - validate_restore_request
+      - fetch_db_backup
+      - restore_db_on_home
+    if: |
+      always() &&
+      (needs.validate_restore_request.result == 'success' || needs.validate_restore_request.result == 'skipped') &&
+      (needs.fetch_db_backup.result == 'success' || needs.fetch_db_backup.result == 'skipped') &&
+      (needs.restore_db_on_home.result == 'success' || needs.restore_db_on_home.result == 'skipped')
+    runs-on: ${{ github.event_name == 'workflow_dispatch' && inputs.target == 'home-server' && 'self-hosted' || 'ubuntu-latest' }}
     environment: ${{ github.event_name == 'push' && 'production' || inputs.target }}
     env:
       DEPLOY_TARGET: ${{ github.event_name == 'push' && 'production' || inputs.target }}
