@@ -137,6 +137,21 @@ jobs:
 
             # ── Create .env from GitHub Environment vars/secrets ──
             echo "=== Creating .env file ==="
+
+            POSTGRES_HOST_VALUE='${{ vars.POSTGRES_HOST }}'
+            POSTGRES_DB_VALUE='${{ vars.POSTGRES_DB }}'
+            POSTGRES_USER_VALUE='${{ vars.POSTGRES_USER }}'
+            POSTGRES_PORT_VALUE='${{ vars.POSTGRES_PORT }}'
+
+            # Home server runs the staging DB from docker-compose.testing.yml.
+            # Ensure sane defaults even if environment vars are missing.
+            if [ "${{ env.DEPLOY_TARGET }}" = "home-server" ]; then
+              [ -n "$POSTGRES_HOST_VALUE" ] || POSTGRES_HOST_VALUE="postgres"
+              [ -n "$POSTGRES_DB_VALUE" ] || POSTGRES_DB_VALUE="Skuld"
+              [ -n "$POSTGRES_USER_VALUE" ] || POSTGRES_USER_VALUE="admin"
+              [ -n "$POSTGRES_PORT_VALUE" ] || POSTGRES_PORT_VALUE="5432"
+            fi
+
             echo "DOMAIN_NAME=${{ vars.DOMAIN_NAME }}" > .env
             echo "AUTH_DOMAIN=${{ vars.AUTH_DOMAIN }}" >> .env
             echo "TRAEFIK_ENTRYPOINT=${{ vars.TRAEFIK_ENTRYPOINT }}" >> .env
@@ -148,11 +163,20 @@ jobs:
             echo "MASSIVE_API_KEY=${{ secrets.MASSIVE_API_KEY }}" >> .env
             echo "MASSIVE_API_KEY_FLAT_FILES=${{ secrets.MASSIVE_API_KEY_FLAT_FILES }}" >> .env
             echo "SKULD_VERSION=${{ steps.get_version.outputs.VERSION }}" >> .env
-            echo "POSTGRES_HOST=${{ vars.POSTGRES_HOST }}" >> .env
-            echo "POSTGRES_DB=${{ vars.POSTGRES_DB }}" >> .env
-            echo "POSTGRES_USER=${{ vars.POSTGRES_USER }}" >> .env
+            echo "POSTGRES_HOST=${POSTGRES_HOST_VALUE}" >> .env
+            echo "POSTGRES_DB=${POSTGRES_DB_VALUE}" >> .env
+            echo "POSTGRES_USER=${POSTGRES_USER_VALUE}" >> .env
             echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env
-            echo "POSTGRES_PORT=${{ vars.POSTGRES_PORT }}" >> .env
+            echo "POSTGRES_PORT=${POSTGRES_PORT_VALUE}" >> .env
+
+            # Fail fast on missing critical DB vars.
+            REQUIRED_DB_VARS="POSTGRES_HOST POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD POSTGRES_PORT"
+            for k in $REQUIRED_DB_VARS; do
+              if ! grep -q "^${k}=.\+" .env; then
+                echo "Missing required DB setting: ${k}" >&2
+                exit 1
+              fi
+            done
 
             # ── Authelia secrets ──
             echo "=== Creating Authelia configuration ==="
@@ -173,6 +197,10 @@ jobs:
 
             set -x
             mkdir -p logs
+
+            # Ensure external networks exist before compose (especially on fresh home-server installs).
+            mysudo docker network create web >/dev/null 2>&1 || true
+            mysudo docker network create postgres_setup_default >/dev/null 2>&1 || true
 
             # ── Safe Deploy: wait for running data-collection jobs ──
             echo "=== Checking for running jobs in skuld-backend ==="
@@ -246,6 +274,15 @@ jobs:
 
             echo "=== Container status ==="
             mysudo docker compose ${{ env.COMPOSE_ARGS }} ps
+
+            # Verify DB connectivity from the runtime stack so branch choice cannot break DB wiring silently.
+            echo "=== Verifying DB connectivity ==="
+            if [ "${{ env.DEPLOY_TARGET }}" = "home-server" ]; then
+              mysudo docker exec skuld_staging_db psql -U "${POSTGRES_USER_VALUE}" -d "${POSTGRES_DB_VALUE}" -c 'select 1;' >/dev/null
+            else
+              mysudo docker exec postgres_setup-db-1 psql -U "${POSTGRES_USER_VALUE}" -d "${POSTGRES_DB_VALUE}" -c 'select 1;' >/dev/null
+            fi
+            echo "DB connectivity check passed"
 
             echo "=== Container logs ==="
             mysudo docker compose ${{ env.COMPOSE_ARGS }} logs --tail=30
