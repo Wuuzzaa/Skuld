@@ -203,21 +203,40 @@ jobs:
       COMPOSE_ARGS: ${{ github.event_name == 'push' && '-f docker-compose.yml' || inputs.target == 'home-server' && '-f docker-compose.yml -f docker-compose.testing.yml' || '-f docker-compose.yml' }}
 
     steps:
+      - name: Fix workspace permissions (self-hosted home-server)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.target == 'home-server' }}
+        run: |
+          set -euo pipefail
+          WORK_DIR="$(dirname "$GITHUB_WORKSPACE")"
+
+          if [ -w "$GITHUB_WORKSPACE" ]; then
+            echo "Workspace is writable."
+            exit 0
+          fi
+
+          echo "Workspace is not writable. Attempting to fix ownership under: $WORK_DIR"
+          if command -v sudo >/dev/null 2>&1; then
+            sudo chown -R "$(id -u):$(id -g)" "$WORK_DIR"
+          else
+            echo "sudo is required on self-hosted runner to repair workspace permissions." >&2
+            exit 1
+          fi
+
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref || '' }}
+          clean: false
 
       - name: Notify deploy started via Telegram
-        if: always()
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           ACTOR="${{ github.actor }}"
           REF="${{ inputs.ref || github.ref_name }}"
-          COMMIT_MSG=$(git log -1 --format='%s')
-          SHORT_SHA=$(git rev-parse --short HEAD)
+          COMMIT_MSG=$(git log -1 --format='%s' 2>/dev/null || echo "workflow_dispatch")
+          SHORT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "${GITHUB_SHA:0:7}")
           REPO="${{ github.repository }}"
           LABEL="${{ env.DEPLOY_LABEL }}"
           TEXT="🚀 <b>[${LABEL}] Deploy gestartet</b>%0A%0A👤 <b>${ACTOR}</b> deployed <code>${REF}</code>.%0A📝 <code>${SHORT_SHA}</code>: ${COMMIT_MSG}%0A📦 ${REPO}"
@@ -446,8 +465,8 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          COMMIT_MSG=$(git log -1 --format='%s')
-          SHORT_SHA=$(git rev-parse --short HEAD)
+          COMMIT_MSG=$(git log -1 --format='%s' 2>/dev/null || echo "workflow_dispatch")
+          SHORT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "${GITHUB_SHA:0:7}")
           LABEL="${{ env.DEPLOY_LABEL }}"
           TEXT="✅ <b>[${LABEL}] Deploy erfolgreich</b>%0A%0A📝 <code>${SHORT_SHA}</code>: ${COMMIT_MSG}"
           curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
@@ -462,8 +481,8 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           ACTOR="${{ github.actor }}"
-          COMMIT_MSG=$(git log -1 --format='%s')
-          SHORT_SHA=$(git rev-parse --short HEAD)
+          COMMIT_MSG=$(git log -1 --format='%s' 2>/dev/null || echo "checkout failed before git metadata was available")
+          SHORT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "${GITHUB_SHA:0:7}")
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           LABEL="${{ env.DEPLOY_LABEL }}"
           TEXT="❌ <b>[${LABEL}] Deploy fehlgeschlagen!</b>%0A%0A👤 ${ACTOR}%0A📝 <code>${SHORT_SHA}</code>: ${COMMIT_MSG}%0A🔗 <a href=\"${RUN_URL}\">Build Logs ansehen</a>"
