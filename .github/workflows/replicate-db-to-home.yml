@@ -148,7 +148,7 @@ jobs:
             docker start schuld-backend schuld-frontend 2>/dev/null || true
             docker start skuld-backend skuld-frontend 2>/dev/null || true
           fi
-EOF
+          EOF
 
       - name: Write summary
         run: |
