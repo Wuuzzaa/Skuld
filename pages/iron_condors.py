@@ -6,7 +6,7 @@ from pages.documentation_text.iron_condors_page_doc import get_iron_condor_docum
 from src.database import select_into_dataframe
 from src.logger_config import setup_logging
 from src.page_display_dataframe import page_display_dataframe
-from src.iron_condor_calculation import get_page_iron_condors
+from src.iron_condor_calculation import get_page_iron_condors, calc_iron_condors
 from src.utils.option_utils import get_expiration_type
 from src.ui_utils import init_session_state, reset_to_defaults as ui_reset, filter_by_expiration_type
 import pandas as pd
@@ -149,6 +149,14 @@ with st.expander("Configuration and Filters", expanded=True):
     with col14:
         st.checkbox("Show only spreads with no earnings till expiration", key="ic_show_only_spreads_with_no_earnings_till_expiration")
 
+@st.cache_data
+def _cached_select_into_dataframe(sql_file_path, params):
+    return select_into_dataframe(sql_file_path=sql_file_path, params=params)
+
+@st.cache_data
+def _cached_calc_iron_condors(put_df, call_df):
+    return calc_iron_condors(put_df, call_df)
+
 with st.spinner("Calculating Iron Condors..."):
     common_params = {
         "min_open_interest": min_open_interest,
@@ -161,13 +169,14 @@ with st.spinner("Calculating Iron Condors..."):
     
     # Get Put Spreads
     put_params = {**common_params, "expiration_date": expiration_date_put, "option_type": "put", "delta_target": st.session_state.ic_delta_put, "spread_width": st.session_state.ic_width_put}
-    put_df = select_into_dataframe(sql_file_path=sql_query_path, params=put_params)
+    put_df = _cached_select_into_dataframe(sql_file_path=sql_query_path, params=put_params)
     
     # Get Call Spreads
     call_params = {**common_params, "expiration_date": expiration_date_call, "option_type": "call", "delta_target": st.session_state.ic_delta_call, "spread_width": st.session_state.ic_width_call}
-    call_df = select_into_dataframe(sql_file_path=sql_query_path, params=call_params)
+    call_df = _cached_select_into_dataframe(sql_file_path=sql_query_path, params=call_params)
     
-    ic_df = get_page_iron_condors(put_df, call_df)
+    ic_df_raw = _cached_calc_iron_condors(put_df, call_df)
+    ic_df = get_page_iron_condors(ic_df_raw)
 
 if not ic_df.empty:
     # Apply filters
@@ -215,6 +224,96 @@ if not ic_df.empty:
         "optionstrat_url": st.column_config.LinkColumn(label="", help="OptionStrat", display_text="🎯")
     }
     
-    page_display_dataframe(ic_df, page='iron_condors', symbol_column='symbol', column_config=column_config)
+    event = page_display_dataframe(
+        ic_df, 
+        page='iron_condors', 
+        symbol_column='symbol', 
+        column_config=column_config,
+        on_select="rerun",
+        selection_mode="single-row"
+    )
+
+    # Leg Details View
+    selected_rows = event.selection.rows if hasattr(event, "selection") else []
+    if selected_rows and not ic_df.empty:
+        selected_idx = selected_rows[0]
+        row = ic_df.iloc[selected_idx]
+
+        st.divider()
+        st.subheader(f"Details für {row['symbol']} Iron Condor")
+
+        # Create detailed table for legs
+        legs_data = [
+            {
+                "Leg": "Short Put",
+                "Strike": row['sell_strike_put'],
+                "Price": row['sell_last_option_price_put'],
+                "Delta": row['sell_delta_put'],
+                "IV": row['sell_iv_put'],
+                "Theta": row['sell_theta_put'],
+                "OI": row['sell_open_interest_put'],
+                "Volume": row.get('sell_day_volume_put'),
+                "Exp Move": row.get('sell_expected_move_put')
+            },
+            {
+                "Leg": "Long Put",
+                "Strike": row['buy_strike_put'],
+                "Price": row['buy_last_option_price_put'],
+                "Delta": row['buy_delta_put'],
+                "IV": row['buy_iv_put'],
+                "Theta": row['buy_theta_put'],
+                "OI": row['buy_open_interest_put'],
+                "Volume": row.get('buy_day_volume_put'),
+                "Exp Move": row.get('buy_expected_move_put')
+            },
+            {
+                "Leg": "Short Call",
+                "Strike": row['sell_strike_call'],
+                "Price": row['sell_last_option_price_call'],
+                "Delta": row['sell_delta_call'],
+                "IV": row['sell_iv_call'],
+                "Theta": row['sell_theta_call'],
+                "OI": row['sell_open_interest_call'],
+                "Volume": row.get('sell_day_volume_call'),
+                "Exp Move": row.get('sell_expected_move_call')
+            },
+            {
+                "Leg": "Long Call",
+                "Strike": row['buy_strike_call'],
+                "Price": row['buy_last_option_price_call'],
+                "Delta": row['buy_delta_call'],
+                "IV": row['buy_iv_call'],
+                "Theta": row['buy_theta_call'],
+                "OI": row['buy_open_interest_call'],
+                "Volume": row.get('buy_day_volume_call'),
+                "Exp Move": row.get('buy_expected_move_call')
+            }
+        ]
+        
+        details_df = pd.DataFrame(legs_data)
+        st.table(details_df)
+        
+        # Additional Info
+        st.markdown("#### Kennzahlen & Unternehmensinfos")
+        col_info1, col_info2, col_info3, col_info4 = st.columns(4)
+        with col_info1:
+            st.metric("Max Profit", f"${row['max_profit']:.2f}")
+            st.metric("BPR", f"${row['bpr']:.2f}")
+        with col_info2:
+            st.metric("Expected Value", f"${row['expected_value']:.2f}")
+            st.metric("APDI", f"{row['APDI']:.2f}%")
+        with col_info3:
+            st.metric("IV Rank", f"{row['iv_rank']:.1f}")
+            st.metric("IV Percentile", f"{row['iv_percentile']:.1f}")
+        with col_info4:
+            st.metric("Hist. Vola (30d)", f"{row.get('historical_volatility_30d_put', 0)*100:.1f}%")
+            st.write(f"**Sektor:** {row['sector']}")
+            st.write(f"**Branche:** {row['industry']}")
+
+        if 'analyst_target' in row:
+            st.write(f"**Analyst Kursziel:** ${row['analyst_target']:.2f} (Aktuell: ${row['close']:.2f})")
+
+    else:
+        st.caption("💡 Klicke auf eine Zeile in der Tabelle, um die Details der einzelnen Legs zu sehen.")
 else:
     st.warning("No results found for the selected criteria.")

@@ -105,8 +105,7 @@ def calc_iron_condors(put_spreads: pd.DataFrame, call_spreads: pd.DataFrame) -> 
 
     return combined
 
-def get_page_iron_condors(put_spreads: pd.DataFrame, call_spreads: pd.DataFrame) -> pd.DataFrame:
-    df = calc_iron_condors(put_spreads, call_spreads)
+def get_page_iron_condors(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
 
@@ -135,7 +134,20 @@ def get_page_iron_condors(put_spreads: pd.DataFrame, call_spreads: pd.DataFrame)
         'expected_value',
         'APDI',
         'APDI_EV',
-        'optionstrat_url'
+        'optionstrat_url',
+        # Keep detailed columns for the detail view
+        'sell_last_option_price_put', 'buy_last_option_price_put',
+        'sell_last_option_price_call', 'buy_last_option_price_call',
+        'sell_iv_put', 'buy_iv_put', 'sell_iv_call', 'buy_iv_call',
+        'sell_theta_put', 'buy_theta_put', 'sell_theta_call', 'buy_theta_call',
+        'sell_open_interest_put', 'buy_open_interest_put',
+        'sell_open_interest_call', 'buy_open_interest_call',
+        'buy_delta_put', 'buy_delta_call',
+        'sell_day_volume_put', 'buy_day_volume_put',
+        'sell_day_volume_call', 'buy_day_volume_call',
+        'sell_expected_move_put', 'buy_expected_move_put',
+        'sell_expected_move_call', 'buy_expected_move_call',
+        'historical_volatility_30d_put'
     ]
     
     display_map = {
@@ -147,4 +159,7 @@ def get_page_iron_condors(put_spreads: pd.DataFrame, call_spreads: pd.DataFrame)
         'iv_percentile_put': 'iv_percentile'
     }
     
-    return df[columns].rename(columns=display_map)
+    # Only keep columns that actually exist in the dataframe
+    existing_columns = [col for col in columns if col in df.columns]
+    
+    return df[existing_columns].rename(columns=display_map)
