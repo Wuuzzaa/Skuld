@@ -313,14 +313,36 @@ jobs:
             POSTGRES_DB_VALUE='${{ vars.POSTGRES_DB }}'
             POSTGRES_USER_VALUE='${{ vars.POSTGRES_USER }}'
             POSTGRES_PORT_VALUE='${{ vars.POSTGRES_PORT }}'
+            TELEGRAM_BOT_TOKEN_VALUE='${{ secrets.TELEGRAM_BOT_TOKEN }}'
+            TELEGRAM_CHAT_ID_VALUE='${{ secrets.TELEGRAM_CHAT_ID }}'
+            MASSIVE_API_KEY_VALUE='${{ secrets.MASSIVE_API_KEY }}'
+            MASSIVE_API_KEY_FLAT_FILES_VALUE='${{ secrets.MASSIVE_API_KEY_FLAT_FILES }}'
+
+            read_existing_env_value() {
+              local key="$1"
+              if [ -f .env ]; then
+                grep -m1 "^${key}=" .env | cut -d= -f2- || true
+              fi
+            }
 
             # Home server runs the staging DB from docker-compose.testing.yml.
             # Ensure sane defaults even if environment vars are missing.
+            # Also preserve home-local app secrets from the existing .env.
             if [ "${{ env.DEPLOY_TARGET }}" = "home-server" ]; then
               [ -n "$POSTGRES_HOST_VALUE" ] || POSTGRES_HOST_VALUE="postgres"
               [ -n "$POSTGRES_DB_VALUE" ] || POSTGRES_DB_VALUE="Skuld"
               [ -n "$POSTGRES_USER_VALUE" ] || POSTGRES_USER_VALUE="admin"
               [ -n "$POSTGRES_PORT_VALUE" ] || POSTGRES_PORT_VALUE="5432"
+
+              EXISTING_TELEGRAM_BOT_TOKEN=$(read_existing_env_value TELEGRAM_BOT_TOKEN)
+              EXISTING_TELEGRAM_CHAT_ID=$(read_existing_env_value TELEGRAM_CHAT_ID)
+              EXISTING_MASSIVE_API_KEY=$(read_existing_env_value MASSIVE_API_KEY)
+              EXISTING_MASSIVE_API_KEY_FLAT_FILES=$(read_existing_env_value MASSIVE_API_KEY_FLAT_FILES)
+
+              [ -n "$EXISTING_TELEGRAM_BOT_TOKEN" ] && TELEGRAM_BOT_TOKEN_VALUE="$EXISTING_TELEGRAM_BOT_TOKEN"
+              [ -n "$EXISTING_TELEGRAM_CHAT_ID" ] && TELEGRAM_CHAT_ID_VALUE="$EXISTING_TELEGRAM_CHAT_ID"
+              [ -n "$EXISTING_MASSIVE_API_KEY" ] && MASSIVE_API_KEY_VALUE="$EXISTING_MASSIVE_API_KEY"
+              [ -n "$EXISTING_MASSIVE_API_KEY_FLAT_FILES" ] && MASSIVE_API_KEY_FLAT_FILES_VALUE="$EXISTING_MASSIVE_API_KEY_FLAT_FILES"
             fi
 
             echo "DOMAIN_NAME=${{ vars.DOMAIN_NAME }}" > .env
@@ -329,10 +351,10 @@ jobs:
             echo "TRAEFIK_CERTRESOLVER_LABEL_SKULD=${{ vars.TRAEFIK_CERTRESOLVER_LABEL_SKULD }}" >> .env
             echo "TRAEFIK_CERTRESOLVER_LABEL_AUTHELIA=${{ vars.TRAEFIK_CERTRESOLVER_LABEL_AUTHELIA }}" >> .env
             echo "AUTH_SCHEME=${{ vars.AUTH_SCHEME }}" >> .env
-            echo "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" >> .env
-            echo "TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}" >> .env
-            echo "MASSIVE_API_KEY=${{ secrets.MASSIVE_API_KEY }}" >> .env
-            echo "MASSIVE_API_KEY_FLAT_FILES=${{ secrets.MASSIVE_API_KEY_FLAT_FILES }}" >> .env
+            echo "TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN_VALUE}" >> .env
+            echo "TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID_VALUE}" >> .env
+            echo "MASSIVE_API_KEY=${MASSIVE_API_KEY_VALUE}" >> .env
+            echo "MASSIVE_API_KEY_FLAT_FILES=${MASSIVE_API_KEY_FLAT_FILES_VALUE}" >> .env
             echo "SKULD_VERSION=${{ steps.get_version.outputs.VERSION }}" >> .env
             echo "POSTGRES_HOST=${POSTGRES_HOST_VALUE}" >> .env
             echo "POSTGRES_DB=${POSTGRES_DB_VALUE}" >> .env
