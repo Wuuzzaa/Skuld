@@ -302,6 +302,10 @@ filtered_df = filtered_df[filtered_df['sell_iv'] <= max_sell_iv]
 # Reset index to ensure the zebra style works on the dataframe
 filtered_df.reset_index(drop=True, inplace=True)
 
+# Pre-format columns that we want to show in details but not in the main table
+# This ensures they are available in 'row' even after page_display_dataframe might have dropped them from display
+# Actually page_display_dataframe creates a copy for display, so filtered_df remains intact.
+
 st.markdown(f"### {len(filtered_df)} Results")
 
 # Optionstrat URL configuration
@@ -314,7 +318,89 @@ column_config = {
 }
 
 # Display final dataframe
-page_display_dataframe(filtered_df, page='spreads', symbol_column='symbol', column_config=column_config)
+event = page_display_dataframe(
+    filtered_df, 
+    page='spreads', 
+    symbol_column='symbol', 
+    column_config=column_config,
+    on_select="rerun",
+    selection_mode="single-row"
+)
+
+# Leg Details View
+selected_rows = event.selection.rows if hasattr(event, "selection") else []
+if selected_rows and not filtered_df.empty:
+    selected_idx = selected_rows[0]
+    row = filtered_df.iloc[selected_idx]
+
+    st.divider()
+    st.subheader(f"Details für {row['symbol']} {row['option_type'].capitalize()} Spread")
+
+    # Create detailed table for legs
+    legs_data = [
+        {
+            "Leg": f"Short {row['option_type'].capitalize()}",
+            "Strike": row['sell_strike'],
+            "Price": row['sell_last_option_price'],
+            "Delta": row['sell_delta'],
+            "IV": row['sell_iv'],
+            "Theta": row['sell_theta'],
+            "OI": row['sell_open_interest'],
+            "Volume": row.get('sell_day_volume'),
+            "Exp Move": row.get('sell_expected_move')
+        },
+        {
+            "Leg": f"Long {row['option_type'].capitalize()}",
+            "Strike": row['buy_strike'],
+            "Price": row['buy_last_option_price'],
+            "Delta": row['buy_delta'],
+            "IV": row['buy_iv'],
+            "Theta": row['buy_theta'],
+            "OI": row['buy_open_interest'],
+            "Volume": row.get('buy_day_volume'),
+            "Exp Move": row.get('buy_expected_move')
+        }
+    ]
+    
+    details_df = pd.DataFrame(legs_data)
+    st.table(details_df)
+    
+    # Additional Info
+    st.markdown("#### Kennzahlen & Unternehmensinfos")
+    st.write(f"**Unternehmen:** {row.get('Company', 'N/A')}")
+    
+    col_info1, col_info2, col_info3, col_info4 = st.columns(4)
+    with col_info1:
+        st.metric("Max Profit", f"${row['max_profit']:.2f}")
+        st.metric("BPR", f"${row['bpr']:.2f}")
+    with col_info2:
+        st.metric("Expected Value", f"${row['expected_value']:.2f}")
+        st.metric("APDI", f"{row['APDI']:.2f}%")
+    with col_info3:
+        st.metric("IV Rank", f"{row['iv_rank']:.1f}")
+        st.metric("IV Percentile", f"{row['iv_percentile']:.1f}")
+    with col_info4:
+        st.metric("Hist. Vola (30d)", f"{row.get('historical_volatility_30d', 0)*100:.1f}%")
+        st.write(f"**Sektor:** {row['company_sector']}")
+        st.write(f"**Branche:** {row['company_industry']}")
+
+    if 'analyst_mean_target' in row:
+        st.write(f"**Analyst Kursziel:** ${row['analyst_mean_target']:.2f} (Aktuell: ${row['close']:.2f})")
+
+    # External Links
+    st.markdown("#### Links")
+    link_col1, link_col2, link_col3, link_col4 = st.columns(4)
+    with link_col1:
+        st.link_button("TradingView", f"https://www.tradingview.com/symbols/{row['symbol']}/", use_container_width=True)
+    with link_col2:
+        st.link_button("Finviz", f"https://finviz.com/quote.ashx?t={row['symbol']}", use_container_width=True)
+    with link_col3:
+        st.link_button("Seeking Alpha", f"https://seekingalpha.com/symbol/{row['symbol']}", use_container_width=True)
+    with link_col4:
+        st.link_button("Yahoo Finance", f"https://finance.yahoo.com/quote/{row['symbol']}", use_container_width=True)
+
+else:
+    st.caption("💡 Klicke auf eine Zeile in der Tabelle, um die Details der einzelnen Legs zu sehen.")
 
 # Show documentation
 with st.expander("📖 Documentation - Fields Overview", expanded=False):

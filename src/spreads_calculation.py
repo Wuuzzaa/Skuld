@@ -232,6 +232,7 @@ def get_page_spreads(df: pd.DataFrame) -> pd.DataFrame:
             # symbol data
             #############
             'symbol',
+            'Company',
             'earnings_date',
             'earnings_warning',
             'close',
@@ -245,41 +246,35 @@ def get_page_spreads(df: pd.DataFrame) -> pd.DataFrame:
             #'days_to_expiration',
             'days_to_earnings',
             #############
-            # sell option data
-            #############
-            'sell_strike',
-            'sell_last_option_price',
-            'sell_delta',
-            'sell_iv',
-            '%_otm',
-            #'sell_theta',
-            #'sell_open_interest',
-            'sell_expected_move',
-            "sell_day_volume",
-            #############
-            # buy option data
-            #############
-            'buy_strike',
-            'buy_last_option_price',
-            'buy_delta',
-            #'buy_iv',
-            #'buy_theta',
-            #'buy_open_interest',
-            #'buy_expected_move',
-            #############
             # spread data
             #############
-            #'spread_width',
+            'spread_width',
             'max_profit',
             'bpr',
             'profit_to_bpr',
-            #'spread_theta',
+            'spread_theta',
             'expected_value',
             'APDI',
             'APDI_EV',
             'optionstrat_url',
 
-            # needed for the ai promt drop later in the page :D
+            # columns for the detail view / AI prompt
+            'sell_strike',
+            'sell_last_option_price',
+            'sell_delta',
+            'sell_iv',
+            '%_otm',
+            'sell_theta',
+            'sell_open_interest',
+            'sell_expected_move',
+            "sell_day_volume",
+            'buy_strike',
+            'buy_last_option_price',
+            'buy_delta',
+            'buy_iv',
+            'buy_theta',
+            'buy_open_interest',
+            'buy_expected_move',
             'option_type',
             'expiration_date',
     ]

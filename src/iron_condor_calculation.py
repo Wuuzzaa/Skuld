@@ -111,6 +111,7 @@ def get_page_iron_condors(df: pd.DataFrame) -> pd.DataFrame:
 
     columns = [
         'symbol',
+        'Company_put',
         'earnings_date',
         'earnings_warning',
         'close_put',
@@ -119,6 +120,14 @@ def get_page_iron_condors(df: pd.DataFrame) -> pd.DataFrame:
         'company_sector_put',
         'iv_rank_put',
         'iv_percentile_put',
+        'max_profit',
+        'bpr',
+        'expected_value',
+        'APDI',
+        'APDI_EV',
+        'optionstrat_url',
+        
+        # columns for details and AI prompt
         'sell_strike_put',
         'buy_strike_put',
         'sell_strike_call',
@@ -129,13 +138,6 @@ def get_page_iron_condors(df: pd.DataFrame) -> pd.DataFrame:
         'sell_delta_call',
         'expiration_date_put',
         'expiration_date_call',
-        'max_profit',
-        'bpr',
-        'expected_value',
-        'APDI',
-        'APDI_EV',
-        'optionstrat_url',
-        # Keep detailed columns for the detail view
         'sell_last_option_price_put', 'buy_last_option_price_put',
         'sell_last_option_price_call', 'buy_last_option_price_call',
         'sell_iv_put', 'buy_iv_put', 'sell_iv_call', 'buy_iv_call',
@@ -151,6 +153,7 @@ def get_page_iron_condors(df: pd.DataFrame) -> pd.DataFrame:
     ]
     
     display_map = {
+        'Company_put': 'Company',
         'close_put': 'close',
         'analyst_mean_target_put': 'analyst_target',
         'company_industry_put': 'industry',

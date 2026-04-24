@@ -295,6 +295,8 @@ if not ic_df.empty:
         
         # Additional Info
         st.markdown("#### Kennzahlen & Unternehmensinfos")
+        st.write(f"**Unternehmen:** {row.get('Company', 'N/A')}")
+
         col_info1, col_info2, col_info3, col_info4 = st.columns(4)
         with col_info1:
             st.metric("Max Profit", f"${row['max_profit']:.2f}")
@@ -312,6 +314,18 @@ if not ic_df.empty:
 
         if 'analyst_target' in row:
             st.write(f"**Analyst Kursziel:** ${row['analyst_target']:.2f} (Aktuell: ${row['close']:.2f})")
+
+        # External Links
+        st.markdown("#### Links")
+        link_col1, link_col2, link_col3, link_col4 = st.columns(4)
+        with link_col1:
+            st.link_button("TradingView", f"https://www.tradingview.com/symbols/{row['symbol']}/", use_container_width=True)
+        with link_col2:
+            st.link_button("Finviz", f"https://finviz.com/quote.ashx?t={row['symbol']}", use_container_width=True)
+        with link_col3:
+            st.link_button("Seeking Alpha", f"https://seekingalpha.com/symbol/{row['symbol']}", use_container_width=True)
+        with link_col4:
+            st.link_button("Yahoo Finance", f"https://finance.yahoo.com/quote/{row['symbol']}", use_container_width=True)
 
     else:
         st.caption("💡 Klicke auf eine Zeile in der Tabelle, um die Details der einzelnen Legs zu sehen.")

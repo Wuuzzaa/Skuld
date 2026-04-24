@@ -28,9 +28,10 @@ def _add_claude_analysis_link(df: pd.DataFrame, page=None) -> pd.DataFrame:
         raise ValueError('Page not recognized')
     return df
 
-def _get_claude_prompt_header(symbol):
+def _get_claude_prompt_header(symbol, company=None):
+    company_info = f" ({company})" if company else ""
     return f"""
-Erstelle eine kompakte Aktienanalyse für {symbol}:
+Erstelle eine kompakte Aktienanalyse für {symbol}{company_info}:
 Unternehmen: Geschäftsmodell und Branche (1-2 Sätzen):
 
 Aktuelle News: Wichtigste Entwicklungen der letzten 4 Wochen
@@ -55,7 +56,7 @@ Rolle: Aktien und Finanzexperte.
 """
 
 def _create_claude_prompt_page_spreads(row):
-    prompt = _get_claude_prompt_header(row['symbol'])
+    prompt = _get_claude_prompt_header(row['symbol'], row.get('Company'))
     prompt += f"""
 Verkaufe einen {row['option_type']} Strike {row['sell_strike']} für eine Prämie von {row['sell_last_option_price']} bei einem Delta 
 von {row['sell_delta']}. Kaufe einen {row['option_type']} mit Strike {row['buy_strike']}
@@ -68,7 +69,7 @@ für eine Prämie von {row['buy_last_option_price']}. Expirationdate ist jeweils
     return f'https://claude.ai/new?q={encoded_prompt}'
 
 def _create_claude_prompt_page_iron_condors(row):
-    prompt = _get_claude_prompt_header(row['symbol'])
+    prompt = _get_claude_prompt_header(row['symbol'], row.get('Company'))
     prompt += f"""
 Iron Condor Strategie:
 Put-Seite: Verkauf Strike {row['sell_strike_put']} (Delta {row['sell_delta_put']}), Kauf Strike {row['buy_strike_put']}. Expiration: {row['expiration_date_put']}
@@ -82,9 +83,11 @@ Call-Seite: Verkauf Strike {row['sell_strike_call']} (Delta {row['sell_delta_cal
 
 def _create_claude_prompt_default(row):
     symbol = row['symbol']
+    company = row.get('Company')
+    company_info = f" ({company})" if company else ""
 
     prompt = f"""
-Erstelle eine kompakte Aktienanalyse für {symbol}:
+Erstelle eine kompakte Aktienanalyse für {symbol}{company_info}:
 Unternehmen: Geschäftsmodell und Branche in 1-2 Sätzen
 Aktuelle News: Wichtigste Entwicklungen der letzten 4 Wochen
 Anstehende Events: Earnings, Produktlaunches oder relevante Termine
@@ -131,13 +134,39 @@ def page_display_dataframe(
 
     if page == "spreads":
         # drop unnecessary columns which where needed for the AI prompt generation
-        df_to_display = df_to_display.drop(columns=['option_type', 'expiration_date'])
+        cols_to_drop = [
+            'option_type', 'expiration_date',
+            'sell_strike', 'sell_last_option_price', 'sell_delta', 'sell_iv',
+            '%_otm', 'sell_theta', 'sell_open_interest', 'sell_expected_move',
+            'sell_day_volume', 'buy_strike', 'buy_last_option_price', 'buy_delta',
+            'buy_iv', 'buy_theta', 'buy_open_interest', 'buy_expected_move',
+            'company_industry', 'company_sector', 'historical_volatility_30d',
+            'days_to_earnings', 'analyst_mean_target'
+        ]
+        # Only drop columns that exist to avoid errors
+        cols_to_drop = [c for c in cols_to_drop if c in df_to_display.columns]
+        df_to_display = df_to_display.drop(columns=cols_to_drop)
     elif page == "iron_condors":
         # drop unnecessary columns which where needed for the AI prompt generation
         cols_to_drop = [
             'sell_delta_put', 'sell_delta_call', 
             'expiration_date_put', 'expiration_date_call',
-            'close_call'
+            'close_call',
+            'sell_strike_put', 'buy_strike_put',
+            'sell_strike_call', 'buy_strike_call',
+            'sell_last_option_price_put', 'buy_last_option_price_put',
+            'sell_last_option_price_call', 'buy_last_option_price_call',
+            'sell_iv_put', 'buy_iv_put', 'sell_iv_call', 'buy_iv_call',
+            'sell_theta_put', 'buy_theta_put', 'sell_theta_call', 'buy_theta_call',
+            'sell_open_interest_put', 'buy_open_interest_put',
+            'sell_open_interest_call', 'buy_open_interest_call',
+            'buy_delta_put', 'buy_delta_call',
+            'sell_day_volume_put', 'buy_day_volume_put',
+            'sell_day_volume_call', 'buy_day_volume_call',
+            'sell_expected_move_put', 'buy_expected_move_put',
+            'sell_expected_move_call', 'buy_expected_move_call',
+            'historical_volatility_30d_put', 'industry', 'sector',
+            'analyst_target'
         ]
         # Only drop columns that exist to avoid errors
         cols_to_drop = [c for c in cols_to_drop if c in df_to_display.columns]

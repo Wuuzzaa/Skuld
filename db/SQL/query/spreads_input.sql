@@ -18,6 +18,7 @@ WITH FilteredOptions AS (
         analyst_mean_target,
         -- NULL AS recommendation, -- replace later with own recommendation based on technical indicators
         day_volume,
+        company_name,
         company_industry,
         company_sector,
         historical_volatility_30d,
@@ -54,6 +55,7 @@ SelectedSellOptions AS (
         analyst_mean_target,
         -- recommendation, -- replace later with own recommendation based on technical indicators
         day_volume AS sell_day_volume,
+        company_name,
         company_industry,
         company_sector,
         historical_volatility_30d,
@@ -73,6 +75,7 @@ SELECT
     sell.option_type,
     sell.sell_close AS close,
     sell.earnings_date,
+    sell.company_name AS "Company",
     sell.days_to_expiration,
     sell.days_to_earnings,
     sell.analyst_mean_target,
