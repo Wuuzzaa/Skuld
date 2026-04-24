@@ -2,6 +2,7 @@ import logging
 import os
 import streamlit as st
 from config import PATH_DATABASE_QUERY_FOLDER
+from pages.documentation_text.iron_condors_page_doc import get_iron_condor_documentation
 from src.database import select_into_dataframe
 from src.logger_config import setup_logging
 from src.page_display_dataframe import page_display_dataframe
@@ -63,6 +64,9 @@ def clear_all_filters():
     st.session_state.ic_min_sell_iv = 0.0
     st.session_state.ic_max_sell_iv = 999.0
     st.session_state.ic_min_max_profit = 0.0
+
+with st.expander("Documentation"):
+    st.markdown(get_iron_condor_documentation())
 
 with st.expander("Configuration and Filters", expanded=True):
     btn_col1, btn_col2 = st.columns(2)

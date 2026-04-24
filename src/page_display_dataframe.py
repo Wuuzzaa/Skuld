@@ -131,7 +131,8 @@ def page_display_dataframe(
         # drop unnecessary columns which where needed for the AI prompt generation
         cols_to_drop = [
             'sell_delta_put', 'sell_delta_call', 
-            'expiration_date_put', 'expiration_date_call'
+            'expiration_date_put', 'expiration_date_call',
+            'close_call'
         ]
         # Only drop columns that exist to avoid errors
         cols_to_drop = [c for c in cols_to_drop if c in df.columns]

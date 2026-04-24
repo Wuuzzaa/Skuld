@@ -48,6 +48,10 @@ def _calculate_iron_condor_metrics(df: pd.DataFrame) -> pd.DataFrame:
     # Spread Theta
     df["combined_theta"] = (df["sell_theta_put"] - df["buy_theta_put"]) + (df["sell_theta_call"] - df["buy_theta_call"])
 
+    # % OTM
+    df["%_otm_put"] = (df["close_put"] - df["sell_strike_put"]) / df["close_put"] * 100
+    df["%_otm_call"] = (df["sell_strike_call"] - df["close_call"]) / df["close_call"] * 100
+
     # Expected Value
     df["expected_value"] = df.apply(_calculate_combined_ev, axis=1)
 
@@ -120,6 +124,8 @@ def get_page_iron_condors(put_spreads: pd.DataFrame, call_spreads: pd.DataFrame)
         'buy_strike_put',
         'sell_strike_call',
         'buy_strike_call',
+        '%_otm_put',
+        '%_otm_call',
         'sell_delta_put',
         'sell_delta_call',
         'expiration_date_put',
