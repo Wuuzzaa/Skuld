@@ -203,36 +203,40 @@ jobs:
       COMPOSE_ARGS: ${{ github.event_name == 'push' && '-f docker-compose.yml' || inputs.target == 'home-server' && '-f docker-compose.yml -f docker-compose.testing.yml' || '-f docker-compose.yml' }}
 
     steps:
-      - name: Fix workspace permissions (self-hosted home-server)
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.target == 'home-server' }}
+      - name: Initialize source directory
         run: |
-          set -euo pipefail
-          WORK_DIR="$(dirname "$GITHUB_WORKSPACE")"
-
-          if [ -w "$GITHUB_WORKSPACE" ]; then
-            echo "Workspace is writable."
-            exit 0
-          fi
-
-          echo "Workspace is not writable. Attempting to fix ownership under: $WORK_DIR"
-          if command -v sudo >/dev/null 2>&1; then
-            sudo chown -R "$(id -u):$(id -g)" "$WORK_DIR"
-          else
-            echo "sudo is required on self-hosted runner to repair workspace permissions." >&2
-            exit 1
-          fi
+          echo "SOURCE_DIR=$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
 
       - name: Checkout code
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.target == 'home-server') }}
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref || '' }}
           clean: false
+
+      - name: Fetch source for home-server deploy
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.target == 'home-server' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          REF="${{ inputs.ref || github.ref_name }}"
+          SOURCE_DIR="$RUNNER_TEMP/skuld-source-${GITHUB_RUN_ID}"
+          rm -rf "$SOURCE_DIR"
+          mkdir -p "$SOURCE_DIR"
+          git init "$SOURCE_DIR"
+          cd "$SOURCE_DIR"
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
+          git fetch --depth 1 origin "$REF"
+          git checkout --detach FETCH_HEAD
+          echo "SOURCE_DIR=$SOURCE_DIR" >> "$GITHUB_ENV"
 
       - name: Notify deploy started via Telegram
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
+          cd "$SOURCE_DIR"
           ACTOR="${{ github.actor }}"
           REF="${{ inputs.ref || github.ref_name }}"
           COMMIT_MSG=$(git log -1 --format='%s' 2>/dev/null || echo "workflow_dispatch")
@@ -281,11 +285,13 @@ jobs:
             --exclude 'authelia/session_secret' \
             --exclude 'authelia/jwt_secret' \
             --exclude 'authelia/storage_encryption_key' \
-            ./ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/skuld/
+            ${{ env.DEPLOY_TARGET == 'home-server' && "--exclude 'authelia/**'" || '' }} \
+            "$SOURCE_DIR"/ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/skuld/
 
       - name: Get version
         id: get_version
         run: |
+          cd "$SOURCE_DIR"
           COUNT=$(git rev-list --count HEAD)
           HASH=$(git rev-parse --short HEAD)
           DATE=$(git log -1 --format=%cd --date=format:'%Y-%m-%d %H:%M')
@@ -325,32 +331,57 @@ jobs:
               fi
             }
 
+            pick_env_value() {
+              local existing_key="$1"
+              local fallback_value="$2"
+              local default_value="${3:-}"
+              local existing_value
+
+              existing_value=$(read_existing_env_value "$existing_key")
+              if [ -n "$existing_value" ]; then
+                printf '%s\n' "$existing_value"
+              elif [ -n "$fallback_value" ]; then
+                printf '%s\n' "$fallback_value"
+              else
+                printf '%s\n' "$default_value"
+              fi
+            }
+
             # Home server runs the staging DB from docker-compose.testing.yml.
             # Ensure sane defaults even if environment vars are missing.
-            # Also preserve home-local app secrets from the existing .env.
+            # Preserve the existing home-server configuration instead of rewriting infra values.
             if [ "${{ env.DEPLOY_TARGET }}" = "home-server" ]; then
-              [ -n "$POSTGRES_HOST_VALUE" ] || POSTGRES_HOST_VALUE="postgres"
-              [ -n "$POSTGRES_DB_VALUE" ] || POSTGRES_DB_VALUE="Skuld"
-              [ -n "$POSTGRES_USER_VALUE" ] || POSTGRES_USER_VALUE="admin"
-              [ -n "$POSTGRES_PORT_VALUE" ] || POSTGRES_PORT_VALUE="5432"
-
-              EXISTING_TELEGRAM_BOT_TOKEN=$(read_existing_env_value TELEGRAM_BOT_TOKEN)
-              EXISTING_TELEGRAM_CHAT_ID=$(read_existing_env_value TELEGRAM_CHAT_ID)
-              EXISTING_MASSIVE_API_KEY=$(read_existing_env_value MASSIVE_API_KEY)
-              EXISTING_MASSIVE_API_KEY_FLAT_FILES=$(read_existing_env_value MASSIVE_API_KEY_FLAT_FILES)
-
-              [ -n "$EXISTING_TELEGRAM_BOT_TOKEN" ] && TELEGRAM_BOT_TOKEN_VALUE="$EXISTING_TELEGRAM_BOT_TOKEN"
-              [ -n "$EXISTING_TELEGRAM_CHAT_ID" ] && TELEGRAM_CHAT_ID_VALUE="$EXISTING_TELEGRAM_CHAT_ID"
-              [ -n "$EXISTING_MASSIVE_API_KEY" ] && MASSIVE_API_KEY_VALUE="$EXISTING_MASSIVE_API_KEY"
-              [ -n "$EXISTING_MASSIVE_API_KEY_FLAT_FILES" ] && MASSIVE_API_KEY_FLAT_FILES_VALUE="$EXISTING_MASSIVE_API_KEY_FLAT_FILES"
+              DOMAIN_NAME_VALUE=$(pick_env_value DOMAIN_NAME "${{ vars.DOMAIN_NAME }}")
+              AUTH_DOMAIN_VALUE=$(pick_env_value AUTH_DOMAIN "${{ vars.AUTH_DOMAIN }}")
+              TRAEFIK_ENTRYPOINT_VALUE=$(pick_env_value TRAEFIK_ENTRYPOINT "${{ vars.TRAEFIK_ENTRYPOINT }}")
+              TRAEFIK_CERTRESOLVER_LABEL_SKULD_VALUE=$(pick_env_value TRAEFIK_CERTRESOLVER_LABEL_SKULD "${{ vars.TRAEFIK_CERTRESOLVER_LABEL_SKULD }}")
+              TRAEFIK_CERTRESOLVER_LABEL_AUTHELIA_VALUE=$(pick_env_value TRAEFIK_CERTRESOLVER_LABEL_AUTHELIA "${{ vars.TRAEFIK_CERTRESOLVER_LABEL_AUTHELIA }}")
+              AUTH_SCHEME_VALUE=$(pick_env_value AUTH_SCHEME "${{ vars.AUTH_SCHEME }}")
+              TELEGRAM_BOT_TOKEN_VALUE=$(pick_env_value TELEGRAM_BOT_TOKEN "$TELEGRAM_BOT_TOKEN_VALUE")
+              TELEGRAM_CHAT_ID_VALUE=$(pick_env_value TELEGRAM_CHAT_ID "$TELEGRAM_CHAT_ID_VALUE")
+              MASSIVE_API_KEY_VALUE=$(pick_env_value MASSIVE_API_KEY "$MASSIVE_API_KEY_VALUE")
+              MASSIVE_API_KEY_FLAT_FILES_VALUE=$(pick_env_value MASSIVE_API_KEY_FLAT_FILES "$MASSIVE_API_KEY_FLAT_FILES_VALUE")
+              POSTGRES_HOST_VALUE=$(pick_env_value POSTGRES_HOST "$POSTGRES_HOST_VALUE" postgres)
+              POSTGRES_DB_VALUE=$(pick_env_value POSTGRES_DB "$POSTGRES_DB_VALUE" Skuld)
+              POSTGRES_USER_VALUE=$(pick_env_value POSTGRES_USER "$POSTGRES_USER_VALUE" admin)
+              POSTGRES_PORT_VALUE=$(pick_env_value POSTGRES_PORT "$POSTGRES_PORT_VALUE" 5432)
+              POSTGRES_PASSWORD_VALUE=$(pick_env_value POSTGRES_PASSWORD "${{ secrets.POSTGRES_PASSWORD }}")
+            else
+              DOMAIN_NAME_VALUE='${{ vars.DOMAIN_NAME }}'
+              AUTH_DOMAIN_VALUE='${{ vars.AUTH_DOMAIN }}'
+              TRAEFIK_ENTRYPOINT_VALUE='${{ vars.TRAEFIK_ENTRYPOINT }}'
+              TRAEFIK_CERTRESOLVER_LABEL_SKULD_VALUE='${{ vars.TRAEFIK_CERTRESOLVER_LABEL_SKULD }}'
+              TRAEFIK_CERTRESOLVER_LABEL_AUTHELIA_VALUE='${{ vars.TRAEFIK_CERTRESOLVER_LABEL_AUTHELIA }}'
+              AUTH_SCHEME_VALUE='${{ vars.AUTH_SCHEME }}'
+              POSTGRES_PASSWORD_VALUE='${{ secrets.POSTGRES_PASSWORD }}'
             fi
 
-            echo "DOMAIN_NAME=${{ vars.DOMAIN_NAME }}" > .env
-            echo "AUTH_DOMAIN=${{ vars.AUTH_DOMAIN }}" >> .env
-            echo "TRAEFIK_ENTRYPOINT=${{ vars.TRAEFIK_ENTRYPOINT }}" >> .env
-            echo "TRAEFIK_CERTRESOLVER_LABEL_SKULD=${{ vars.TRAEFIK_CERTRESOLVER_LABEL_SKULD }}" >> .env
-            echo "TRAEFIK_CERTRESOLVER_LABEL_AUTHELIA=${{ vars.TRAEFIK_CERTRESOLVER_LABEL_AUTHELIA }}" >> .env
-            echo "AUTH_SCHEME=${{ vars.AUTH_SCHEME }}" >> .env
+            echo "DOMAIN_NAME=${DOMAIN_NAME_VALUE}" > .env
+            echo "AUTH_DOMAIN=${AUTH_DOMAIN_VALUE}" >> .env
+            echo "TRAEFIK_ENTRYPOINT=${TRAEFIK_ENTRYPOINT_VALUE}" >> .env
+            echo "TRAEFIK_CERTRESOLVER_LABEL_SKULD=${TRAEFIK_CERTRESOLVER_LABEL_SKULD_VALUE}" >> .env
+            echo "TRAEFIK_CERTRESOLVER_LABEL_AUTHELIA=${TRAEFIK_CERTRESOLVER_LABEL_AUTHELIA_VALUE}" >> .env
+            echo "AUTH_SCHEME=${AUTH_SCHEME_VALUE}" >> .env
             echo "TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN_VALUE}" >> .env
             echo "TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID_VALUE}" >> .env
             echo "MASSIVE_API_KEY=${MASSIVE_API_KEY_VALUE}" >> .env
@@ -359,7 +390,7 @@ jobs:
             echo "POSTGRES_HOST=${POSTGRES_HOST_VALUE}" >> .env
             echo "POSTGRES_DB=${POSTGRES_DB_VALUE}" >> .env
             echo "POSTGRES_USER=${POSTGRES_USER_VALUE}" >> .env
-            echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env
+            echo "POSTGRES_PASSWORD=${POSTGRES_PASSWORD_VALUE}" >> .env
             echo "POSTGRES_PORT=${POSTGRES_PORT_VALUE}" >> .env
 
             # Fail fast on missing critical DB vars.
@@ -372,21 +403,23 @@ jobs:
             done
 
             # ── Authelia secrets ──
-            echo "=== Creating Authelia configuration ==="
-            mkdir -p authelia
-            echo "${{ secrets.AUTHELIA_JWT_SECRET }}" > authelia/jwt_secret
-            echo "${{ secrets.AUTHELIA_SESSION_SECRET }}" > authelia/session_secret
-            echo "${{ secrets.AUTHELIA_STORAGE_ENCRYPTION_KEY }}" > authelia/storage_encryption_key
+            if [ "${{ env.DEPLOY_TARGET }}" != "home-server" ]; then
+              echo "=== Creating Authelia configuration ==="
+              mkdir -p authelia
+              echo "${{ secrets.AUTHELIA_JWT_SECRET }}" > authelia/jwt_secret
+              echo "${{ secrets.AUTHELIA_SESSION_SECRET }}" > authelia/session_secret
+              echo "${{ secrets.AUTHELIA_STORAGE_ENCRYPTION_KEY }}" > authelia/storage_encryption_key
 
-            AUTHELIA_HASH='${{ secrets.AUTHELIA_PASSWORD_HASH }}'
-            echo "users:" > authelia/users_database.yml
-            echo "  admin:" >> authelia/users_database.yml
-            echo "    displayname: \"Admin\"" >> authelia/users_database.yml
-            echo "    password: \"$AUTHELIA_HASH\"" >> authelia/users_database.yml
-            echo "    email: admin@skuld.com" >> authelia/users_database.yml
-            echo "    groups:" >> authelia/users_database.yml
-            echo "      - admins" >> authelia/users_database.yml
-            echo "      - dev" >> authelia/users_database.yml
+              AUTHELIA_HASH='${{ secrets.AUTHELIA_PASSWORD_HASH }}'
+              echo "users:" > authelia/users_database.yml
+              echo "  admin:" >> authelia/users_database.yml
+              echo "    displayname: \"Admin\"" >> authelia/users_database.yml
+              echo "    password: \"$AUTHELIA_HASH\"" >> authelia/users_database.yml
+              echo "    email: admin@skuld.com" >> authelia/users_database.yml
+              echo "    groups:" >> authelia/users_database.yml
+              echo "      - admins" >> authelia/users_database.yml
+              echo "      - dev" >> authelia/users_database.yml
+            fi
 
             set -x
             mkdir -p logs
@@ -444,23 +477,31 @@ jobs:
             mysudo docker rm -f skuld-streamlit 2>/dev/null || true
             mysudo docker rm -f skuld-frontend 2>/dev/null || true
             mysudo docker rm -f skuld-backend 2>/dev/null || true
-            mysudo docker rm -f authelia 2>/dev/null || true
-            mysudo docker ps -a --filter "name=authelia" -q | xargs -r mysudo docker rm -f 2>/dev/null || true
-            mysudo docker ps -a --filter "name=skuld" -q | xargs -r mysudo docker rm -f 2>/dev/null || true
             if [ "${{ env.DEPLOY_TARGET }}" = "home-server" ]; then
-              mysudo docker rm -f traefik_staging 2>/dev/null || true
-              mysudo docker rm -f skuld_staging_db 2>/dev/null || true
-              mysudo docker rm -f schuld_staging_db 2>/dev/null || true
-              mysudo docker rm -f skuld_staging_pgadmin 2>/dev/null || true
+              true
+            else
+              mysudo docker rm -f authelia 2>/dev/null || true
+              mysudo docker ps -a --filter "name=authelia" -q | xargs -r mysudo docker rm -f 2>/dev/null || true
+              mysudo docker ps -a --filter "name=skuld" -q | xargs -r mysudo docker rm -f 2>/dev/null || true
             fi
-            mysudo docker compose ${{ env.COMPOSE_ARGS }} down --remove-orphans || true
+            if [ "${{ env.DEPLOY_TARGET }}" != "home-server" ]; then
+              mysudo docker compose ${{ env.COMPOSE_ARGS }} down --remove-orphans || true
+            fi
 
             # ── Build & start ──
             echo "=== Building image ==="
-            mysudo docker compose ${{ env.COMPOSE_ARGS }} build --pull --no-cache
+            if [ "${{ env.DEPLOY_TARGET }}" = "home-server" ]; then
+              mysudo docker compose ${{ env.COMPOSE_ARGS }} build --pull --no-cache skuld-frontend skuld-backend
+            else
+              mysudo docker compose ${{ env.COMPOSE_ARGS }} build --pull --no-cache
+            fi
 
             echo "=== Starting containers ==="
-            mysudo docker compose ${{ env.COMPOSE_ARGS }} up -d --remove-orphans
+            if [ "${{ env.DEPLOY_TARGET }}" = "home-server" ]; then
+              mysudo docker compose ${{ env.COMPOSE_ARGS }} up -d --no-deps skuld-frontend skuld-backend
+            else
+              mysudo docker compose ${{ env.COMPOSE_ARGS }} up -d --remove-orphans
+            fi
 
             echo "=== Cleaning old images ==="
             mysudo docker image prune -f
@@ -487,6 +528,7 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
+          cd "$SOURCE_DIR"
           COMMIT_MSG=$(git log -1 --format='%s' 2>/dev/null || echo "workflow_dispatch")
           SHORT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "${GITHUB_SHA:0:7}")
           LABEL="${{ env.DEPLOY_LABEL }}"
@@ -502,6 +544,7 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
+          cd "$SOURCE_DIR" 2>/dev/null || true
           ACTOR="${{ github.actor }}"
           COMMIT_MSG=$(git log -1 --format='%s' 2>/dev/null || echo "checkout failed before git metadata was available")
           SHORT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "${GITHUB_SHA:0:7}")
