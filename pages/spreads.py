@@ -126,7 +126,7 @@ with st.expander("Configuration and Filters", expanded=True):
             st.stop()
 
         # Selectbox with DTE labels
-        selected_label = st.selectbox("Expiration Date", dte_labels)
+        selected_label = st.selectbox("Expiration Date", dte_labels, index=min(1, len(dte_labels)-1))
 
         # Extract selected expiration date from DTE label
         selected_index = dte_labels.index(selected_label)
@@ -380,7 +380,7 @@ if selected_rows and not filtered_df.empty:
         st.metric("IV Rank", f"{row['iv_rank']:.1f}")
         st.metric("IV Percentile", f"{row['iv_percentile']:.1f}")
     with col_info4:
-        st.metric("Hist. Vola (30d)", f"{row.get('historical_volatility_30d', 0)*100:.1f}%")
+        st.metric("Sell IV", f"{row.get('sell_iv', 0)*100:.1f}%")
         st.metric("Theta", f"{row.get('spread_theta', 0):.4f}")
     
     st.write(f"**Sektor:** {row['company_sector']} | **Branche:** {row['company_industry']}")

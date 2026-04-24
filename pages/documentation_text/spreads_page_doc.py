@@ -17,8 +17,6 @@ def get_spreads_documentation() -> str:
 
 **Analyst Mean Target** - Durchschnittliches Kursziel der Analysten
 
-**Recommendation** - Analystenempfehlung (STRONG_BUY, BUY, NEUTRAL, SELL, STRONG_SELL)
-
 **Days to Earnings** - Tage bis zum nächsten Earnings Report
 
 ---
@@ -71,7 +69,7 @@ Profit to BPR = Max Profit / BPR
 ```
 *Höhere Werte bedeuten effizientere Kapitalnutzung*
 
-**Expected Value** - Erwarteter Gewinn basierend auf Monte-Carlo-Simulation ({NUM_SIMULATIONS:,} Simulationen)
+**Expected Value** - Erwarteter Gewinn basierend auf Monte-Carlo-Simulation
 - Berücksichtigt alle möglichen Kursverläufe
 - Realistischer als Max Profit
 
@@ -144,7 +142,7 @@ APDI_EV = (Expected Value / Days to Expiration / BPR) × 36,500
 
 ⚠️ **Risiko**: Der maximale Verlust bei Spreads ist die Differenz zwischen Max Profit und BPR
 
-📊 **Monte Carlo**: Die Expected Value Berechnung verwendet {NUM_SIMULATIONS:,} Simulationen
+📊 **Monte Carlo**: Die Expected Value Berechnung verwendet eine stochastische Simulation
 
 💡 **APDI vs APDI_EV**: APDI_EV ist konservativer und realistischer als APDI
 

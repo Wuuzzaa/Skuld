@@ -105,8 +105,8 @@ with st.expander("Configuration and Filters", expanded=True):
             st.warning("No expiration dates match the selected filters.")
             st.stop()
             
-        exp_put = st.selectbox("Put Expiration", dte_labels, index=0)
-        exp_call = st.selectbox("Call Expiration", dte_labels, index=0)
+        exp_put = st.selectbox("Put Expiration", dte_labels, index=min(1, len(dte_labels)-1))
+        exp_call = st.selectbox("Call Expiration", dte_labels, index=min(1, len(dte_labels)-1))
         
         expiration_date_put = str(filtered_dates_df.iloc[dte_labels.index(exp_put)]['expiration_date'])
         expiration_date_call = str(filtered_dates_df.iloc[dte_labels.index(exp_call)]['expiration_date'])
@@ -206,8 +206,6 @@ if not ic_df.empty:
         ]
         
     # 4. Sell IV filters (using the sell_iv column which should be the average or one of the legs)
-    # Based on spreads page, it uses sell_iv. In IC we might have two sell legs.
-    # Let's check if sell_iv exists in ic_df. In iron_condor_calculation.py it is calculated as (put_sell_iv + call_sell_iv) / 2
     if 'sell_iv' in ic_df.columns:
         ic_df = ic_df[ic_df['sell_iv'] >= st.session_state.ic_min_sell_iv]
         ic_df = ic_df[ic_df['sell_iv'] <= st.session_state.ic_max_sell_iv]
@@ -318,7 +316,7 @@ if not ic_df.empty:
             iv_percentile = row.get('iv_percentile')
             st.metric("IV Percentile", f"{iv_percentile:.1f}" if pd.notnull(iv_percentile) else "N/A")
         with col_info4:
-            st.metric("Hist. Vola (30d)", f"{row.get('historical_volatility_30d_put', 0)*100:.1f}%")
+            st.metric("Sell IV (Avg)", f"{row.get('sell_iv', 0)*100:.1f}%")
             st.metric("Theta", f"{row.get('total_theta', 0):.4f}")
         
         st.write(f"**Sektor:** {row.get('company_sector', 'N/A')} | **Branche:** {row.get('company_industry', 'N/A')}")

@@ -74,6 +74,8 @@ def _calculate_iron_condor_metrics(df: pd.DataFrame) -> pd.DataFrame:
     _safe_assign("company_sector", "company_sector_put")
     _safe_assign("iv_rank", "iv_rank_put")
     _safe_assign("iv_percentile", "iv_percentile_put")
+    _safe_assign("days_to_expiration", "days_to_expiration_put")
+    _safe_assign("days_to_earnings", "days_to_earnings_put")
 
     # Buying Power Reduction (BPR)
     df["width_put"] = (df["sell_strike_put"] - df["buy_strike_put"]).abs()
@@ -89,6 +91,9 @@ def _calculate_iron_condor_metrics(df: pd.DataFrame) -> pd.DataFrame:
 
     # Expected Value
     df["expected_value"] = df.apply(_calculate_combined_ev, axis=1)
+
+    # Combined Sell IV (Average of put and call side short IV)
+    df["sell_iv"] = (df["sell_iv_put"] + df["sell_iv_call"]) / 2
 
     # APDI
     df["max_dte"] = df[["days_to_expiration_put", "days_to_expiration_call"]].max(axis=1)
@@ -159,10 +164,13 @@ def get_page_iron_condors(df: pd.DataFrame) -> pd.DataFrame:
         'max_profit',
         'bpr',
         'expected_value',
+        'sell_iv',
         'APDI',
         'APDI_EV',
         'optionstrat_url',
         'total_theta',
+        'days_to_expiration',
+        'days_to_earnings',
         
         # columns for details and AI prompt
         'sell_strike_put',
