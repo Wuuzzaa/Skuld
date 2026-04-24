@@ -1,3 +1,5 @@
+import logging
+
 import streamlit as st
 import pandas as pd
 import sys
@@ -11,6 +13,8 @@ from src.documentation_renderer import render_married_put_analysis_documentation
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from src.database import select_into_dataframe
+
+logger = logging.getLogger(__name__)
 
 # Titel
 st.subheader("Married Put Analysis")

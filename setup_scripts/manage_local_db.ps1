@@ -212,7 +212,7 @@ PGADMIN_EMAIL=admin@admin.com
 PGADMIN_PASSWORD=admin
 PGADMIN_PORT=5051
 # Remote Backup Config
-REMOTE_DB_HOST=91.98.156.116
+REMOTE_DB_HOST=204.168.128.55
 REMOTE_DB_USER=deploy
 REMOTE_DB_PATH=/home/deploy/backups/postgres
 SSH_KEY_PATH=
@@ -242,7 +242,7 @@ $PG_EMAIL_VAL = if ($EnvVars.ContainsKey("PGADMIN_EMAIL")) { $EnvVars["PGADMIN_E
 $PG_PORT_VAL = if ($EnvVars.ContainsKey("PGADMIN_PORT")) { $EnvVars["PGADMIN_PORT"] } else { 5051 }
 
 # Remote defaults
-$REMOTE_HOST_VAL = if ($EnvVars.ContainsKey("REMOTE_DB_HOST")) { $EnvVars["REMOTE_DB_HOST"] } else { "91.98.156.116" }
+$REMOTE_HOST_VAL = if ($EnvVars.ContainsKey("REMOTE_DB_HOST")) { $EnvVars["REMOTE_DB_HOST"] } else { "204.168.128.55" }
 $REMOTE_USER_VAL = if ($EnvVars.ContainsKey("REMOTE_DB_USER")) { $EnvVars["REMOTE_DB_USER"] } else { "deploy" }
 $REMOTE_PATH_VAL = if ($EnvVars.ContainsKey("REMOTE_DB_PATH")) { $EnvVars["REMOTE_DB_PATH"] } else { "/home/deploy/backups/postgres" }
 $SSH_KEY_VAL     = if ($EnvVars.ContainsKey("SSH_KEY_PATH"))     { $EnvVars["SSH_KEY_PATH"] }     else { "" }

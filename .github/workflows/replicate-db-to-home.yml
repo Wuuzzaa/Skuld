@@ -1,0 +1,162 @@
+name: "Replicate DB To Home"
+
+# ============================================================================
+# Explicit cross-environment workflow to copy the latest backup from a chosen
+# source environment to the home server and restore it into the staging
+# database container.
+#
+# This is intentionally separate from trigger-jobs.yml so production deploys,
+# home deploys, and source-to-home database restores stay easy to reason about
+# in the GitHub Actions UI.
+# ============================================================================
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_environment:
+        description: "Source environment for the backup"
+        required: true
+        type: choice
+        options:
+          - production
+          - dev-hetzner
+        default: production
+      backup_path:
+        description: "Optional absolute backup path on the source server (default: latest backup)"
+        required: false
+        default: ""
+      restart_app:
+        description: "Restart frontend/backend on home server after restore"
+        type: boolean
+        default: true
+      confirm_restore:
+        description: "Type RESTORE_HOME_DB to confirm replacing the home-server database"
+        required: true
+        default: ""
+
+jobs:
+  validate:
+    name: Validate request
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm destructive restore intent
+        run: |
+          if [ "${{ inputs.confirm_restore }}" != "RESTORE_HOME_DB" ]; then
+            echo "Confirmation missing. Type RESTORE_HOME_DB to run this workflow." >&2
+            exit 1
+          fi
+
+  fetch_backup:
+    name: Fetch source backup
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.source_environment }}
+    outputs:
+      backup_file_name: ${{ steps.select_backup.outputs.backup_file_name }}
+      backup_remote_path: ${{ steps.select_backup.outputs.backup_remote_path }}
+    steps:
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" | tr -d '\r' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: Select backup on source server
+        id: select_backup
+        run: |
+          REQUESTED_PATH="${{ inputs.backup_path }}"
+
+          if [ -n "$REQUESTED_PATH" ]; then
+            BACKUP_PATH="$REQUESTED_PATH"
+          else
+            BACKUP_PATH=$(ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+              ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+              'ls -t ~/backups/postgres/skuld_*.sql.gz ~/backups/postgres/skuld_manual_*.sql.gz 2>/dev/null | head -n 1')
+          fi
+
+          if [ -z "$BACKUP_PATH" ]; then
+            echo "No backup found on source environment ${{ inputs.source_environment }}." >&2
+            exit 1
+          fi
+
+          echo "backup_remote_path=$BACKUP_PATH" >> $GITHUB_OUTPUT
+          echo "backup_file_name=$(basename "$BACKUP_PATH")" >> $GITHUB_OUTPUT
+          echo "## Selected source backup" >> $GITHUB_STEP_SUMMARY
+          echo "Source environment: ${{ inputs.source_environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "$BACKUP_PATH" >> $GITHUB_STEP_SUMMARY
+
+      - name: Download backup from source server
+        run: |
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ steps.select_backup.outputs.backup_remote_path }} \
+            ./${{ steps.select_backup.outputs.backup_file_name }}
+
+      - name: Upload backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-db-backup
+          path: ./${{ steps.select_backup.outputs.backup_file_name }}
+          if-no-files-found: error
+          retention-days: 1
+
+  restore_home:
+    name: Restore backup on home server
+    needs: fetch_backup
+    runs-on: self-hosted
+    environment: home-server
+    steps:
+      - name: Download backup artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: source-db-backup
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" | tr -d '\r' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: Copy backup to home server
+        run: |
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ./${{ needs.fetch_backup.outputs.backup_file_name }} \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/${{ needs.fetch_backup.outputs.backup_file_name }}
+
+      - name: Restore backup on home server
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} 'bash -s' <<EOF
+          set -euo pipefail
+
+          BACKUP_FILE="/tmp/${{ needs.fetch_backup.outputs.backup_file_name }}"
+          RESTART_APP="${{ inputs.restart_app }}"
+
+          if [ "\$RESTART_APP" = "true" ]; then
+            docker stop skuld-frontend skuld-backend || true
+          fi
+
+          echo "Dropping and recreating Skuld database on home server..."
+          echo 'DROP DATABASE IF EXISTS "Skuld"; CREATE DATABASE "Skuld";' | \
+            docker exec -i skuld_staging_db psql -U admin -d postgres
+
+          echo "Restoring backup into home-server database..."
+          gzip -dc "\$BACKUP_FILE" | docker exec -i skuld_staging_db psql -U admin -d Skuld
+
+          rm -f "\$BACKUP_FILE"
+
+          if [ "\$RESTART_APP" = "true" ]; then
+            docker start schuld-backend schuld-frontend 2>/dev/null || true
+            docker start skuld-backend skuld-frontend 2>/dev/null || true
+          fi
+EOF
+
+      - name: Write summary
+        run: |
+          echo "## DB replicated to home server" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Setting | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Source environment | ${{ inputs.source_environment }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Source backup | ${{ needs.fetch_backup.outputs.backup_remote_path }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Home DB container | skuld_staging_db |" >> $GITHUB_STEP_SUMMARY
+          echo "| Restart app | ${{ inputs.restart_app }} |" >> $GITHUB_STEP_SUMMARY

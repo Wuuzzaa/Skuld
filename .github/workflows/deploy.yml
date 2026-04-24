@@ -1,19 +1,213 @@
-name: Deploy SKULD Production to Hetzner
+name: Deploy SKULD
+
+# ============================================================================
+# Unified deployment workflow for all environments.
+#
+# Triggers:
+#   - push to master  -> auto-deploy to production only
+#   - workflow_dispatch -> choose target (production / dev-hetzner / home-server) + git ref
+#
+# Each target maps to a GitHub Environment that holds its own
+# secrets (DEPLOY_HOST, DEPLOY_SSH_KEY, ...) and variables
+# (DOMAIN_NAME, AUTH_DOMAIN, ...).
+#
+# Environments:
+#   production  -> Helsinki / Falkenstein (whichever is current prod)
+#   dev-hetzner -> Dev server
+#   home-server -> Home server / staging
+# ============================================================================
 
 on:
   push:
-    branches: [ master ]
-    paths-ignore:
-      - 'monitoring/**'
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Deploy target"
+        required: true
+        type: choice
+        options:
+          - production
+          - dev-hetzner
+          - home-server
+        default: production
+      ref:
+        description: "Git ref to deploy (branch, tag, or SHA)"
+        required: false
+        default: master
+      restore_db_from_source:
+        description: "Only for home-server: restore DB from source before deploy"
+        type: boolean
+        required: false
+        default: false
+      db_source_environment:
+        description: "Source environment for DB restore"
+        required: false
+        type: choice
+        options:
+          - production
+          - dev-hetzner
+        default: production
+      db_backup_path:
+        description: "Optional absolute backup path on source server (default: latest)"
+        required: false
+        default: ""
+      confirm_db_restore:
+        description: "Type RESTORE_HOME_DB to confirm destructive restore"
+        required: false
+        default: ""
+
+concurrency:
+  group: deploy-${{ github.event_name == 'push' && 'production' || inputs.target }}
+  cancel-in-progress: false
 
 jobs:
-  deploy:
+  validate_restore_request:
+    name: Validate optional DB restore
     runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    steps:
+      - name: Validate restore parameters
+        run: |
+          set -euo pipefail
+
+          TARGET="${{ inputs.target }}"
+          RESTORE="${{ inputs.restore_db_from_source }}"
+
+          if [ "$RESTORE" != "true" ]; then
+            echo "DB restore not requested."
+            exit 0
+          fi
+
+          if [ "$TARGET" != "home-server" ]; then
+            echo "DB restore from source is only allowed when target=home-server." >&2
+            exit 1
+          fi
+
+          if [ "${{ inputs.confirm_db_restore }}" != "RESTORE_HOME_DB" ]; then
+            echo "Confirmation missing. Set confirm_db_restore=RESTORE_HOME_DB." >&2
+            exit 1
+          fi
+
+          echo "Restore request validated."
+
+  fetch_db_backup:
+    name: Fetch source DB backup
+    runs-on: ubuntu-latest
+    needs: validate_restore_request
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.target == 'home-server' && inputs.restore_db_from_source }}
+    environment: ${{ inputs.db_source_environment }}
+    outputs:
+      backup_file_name: ${{ steps.select_backup.outputs.backup_file_name }}
+      backup_remote_path: ${{ steps.select_backup.outputs.backup_remote_path }}
+    steps:
+      - name: Setup source SSH key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" | tr -d '\r' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: Select backup on source server
+        id: select_backup
+        run: |
+          REQUESTED_PATH="${{ inputs.db_backup_path }}"
+
+          if [ -n "$REQUESTED_PATH" ]; then
+            BACKUP_PATH="$REQUESTED_PATH"
+          else
+            BACKUP_PATH=$(ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+              ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+              'ls -t ~/backups/postgres/skuld_*.sql.gz ~/backups/postgres/skuld_manual_*.sql.gz 2>/dev/null | head -n 1')
+          fi
+
+          if [ -z "$BACKUP_PATH" ]; then
+            echo "No backup found on source environment ${{ inputs.db_source_environment }}." >&2
+            exit 1
+          fi
+
+          echo "backup_remote_path=$BACKUP_PATH" >> $GITHUB_OUTPUT
+          echo "backup_file_name=$(basename "$BACKUP_PATH")" >> $GITHUB_OUTPUT
+
+      - name: Download backup from source server
+        run: |
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ steps.select_backup.outputs.backup_remote_path }} \
+            ./${{ steps.select_backup.outputs.backup_file_name }}
+
+      - name: Upload backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-db-backup
+          path: ./${{ steps.select_backup.outputs.backup_file_name }}
+          if-no-files-found: error
+          retention-days: 1
+
+  restore_db_on_home:
+    name: Restore DB on home-server
+    runs-on: self-hosted
+    needs: fetch_db_backup
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.target == 'home-server' && inputs.restore_db_from_source }}
+    environment: home-server
+    steps:
+      - name: Download backup artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: source-db-backup
+
+      - name: Setup home SSH key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" | tr -d '\r' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: Copy backup to home server
+        run: |
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ./${{ needs.fetch_db_backup.outputs.backup_file_name }} \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/${{ needs.fetch_db_backup.outputs.backup_file_name }}
+
+      - name: Restore backup on home server
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} 'bash -s' <<EOF
+            set -euo pipefail
+
+            BACKUP_FILE="/tmp/${{ needs.fetch_db_backup.outputs.backup_file_name }}"
+
+            docker stop skuld-frontend skuld-backend 2>/dev/null || true
+
+            echo 'DROP DATABASE IF EXISTS "Skuld"; CREATE DATABASE "Skuld";' | \
+              docker exec -i skuld_staging_db psql -U admin -d postgres
+
+            gzip -dc "$BACKUP_FILE" | docker exec -i skuld_staging_db psql -U admin -d Skuld
+
+            rm -f "$BACKUP_FILE"
+          EOF
+
+  deploy:
+    name: "Deploy to ${{ github.event_name == 'push' && 'production' || inputs.target }}"
+    needs:
+      - validate_restore_request
+      - fetch_db_backup
+      - restore_db_on_home
+    if: |
+      always() &&
+      (needs.validate_restore_request.result == 'success' || needs.validate_restore_request.result == 'skipped') &&
+      (needs.fetch_db_backup.result == 'success' || needs.fetch_db_backup.result == 'skipped') &&
+      (needs.restore_db_on_home.result == 'success' || needs.restore_db_on_home.result == 'skipped')
+    runs-on: ${{ github.event_name == 'workflow_dispatch' && inputs.target == 'home-server' && 'self-hosted' || 'ubuntu-latest' }}
+    environment: ${{ github.event_name == 'push' && 'production' || inputs.target }}
+    env:
+      DEPLOY_TARGET: ${{ github.event_name == 'push' && 'production' || inputs.target }}
+      DEPLOY_LABEL: ${{ github.event_name == 'push' && 'Production' || inputs.target == 'production' && 'Production' || inputs.target == 'home-server' && 'Home Server' || 'Dev Hetzner' }}
+      COMPOSE_ARGS: ${{ github.event_name == 'push' && '-f docker-compose.yml' || inputs.target == 'home-server' && '-f docker-compose.yml -f docker-compose.testing.yml' || '-f docker-compose.yml' }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || '' }}
 
-      # ── Telegram: Deploy Notification (self-contained, safe to remove) ──
       - name: Notify deploy started via Telegram
         if: always()
         env:
@@ -21,31 +215,39 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           ACTOR="${{ github.actor }}"
-          BRANCH="${{ github.ref_name }}"
+          REF="${{ inputs.ref || github.ref_name }}"
           COMMIT_MSG=$(git log -1 --format='%s')
           SHORT_SHA=$(git rev-parse --short HEAD)
           REPO="${{ github.repository }}"
-          TEXT="🚀 <b>[Production] Deploy gestartet</b>%0A%0A👤 <b>${ACTOR}</b> hat eine neue Version auf <code>${BRANCH}</code> gepusht.%0A📝 <code>${SHORT_SHA}</code>: ${COMMIT_MSG}%0A📦 ${REPO}"
+          LABEL="${{ env.DEPLOY_LABEL }}"
+          TEXT="🚀 <b>[${LABEL}] Deploy gestartet</b>%0A%0A👤 <b>${ACTOR}</b> deployed <code>${REF}</code>.%0A📝 <code>${SHORT_SHA}</code>: ${COMMIT_MSG}%0A📦 ${REPO}"
           curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TELEGRAM_CHAT_ID}" \
             -d text="${TEXT}" \
             -d parse_mode=HTML >/dev/null 2>&1 || true
-      # ── End Telegram Notification ───────────────────────────────────────
 
       - name: Setup SSH Key
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" | tr -d '\r' > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          # ssh-keyscan removed to avoid failures, we use StrictHostKeyChecking=no later anyway
 
-      - name: Pre-cleanup on server to free space
+      - name: Prepare remote server
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
-            "echo '${{ secrets.DEPLOY_PASSWORD }}' | sudo -S docker system prune -af || true && echo '${{ secrets.DEPLOY_PASSWORD }}' | sudo -S chown -R ${{ secrets.DEPLOY_USER }} /opt/skuld"
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'ENDSSH'
+            _DEPLOY_PASS='${{ secrets.DEPLOY_PASSWORD }}'
+            if [ -n "$_DEPLOY_PASS" ]; then
+              mysudo() { echo "$_DEPLOY_PASS" | sudo -S "$@"; }
+            else
+              mysudo() { sudo "$@"; }
+            fi
+            mysudo docker image prune -af || true
+            mysudo mkdir -p /opt/skuld
+            mysudo chown -R $(whoami) /opt/skuld
+          ENDSSH
 
-      - name: Sync files to server (Production deployment)
+      - name: Sync files to server
         run: |
           rsync -avz --delete \
             -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectionAttempts=1" \
@@ -70,54 +272,72 @@ jobs:
           DATE=$(git log -1 --format=%cd --date=format:'%Y-%m-%d %H:%M')
           echo "VERSION=${COUNT}-${HASH} (${DATE})" >> $GITHUB_OUTPUT
 
-      - name: Build and deploy Docker container (Production)
+      - name: Build and deploy
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'ENDSSH'
             set -euo pipefail
-            
-            # Define sudo helper with password
-            DEPLOY_PASS="${{ secrets.DEPLOY_PASSWORD }}"
-            function mysudo() {
-                echo "$DEPLOY_PASS" | sudo -S "$@"
-            }
+
+            _DEPLOY_PASS='${{ secrets.DEPLOY_PASSWORD }}'
+            if [ -n "$_DEPLOY_PASS" ]; then
+              mysudo() { echo "$_DEPLOY_PASS" | sudo -S "$@"; }
+            else
+              mysudo() { sudo "$@"; }
+            fi
 
             cd /opt/skuld
-            
-            # Create .env file with secrets (disable xtrace to avoid logging secrets)
-            echo "=== Creating .env file ==="
-            echo "DOMAIN_NAME=app.skuld-options.com" > .env
-            echo "AUTH_DOMAIN=auth.skuld-options.com" >> .env
-            
-            # Traefik Configuration (Prod = HTTPS / LetsEncrypt)
-            echo "TRAEFIK_ENTRYPOINT=websecure" >> .env
-            echo "TRAEFIK_CERTRESOLVER_LABEL_SKULD=traefik.http.routers.skuld.tls.certresolver=letsencrypt" >> .env
-            echo "TRAEFIK_CERTRESOLVER_LABEL_AUTHELIA=traefik.http.routers.authelia.tls.certresolver=letsencrypt" >> .env
-            echo "AUTH_SCHEME=https" >> .env
 
+            # ── Create .env from GitHub Environment vars/secrets ──
+            echo "=== Creating .env file ==="
+
+            POSTGRES_HOST_VALUE='${{ vars.POSTGRES_HOST }}'
+            POSTGRES_DB_VALUE='${{ vars.POSTGRES_DB }}'
+            POSTGRES_USER_VALUE='${{ vars.POSTGRES_USER }}'
+            POSTGRES_PORT_VALUE='${{ vars.POSTGRES_PORT }}'
+
+            # Home server runs the staging DB from docker-compose.testing.yml.
+            # Ensure sane defaults even if environment vars are missing.
+            if [ "${{ env.DEPLOY_TARGET }}" = "home-server" ]; then
+              [ -n "$POSTGRES_HOST_VALUE" ] || POSTGRES_HOST_VALUE="postgres"
+              [ -n "$POSTGRES_DB_VALUE" ] || POSTGRES_DB_VALUE="Skuld"
+              [ -n "$POSTGRES_USER_VALUE" ] || POSTGRES_USER_VALUE="admin"
+              [ -n "$POSTGRES_PORT_VALUE" ] || POSTGRES_PORT_VALUE="5432"
+            fi
+
+            echo "DOMAIN_NAME=${{ vars.DOMAIN_NAME }}" > .env
+            echo "AUTH_DOMAIN=${{ vars.AUTH_DOMAIN }}" >> .env
+            echo "TRAEFIK_ENTRYPOINT=${{ vars.TRAEFIK_ENTRYPOINT }}" >> .env
+            echo "TRAEFIK_CERTRESOLVER_LABEL_SKULD=${{ vars.TRAEFIK_CERTRESOLVER_LABEL_SKULD }}" >> .env
+            echo "TRAEFIK_CERTRESOLVER_LABEL_AUTHELIA=${{ vars.TRAEFIK_CERTRESOLVER_LABEL_AUTHELIA }}" >> .env
+            echo "AUTH_SCHEME=${{ vars.AUTH_SCHEME }}" >> .env
             echo "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" >> .env
             echo "TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}" >> .env
             echo "MASSIVE_API_KEY=${{ secrets.MASSIVE_API_KEY }}" >> .env
             echo "MASSIVE_API_KEY_FLAT_FILES=${{ secrets.MASSIVE_API_KEY_FLAT_FILES }}" >> .env
             echo "SKULD_VERSION=${{ steps.get_version.outputs.VERSION }}" >> .env
-            echo "POSTGRES_HOST=postgres_setup-db-1" >> .env
-            echo "POSTGRES_DB=Skuld" >> .env
-            echo "POSTGRES_USER=admin" >> .env
+            echo "POSTGRES_HOST=${POSTGRES_HOST_VALUE}" >> .env
+            echo "POSTGRES_DB=${POSTGRES_DB_VALUE}" >> .env
+            echo "POSTGRES_USER=${POSTGRES_USER_VALUE}" >> .env
             echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env
-            echo "POSTGRES_PORT=5432" >> .env
-            
-            # Create Authelia secrets and configuration
+            echo "POSTGRES_PORT=${POSTGRES_PORT_VALUE}" >> .env
+
+            # Fail fast on missing critical DB vars.
+            REQUIRED_DB_VARS="POSTGRES_HOST POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD POSTGRES_PORT"
+            for k in $REQUIRED_DB_VARS; do
+              if ! grep -q "^${k}=.\+" .env; then
+                echo "Missing required DB setting: ${k}" >&2
+                exit 1
+              fi
+            done
+
+            # ── Authelia secrets ──
             echo "=== Creating Authelia configuration ==="
             mkdir -p authelia
-            
             echo "${{ secrets.AUTHELIA_JWT_SECRET }}" > authelia/jwt_secret
             echo "${{ secrets.AUTHELIA_SESSION_SECRET }}" > authelia/session_secret
             echo "${{ secrets.AUTHELIA_STORAGE_ENCRYPTION_KEY }}" > authelia/storage_encryption_key
-            
-            # Store password hash in variable with single quotes to prevent expansion
+
             AUTHELIA_HASH='${{ secrets.AUTHELIA_PASSWORD_HASH }}'
-            
-            # Create users_database.yml using echo to avoid YAML syntax issues with heredocs
             echo "users:" > authelia/users_database.yml
             echo "  admin:" >> authelia/users_database.yml
             echo "    displayname: \"Admin\"" >> authelia/users_database.yml
@@ -126,20 +346,19 @@ jobs:
             echo "    groups:" >> authelia/users_database.yml
             echo "      - admins" >> authelia/users_database.yml
             echo "      - dev" >> authelia/users_database.yml
-            
-            set -x # Enable xtrace for the rest of the script
-            
-            echo "=== Current container status ==="
-            mysudo docker compose ps
-            
-            echo "=== Current images ==="
-            mysudo docker images | grep skuld || echo "No skuld images"
-            
-            # ── Safe Deploy: wait for running jobs ──────────────────────
+
+            set -x
+            mkdir -p logs
+
+            # Ensure external networks exist before compose (especially on fresh home-server installs).
+            mysudo docker network create web >/dev/null 2>&1 || true
+            mysudo docker network create postgres_setup_default >/dev/null 2>&1 || true
+
+            # ── Safe Deploy: wait for running data-collection jobs ──
             echo "=== Checking for running jobs in skuld-backend ==="
             TELEGRAM_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
             TELEGRAM_CHAT="${{ secrets.TELEGRAM_CHAT_ID }}"
-            MAX_WAIT=3600   # max 60 minutes
+            MAX_WAIT=3600
             POLL_INTERVAL=30
             WAITED=0
             NOTIFIED=0
@@ -153,10 +372,6 @@ jobs:
             }
 
             is_job_running() {
-              # Check for any data collection process:
-              # - python main.py (any --mode)
-              # - run_data_collection.sh wrapper
-              # - timeout wrapper around main.py
               mysudo docker exec skuld-backend sh -c \
                 'pgrep -f "python.*main\.py" || pgrep -f "run_data_collection\.sh"' \
                 >/dev/null 2>&1
@@ -164,59 +379,67 @@ jobs:
 
             while is_job_running; do
               if [ "$NOTIFIED" -eq 0 ]; then
-                echo "⏳ main.py is running – waiting for job to finish before deploy..."
-                send_telegram "⏳ <b>Deploy triggered</b> but <code>main.py</code> is still running in skuld-backend. Waiting for the job to finish before rebuilding containers..."
+                echo "⏳ main.py is running – waiting for job to finish..."
+                send_telegram "⏳ <b>Deploy triggered</b> but <code>main.py</code> is still running. Waiting..."
                 NOTIFIED=1
               fi
-
               if [ "$WAITED" -ge "$MAX_WAIT" ]; then
-                echo "⚠️ Timeout after ${MAX_WAIT}s – proceeding with deploy anyway"
-                send_telegram "⚠️ <b>Deploy timeout</b>: waited ${MAX_WAIT}s for main.py to finish. Proceeding with deploy now."
+                echo "⚠️ Timeout after ${MAX_WAIT}s – proceeding anyway"
+                send_telegram "⚠️ <b>Deploy timeout</b>: waited ${MAX_WAIT}s. Proceeding."
                 break
               fi
-
               sleep $POLL_INTERVAL
               WAITED=$((WAITED + POLL_INTERVAL))
               echo "   … still waiting (${WAITED}s / ${MAX_WAIT}s)"
             done
 
             if [ "$NOTIFIED" -eq 1 ] && [ "$WAITED" -lt "$MAX_WAIT" ]; then
-              echo "✅ Job finished after ${WAITED}s – proceeding with deploy"
-              send_telegram "✅ <b>Job finished</b> after ${WAITED}s. Starting deploy now..."
+              echo "✅ Job finished after ${WAITED}s – proceeding"
+              send_telegram "✅ <b>Job finished</b> after ${WAITED}s. Deploying..."
             fi
-            # ────────────────────────────────────────────────────────────
-            
-            echo "=== Stopping old container ==="
-            # Force-remove any leftover containers (handles restart policies & orphans)
+
+            # ── Stop old containers ──
+            echo "=== Stopping old containers ==="
             mysudo docker rm -f skuld-streamlit 2>/dev/null || true
             mysudo docker rm -f skuld-frontend 2>/dev/null || true
             mysudo docker rm -f skuld-backend 2>/dev/null || true
             mysudo docker rm -f authelia 2>/dev/null || true
-            # Also remove containers by partial name match (catches prefixed names)
             mysudo docker ps -a --filter "name=authelia" -q | xargs -r mysudo docker rm -f 2>/dev/null || true
             mysudo docker ps -a --filter "name=skuld" -q | xargs -r mysudo docker rm -f 2>/dev/null || true
-            mysudo docker compose down --remove-orphans
-            
-            echo "=== Ensuring logs directory exists ==="
-            mkdir -p logs
-            
-            echo "=== Building new image ==="
-            mysudo docker compose build --pull --no-cache
-            
-            echo "=== Starting new container ==="
-            mysudo docker compose up -d --remove-orphans
-            
-            echo "=== Cleaning up old images ==="
+            if [ "${{ env.DEPLOY_TARGET }}" = "home-server" ]; then
+              mysudo docker rm -f traefik_staging 2>/dev/null || true
+              mysudo docker rm -f skuld_staging_db 2>/dev/null || true
+              mysudo docker rm -f schuld_staging_db 2>/dev/null || true
+              mysudo docker rm -f skuld_staging_pgadmin 2>/dev/null || true
+            fi
+            mysudo docker compose ${{ env.COMPOSE_ARGS }} down --remove-orphans || true
+
+            # ── Build & start ──
+            echo "=== Building image ==="
+            mysudo docker compose ${{ env.COMPOSE_ARGS }} build --pull --no-cache
+
+            echo "=== Starting containers ==="
+            mysudo docker compose ${{ env.COMPOSE_ARGS }} up -d --remove-orphans
+
+            echo "=== Cleaning old images ==="
             mysudo docker image prune -f
-            
-            echo "=== New container status ==="
-            mysudo docker compose ps
-            
+
+            echo "=== Container status ==="
+            mysudo docker compose ${{ env.COMPOSE_ARGS }} ps
+
+            # Verify DB connectivity from the runtime stack so branch choice cannot break DB wiring silently.
+            echo "=== Verifying DB connectivity ==="
+            if [ "${{ env.DEPLOY_TARGET }}" = "home-server" ]; then
+              mysudo docker exec skuld_staging_db psql -U "${POSTGRES_USER_VALUE}" -d "${POSTGRES_DB_VALUE}" -c 'select 1;' >/dev/null
+            else
+              mysudo docker exec postgres_setup-db-1 psql -U "${POSTGRES_USER_VALUE}" -d "${POSTGRES_DB_VALUE}" -c 'select 1;' >/dev/null
+            fi
+            echo "DB connectivity check passed"
+
             echo "=== Container logs ==="
-            mysudo docker compose logs --tail=30
+            mysudo docker compose ${{ env.COMPOSE_ARGS }} logs --tail=30
           ENDSSH
 
-      # ── Telegram: Deploy Success Notification ──
       - name: Notify deploy success via Telegram
         if: success()
         env:
@@ -225,13 +448,13 @@ jobs:
         run: |
           COMMIT_MSG=$(git log -1 --format='%s')
           SHORT_SHA=$(git rev-parse --short HEAD)
-          TEXT="✅ <b>[Production] Deploy erfolgreich</b>%0A%0A📝 <code>${SHORT_SHA}</code>: ${COMMIT_MSG}"
+          LABEL="${{ env.DEPLOY_LABEL }}"
+          TEXT="✅ <b>[${LABEL}] Deploy erfolgreich</b>%0A%0A📝 <code>${SHORT_SHA}</code>: ${COMMIT_MSG}"
           curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TELEGRAM_CHAT_ID}" \
             -d text="${TEXT}" \
             -d parse_mode=HTML >/dev/null 2>&1 || true
 
-      # ── Telegram: Deploy Failure Notification ──
       - name: Notify deploy failure via Telegram
         if: failure()
         env:
@@ -242,7 +465,8 @@ jobs:
           COMMIT_MSG=$(git log -1 --format='%s')
           SHORT_SHA=$(git rev-parse --short HEAD)
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          TEXT="❌ <b>[Production] Deploy fehlgeschlagen!</b>%0A%0A👤 ${ACTOR}%0A📝 <code>${SHORT_SHA}</code>: ${COMMIT_MSG}%0A🔗 <a href=\"${RUN_URL}\">Build Logs ansehen</a>"
+          LABEL="${{ env.DEPLOY_LABEL }}"
+          TEXT="❌ <b>[${LABEL}] Deploy fehlgeschlagen!</b>%0A%0A👤 ${ACTOR}%0A📝 <code>${SHORT_SHA}</code>: ${COMMIT_MSG}%0A🔗 <a href=\"${RUN_URL}\">Build Logs ansehen</a>"
           curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TELEGRAM_CHAT_ID}" \
             -d text="${TEXT}" \

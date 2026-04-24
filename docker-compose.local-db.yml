@@ -13,15 +13,45 @@ services:
   db:
     image: postgres:15
     container_name: skuld-local-db
+    shm_size: 2g
     environment:
       POSTGRES_USER: ${DB_USER:-dev}
       POSTGRES_PASSWORD: ${DB_PASS:-dev}
       POSTGRES_DB: ${DB_NAME:-skuld_dev} # Default DB to create on init
+    command:
+      - postgres
+      - -c
+      - shared_buffers=1024MB
+      - -c
+      - effective_cache_size=3GB
+      - -c
+      - work_mem=8MB
+      - -c
+      - maintenance_work_mem=256MB
+      - -c
+      - max_connections=80
+      - -c
+      - max_worker_processes=4
+      - -c
+      - max_parallel_workers=4
+      - -c
+      - max_parallel_workers_per_gather=2
     ports:
       - "${DB_PORT:-5432}:5432"
     volumes:
       - postgres_data_local:/var/lib/postgresql/data
     restart: unless-stopped
+    cpus: 2.0
+    mem_limit: 6g
+    mem_reservation: 2g
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 6G
+        reservations:
+          cpus: '0.5'
+          memory: 2G
     networks:
       - skuld-local-net
 

@@ -79,14 +79,7 @@ WITH
 			DATE,
 			SYMBOL,
 			IV,
-			-- Average, High und Low über 1 Jahr
-			AVG(IV) OVER (
-				PARTITION BY
-					SYMBOL
-				ORDER BY
-					DATE ROWS BETWEEN 251 PRECEDING
-					AND CURRENT ROW
-			) AS IV_HIST,
+			-- High und Low über 1 Jahr
 			MAX(IV) OVER (
 				PARTITION BY
 					SYMBOL

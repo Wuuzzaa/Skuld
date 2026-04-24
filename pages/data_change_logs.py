@@ -1,17 +1,18 @@
+import logging
+
 import streamlit as st
 import pandas as pd
 import sqlite3
 import os
-from config import PATH_DATABASE_FILE
+from src.database import select_into_dataframe
+from src.decorator_log_function import log_function
 
-# Datenbankpfad (wie im Docker-Compose gemountet)
-DB_PATH = PATH_DATABASE_FILE
+logger = logging.getLogger(__name__)
 
+@log_function
 def get_data():
     try:
-        conn = sqlite3.connect(DB_PATH)
-        df = pd.read_sql_query("SELECT * FROM DataChangeLogs", conn)
-        conn.close()
+        df = select_into_dataframe('SELECT * FROM "DataChangeLogs" ORDER BY timestamp DESC')
         return df
     except Exception as e:
         st.error(f"Fehler beim Laden der Daten: {e}")

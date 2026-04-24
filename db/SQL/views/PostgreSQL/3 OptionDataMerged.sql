@@ -29,8 +29,6 @@ SELECT
 	-- OptionPricingMetrics
 	a.days_to_expiration,
 	a.premium_option_price,
-	a.spread,
-    a.spread_ptc,
 	a.intrinsic_value,
 	a.extrinsic_value,
 	a.strike_stock_price_difference,
@@ -569,10 +567,10 @@ SELECT
     b."STOCHh_14_3_1",
     b."RSI_14",
     b."RSL",
+	b."target-close$",
+	b."target-close%",
 
 	-- Additional calculated fields
-	ROUND((b.analyst_mean_target - b.live_stock_price)::numeric,2) as "target-close$",
-	ROUND((ROUND((b.analyst_mean_target - b.live_stock_price)::numeric,2) / b.live_stock_price * 100.0)::numeric, 2) as "target-close%",
     CASE
 		WHEN a.days_to_expiration >= 0 THEN
 			ROUND((b.live_stock_price * a.implied_volatility * sqrt(a.days_to_expiration / 365.0))::numeric, 2)

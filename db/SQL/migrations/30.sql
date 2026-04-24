@@ -1,0 +1,1 @@
+ALTER TABLE "OptionDataMassive" ALTER COLUMN "expiration_date" TYPE date USING expiration_date::date

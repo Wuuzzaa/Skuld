@@ -2,9 +2,8 @@ import logging
 import os
 import pathlib
 import time
-from sqlalchemy import text
-from config import HISTORY_ENABLED_TABLES, HISTORY_ENABLED_VIEWS
-from src.database import column_exists, drop_all_views, get_columns, get_database_engine, execute_sql, get_postgres_engine, get_table_key_and_data_columns, mapping_sqlite_to_postgres, pg_migrate_week_to_ISO_week, recreate_views, run_migrations, select_into_dataframe, table_exists, view_exists
+from config import HISTORY_ENABLED_TABLES
+from src.database import get_columns, execute_sql, get_postgres_engine, get_table_key_and_data_columns, run_migrations, table_exists, view_exists
 from src.decorator_log_function import log_function
 from src.data_aging import DataAgingService, get_history_select_statement, is_weekend, is_classified_for_master_data
 from src.util import executed_as_github_action
@@ -38,6 +37,7 @@ def run_historization_pipeline():
         logger.info("Historization Pipeline Completed Successfully.")
     except Exception as e:
         logger.error(f"Historization Pipeline Failed: {e}")
+        raise e
     
     # _create_history_merge_views()
     logger.info(f"Historization Pipeline Finished in {round(time.time() - start_time, 2)}s.")
@@ -153,25 +153,7 @@ def insert_into_master_data_table(source_table):
                 pass
             except Exception as e:
                 logger.error(f"Error during historization execution on Postgres: {e}")
-                raise e
-
-def delete_sqlite_history(source_table):
-    daily_table = f"{source_table}HistoryDaily"
-    weekly_table = f"{source_table}HistoryWeekly"
-    monthly_table = f"{source_table}HistoryMonthly"
-    master_table = f"{source_table}MasterData"
-
-    engine = get_database_engine()
-    tables = [source_table, daily_table, weekly_table, monthly_table, master_table]
-    for table in tables:
-        delete_sql = f"""
-            DELETE FROM "{table}"
-        """
-        with engine.begin() as connection:
-            try:
-                execute_sql(connection, delete_sql, table, "DELETE", f"DELETE data from {table}")
-            except Exception as e:
-                logger.error(f"Error during execution on SQLite: {e}")     
+                raise e  
 
 def delete_postgres_history(source_table):
     if source_table in ["OptionDataYahoo", "OptionDataTradingView", "StockDataBarchart"]:
@@ -411,7 +393,7 @@ def _create_history_merge_views():
         
         with open(f"db/SQL/views/create_view/history/{view_template_file.replace('_template','')}", "w") as f:
             f.write(sql)
-    recreate_views()
+    # recreate_views()
 
 def _insert_date():
         start_time = time.time()
@@ -448,57 +430,3 @@ def _insert_date():
                     raise e
 
         logger.info(f"Inserted date to Dates History in {round(time.time() - start_time, 2)}s.")
-
-def migrate_weekly_history_tables():
-    """
-    Migrates weekly history tables to use ISO year and week.
-    """
-    pg_engine = get_postgres_engine()
-
-    if column_exists(pg_engine, "DatesHistory", "isoyear"):
-        logger.info("PostgreSQL Weekly History table already has isoyear column, skipping migration.")
-        return
-
-    drop_all_views(pg_engine)
-    
-    for table in HISTORY_ENABLED_TABLES:
-        weekly_history_table_name, create_weekly_table_sql = _get_weekly_history_table_name_create_statement(table)
-        if table_exists(weekly_history_table_name):
-            logger.info(f"Migrating {weekly_history_table_name} to ISO year and week...")
-            with pg_engine.begin() as connection:
-                rename_history_weekly = f'ALTER TABLE "{weekly_history_table_name}" RENAME TO "{weekly_history_table_name}Old";'
-                execute_sql(connection, rename_history_weekly, weekly_history_table_name, 'ALTER TABLE', f"RENAME to Old - Migrate {weekly_history_table_name} to ISO year and week")
-        
-                pg_create_weekly_table_sql = mapping_sqlite_to_postgres(create_weekly_table_sql)
-                execute_sql(connection, pg_create_weekly_table_sql, weekly_history_table_name, "CREATE TABLE", f"Migrate {weekly_history_table_name} to ISO year and week")
-                rename_weekly_table_column = f'ALTER TABLE "{weekly_history_table_name}" RENAME COLUMN year TO isoyear;'
-                execute_sql(connection, rename_weekly_table_column, weekly_history_table_name, 'ALTER TABLE', "RENAME COLUMN to isoyear - Migration to ISO week")
-             
-                _, data_columns = get_table_key_and_data_columns(table)
-                data_columns_str = ", ".join([f'MAX("{col["name"]}") AS "{col["name"]}"' for col in data_columns])  
-                insert_sql = f"""
-                    INSERT INTO "{weekly_history_table_name}" (
-                        isoyear,
-                        week,
-                        {_get_key_columns_str(table)},
-                        {_get_data_columns_str(table)}
-                    )
-                    SELECT
-                        EXTRACT(ISOYEAR FROM dh.date)::int AS isoyear,
-                        EXTRACT(WEEK FROM dh.date)::int AS week,
-                        { _get_key_columns_str(table) },
-                        { data_columns_str }
-                    FROM "{weekly_history_table_name}Old" AS old
-                    JOIN "DatesHistory" AS dh
-                    ON old.year = dh.year AND old.week = dh.week
-                    GROUP BY
-                        EXTRACT(ISOYEAR FROM dh.date)::int, 
-                        EXTRACT(WEEK FROM dh.date)::int,
-                        { _get_key_columns_str(table) }
-                """
-                execute_sql(connection, insert_sql, weekly_history_table_name, 'INSERT', "Migration to ISO week")
-                drop_weekly_history_old = f'DROP TABLE "{weekly_history_table_name}Old";'
-                execute_sql(connection, drop_weekly_history_old, f"{weekly_history_table_name}Old", 'DROP TABLE', "Migration to ISO week")
-
-    pg_migrate_week_to_ISO_week(pg_engine)
-            
