@@ -7,9 +7,15 @@ from pathlib import Path
 # Alle Page-Dateien die getestet werden sollen
 PAGES = [
     "pages/analyst_prices.py",
-    "pages/married_put_analysis.py",
     "pages/spreads.py",
-    'pages/multifactor_swingtrading.py'
+    "pages/iron_condors.py",
+    "pages/married_put_analysis.py",
+    "pages/position_insurance_tool.py",
+    "pages/multifactor_swingtrading.py",
+    "pages/sector_rotation.py",
+    "pages/expected_value.py",
+    "pages/data_change_logs.py",
+    "pages/symbolpage.py"
 ]
 
 
@@ -23,7 +29,8 @@ def test_page_runs_without_error(page_file):
 
     # Führe die Page aus
     at = AppTest.from_file(str(page_path))
-    at.run(timeout=30)
+    timeout = 60 if "sector_rotation" in page_file else 30
+    at.run(timeout=timeout)
 
     # Prüfe ob es Fehler gibt
     assert not at.exception, f"Fehler in {page_file}: {at.exception}"

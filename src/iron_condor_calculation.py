@@ -1,31 +1,19 @@
 import pandas as pd
-from config import NUM_SIMULATIONS, RANDOM_SEED, RISK_FREE_RATE
 from src.decorator_log_function import log_function
-from src.monte_carlo_simulation import UniversalOptionsMonteCarloSimulator
-
-# Constants
-MULTIPLIER = 100
-EARNINGS_WARNING_DAYS = 7
-DIVIDEND_YIELD = 0
+from src.options_utils import (
+    MULTIPLIER, 
+    calculate_apdi, 
+    create_earnings_warning, 
+    format_strike, 
+    format_expiration_date,
+    calculate_expected_value
+)
 
 def _calculate_combined_ev(row: pd.Series) -> float:
     """
     Calculates the combined Expected Value for an Iron Condor using Monte Carlo simulation.
     Processes 4 legs: Short Put, Long Put, Short Call, Long Call.
     """
-    # Use the IV of one of the short options as a proxy for the strategy IV
-    volatility = row['sell_iv_put'] 
-    
-    monte_carlo_simulator = UniversalOptionsMonteCarloSimulator(
-        num_simulations=NUM_SIMULATIONS,
-        random_seed=RANDOM_SEED,
-        current_price=row['close_put'],
-        dte=max(row['days_to_expiration_put'], row['days_to_expiration_call']),
-        volatility=volatility,
-        risk_free_rate=RISK_FREE_RATE,
-        dividend_yield=DIVIDEND_YIELD,
-    )
-
     options = [
         # Put side
         {'strike': row['sell_strike_put'], 'premium': row['sell_last_option_price_put'], 'is_call': False, 'is_long': False},
@@ -35,7 +23,12 @@ def _calculate_combined_ev(row: pd.Series) -> float:
         {'strike': row['buy_strike_call'], 'premium': row['buy_last_option_price_call'], 'is_call': True, 'is_long': True},
     ]
 
-    return monte_carlo_simulator.calculate_expected_value(options=options)
+    return calculate_expected_value(
+        current_price=row['close_put'],
+        dte=max(row['days_to_expiration_put'], row['days_to_expiration_call']),
+        volatility=row['sell_iv_put'],
+        options=options
+    )
 
 def _calculate_iron_condor_metrics(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
@@ -60,8 +53,8 @@ def _calculate_iron_condor_metrics(df: pd.DataFrame) -> pd.DataFrame:
 
     # APDI
     df["max_dte"] = df[["days_to_expiration_put", "days_to_expiration_call"]].max(axis=1)
-    df["APDI"] = (df["max_profit"] / df["max_dte"] / df["bpr"]) * 36500
-    df["APDI_EV"] = (df["expected_value"] / df["max_dte"] / df["bpr"]) * 36500
+    df["APDI"] = df.apply(lambda r: calculate_apdi(r["max_profit"], r["max_dte"], r["bpr"]), axis=1)
+    df["APDI_EV"] = df.apply(lambda r: calculate_apdi(r["expected_value"], r["max_dte"], r["bpr"]), axis=1)
 
     return df
 
@@ -70,30 +63,22 @@ def _add_earnings_and_urls(df: pd.DataFrame) -> pd.DataFrame:
     df['expiration_date_put'] = pd.to_datetime(df['expiration_date_put'], errors='coerce')
     df['expiration_date_call'] = pd.to_datetime(df['expiration_date_call'], errors='coerce')
 
-    df['earnings_warning'] = df.apply(_create_earnings_warning, axis=1)
+    df['earnings_warning'] = df.apply(
+        lambda r: create_earnings_warning(r['earnings_date'], min(r['expiration_date_put'], r['expiration_date_call'])), 
+        axis=1
+    )
     df['optionstrat_url'] = df.apply(_build_optionstrat_url, axis=1)
 
     return df
-
-def _create_earnings_warning(row: pd.Series) -> str:
-    earliest_exp = pd.to_datetime(min(row['expiration_date_put'], row['expiration_date_call']))
-    if (pd.notna(row['earnings_date']) and pd.notna(earliest_exp) and row['earnings_date'] > pd.Timestamp.now()):
-        days_before_expiration = (earliest_exp - row['earnings_date']).days
-        if 0 <= days_before_expiration <= EARNINGS_WARNING_DAYS:
-            return f'⚠️ {days_before_expiration} days'
-    return ''
 
 def _build_optionstrat_url(row: pd.Series) -> str:
     base_url = "https://optionstrat.com/build/iron-condor"
     symbol = row['symbol'].upper()
     
-    def fmt_date(d): return pd.to_datetime(d).strftime('%y%m%d')
-    def fmt_strike(s): return str(int(s)) if s == int(s) else str(s)
-    
-    p_buy = f".{symbol}{fmt_date(row['expiration_date_put'])}P{fmt_strike(row['buy_strike_put'])}"
-    p_sell = f"-.{symbol}{fmt_date(row['expiration_date_put'])}P{fmt_strike(row['sell_strike_put'])}"
-    c_sell = f"-.{symbol}{fmt_date(row['expiration_date_call'])}C{fmt_strike(row['sell_strike_call'])}"
-    c_buy = f".{symbol}{fmt_date(row['expiration_date_call'])}C{fmt_strike(row['buy_strike_call'])}"
+    p_buy = f".{symbol}{format_expiration_date(row['expiration_date_put'])}P{format_strike(row['buy_strike_put'])}"
+    p_sell = f"-.{symbol}{format_expiration_date(row['expiration_date_put'])}P{format_strike(row['sell_strike_put'])}"
+    c_sell = f"-.{symbol}{format_expiration_date(row['expiration_date_call'])}C{format_strike(row['sell_strike_call'])}"
+    c_buy = f".{symbol}{format_expiration_date(row['expiration_date_call'])}C{format_strike(row['buy_strike_call'])}"
     
     return f"{base_url}/{symbol}/{p_buy},{p_sell},{c_sell},{c_buy}"
 

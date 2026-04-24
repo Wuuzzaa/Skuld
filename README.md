@@ -31,6 +31,14 @@ chmod +x ./setup_scripts/manage_local_db.sh
 ./setup_scripts/manage_local_db.sh
 ```
 
+### Running Tests
+
+To run the automated tests, you can use `pytest`. Make sure you have the dependencies installed.
+
+```bash
+pytest
+```
+
 ---
 
 ### Remote Database Import & SSH Configuration

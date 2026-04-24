@@ -7,6 +7,7 @@ from src.logger_config import setup_logging
 from src.page_display_dataframe import page_display_dataframe
 from src.iron_condor_calculation import get_page_iron_condors
 from src.utils.option_utils import get_expiration_type
+from src.ui_utils import init_session_state, reset_to_defaults as ui_reset, filter_by_expiration_type
 import pandas as pd
 
 # Setup logging
@@ -30,33 +31,28 @@ DEFAULT_MIN_MAX_PROFIT = 150.0
 
 st.title("Iron Condors")
 
-# Initialize session state
-if 'ic_show_monthly' not in st.session_state: st.session_state.ic_show_monthly = DEFAULT_SHOW_MONTHLY
-if 'ic_show_weekly' not in st.session_state: st.session_state.ic_show_weekly = DEFAULT_SHOW_WEEKLY
-if 'ic_show_daily' not in st.session_state: st.session_state.ic_show_daily = DEFAULT_SHOW_DAILY
-if 'ic_show_only_positiv_expected_value' not in st.session_state: st.session_state.ic_show_only_positiv_expected_value = DEFAULT_SHOW_ONLY_POSITIV_EXPECTED_VALUE
-if 'ic_show_only_spreads_with_no_earnings_till_expiration' not in st.session_state: st.session_state.ic_show_only_spreads_with_no_earnings_till_expiration = DEFAULT_SHOW_ONLY_SPREADS_WITH_NO_EARNINGS_TILL_EXPIRATION
-if 'ic_delta_put' not in st.session_state: st.session_state.ic_delta_put = DEFAULT_DELTA_TARGET
-if 'ic_delta_call' not in st.session_state: st.session_state.ic_delta_call = DEFAULT_DELTA_TARGET
-if 'ic_width_put' not in st.session_state: st.session_state.ic_width_put = DEFAULT_SPREAD_WIDTH
-if 'ic_width_call' not in st.session_state: st.session_state.ic_width_call = DEFAULT_SPREAD_WIDTH
-if 'ic_min_sell_iv' not in st.session_state: st.session_state.ic_min_sell_iv = DEFAULT_MIN_SELL_IV
-if 'ic_max_sell_iv' not in st.session_state: st.session_state.ic_max_sell_iv = DEFAULT_MAX_SELL_IV
-if 'ic_min_max_profit' not in st.session_state: st.session_state.ic_min_max_profit = DEFAULT_MIN_MAX_PROFIT
+# Default values mapping for UI utils
+DEFAULTS = {
+    'ic_show_monthly': DEFAULT_SHOW_MONTHLY,
+    'ic_show_weekly': DEFAULT_SHOW_WEEKLY,
+    'ic_show_daily': DEFAULT_SHOW_DAILY,
+    'ic_show_only_positiv_expected_value': DEFAULT_SHOW_ONLY_POSITIV_EXPECTED_VALUE,
+    'ic_show_only_spreads_with_no_earnings_till_expiration': DEFAULT_SHOW_ONLY_SPREADS_WITH_NO_EARNINGS_TILL_EXPIRATION,
+    'ic_delta_put': DEFAULT_DELTA_TARGET,
+    'ic_delta_call': DEFAULT_DELTA_TARGET,
+    'ic_width_put': DEFAULT_SPREAD_WIDTH,
+    'ic_width_call': DEFAULT_SPREAD_WIDTH,
+    'ic_min_sell_iv': DEFAULT_MIN_SELL_IV,
+    'ic_max_sell_iv': DEFAULT_MAX_SELL_IV,
+    'ic_min_max_profit': DEFAULT_MIN_MAX_PROFIT
+}
+
+init_session_state(DEFAULTS)
+
 
 def reset_to_defaults():
-    st.session_state.ic_show_monthly = DEFAULT_SHOW_MONTHLY
-    st.session_state.ic_show_weekly = DEFAULT_SHOW_WEEKLY
-    st.session_state.ic_show_daily = DEFAULT_SHOW_DAILY
-    st.session_state.ic_show_only_positiv_expected_value = DEFAULT_SHOW_ONLY_POSITIV_EXPECTED_VALUE
-    st.session_state.ic_show_only_spreads_with_no_earnings_till_expiration = DEFAULT_SHOW_ONLY_SPREADS_WITH_NO_EARNINGS_TILL_EXPIRATION
-    st.session_state.ic_delta_put = DEFAULT_DELTA_TARGET
-    st.session_state.ic_delta_call = DEFAULT_DELTA_TARGET
-    st.session_state.ic_width_put = DEFAULT_SPREAD_WIDTH
-    st.session_state.ic_width_call = DEFAULT_SPREAD_WIDTH
-    st.session_state.ic_min_sell_iv = DEFAULT_MIN_SELL_IV
-    st.session_state.ic_max_sell_iv = DEFAULT_MAX_SELL_IV
-    st.session_state.ic_min_max_profit = DEFAULT_MIN_MAX_PROFIT
+    ui_reset(DEFAULTS)
+
 
 def clear_all_filters():
     st.session_state.ic_show_monthly = True
@@ -83,14 +79,13 @@ with st.expander("Configuration and Filters", expanded=True):
         dates_df = select_into_dataframe(sql_file_path=sql_file_path)
         
         # Filter dates_df based on checkbox states
-        filtered_dates_df = dates_df[
-            (dates_df.apply(lambda row: get_expiration_type(row['expiration_date']) == "Monthly",
-                            axis=1) & st.session_state.ic_show_monthly) |
-            (dates_df.apply(lambda row: get_expiration_type(row['expiration_date']) == "Weekly",
-                            axis=1) & st.session_state.ic_show_weekly) |
-            (dates_df.apply(lambda row: get_expiration_type(row['expiration_date']) == "Daily",
-                            axis=1) & st.session_state.ic_show_daily)
-            ]
+        filtered_dates_df = filter_by_expiration_type(
+            dates_df,
+            'expiration_date',
+            st.session_state.ic_show_monthly,
+            st.session_state.ic_show_weekly,
+            st.session_state.ic_show_daily
+        )
 
         dte_labels = [
             (

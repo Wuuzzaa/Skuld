@@ -28,9 +28,9 @@ def _add_claude_analysis_link(df: pd.DataFrame, page=None) -> pd.DataFrame:
         raise ValueError('Page not recognized')
     return df
 
-def _create_claude_prompt_page_spreads(row):
-    prompt = f"""
-Erstelle eine kompakte Aktienanalyse für {row['symbol']}:
+def _get_claude_prompt_header(symbol):
+    return f"""
+Erstelle eine kompakte Aktienanalyse für {symbol}:
 Unternehmen: Geschäftsmodell und Branche (1-2 Sätzen):
 
 Aktuelle News: Wichtigste Entwicklungen der letzten 4 Wochen
@@ -42,52 +42,42 @@ Aktuelles Kursziel (Analystenkonsens)
 Eigenes Kursziel durch Fundamentaldaten, News, Technische Analyse State of the Art.
 Wichtigste Chance und größtes Risiko. 
 
-Beurteile folgende Strategie mit Optionen für {row['symbol']} (So viele Sätze wie nötig): 
+Beurteile folgende Strategie mit Optionen für {symbol} (So viele Sätze wie nötig): 
 Gehe besonders auf die Gewinnwahrscheinlichkeit ein. Kombiniere hier fundamental, news, Vola technische indikatoren auf 
 maximalem Expertenwissen und gebe eine klare Empfehlung Strategie umsetzen oder nicht ab. 
 Begründe deine Entscheidung nachvollziehbar mit KPIs.
+"""
 
+def _get_claude_prompt_footer():
+    return """
+Format: Prägnant, faktenbasiert, keine Füllwörter, max. eine Seite.
+Rolle: Aktien und Finanzexperte.
+"""
+
+def _create_claude_prompt_page_spreads(row):
+    prompt = _get_claude_prompt_header(row['symbol'])
+    prompt += f"""
 Verkaufe einen {row['option_type']} Strike {row['sell_strike']} für eine Prämie von {row['sell_last_option_price']} bei einem Delta 
 von {row['sell_delta']}. Kaufe einen {row['option_type']} mit Strike {row['buy_strike']}
 für eine Prämie von {row['buy_last_option_price']}. Expirationdate ist jeweils {row['expiration_date']}
-
-Format: Prägnant, faktenbasiert, keine Füllwörter, max. eine Seite.
-Rolle: Aktien und Finanzexperte.
-    """
+"""
+    prompt += _get_claude_prompt_footer()
 
     # URL-encode the prompt
-    encoded_prompt = urllib.parse.quote(prompt)
+    encoded_prompt = urllib.parse.quote(prompt.strip())
     return f'https://claude.ai/new?q={encoded_prompt}'
 
 def _create_claude_prompt_page_iron_condors(row):
-    prompt = f"""
-Erstelle eine kompakte Aktienanalyse für {row['symbol']}:
-Unternehmen: Geschäftsmodell und Branche (1-2 Sätzen):
-
-Aktuelle News: Wichtigste Entwicklungen der letzten 4 Wochen
-Anstehende Events: Earnings, Produktlaunches oder relevante Termine (in 3-7 Sätzen).
-
-Einschätzung (maximal 8 Sätze):
-Kauf/Halten/Verkaufen mit Begründung
-Aktuelles Kursziel (Analystenkonsens)
-Eigenes Kursziel durch Fundamentaldaten, News, Technische Analyse State of the Art.
-Wichtigste Chance und größtes Risiko. 
-
-Beurteile folgende Strategie mit Optionen für {row['symbol']} (So viele Sätze wie nötig): 
-Gehe besonders auf die Gewinnwahrscheinlichkeit ein. Kombiniere hier fundamental, news, Vola technische indikatoren auf 
-maximalem Expertenwissen und gebe eine klare Empfehlung Strategie umsetzen oder nicht ab. 
-Begründe deine Entscheidung nachvollziehbar mit KPIs.
-
+    prompt = _get_claude_prompt_header(row['symbol'])
+    prompt += f"""
 Iron Condor Strategie:
 Put-Seite: Verkauf Strike {row['sell_strike_put']} (Delta {row['sell_delta_put']}), Kauf Strike {row['buy_strike_put']}. Expiration: {row['expiration_date_put']}
 Call-Seite: Verkauf Strike {row['sell_strike_call']} (Delta {row['sell_delta_call']}), Kauf Strike {row['buy_strike_call']}. Expiration: {row['expiration_date_call']}
-
-Format: Prägnant, faktenbasiert, keine Füllwörter, max. eine Seite.
-Rolle: Aktien und Finanzexperte.
-    """
+"""
+    prompt += _get_claude_prompt_footer()
 
     # URL-encode the prompt
-    encoded_prompt = urllib.parse.quote(prompt)
+    encoded_prompt = urllib.parse.quote(prompt.strip())
     return f'https://claude.ai/new?q={encoded_prompt}'
 
 def _create_claude_prompt_default(row):
