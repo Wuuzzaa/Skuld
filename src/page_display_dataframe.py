@@ -22,6 +22,8 @@ def _add_claude_analysis_link(df: pd.DataFrame, page=None) -> pd.DataFrame:
         df['Claude'] = df.apply(_create_claude_prompt_default, axis=1)
     elif page == 'spreads':
         df['Claude'] = df.apply(_create_claude_prompt_page_spreads, axis=1)
+    elif page == 'iron_condors':
+        df['Claude'] = df.apply(_create_claude_prompt_page_iron_condors, axis=1)
     else:
         raise ValueError('Page not recognized')
     return df
@@ -48,6 +50,37 @@ Begründe deine Entscheidung nachvollziehbar mit KPIs.
 Verkaufe einen {row['option_type']} Strike {row['sell_strike']} für eine Prämie von {row['sell_last_option_price']} bei einem Delta 
 von {row['sell_delta']}. Kaufe einen {row['option_type']} mit Strike {row['buy_strike']}
 für eine Prämie von {row['buy_last_option_price']}. Expirationdate ist jeweils {row['expiration_date']}
+
+Format: Prägnant, faktenbasiert, keine Füllwörter, max. eine Seite.
+Rolle: Aktien und Finanzexperte.
+    """
+
+    # URL-encode the prompt
+    encoded_prompt = urllib.parse.quote(prompt)
+    return f'https://claude.ai/new?q={encoded_prompt}'
+
+def _create_claude_prompt_page_iron_condors(row):
+    prompt = f"""
+Erstelle eine kompakte Aktienanalyse für {row['symbol']}:
+Unternehmen: Geschäftsmodell und Branche (1-2 Sätzen):
+
+Aktuelle News: Wichtigste Entwicklungen der letzten 4 Wochen
+Anstehende Events: Earnings, Produktlaunches oder relevante Termine (in 3-7 Sätzen).
+
+Einschätzung (maximal 8 Sätze):
+Kauf/Halten/Verkaufen mit Begründung
+Aktuelles Kursziel (Analystenkonsens)
+Eigenes Kursziel durch Fundamentaldaten, News, Technische Analyse State of the Art.
+Wichtigste Chance und größtes Risiko. 
+
+Beurteile folgende Strategie mit Optionen für {row['symbol']} (So viele Sätze wie nötig): 
+Gehe besonders auf die Gewinnwahrscheinlichkeit ein. Kombiniere hier fundamental, news, Vola technische indikatoren auf 
+maximalem Expertenwissen und gebe eine klare Empfehlung Strategie umsetzen oder nicht ab. 
+Begründe deine Entscheidung nachvollziehbar mit KPIs.
+
+Iron Condor Strategie:
+Put-Seite: Verkauf Strike {row['sell_strike_put']} (Delta {row['sell_delta_put']}), Kauf Strike {row['buy_strike_put']}. Expiration: {row['expiration_date_put']}
+Call-Seite: Verkauf Strike {row['sell_strike_call']} (Delta {row['sell_delta_call']}), Kauf Strike {row['buy_strike_call']}. Expiration: {row['expiration_date_call']}
 
 Format: Prägnant, faktenbasiert, keine Füllwörter, max. eine Seite.
 Rolle: Aktien und Finanzexperte.
@@ -104,6 +137,15 @@ def page_display_dataframe(
     if page == "spreads":
         # drop unnecessary columns which where needed for the AI prompt generation
         df = df.drop(columns=['option_type', 'expiration_date'])
+    elif page == "iron_condors":
+        # drop unnecessary columns which where needed for the AI prompt generation
+        cols_to_drop = [
+            'sell_delta_put', 'sell_delta_call', 
+            'expiration_date_put', 'expiration_date_call'
+        ]
+        # Only drop columns that exist to avoid errors
+        cols_to_drop = [c for c in cols_to_drop if c in df.columns]
+        df = df.drop(columns=cols_to_drop)
 
     # default configuration
     default_config = {
