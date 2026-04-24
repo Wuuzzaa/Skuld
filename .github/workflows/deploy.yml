@@ -272,6 +272,11 @@ jobs:
 
       - name: Sync files to server
         run: |
+          EXTRA_EXCLUDES=""
+          if [ "${{ env.DEPLOY_TARGET }}" = "home-server" ]; then
+            EXTRA_EXCLUDES="--exclude authelia/**"
+          fi
+
           rsync -avz --delete \
             -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectionAttempts=1" \
             --exclude 'logs/' \
@@ -285,7 +290,7 @@ jobs:
             --exclude 'authelia/session_secret' \
             --exclude 'authelia/jwt_secret' \
             --exclude 'authelia/storage_encryption_key' \
-            ${{ env.DEPLOY_TARGET == 'home-server' && "--exclude 'authelia/**'" || '' }} \
+            $EXTRA_EXCLUDES \
             "$SOURCE_DIR"/ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/skuld/
 
       - name: Get version
