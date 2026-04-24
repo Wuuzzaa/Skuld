@@ -381,8 +381,9 @@ if selected_rows and not filtered_df.empty:
         st.metric("IV Percentile", f"{row['iv_percentile']:.1f}")
     with col_info4:
         st.metric("Hist. Vola (30d)", f"{row.get('historical_volatility_30d', 0)*100:.1f}%")
-        st.write(f"**Sektor:** {row['company_sector']}")
-        st.write(f"**Branche:** {row['company_industry']}")
+        st.metric("Theta", f"{row.get('spread_theta', 0):.4f}")
+    
+    st.write(f"**Sektor:** {row['company_sector']} | **Branche:** {row['company_industry']}")
 
     if 'analyst_mean_target' in row:
         st.write(f"**Analyst Kursziel:** ${row['analyst_mean_target']:.2f} (Aktuell: ${row['close']:.2f})")
@@ -392,10 +393,15 @@ if selected_rows and not filtered_df.empty:
     link_col1, link_col2, link_col3, link_col4 = st.columns(4)
     with link_col1:
         st.link_button("TradingView", f"https://www.tradingview.com/symbols/{row['symbol']}/", use_container_width=True)
+        st.link_button("Chart", f"https://www.tradingview.com/chart/?symbol={row['symbol']}", use_container_width=True)
     with link_col2:
         st.link_button("Finviz", f"https://finviz.com/quote.ashx?t={row['symbol']}", use_container_width=True)
+        if 'optionstrat_url' in row and row['optionstrat_url']:
+            st.link_button("OptionStrat", row['optionstrat_url'], use_container_width=True)
     with link_col3:
         st.link_button("Seeking Alpha", f"https://seekingalpha.com/symbol/{row['symbol']}", use_container_width=True)
+        if 'Claude' in row and row['Claude']:
+            st.link_button("Claude AI Analysis", row['Claude'], use_container_width=True)
     with link_col4:
         st.link_button("Yahoo Finance", f"https://finance.yahoo.com/quote/{row['symbol']}", use_container_width=True)
 

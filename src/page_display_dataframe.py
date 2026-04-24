@@ -141,7 +141,8 @@ def page_display_dataframe(
             'sell_day_volume', 'buy_strike', 'buy_last_option_price', 'buy_delta',
             'buy_iv', 'buy_theta', 'buy_open_interest', 'buy_expected_move',
             'company_industry', 'company_sector', 'historical_volatility_30d',
-            'days_to_earnings', 'analyst_mean_target'
+            'days_to_earnings', 'analyst_mean_target', 'spread_theta',
+            'TradingView', 'Chart', 'Claude', 'optionstrat_url'
         ]
         # Only drop columns that exist to avoid errors
         cols_to_drop = [c for c in cols_to_drop if c in df_to_display.columns]
@@ -166,7 +167,8 @@ def page_display_dataframe(
             'sell_expected_move_put', 'buy_expected_move_put',
             'sell_expected_move_call', 'buy_expected_move_call',
             'historical_volatility_30d_put', 'industry', 'sector',
-            'analyst_target'
+            'analyst_target', 'total_theta',
+            'TradingView', 'Chart', 'Claude', 'optionstrat_url'
         ]
         # Only drop columns that exist to avoid errors
         cols_to_drop = [c for c in cols_to_drop if c in df_to_display.columns]

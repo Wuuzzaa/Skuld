@@ -290,40 +290,56 @@ if not ic_df.empty:
             }
         ]
         
+        logger.debug(f"Legs data for {row['symbol']}: {legs_data}")
+        
         details_df = pd.DataFrame(legs_data)
         st.table(details_df)
         
         # Additional Info
         st.markdown("#### Kennzahlen & Unternehmensinfos")
+
         st.write(f"**Unternehmen:** {row.get('Company', 'N/A')}")
 
         col_info1, col_info2, col_info3, col_info4 = st.columns(4)
         with col_info1:
-            st.metric("Max Profit", f"${row['max_profit']:.2f}")
-            st.metric("BPR", f"${row['bpr']:.2f}")
+            max_profit = row.get('max_profit')
+            st.metric("Max Profit", f"${max_profit:.2f}" if pd.notnull(max_profit) else "N/A")
+            bpr = row.get('bpr')
+            st.metric("BPR", f"${bpr:.2f}" if pd.notnull(bpr) else "N/A")
         with col_info2:
-            st.metric("Expected Value", f"${row['expected_value']:.2f}")
-            st.metric("APDI", f"{row['APDI']:.2f}%")
+            expected_value = row.get('expected_value')
+            st.metric("Expected Value", f"${expected_value:.2f}" if pd.notnull(expected_value) else "N/A")
+            apdi = row.get('APDI')
+            st.metric("APDI", f"{apdi:.2f}%" if pd.notnull(apdi) else "N/A")
         with col_info3:
-            st.metric("IV Rank", f"{row['iv_rank']:.1f}")
-            st.metric("IV Percentile", f"{row['iv_percentile']:.1f}")
+            iv_rank = row.get('iv_rank')
+            st.metric("IV Rank", f"{iv_rank:.1f}" if pd.notnull(iv_rank) else "N/A")
+            
+            iv_percentile = row.get('iv_percentile')
+            st.metric("IV Percentile", f"{iv_percentile:.1f}" if pd.notnull(iv_percentile) else "N/A")
         with col_info4:
             st.metric("Hist. Vola (30d)", f"{row.get('historical_volatility_30d_put', 0)*100:.1f}%")
-            st.write(f"**Sektor:** {row['sector']}")
-            st.write(f"**Branche:** {row['industry']}")
+            st.metric("Theta", f"{row.get('total_theta', 0):.4f}")
+        
+        st.write(f"**Sektor:** {row.get('company_sector', 'N/A')} | **Branche:** {row.get('company_industry', 'N/A')}")
 
-        if 'analyst_target' in row:
-            st.write(f"**Analyst Kursziel:** ${row['analyst_target']:.2f} (Aktuell: ${row['close']:.2f})")
+        if 'analyst_mean_target' in row and pd.notnull(row['analyst_mean_target']):
+            st.write(f"**Analyst Kursziel:** ${row['analyst_mean_target']:.2f} (Aktuell: ${row.get('close', 0):.2f})")
 
         # External Links
         st.markdown("#### Links")
         link_col1, link_col2, link_col3, link_col4 = st.columns(4)
         with link_col1:
             st.link_button("TradingView", f"https://www.tradingview.com/symbols/{row['symbol']}/", use_container_width=True)
+            st.link_button("Chart", f"https://www.tradingview.com/chart/?symbol={row['symbol']}", use_container_width=True)
         with link_col2:
             st.link_button("Finviz", f"https://finviz.com/quote.ashx?t={row['symbol']}", use_container_width=True)
+            if 'optionstrat_url' in row and row['optionstrat_url']:
+                st.link_button("OptionStrat", row['optionstrat_url'], use_container_width=True)
         with link_col3:
             st.link_button("Seeking Alpha", f"https://seekingalpha.com/symbol/{row['symbol']}", use_container_width=True)
+            if 'Claude' in row and row['Claude']:
+                st.link_button("Claude AI Analysis", row['Claude'], use_container_width=True)
         with link_col4:
             st.link_button("Yahoo Finance", f"https://finance.yahoo.com/quote/{row['symbol']}", use_container_width=True)
 

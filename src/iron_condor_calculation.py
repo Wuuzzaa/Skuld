@@ -1,4 +1,6 @@
 import pandas as pd
+import logging
+import os
 from src.decorator_log_function import log_function
 from src.options_utils import (
     MULTIPLIER, 
@@ -8,6 +10,9 @@ from src.options_utils import (
     format_expiration_date,
     calculate_expected_value
 )
+
+# Setup logging
+logger = logging.getLogger(os.path.basename(__file__))
 
 def _calculate_combined_ev(row: pd.Series) -> float:
     """
@@ -40,13 +45,43 @@ def _calculate_iron_condor_metrics(df: pd.DataFrame) -> pd.DataFrame:
         (df["sell_last_option_price_call"] - df["buy_last_option_price_call"])
     )
 
+    # Clean up column names from merge
+    def _safe_assign(target_col, source_col):
+        if source_col in df.columns:
+            df[target_col] = df[source_col]
+        elif target_col not in df.columns:
+            df[target_col] = None
+
+    # Check for Company name in both _put and _call suffixes if needed, but usually _put is enough
+    if "Company_put" in df.columns:
+        df["Company"] = df["Company_put"]
+    elif "Company_call" in df.columns:
+        df["Company"] = df["Company_call"]
+    elif "company_name_put" in df.columns:
+        df["Company"] = df["company_name_put"]
+    elif "company_name_call" in df.columns:
+        df["Company"] = df["company_name_call"]
+    elif "Company" not in df.columns:
+        df["Company"] = None
+
+    # Fallback to symbol if Company is still N/A or empty
+    df["Company"] = df["Company"].replace("", None)
+    df["Company"] = df["Company"].fillna(df["symbol"])
+    
+    _safe_assign("close", "close_put")
+    _safe_assign("analyst_mean_target", "analyst_mean_target_put")
+    _safe_assign("company_industry", "company_industry_put")
+    _safe_assign("company_sector", "company_sector_put")
+    _safe_assign("iv_rank", "iv_rank_put")
+    _safe_assign("iv_percentile", "iv_percentile_put")
+
     # Buying Power Reduction (BPR)
     df["width_put"] = (df["sell_strike_put"] - df["buy_strike_put"]).abs()
     df["width_call"] = (df["buy_strike_call"] - df["sell_strike_call"]).abs()
     df["bpr"] = df[["width_put", "width_call"]].max(axis=1) * MULTIPLIER - df["max_profit"]
 
     # Spread Theta
-    df["combined_theta"] = (df["sell_theta_put"] - df["buy_theta_put"]) + (df["sell_theta_call"] - df["buy_theta_call"])
+    df["total_theta"] = (df["sell_theta_put"].fillna(0) - df["buy_theta_put"].fillna(0)) + (df["sell_theta_call"].fillna(0) - df["buy_theta_call"].fillna(0))
 
     # % OTM
     df["%_otm_put"] = (df["close_put"] - df["sell_strike_put"]) / df["close_put"] * 100
@@ -100,6 +135,7 @@ def calc_iron_condors(put_spreads: pd.DataFrame, call_spreads: pd.DataFrame) -> 
     if combined.empty:
         return combined
 
+    logger.debug(f"Combined DF before metrics: {combined[['symbol', 'sell_theta_put', 'buy_theta_put', 'sell_theta_call', 'buy_theta_call']].head()}")
     combined = _calculate_iron_condor_metrics(combined)
     combined = _add_earnings_and_urls(combined)
 
@@ -111,21 +147,22 @@ def get_page_iron_condors(df: pd.DataFrame) -> pd.DataFrame:
 
     columns = [
         'symbol',
-        'Company_put',
+        'Company',
         'earnings_date',
         'earnings_warning',
-        'close_put',
-        'analyst_mean_target_put',
-        'company_industry_put',
-        'company_sector_put',
-        'iv_rank_put',
-        'iv_percentile_put',
+        'close',
+        'analyst_mean_target',
+        'company_industry',
+        'company_sector',
+        'iv_rank',
+        'iv_percentile',
         'max_profit',
         'bpr',
         'expected_value',
         'APDI',
         'APDI_EV',
         'optionstrat_url',
+        'total_theta',
         
         # columns for details and AI prompt
         'sell_strike_put',
@@ -152,17 +189,7 @@ def get_page_iron_condors(df: pd.DataFrame) -> pd.DataFrame:
         'historical_volatility_30d_put'
     ]
     
-    display_map = {
-        'Company_put': 'Company',
-        'close_put': 'close',
-        'analyst_mean_target_put': 'analyst_target',
-        'company_industry_put': 'industry',
-        'company_sector_put': 'sector',
-        'iv_rank_put': 'iv_rank',
-        'iv_percentile_put': 'iv_percentile'
-    }
-    
     # Only keep columns that actually exist in the dataframe
     existing_columns = [col for col in columns if col in df.columns]
     
-    return df[existing_columns].rename(columns=display_map)
+    return df[existing_columns]
