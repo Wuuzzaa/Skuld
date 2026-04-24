@@ -36,6 +36,7 @@ DEFAULT_MAX_SELL_IV = 0.9
 DEFAULT_MIN_MAX_PROFIT = 80.0
 DEFAULT_MIN_IV_RANK = 0
 DEFAULT_MIN_IV_PERCENTILE = 0
+DEFAULT_STRATEGY_TYPE = "credit"
 
 # Page header
 st.title("Spreads")
@@ -56,7 +57,8 @@ DEFAULTS = {
     'max_sell_iv': DEFAULT_MAX_SELL_IV,
     'min_max_profit': DEFAULT_MIN_MAX_PROFIT,
     'min_iv_rank': DEFAULT_MIN_IV_RANK,
-    'min_iv_percentile': DEFAULT_MIN_IV_PERCENTILE
+    'min_iv_percentile': DEFAULT_MIN_IV_PERCENTILE,
+    'strategy_type': DEFAULT_STRATEGY_TYPE
 }
 
 init_session_state(DEFAULTS)
@@ -134,13 +136,18 @@ with st.expander("Configuration and Filters", expanded=True):
         logging.debug(f"Extracted selected expiration date: {expiration_date}")
 
     with col2:
+        # Suggest different delta for debit
+        default_delta = 0.6 if st.session_state.strategy_type == "debit" else 0.2
         delta_target = st.number_input(
             "Delta Target",
             min_value=0.0,
             max_value=1.0,
+            value=default_delta,
             step=0.01,
-            key="delta_target"
+            key="delta_target_input"
         )
+        # We need to handle the session state correctly if it was already set
+        st.session_state.delta_target = delta_target
 
     with col3:
         spread_width = st.number_input(
@@ -152,30 +159,33 @@ with st.expander("Configuration and Filters", expanded=True):
         )
 
     with col4:
-        option_type = st.selectbox("Option Type", ["put", "call"], key="option_type")
+        strategy_type = st.selectbox("Strategy Type", ["credit", "debit"], key="strategy_type")
 
     # Second row
     col5, col6, col7, col8 = st.columns(4)
 
     with col5:
-        st.checkbox("Show Monthly", key="show_monthly")
+        option_type = st.selectbox("Option Type", ["put", "call"], key="option_type")
 
     with col6:
-        st.checkbox("Show Weekly", key="show_weekly")
+        st.checkbox("Show Monthly", key="show_monthly")
 
     with col7:
-        st.checkbox("Show Daily", key="show_daily")
+        st.checkbox("Show Weekly", key="show_weekly")
 
     with col8:
-        st.checkbox(
-            "Show only positive expected value",
-            key="show_only_positiv_expected_value"
-        )
+        st.checkbox("Show Daily", key="show_daily")
 
     # Third row
     col9, col10, col11, col12 = st.columns(4)
 
     with col9:
+        st.checkbox(
+            "Show only positive expected value",
+            key="show_only_positiv_expected_value"
+        )
+
+    with col10:
         min_day_volume = st.number_input(
             "Min dayvolume",
             min_value=0,
@@ -183,7 +193,7 @@ with st.expander("Configuration and Filters", expanded=True):
             key="min_day_volume"
         )
 
-    with col10:
+    with col11:
         min_open_interest = st.number_input(
             "Min Open Interest",
             min_value=0,
@@ -191,7 +201,7 @@ with st.expander("Configuration and Filters", expanded=True):
             key="min_open_interest"
         )
 
-    with col11:
+    with col12:
         min_sell_iv = st.number_input(
             "Min sell iv",
             min_value=0.0,
@@ -200,22 +210,16 @@ with st.expander("Configuration and Filters", expanded=True):
             key="min_sell_iv"
         )
 
-    with col12:
+    # Fourth row
+    col13, col14, col15, col16 = st.columns(4)
+
+    with col13:
         max_sell_iv = st.number_input(
             "Max sell iv",
             min_value=0.0,
             step=0.05,
             format="%.2f",
             key="max_sell_iv"
-        )
-
-    # Fourth row
-    col13, col14, col15, col16 = st.columns(4)
-
-    with col13:
-        st.checkbox(
-            "Show only spreads with no earnings till expiration",
-            key="show_only_spreads_with_no_earnings_till_expiration"
         )
 
     with col14:
@@ -250,12 +254,13 @@ with st.spinner("Calculating spreads..."):
     params = {
         "expiration_date": expiration_date,
         "option_type": option_type,
-        "delta_target": delta_target,
+        "delta_target": st.session_state.delta_target,
         "min_open_interest": min_open_interest,
         "spread_width": spread_width,
         "min_day_volume": min_day_volume,
         "min_iv_rank": min_iv_rank,
-        "min_iv_percentile": min_iv_percentile
+        "min_iv_percentile": min_iv_percentile,
+        "strategy_type": strategy_type
     }
 
     logging.debug(f"Params for database query: {params}")
@@ -264,7 +269,7 @@ with st.spinner("Calculating spreads..."):
     df = select_into_dataframe(sql_file_path=sql_file_path, params=params)
     logging.debug(f"Input data head: {df.head()}")
 
-    spreads_df = get_page_spreads(df)
+    spreads_df = get_page_spreads(df, strategy_type=strategy_type)
     logging.debug(f"Calculated spreads head: {spreads_df.head()}")
 
 # Apply spread filters
@@ -334,12 +339,20 @@ if selected_rows and not filtered_df.empty:
     row = filtered_df.iloc[selected_idx]
 
     st.divider()
-    st.subheader(f"Details für {row['symbol']} {row['option_type'].capitalize()} Spread")
+    strategy_label = "Credit" if strategy_type == "credit" else "Debit"
+    st.subheader(f"Details für {row['symbol']} {row['option_type'].capitalize()} {strategy_label} Spread")
 
     # Create detailed table for legs
+    if strategy_type == "credit":
+        leg1_label = f"Short {row['option_type'].capitalize()}"
+        leg2_label = f"Long {row['option_type'].capitalize()}"
+    else:
+        leg1_label = f"Long {row['option_type'].capitalize()}"
+        leg2_label = f"Short {row['option_type'].capitalize()}"
+
     legs_data = [
         {
-            "Leg": f"Short {row['option_type'].capitalize()}",
+            "Leg": leg1_label,
             "Strike": row['sell_strike'],
             "Price": row['sell_last_option_price'],
             "Delta": row['sell_delta'],
@@ -350,7 +363,7 @@ if selected_rows and not filtered_df.empty:
             "Exp Move": row.get('sell_expected_move')
         },
         {
-            "Leg": f"Long {row['option_type'].capitalize()}",
+            "Leg": leg2_label,
             "Strike": row['buy_strike'],
             "Price": row['buy_last_option_price'],
             "Delta": row['buy_delta'],

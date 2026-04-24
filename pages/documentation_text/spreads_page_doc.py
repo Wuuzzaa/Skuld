@@ -91,17 +91,31 @@ APDI_EV = (Expected Value / Days to Expiration / BPR) × 36,500
 
 ---
 
-### Strategien
+### Strategien & Typen
 
-**Bull Put Spread** (Put-Optionen)
-- Verkaufe Put mit höherem Strike
-- Kaufe Put mit niedrigerem Strike als Schutz
-- Profitiert von steigenden/stabilen Kursen
+**Credit Spreads** (Verkauf von Premium)
+- **Bull Put Spread**: Verkaufe Put mit höherem Strike, kaufe Put mit niedrigerem Strike als Schutz. Profitiert von steigenden/stabilen Kursen.
+- **Bear Call Spread**: Verkaufe Call mit niedrigerem Strike, kaufe Call mit höherem Strike als Schutz. Profitiert von fallenden/stabilen Kursen.
+- Ziel: Zeitwertverfall (Theta) und Erhalt der Prämie.
 
-**Bear Call Spread** (Call-Optionen)
-- Verkaufe Call mit niedrigerem Strike
-- Kaufe Call mit höherem Strike als Schutz
-- Profitiert von fallenden/stabilen Kursen
+**Debit Spreads** (Kauf von Premium)
+- **Bull Call Spread**: Kaufe Call mit niedrigerem Strike, verkaufe Call mit höherem Strike zur Kostenreduktion. Profitiert von steigenden Kursen.
+- **Bear Put Spread**: Kaufe Put mit höherem Strike, verkaufe Put mit niedrigerem Strike zur Kostenreduktion. Profitiert von fallenden Kursen.
+- Ziel: Richtungsbewegung des Basiswerts.
+
+---
+
+### Berechnung Credit vs. Debit
+
+**Credit Spread**:
+- **Max Profit**: Erhaltene Prämie (Net Credit)
+- **BPR (Risiko)**: (Spread Width × 100) - Max Profit
+- **Theta**: Positiv (profitiert von Zeitablauf)
+
+**Debit Spread**:
+- **Max Profit**: (Spread Width × 100) - Gezahlte Prämie (Net Debit)
+- **BPR (Risiko)**: Gezahlte Prämie (Net Debit)
+- **Theta**: Negativ (leidet unter Zeitablauf)
 
 ---
 
@@ -145,6 +159,22 @@ APDI_EV = (Expected Value / Days to Expiration / BPR) × 36,500
 📊 **Monte Carlo**: Die Expected Value Berechnung verwendet eine stochastische Simulation
 
 💡 **APDI vs APDI_EV**: APDI_EV ist konservativer und realistischer als APDI
+
+---
+
+### Wichtige Hinweise zum Expected Value (EV)
+
+📊 **Monte Carlo Simulation**: Der Expected Value wird mittels einer stochastischen Simulation berechnet. 
+
+⚠️ **IV Correction (Implied Volatility Correction)**:
+- Standardmäßig wird die Implizite Volatilität (IV) des Marktes um ca. 8-15% nach unten korrigiert.
+- Dies basiert auf historischer Forschung, die zeigt, dass die IV die tatsächliche Schwankung meist überschätzt.
+- **Folge**: Dies begünstigt **Credit Spreads** (Verkauf) und führt bei **Debit Spreads** (Kauf) häufig zu negativen Expected Values, da die Wahrscheinlichkeit für starke Kursbewegungen geringer eingeschätzt wird.
+
+💡 **Debit Spreads & Delta**:
+- Bei Debit Spreads (Bull Call / Bear Put) ist ein **Delta Target von 0.60 bis 0.70** oft sinnvoller. 
+- Man kauft dabei eine Option, die bereits "im Geld" (ITM) ist, was die Erfolgswahrscheinlichkeit und den Expected Value erhöht.
+- Ein Delta von 0.20 (Out-of-the-Money) führt bei Debit Spreads fast immer zu einem negativen EV, da die Kosten (Prämie + Transaktionskosten) die statistische Gewinnwahrscheinlichkeit übersteigen.
 
 🔗 **Quick Actions**: Nutze die Icons in der Tabelle für schnellen Zugriff auf Analysetools
 """

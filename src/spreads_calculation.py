@@ -14,20 +14,22 @@ from src.options_utils import (
 # Setup logging
 logger = logging.getLogger(os.path.basename(__file__))
 
-def _calculate_expected_value_for_symbol(row: pd.Series) -> float:
+def _calculate_expected_value_for_symbol(row: pd.Series, strategy_type: str = 'credit') -> float:
     """Calculates the Expected Value for a single spread using Monte Carlo simulation."""
+    is_credit = strategy_type == 'credit'
+    
     options = [
         {
             'strike': row['sell_strike'],
             'premium': row['sell_last_option_price'],
             'is_call': row['option_type'] == 'call',
-            'is_long': False
+            'is_long': not is_credit  # In Debit Spread, the "sell" side from SQL is actually the bought one if we follow the naming
         },
         {
             'strike': row['buy_strike'],
             'premium': row['buy_last_option_price'],
             'is_call': row['option_type'] == 'call',
-            'is_long': True
+            'is_long': is_credit
         }
     ]
 
@@ -38,7 +40,7 @@ def _calculate_expected_value_for_symbol(row: pd.Series) -> float:
         options=options
     )
 
-def _calculate_spread_metrics(df: pd.DataFrame) -> pd.DataFrame:
+def _calculate_spread_metrics(df: pd.DataFrame, strategy_type: str = 'credit') -> pd.DataFrame:
     """Calculates all relevant metrics for the spreads."""
     if df.empty:
         return df
@@ -46,17 +48,25 @@ def _calculate_spread_metrics(df: pd.DataFrame) -> pd.DataFrame:
     # Spread Width
     df["spread_width"] = (df['sell_strike'] - df['buy_strike']).abs()
 
-    # Max Profit
-    df["max_profit"] = MULTIPLIER * (df["sell_last_option_price"] - df["buy_last_option_price"])
+    # Max Profit & Max Loss (BPR usually represents max loss for credit, but we clarify)
+    if strategy_type == 'credit':
+        # Credit Spread: Premium received
+        df["max_profit"] = MULTIPLIER * (df["sell_last_option_price"] - df["buy_last_option_price"])
+        # Buying Power Reduction (BPR) / Max Risk
+        df["bpr"] = df["spread_width"] * MULTIPLIER - df["max_profit"]
+    else:
+        # Debit Spread: Premium paid
+        # In Debit spreads, sell_strike is long and buy_strike is short
+        # Net Debit = Long Price - Short Price
+        df["max_loss"] = MULTIPLIER * (df["sell_last_option_price"] - df["buy_last_option_price"])
+        df["max_profit"] = (df["spread_width"] * MULTIPLIER) - df["max_loss"]
+        df["bpr"] = df["max_loss"]
     
     # Filter out negative profit spreads
     df = df[df['max_profit'] > 0].copy()
     if df.empty:
         return df
 
-    # Buying Power Reduction (BPR)
-    df["bpr"] = df["spread_width"] * MULTIPLIER - df["max_profit"]
-    
     # Filter out negative BPR spreads
     df = df[df['bpr'] > 0].copy()
     if df.empty:
@@ -66,13 +76,25 @@ def _calculate_spread_metrics(df: pd.DataFrame) -> pd.DataFrame:
     df["profit_to_bpr"] = df["max_profit"] / df["bpr"]
 
     # Spread Theta
-    df["spread_theta"] = df["sell_theta"].fillna(0) - df["buy_theta"].fillna(0)
+    if strategy_type == 'credit':
+        df["spread_theta"] = df["sell_theta"].fillna(0) - df["buy_theta"].fillna(0)
+    else:
+        # In Debit spreads, sell_strike is the LONG leg (closer to money), buy_strike is SHORT leg (further)
+        # Total Theta = Theta(Long) + Theta(Short)
+        # Long Theta is negative (time decay hurts), Short Theta is positive (time decay helps)
+        # In our SQL: sell_theta is from the long leg, buy_theta is from the short leg.
+        # So it should be: sell_theta (negative) + (-buy_theta) ? 
+        # Actually, option greeks in data are usually signed (negative for puts/calls theta).
+        # Short position flips the sign of the greek.
+        # Long Theta = sell_theta
+        # Short Theta = -buy_theta
+        df["spread_theta"] = df["sell_theta"].fillna(0) - df["buy_theta"].fillna(0)
 
     # % Out-of-the-Money (OTM)
     df["%_otm"] = (df["sell_strike"] - df["close"]).abs() / df["close"] * 100
 
     # Expected Value
-    df["expected_value"] = df.apply(_calculate_expected_value_for_symbol, axis=1)
+    df["expected_value"] = df.apply(lambda r: _calculate_expected_value_for_symbol(r, strategy_type), axis=1)
 
     # APDI
     df["APDI"] = df.apply(lambda r: calculate_apdi(r["max_profit"], r["days_to_expiration"], r["bpr"]), axis=1)
@@ -86,7 +108,7 @@ def _calculate_spread_metrics(df: pd.DataFrame) -> pd.DataFrame:
 
     return df
 
-def _add_earnings_and_urls(df: pd.DataFrame) -> pd.DataFrame:
+def _add_earnings_and_urls(df: pd.DataFrame, strategy_type: str = 'credit') -> pd.DataFrame:
     """Adds earnings warnings and OptionStrat URLs."""
     if df.empty:
         return df
@@ -98,47 +120,57 @@ def _add_earnings_and_urls(df: pd.DataFrame) -> pd.DataFrame:
         lambda r: create_earnings_warning(r['earnings_date'], r['expiration_date']), 
         axis=1
     )
-    df['optionstrat_url'] = df.apply(_build_optionstrat_url, axis=1)
+    df['optionstrat_url'] = df.apply(lambda r: _build_optionstrat_url(r, strategy_type), axis=1)
 
     return df
 
-def _build_optionstrat_url(row: pd.Series) -> str:
+def _build_optionstrat_url(row: pd.Series, strategy_type: str = 'credit') -> str:
     """Builds an OptionStrat URL for the spread."""
     base_url = "https://optionstrat.com/build"
     symbol = row['symbol'].upper()
     date_str = format_expiration_date(row['expiration_date'])
     opt_type = row['option_type'].lower()
     
-    if opt_type == 'put':
-        strategy = 'bull-put-spread'
-        lower_strike = min(row['sell_strike'], row['buy_strike'])
-        higher_strike = max(row['sell_strike'], row['buy_strike'])
-        options = f".{symbol}{date_str}P{format_strike(lower_strike)},-.{symbol}{date_str}P{format_strike(higher_strike)}"
+    if strategy_type == 'credit':
+        if opt_type == 'put':
+            strategy = 'bull-put-spread'
+            lower_strike = min(row['sell_strike'], row['buy_strike'])
+            higher_strike = max(row['sell_strike'], row['buy_strike'])
+            options = f".{symbol}{date_str}P{format_strike(lower_strike)},-.{symbol}{date_str}P{format_strike(higher_strike)}"
+        else:
+            strategy = 'bear-call-spread'
+            lower_strike = min(row['sell_strike'], row['buy_strike'])
+            higher_strike = max(row['sell_strike'], row['buy_strike'])
+            options = f"-.{symbol}{date_str}C{format_strike(lower_strike)},.{symbol}{date_str}C{format_strike(higher_strike)}"
     else:
-        strategy = 'bear-call-spread'
-        lower_strike = min(row['sell_strike'], row['buy_strike'])
-        higher_strike = max(row['sell_strike'], row['buy_strike'])
-        options = f"-.{symbol}{date_str}C{format_strike(lower_strike)},.{symbol}{date_str}C{format_strike(higher_strike)}"
+        # Debit Spreads
+        if opt_type == 'call':
+            strategy = 'bull-call-spread'
+            # SQL: sell_strike is the closer ITM (buy), buy_strike is further OTM (sell)
+            options = f".{symbol}{date_str}C{format_strike(row['sell_strike'])},-.{symbol}{date_str}C{format_strike(row['buy_strike'])}"
+        else:
+            strategy = 'bear-put-spread'
+            options = f".{symbol}{date_str}P{format_strike(row['sell_strike'])},-.{symbol}{date_str}P{format_strike(row['buy_strike'])}"
         
     return f"{base_url}/{strategy}/{symbol}/{options}"
 
 @log_function
-def calc_spreads(df: pd.DataFrame) -> pd.DataFrame:
+def calc_spreads(df: pd.DataFrame, strategy_type: str = 'credit') -> pd.DataFrame:
     """Main calculation entry point for spreads."""
     if df.empty:
         return df
     
-    df = _calculate_spread_metrics(df)
-    df = _add_earnings_and_urls(df)
+    df = _calculate_spread_metrics(df, strategy_type)
+    df = _add_earnings_and_urls(df, strategy_type)
     
     return df
 
-def get_page_spreads(df: pd.DataFrame) -> pd.DataFrame:
+def get_page_spreads(df: pd.DataFrame, strategy_type: str = 'credit') -> pd.DataFrame:
     """Prepares the DataFrame for display in the frontend."""
     if df.empty:
         return df
         
-    df = calc_spreads(df)
+    df = calc_spreads(df, strategy_type)
     
     if df.empty:
         return df

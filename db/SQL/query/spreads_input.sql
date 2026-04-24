@@ -88,8 +88,16 @@ INNER JOIN
     AND sell.option_type = buy.option_type
     AND buy.strike = (
         CASE
-            WHEN sell.option_type = 'put' THEN sell.strike - :spread_width
-            WHEN sell.option_type = 'call' THEN sell.strike + :spread_width
+            WHEN :strategy_type = 'credit' THEN 
+                CASE
+                    WHEN sell.option_type = 'put' THEN sell.strike - :spread_width
+                    WHEN sell.option_type = 'call' THEN sell.strike + :spread_width
+                END
+            WHEN :strategy_type = 'debit' THEN
+                CASE
+                    WHEN sell.option_type = 'put' THEN sell.strike + :spread_width
+                    WHEN sell.option_type = 'call' THEN sell.strike - :spread_width
+                END
         END
     )
 WHERE
