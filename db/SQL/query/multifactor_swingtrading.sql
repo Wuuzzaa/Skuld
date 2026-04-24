@@ -3,6 +3,7 @@ SELECT DISTINCT
     company_name AS "Company",
     company_sector AS "Sector",
     company_industry AS "Industry",
+    "FinData_debtToEquity" AS "debt_to_equity %",
     live_stock_price                                                            AS price,
     "KeyStats_priceToBook"                                                      AS price_to_book,
     "Summary_trailingPE"                                                        AS price_to_earnings,
