@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 from typing import Dict, Any, List, Optional
-from config import NUM_SIMULATIONS, RANDOM_SEED, RISK_FREE_RATE
+from config import NUM_SIMULATIONS, RANDOM_SEED, RISK_FREE_RATE, IV_CORRECTION_MODE
 from src.monte_carlo_simulation import UniversalOptionsMonteCarloSimulator
 
 # Constants
@@ -43,7 +43,8 @@ def calculate_expected_value(
     risk_free_rate: float = RISK_FREE_RATE,
     dividend_yield: float = DIVIDEND_YIELD,
     num_simulations: int = NUM_SIMULATIONS,
-    random_seed: int = RANDOM_SEED
+    random_seed: int = RANDOM_SEED,
+    iv_correction: str = IV_CORRECTION_MODE
 ) -> float:
     """Calculates the Expected Value using Monte Carlo simulation."""
     simulator = UniversalOptionsMonteCarloSimulator(
@@ -54,5 +55,6 @@ def calculate_expected_value(
         volatility=volatility,
         risk_free_rate=risk_free_rate,
         dividend_yield=dividend_yield,
+        iv_correction=iv_correction
     )
     return simulator.calculate_expected_value(options=options)

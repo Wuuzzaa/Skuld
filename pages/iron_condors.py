@@ -1,7 +1,7 @@
 import logging
 import os
 import streamlit as st
-from config import PATH_DATABASE_QUERY_FOLDER
+from config import PATH_DATABASE_QUERY_FOLDER, IV_CORRECTION_MODE
 from pages.documentation_text.iron_condors_page_doc import get_iron_condor_documentation
 from src.database import select_into_dataframe
 from src.logger_config import setup_logging
@@ -45,7 +45,8 @@ DEFAULTS = {
     'ic_width_call': DEFAULT_SPREAD_WIDTH,
     'ic_min_sell_iv': DEFAULT_MIN_SELL_IV,
     'ic_max_sell_iv': DEFAULT_MAX_SELL_IV,
-    'ic_min_max_profit': DEFAULT_MIN_MAX_PROFIT
+    'ic_min_max_profit': DEFAULT_MIN_MAX_PROFIT,
+    'ic_iv_correction': IV_CORRECTION_MODE
 }
 
 init_session_state(DEFAULTS)
@@ -149,13 +150,29 @@ with st.expander("Configuration and Filters", expanded=True):
     with col14:
         st.checkbox("Show only spreads with no earnings till expiration", key="ic_show_only_spreads_with_no_earnings_till_expiration")
 
+    st.divider()
+    col15, col16 = st.columns(2)
+    with col15:
+        iv_corr_input = st.text_input("IV Correction (auto, 0.0-1.0)", value=str(st.session_state.ic_iv_correction), key="ic_iv_correction_input")
+        # Process input to match expected types (float or "auto")
+        if iv_corr_input.lower() == "auto":
+            st.session_state.ic_iv_correction = "auto"
+        else:
+            try:
+                st.session_state.ic_iv_correction = float(iv_corr_input)
+            except ValueError:
+                st.error("Invalid IV Correction. Use 'auto' or a number.")
+                st.session_state.ic_iv_correction = 0.0
+    with col16:
+        st.info("IV correction mode: 'auto' (Automatic), 0.0-1.0 (Manual reduction), 0.0 (No correction)")
+
 @st.cache_data
 def _cached_select_into_dataframe(sql_file_path, params):
     return select_into_dataframe(sql_file_path=sql_file_path, params=params)
 
 @st.cache_data
-def _cached_calc_iron_condors(put_df, call_df):
-    return calc_iron_condors(put_df, call_df)
+def _cached_calc_iron_condors(put_df, call_df, iv_correction):
+    return calc_iron_condors(put_df, call_df, iv_correction=iv_correction)
 
 with st.spinner("Calculating Iron Condors..."):
     common_params = {
@@ -175,7 +192,7 @@ with st.spinner("Calculating Iron Condors..."):
     call_params = {**common_params, "expiration_date": expiration_date_call, "option_type": "call", "delta_target": st.session_state.ic_delta_call, "spread_width": st.session_state.ic_width_call}
     call_df = _cached_select_into_dataframe(sql_file_path=sql_query_path, params=call_params)
     
-    ic_df_raw = _cached_calc_iron_condors(put_df, call_df)
+    ic_df_raw = _cached_calc_iron_condors(put_df, call_df, st.session_state.ic_iv_correction)
     ic_df = get_page_iron_condors(ic_df_raw)
 
 if not ic_df.empty:
@@ -318,7 +335,8 @@ if not ic_df.empty:
         with col_info4:
             st.metric("Sell IV (Avg)", f"{row.get('sell_iv', 0)*100:.1f}%")
             st.metric("Theta", f"{row.get('total_theta', 0):.4f}")
-        
+
+        st.write(f"**IV Correction Setting:** {st.session_state.ic_iv_correction}")
         st.write(f"**Sektor:** {row.get('company_sector', 'N/A')} | **Branche:** {row.get('company_industry', 'N/A')}")
 
         if 'analyst_mean_target' in row and pd.notnull(row['analyst_mean_target']):

@@ -14,7 +14,7 @@ from src.options_utils import (
 # Setup logging
 logger = logging.getLogger(os.path.basename(__file__))
 
-def _calculate_combined_ev(row: pd.Series) -> float:
+def _calculate_combined_ev(row: pd.Series, iv_correction: str = 'auto') -> float:
     """
     Calculates the combined Expected Value for an Iron Condor using Monte Carlo simulation.
     Processes 4 legs: Short Put, Long Put, Short Call, Long Call.
@@ -32,10 +32,11 @@ def _calculate_combined_ev(row: pd.Series) -> float:
         current_price=row['close_put'],
         dte=max(row['days_to_expiration_put'], row['days_to_expiration_call']),
         volatility=row['sell_iv_put'],
-        options=options
+        options=options,
+        iv_correction=iv_correction
     )
 
-def _calculate_iron_condor_metrics(df: pd.DataFrame) -> pd.DataFrame:
+def _calculate_iron_condor_metrics(df: pd.DataFrame, iv_correction: str = 'auto') -> pd.DataFrame:
     if df.empty:
         return df
 
@@ -90,7 +91,7 @@ def _calculate_iron_condor_metrics(df: pd.DataFrame) -> pd.DataFrame:
     df["%_otm_call"] = (df["sell_strike_call"] - df["close_call"]) / df["close_call"] * 100
 
     # Expected Value
-    df["expected_value"] = df.apply(_calculate_combined_ev, axis=1)
+    df["expected_value"] = df.apply(_calculate_combined_ev, axis=1, iv_correction=iv_correction)
 
     # Combined Sell IV (Average of put and call side short IV)
     df["sell_iv"] = (df["sell_iv_put"] + df["sell_iv_call"]) / 2
@@ -127,7 +128,7 @@ def _build_optionstrat_url(row: pd.Series) -> str:
     return f"{base_url}/{symbol}/{p_buy},{p_sell},{c_sell},{c_buy}"
 
 @log_function
-def calc_iron_condors(put_spreads: pd.DataFrame, call_spreads: pd.DataFrame) -> pd.DataFrame:
+def calc_iron_condors(put_spreads: pd.DataFrame, call_spreads: pd.DataFrame, iv_correction: str = 'auto') -> pd.DataFrame:
     if put_spreads.empty or call_spreads.empty:
         return pd.DataFrame()
 
@@ -141,7 +142,7 @@ def calc_iron_condors(put_spreads: pd.DataFrame, call_spreads: pd.DataFrame) -> 
         return combined
 
     logger.debug(f"Combined DF before metrics: {combined[['symbol', 'sell_theta_put', 'buy_theta_put', 'sell_theta_call', 'buy_theta_call']].head()}")
-    combined = _calculate_iron_condor_metrics(combined)
+    combined = _calculate_iron_condor_metrics(combined, iv_correction=iv_correction)
     combined = _add_earnings_and_urls(combined)
 
     return combined

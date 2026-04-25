@@ -2,7 +2,7 @@ import logging
 import os
 import streamlit as st
 import pandas as pd
-from config import PATH_DATABASE_QUERY_FOLDER
+from config import PATH_DATABASE_QUERY_FOLDER, IV_CORRECTION_MODE
 from pages.documentation_text.spreads_page_doc import get_spreads_documentation
 from src.database import select_into_dataframe
 from src.logger_config import setup_logging
@@ -58,7 +58,8 @@ DEFAULTS = {
     'min_max_profit': DEFAULT_MIN_MAX_PROFIT,
     'min_iv_rank': DEFAULT_MIN_IV_RANK,
     'min_iv_percentile': DEFAULT_MIN_IV_PERCENTILE,
-    'strategy_type': DEFAULT_STRATEGY_TYPE
+    'strategy_type': DEFAULT_STRATEGY_TYPE,
+    'iv_correction': IV_CORRECTION_MODE
 }
 
 init_session_state(DEFAULTS)
@@ -249,6 +250,21 @@ with st.expander("Configuration and Filters", expanded=True):
             key="min_iv_percentile"
         )
 
+    st.divider()
+    col17, col18 = st.columns(2)
+    with col17:
+        iv_corr_input = st.text_input("IV Correction (auto, 0.0-1.0)", value=str(st.session_state.iv_correction), key="iv_correction_input")
+        if iv_corr_input.lower() == "auto":
+            st.session_state.iv_correction = "auto"
+        else:
+            try:
+                st.session_state.iv_correction = float(iv_corr_input)
+            except ValueError:
+                st.error("Invalid IV Correction. Use 'auto' or a number.")
+                st.session_state.iv_correction = 0.0
+    with col18:
+        st.info("IV correction mode: 'auto' (Automatic), 0.0-1.0 (Manual reduction), 0.0 (No correction)")
+
 # Calculate the spread values with a loading indicator
 with st.spinner("Calculating spreads..."):
     params = {
@@ -269,7 +285,7 @@ with st.spinner("Calculating spreads..."):
     df = select_into_dataframe(sql_file_path=sql_file_path, params=params)
     logging.debug(f"Input data head: {df.head()}")
 
-    spreads_df = get_page_spreads(df, strategy_type=strategy_type)
+    spreads_df = get_page_spreads(df, strategy_type=strategy_type, iv_correction=st.session_state.iv_correction)
     logging.debug(f"Calculated spreads head: {spreads_df.head()}")
 
 # Apply spread filters
@@ -395,7 +411,8 @@ if selected_rows and not filtered_df.empty:
     with col_info4:
         st.metric("Sell IV", f"{row.get('sell_iv', 0)*100:.1f}%")
         st.metric("Theta", f"{row.get('spread_theta', 0):.4f}")
-    
+
+    st.write(f"**IV Correction Setting:** {st.session_state.iv_correction}")
     st.write(f"**Sektor:** {row['company_sector']} | **Branche:** {row['company_industry']}")
 
     if 'analyst_mean_target' in row:
