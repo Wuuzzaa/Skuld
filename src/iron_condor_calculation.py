@@ -1,6 +1,7 @@
 import pandas as pd
 import logging
 import os
+from typing import Dict, Any
 from src.decorator_log_function import log_function
 from src.options_utils import (
     MULTIPLIER, 
@@ -14,9 +15,9 @@ from src.options_utils import (
 # Setup logging
 logger = logging.getLogger(os.path.basename(__file__))
 
-def _calculate_combined_ev(row: pd.Series, iv_correction: str = 'auto') -> float:
+def _calculate_combined_ev(row: pd.Series, iv_correction: str = 'auto') -> Dict[str, Any]:
     """
-    Calculates the combined Expected Value for an Iron Condor using Monte Carlo simulation.
+    Calculates the combined Expected Value and IV details for an Iron Condor using Monte Carlo simulation.
     Processes 4 legs: Short Put, Long Put, Short Call, Long Call.
     """
     options = [
@@ -33,7 +34,8 @@ def _calculate_combined_ev(row: pd.Series, iv_correction: str = 'auto') -> float
         dte=max(row['days_to_expiration_put'], row['days_to_expiration_call']),
         volatility=row['sell_iv_put'],
         options=options,
-        iv_correction=iv_correction
+        iv_correction=iv_correction,
+        return_details=True
     )
 
 def _calculate_iron_condor_metrics(df: pd.DataFrame, iv_correction: str = 'auto') -> pd.DataFrame:
@@ -90,8 +92,10 @@ def _calculate_iron_condor_metrics(df: pd.DataFrame, iv_correction: str = 'auto'
     df["%_otm_put"] = (df["close_put"] - df["sell_strike_put"]) / df["close_put"] * 100
     df["%_otm_call"] = (df["sell_strike_call"] - df["close_call"]) / df["close_call"] * 100
 
-    # Expected Value
-    df["expected_value"] = df.apply(_calculate_combined_ev, axis=1, iv_correction=iv_correction)
+    # Expected Value and IV Details
+    ev_results = df.apply(_calculate_combined_ev, axis=1, iv_correction=iv_correction)
+    df["expected_value"] = ev_results.apply(lambda x: x["expected_value"])
+    df["iv_correction_factor"] = ev_results.apply(lambda x: x["iv_correction_factor"])
 
     # Combined Sell IV (Average of put and call side short IV)
     df["sell_iv"] = (df["sell_iv_put"] + df["sell_iv_call"]) / 2

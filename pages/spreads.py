@@ -412,7 +412,10 @@ if selected_rows and not filtered_df.empty:
         st.metric("Sell IV", f"{row.get('sell_iv', 0)*100:.1f}%")
         st.metric("Theta", f"{row.get('spread_theta', 0):.4f}")
 
-    st.write(f"**IV Correction Setting:** {st.session_state.iv_correction}")
+    iv_corr_display = str(st.session_state.iv_correction)
+    if st.session_state.iv_correction == "auto" and "iv_correction_factor" in row:
+        iv_corr_display = f"auto ({row['iv_correction_factor']*100:.1f}%)"
+    st.write(f"**IV Correction Setting:** {iv_corr_display}")
     st.write(f"**Sektor:** {row['company_sector']} | **Branche:** {row['company_industry']}")
 
     if 'analyst_mean_target' in row:

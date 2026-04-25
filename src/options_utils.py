@@ -44,8 +44,9 @@ def calculate_expected_value(
     dividend_yield: float = DIVIDEND_YIELD,
     num_simulations: int = NUM_SIMULATIONS,
     random_seed: int = RANDOM_SEED,
-    iv_correction: str = IV_CORRECTION_MODE
-) -> float:
+    iv_correction: str = IV_CORRECTION_MODE,
+    return_details: bool = False
+) -> float | Dict[str, Any]:
     """Calculates the Expected Value using Monte Carlo simulation."""
     simulator = UniversalOptionsMonteCarloSimulator(
         num_simulations=num_simulations,
@@ -57,4 +58,12 @@ def calculate_expected_value(
         dividend_yield=dividend_yield,
         iv_correction=iv_correction
     )
-    return simulator.calculate_expected_value(options=options)
+    ev = simulator.calculate_expected_value(options=options)
+    
+    if return_details:
+        return {
+            "expected_value": ev,
+            "iv_correction_factor": simulator.iv_correction_factor,
+            "corrected_volatility": simulator.volatility
+        }
+    return ev

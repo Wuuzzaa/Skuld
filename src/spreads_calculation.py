@@ -1,6 +1,7 @@
 import pandas as pd
 import logging
 import os
+from typing import Dict, Any
 from src.decorator_log_function import log_function
 from src.options_utils import (
     MULTIPLIER,
@@ -14,8 +15,8 @@ from src.options_utils import (
 # Setup logging
 logger = logging.getLogger(os.path.basename(__file__))
 
-def _calculate_expected_value_for_symbol(row: pd.Series, strategy_type: str = 'credit', iv_correction: str = 'auto') -> float:
-    """Calculates the Expected Value for a single spread using Monte Carlo simulation."""
+def _calculate_expected_value_for_symbol(row: pd.Series, strategy_type: str = 'credit', iv_correction: str = 'auto') -> Dict[str, Any]:
+    """Calculates the Expected Value and IV details for a single spread using Monte Carlo simulation."""
     is_credit = strategy_type == 'credit'
     
     options = [
@@ -38,7 +39,8 @@ def _calculate_expected_value_for_symbol(row: pd.Series, strategy_type: str = 'c
         dte=row['days_to_expiration'],
         volatility=row['sell_iv'],
         options=options,
-        iv_correction=iv_correction
+        iv_correction=iv_correction,
+        return_details=True
     )
 
 def _calculate_spread_metrics(df: pd.DataFrame, strategy_type: str = 'credit', iv_correction: str = 'auto') -> pd.DataFrame:
@@ -94,8 +96,10 @@ def _calculate_spread_metrics(df: pd.DataFrame, strategy_type: str = 'credit', i
     # % Out-of-the-Money (OTM)
     df["%_otm"] = (df["sell_strike"] - df["close"]).abs() / df["close"] * 100
 
-    # Expected Value
-    df["expected_value"] = df.apply(lambda r: _calculate_expected_value_for_symbol(r, strategy_type, iv_correction=iv_correction), axis=1)
+    # Expected Value and IV Details
+    ev_results = df.apply(lambda r: _calculate_expected_value_for_symbol(r, strategy_type, iv_correction=iv_correction), axis=1)
+    df["expected_value"] = ev_results.apply(lambda x: x["expected_value"])
+    df["iv_correction_factor"] = ev_results.apply(lambda x: x["iv_correction_factor"])
 
     # APDI
     df["APDI"] = df.apply(lambda r: calculate_apdi(r["max_profit"], r["days_to_expiration"], r["bpr"]), axis=1)
@@ -181,7 +185,7 @@ def get_page_spreads(df: pd.DataFrame, strategy_type: str = 'credit', iv_correct
         'analyst_mean_target', 'company_industry', 'company_sector', 
         'historical_volatility_30d', 'iv_rank', 'iv_percentile',
         'spread_width', 'max_profit', 'bpr', 'profit_to_bpr', 'spread_theta', 
-        'expected_value', 'APDI', 'APDI_EV', 'optionstrat_url',
+        'expected_value', 'iv_correction_factor', 'APDI', 'APDI_EV', 'optionstrat_url',
         'sell_strike', 'sell_last_option_price', 'sell_delta', 'sell_iv', '%_otm', 
         'sell_theta', 'sell_open_interest', 'sell_expected_move', 'sell_day_volume',
         'buy_strike', 'buy_last_option_price', 'buy_delta', 'buy_iv', 'buy_theta', 
