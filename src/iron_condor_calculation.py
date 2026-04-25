@@ -9,44 +9,50 @@ from src.options_utils import (
     create_earnings_warning, 
     format_strike, 
     format_expiration_date,
-    calculate_expected_value
+    calculate_expected_value,
+    OptionLeg,
+    calculate_strategy_metrics
 )
 
 # Setup logging
 logger = logging.getLogger(os.path.basename(__file__))
 
-def _calculate_combined_ev(row: pd.Series, iv_correction: str = 'auto') -> Dict[str, Any]:
-    """
-    Calculates the combined Expected Value and IV details for an Iron Condor using Monte Carlo simulation.
-    Processes 4 legs: Short Put, Long Put, Short Call, Long Call.
-    """
-    options = [
+def _calculate_combined_metrics(row: pd.Series, iv_correction: str = 'auto') -> pd.Series:
+    """Calculates all metrics for an Iron Condor using the generic calculator."""
+    legs = [
         # Put side
-        {'strike': row['sell_strike_put'], 'premium': row['sell_last_option_price_put'], 'is_call': False, 'is_long': False},
-        {'strike': row['buy_strike_put'], 'premium': row['buy_last_option_price_put'], 'is_call': False, 'is_long': True},
+        OptionLeg(strike=row['sell_strike_put'], premium=row['sell_last_option_price_put'], is_call=False, is_long=False, theta=row.get('sell_theta_put')),
+        OptionLeg(strike=row['buy_strike_put'], premium=row['buy_last_option_price_put'], is_call=False, is_long=True, theta=row.get('buy_theta_put')),
         # Call side
-        {'strike': row['sell_strike_call'], 'premium': row['sell_last_option_price_call'], 'is_call': True, 'is_long': False},
-        {'strike': row['buy_strike_call'], 'premium': row['buy_last_option_price_call'], 'is_call': True, 'is_long': True},
+        OptionLeg(strike=row['sell_strike_call'], premium=row['sell_last_option_price_call'], is_call=True, is_long=False, theta=row.get('sell_theta_call')),
+        OptionLeg(strike=row['buy_strike_call'], premium=row['buy_last_option_price_call'], is_call=True, is_long=True, theta=row.get('buy_theta_call')),
     ]
 
-    return calculate_expected_value(
+    metrics = calculate_strategy_metrics(
         current_price=row['close_put'],
         dte=max(row['days_to_expiration_put'], row['days_to_expiration_call']),
         volatility=row['sell_iv_put'],
-        options=options,
-        iv_correction=iv_correction,
-        return_details=True
+        legs=legs,
+        iv_correction=iv_correction
     )
+
+    return pd.Series({
+        "max_profit": metrics.max_profit,
+        "max_loss": metrics.max_loss,
+        "bpr": metrics.bpr,
+        "expected_value": metrics.expected_value,
+        "total_theta": metrics.total_theta,
+        "profit_to_bpr": metrics.profit_to_bpr,
+        "APDI": metrics.apdi,
+        "APDI_EV": metrics.apdi_ev,
+        "iv_correction_factor": metrics.iv_correction_factor,
+        "corrected_volatility": metrics.corrected_volatility,
+        "sell_iv": (row["sell_iv_put"] + row["sell_iv_call"]) / 2
+    })
 
 def _calculate_iron_condor_metrics(df: pd.DataFrame, iv_correction: str = 'auto') -> pd.DataFrame:
     if df.empty:
         return df
-
-    # Combined Max Profit
-    df["max_profit"] = MULTIPLIER * (
-        (df["sell_last_option_price_put"] - df["buy_last_option_price_put"]) +
-        (df["sell_last_option_price_call"] - df["buy_last_option_price_call"])
-    )
 
     # Clean up column names from merge
     def _safe_assign(target_col, source_col):
@@ -55,7 +61,7 @@ def _calculate_iron_condor_metrics(df: pd.DataFrame, iv_correction: str = 'auto'
         elif target_col not in df.columns:
             df[target_col] = None
 
-    # Check for Company name in both _put and _call suffixes if needed, but usually _put is enough
+    # Check for Company name in both _put and _call suffixes if needed
     if "Company_put" in df.columns:
         df["Company"] = df["Company_put"]
     elif "Company_call" in df.columns:
@@ -80,30 +86,19 @@ def _calculate_iron_condor_metrics(df: pd.DataFrame, iv_correction: str = 'auto'
     _safe_assign("days_to_expiration", "days_to_expiration_put")
     _safe_assign("days_to_earnings", "days_to_earnings_put")
 
-    # Buying Power Reduction (BPR)
+    # Spread Width (keep for reference)
     df["width_put"] = (df["sell_strike_put"] - df["buy_strike_put"]).abs()
     df["width_call"] = (df["buy_strike_call"] - df["sell_strike_call"]).abs()
-    df["bpr"] = df[["width_put", "width_call"]].max(axis=1) * MULTIPLIER - df["max_profit"]
 
-    # Spread Theta
-    df["total_theta"] = (df["sell_theta_put"].fillna(0) - df["buy_theta_put"].fillna(0)) + (df["sell_theta_call"].fillna(0) - df["buy_theta_call"].fillna(0))
+    # Calculate all generic metrics
+    metrics_df = df.apply(lambda r: _calculate_combined_metrics(r, iv_correction=iv_correction), axis=1)
+    df = pd.concat([df, metrics_df], axis=1)
 
     # % OTM
     df["%_otm_put"] = (df["close_put"] - df["sell_strike_put"]) / df["close_put"] * 100
     df["%_otm_call"] = (df["sell_strike_call"] - df["close_call"]) / df["close_call"] * 100
 
-    # Expected Value and IV Details
-    ev_results = df.apply(_calculate_combined_ev, axis=1, iv_correction=iv_correction)
-    df["expected_value"] = ev_results.apply(lambda x: x["expected_value"])
-    df["iv_correction_factor"] = ev_results.apply(lambda x: x["iv_correction_factor"])
-
-    # Combined Sell IV (Average of put and call side short IV)
-    df["sell_iv"] = (df["sell_iv_put"] + df["sell_iv_call"]) / 2
-
-    # APDI
     df["max_dte"] = df[["days_to_expiration_put", "days_to_expiration_call"]].max(axis=1)
-    df["APDI"] = df.apply(lambda r: calculate_apdi(r["max_profit"], r["max_dte"], r["bpr"]), axis=1)
-    df["APDI_EV"] = df.apply(lambda r: calculate_apdi(r["expected_value"], r["max_dte"], r["bpr"]), axis=1)
 
     return df
 

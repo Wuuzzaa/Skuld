@@ -9,6 +9,8 @@ from src.page_display_dataframe import page_display_dataframe
 from src.iron_condor_calculation import get_page_iron_condors, calc_iron_condors
 from src.utils.option_utils import get_expiration_type
 from src.ui_utils import init_session_state, reset_to_defaults as ui_reset, filter_by_expiration_type
+from src.ui_strategy_display import display_strategy_details
+from src.options_utils import OptionLeg, StrategyMetrics
 import pandas as pd
 
 # Setup logging
@@ -255,112 +257,52 @@ if not ic_df.empty:
         row = ic_df.iloc[selected_idx]
 
         st.divider()
-        st.subheader(f"Details für {row['symbol']} Iron Condor")
-
-        # Create detailed table for legs
-        legs_data = [
-            {
-                "Leg": "Short Put",
-                "Strike": row['sell_strike_put'],
-                "Price": row['sell_last_option_price_put'],
-                "Delta": row['sell_delta_put'],
-                "IV": row['sell_iv_put'],
-                "Theta": row['sell_theta_put'],
-                "OI": row['sell_open_interest_put'],
-                "Volume": row.get('sell_day_volume_put'),
-                "Exp Move": row.get('sell_expected_move_put')
-            },
-            {
-                "Leg": "Long Put",
-                "Strike": row['buy_strike_put'],
-                "Price": row['buy_last_option_price_put'],
-                "Delta": row['buy_delta_put'],
-                "IV": row['buy_iv_put'],
-                "Theta": row['buy_theta_put'],
-                "OI": row['buy_open_interest_put'],
-                "Volume": row.get('buy_day_volume_put'),
-                "Exp Move": row.get('buy_expected_move_put')
-            },
-            {
-                "Leg": "Short Call",
-                "Strike": row['sell_strike_call'],
-                "Price": row['sell_last_option_price_call'],
-                "Delta": row['sell_delta_call'],
-                "IV": row['sell_iv_call'],
-                "Theta": row['sell_theta_call'],
-                "OI": row['sell_open_interest_call'],
-                "Volume": row.get('sell_day_volume_call'),
-                "Exp Move": row.get('sell_expected_move_call')
-            },
-            {
-                "Leg": "Long Call",
-                "Strike": row['buy_strike_call'],
-                "Price": row['buy_last_option_price_call'],
-                "Delta": row['buy_delta_call'],
-                "IV": row['buy_iv_call'],
-                "Theta": row['buy_theta_call'],
-                "OI": row['buy_open_interest_call'],
-                "Volume": row.get('buy_day_volume_call'),
-                "Exp Move": row.get('buy_expected_move_call')
-            }
+        
+        # Legs data for the generic display
+        legs = [
+            OptionLeg(
+                strike=row['sell_strike_put'], premium=row['sell_last_option_price_put'], is_call=False, is_long=False,
+                delta=row['sell_delta_put'], iv=row['sell_iv_put'], theta=row['sell_theta_put'], oi=row['sell_open_interest_put']
+            ),
+            OptionLeg(
+                strike=row['buy_strike_put'], premium=row['buy_last_option_price_put'], is_call=False, is_long=True,
+                delta=row['buy_delta_put'], iv=row['buy_iv_put'], theta=row['buy_theta_put'], oi=row['buy_open_interest_put']
+            ),
+            OptionLeg(
+                strike=row['sell_strike_call'], premium=row['sell_last_option_price_call'], is_call=True, is_long=False,
+                delta=row['sell_delta_call'], iv=row['sell_iv_call'], theta=row['sell_theta_call'], oi=row['sell_open_interest_call']
+            ),
+            OptionLeg(
+                strike=row['buy_strike_call'], premium=row['buy_last_option_price_call'], is_call=True, is_long=True,
+                delta=row['buy_delta_call'], iv=row['buy_iv_call'], theta=row['buy_theta_call'], oi=row['buy_open_interest_call']
+            )
         ]
         
-        logger.debug(f"Legs data for {row['symbol']}: {legs_data}")
+        metrics = StrategyMetrics(
+            max_profit=row['max_profit'],
+            max_loss=row['max_loss'] if 'max_loss' in row else row['bpr'],
+            bpr=row['bpr'],
+            expected_value=row['expected_value'],
+            total_theta=row.get('total_theta', 0),
+            profit_to_bpr=row.get('profit_to_bpr', 0),
+            apdi=row.get('APDI', 0),
+            apdi_ev=row.get('APDI_EV', 0),
+            iv_correction_factor=row.get('iv_correction_factor', 1),
+            corrected_volatility=row.get('corrected_volatility', row.get('sell_iv', 0))
+        )
         
-        details_df = pd.DataFrame(legs_data)
-        st.table(details_df)
+        extra_info = {
+            'iv_rank': row.get('iv_rank'),
+            'iv_percentile': row.get('iv_percentile'),
+            'company_sector': row.get('company_sector'),
+            'company_industry': row.get('company_industry'),
+            'analyst_mean_target': row.get('analyst_mean_target'),
+            'close': row.get('close'),
+            'optionstrat_url': row.get('optionstrat_url'),
+            'Claude': row.get('Claude')
+        }
         
-        # Additional Info
-        st.markdown("#### Kennzahlen & Unternehmensinfos")
-
-        st.write(f"**Unternehmen:** {row.get('Company', 'N/A')}")
-
-        col_info1, col_info2, col_info3, col_info4 = st.columns(4)
-        with col_info1:
-            max_profit = row.get('max_profit')
-            st.metric("Max Profit", f"${max_profit:.2f}" if pd.notnull(max_profit) else "N/A")
-            bpr = row.get('bpr')
-            st.metric("BPR", f"${bpr:.2f}" if pd.notnull(bpr) else "N/A")
-        with col_info2:
-            expected_value = row.get('expected_value')
-            st.metric("Expected Value", f"${expected_value:.2f}" if pd.notnull(expected_value) else "N/A")
-            apdi = row.get('APDI')
-            st.metric("APDI", f"{apdi:.2f}%" if pd.notnull(apdi) else "N/A")
-        with col_info3:
-            iv_rank = row.get('iv_rank')
-            st.metric("IV Rank", f"{iv_rank:.1f}" if pd.notnull(iv_rank) else "N/A")
-            
-            iv_percentile = row.get('iv_percentile')
-            st.metric("IV Percentile", f"{iv_percentile:.1f}" if pd.notnull(iv_percentile) else "N/A")
-        with col_info4:
-            st.metric("Sell IV (Avg)", f"{row.get('sell_iv', 0)*100:.1f}%")
-            st.metric("Theta", f"{row.get('total_theta', 0):.4f}")
-
-        iv_corr_display = str(st.session_state.ic_iv_correction)
-        if st.session_state.ic_iv_correction == "auto" and "iv_correction_factor" in row:
-            iv_corr_display = f"auto ({row['iv_correction_factor']*100:.1f}%)"
-        st.write(f"**IV Correction Setting:** {iv_corr_display}")
-        st.write(f"**Sektor:** {row.get('company_sector', 'N/A')} | **Branche:** {row.get('company_industry', 'N/A')}")
-
-        if 'analyst_mean_target' in row and pd.notnull(row['analyst_mean_target']):
-            st.write(f"**Analyst Kursziel:** ${row['analyst_mean_target']:.2f} (Aktuell: ${row.get('close', 0):.2f})")
-
-        # External Links
-        st.markdown("#### Links")
-        link_col1, link_col2, link_col3, link_col4 = st.columns(4)
-        with link_col1:
-            st.link_button("TradingView", f"https://www.tradingview.com/symbols/{row['symbol']}/", use_container_width=True)
-            st.link_button("Chart", f"https://www.tradingview.com/chart/?symbol={row['symbol']}", use_container_width=True)
-        with link_col2:
-            st.link_button("Finviz", f"https://finviz.com/quote.ashx?t={row['symbol']}", use_container_width=True)
-            if 'optionstrat_url' in row and row['optionstrat_url']:
-                st.link_button("OptionStrat", row['optionstrat_url'], use_container_width=True)
-        with link_col3:
-            st.link_button("Seeking Alpha", f"https://seekingalpha.com/symbol/{row['symbol']}", use_container_width=True)
-            if 'Claude' in row and row['Claude']:
-                st.link_button("Claude AI Analysis", row['Claude'], use_container_width=True)
-        with link_col4:
-            st.link_button("Yahoo Finance", f"https://finance.yahoo.com/quote/{row['symbol']}", use_container_width=True)
+        display_strategy_details(row['symbol'], row.get('Company', 'N/A'), legs, metrics, extra_info)
 
     else:
         st.caption("💡 Klicke auf eine Zeile in der Tabelle, um die Details der einzelnen Legs zu sehen.")

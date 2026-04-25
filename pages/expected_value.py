@@ -3,6 +3,8 @@ import os
 import streamlit as st
 from src.logger_config import setup_logging
 from src.monte_carlo_simulation import UniversalOptionsMonteCarloSimulator
+from src.options_utils import OptionLeg, calculate_strategy_metrics
+from src.ui_strategy_display import display_strategy_details
 
 # Enable logging
 setup_logging(component="streamlit", log_level=logging.DEBUG, console_output=True)
@@ -88,61 +90,42 @@ if st.button("Add Another Option"):
 if st.button("Start Simulation"):
     with st.spinner("Calculating expected value..."):
         try:
-            # Convert option types to is_call and is_long
-            options = []
+            # Convert option types to OptionLegs
+            legs = []
             for option in st.session_state.options:
                 is_call = option["type"] in ["Call Bought", "Call Sold"]
                 is_long = option["type"] in ["Call Bought", "Put Bought"]
-                options.append({
-                    "strike": option["strike"],
-                    "premium": option["premium"],
-                    "is_call": is_call,
-                    "is_long": is_long,
-                })
+                legs.append(OptionLeg(
+                    strike=option["strike"],
+                    premium=option["premium"],
+                    is_call=is_call,
+                    is_long=is_long,
+                ))
 
-            monte_carlo_simulator = UniversalOptionsMonteCarloSimulator(
-                num_simulations=num_simulations,
-                random_seed=random_seed,
+            metrics = calculate_strategy_metrics(
                 current_price=current_price,
                 dte=dte,
                 volatility=volatility,
+                legs=legs,
                 risk_free_rate=risk_free_rate,
                 dividend_yield=dividend_yield,
+                num_simulations=num_simulations,
+                random_seed=random_seed,
                 iv_correction=iv_correction,
             )
 
-            expected_value = monte_carlo_simulator.calculate_expected_value(options=options)
-
             # --- Display Results ---
             st.success("Simulation completed!")
-            st.subheader("Results")
-            st.markdown(f"""
-                | Parameter                     | Value                     |
-                |-------------------------------|--------------------------|
-                | **Expected Value**            | {expected_value:.2f}     |
-                | Current Stock Price           | {current_price:.2f}      |
-                | Raw Volatility                | {volatility:.4f}         |
-                | Days to Expiration (DTE)      | {dte}                    |
-                | Risk-Free Rate                | {risk_free_rate:.4f}     |
-                | Dividend Yield                | {dividend_yield:.4f}     |
-                | Number of Simulations         | {num_simulations:,}      |
-                | Random Seed                   | {random_seed}            |
-                | Transaction Cost per Contract | {transaction_cost_per_contract:.2f} |
-                | IV Correction                 | {iv_correction}          |
-                | Corrected Volatility          | {monte_carlo_simulator.volatility:.6f} |
-                | IV Correction Factor          | {monte_carlo_simulator.iv_correction_factor:.6f} |
-                | Time to Expiration (Years)    | {monte_carlo_simulator.time_to_expiration:.6f} |
-            """)
-
-            # --- Option Strategy Summary ---
-            st.subheader("Option Strategy Summary")
-            for i, option in enumerate(st.session_state.options):
-                st.markdown(f"""
-                    **Option {i+1}:**
-                    - Strike: {option['strike']:.2f}
-                    - Premium: {option['premium']:.2f}
-                    - Type: {option['type']}
-                """)
+            
+            display_strategy_details(
+                symbol="Custom Strategy",
+                company_name="Manual Input",
+                legs=legs,
+                metrics=metrics,
+                extra_info={
+                    'close': current_price
+                }
+            )
 
         except Exception as e:
             st.error(f"Error during simulation: {e}")
