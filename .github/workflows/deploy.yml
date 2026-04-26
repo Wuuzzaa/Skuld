@@ -20,6 +20,7 @@ on:
       - '*.md'
       - 'docs/**'
       - 'ops/skuld-cli/**'
+      - 'ops/environments.yaml'
       - '.github/workflows/**'
   workflow_dispatch:
     inputs:
