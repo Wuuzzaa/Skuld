@@ -34,8 +34,8 @@ services:
       - "traefik.http.routers.skuld.rule=Host(`test.skuld-options.com`)"
       - "traefik.http.routers.skuld.entrypoints=web"
 
-      # No Authelia middleware on staging — direct access
-      - "traefik.http.routers.skuld.middlewares=force-https"
+      # Middleware chain: fix X-Forwarded-Proto for Cloudflare Tunnel, then authenticate via Authelia
+      - "traefik.http.routers.skuld.middlewares=force-https,authelia"
 
       # Explicitly disable TLS on this router just in case
       - "traefik.http.routers.skuld.tls=false"
