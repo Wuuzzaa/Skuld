@@ -49,7 +49,7 @@ home:
   certresolver_authelia: "traefik.enable=true"
   auth_scheme: http
   authelia: "true"
-  skuld_middlewares: ""
+  skuld_middlewares: "force-https,authelia"
   skuld_env: Staging
   deploy_services: "skuld-frontend skuld-backend"
   skip_compose_down: "true"
