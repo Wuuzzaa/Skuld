@@ -330,6 +330,42 @@ jobs:
           git checkout --detach FETCH_HEAD
           echo "SOURCE_DIR=$SOURCE_DIR" >> "$GITHUB_ENV"
 
+      # Always overlay infrastructure files from master so that any branch
+      # can be deployed without carrying its own copy of compose/infra config.
+      - name: Overlay infrastructure from master
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd "$SOURCE_DIR"
+          REF="${{ inputs.ref || github.ref_name }}"
+
+          # Skip if we're already deploying master
+          if [ "$REF" = "master" ] || [ "$REF" = "refs/heads/master" ]; then
+            echo "Deploying master — no overlay needed"
+            exit 0
+          fi
+
+          echo "=== Overlaying infrastructure files from master ==="
+          INFRA_DIR="$RUNNER_TEMP/skuld-infra-${GITHUB_RUN_ID}"
+          rm -rf "$INFRA_DIR"
+          mkdir -p "$INFRA_DIR"
+          git clone --depth 1 --branch master \
+            "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" \
+            "$INFRA_DIR"
+
+          # Overlay infra files (compose, authelia config, ops)
+          for f in docker-compose.yml docker-compose.testing.yml authelia/configuration.yml; do
+            if [ -f "$INFRA_DIR/$f" ]; then
+              echo "  Overlaying $f"
+              mkdir -p "$(dirname "$f")"
+              cp "$INFRA_DIR/$f" "$f"
+            fi
+          done
+
+          rm -rf "$INFRA_DIR"
+          echo "=== Infrastructure overlay complete ==="
+
       - name: Notify deploy started via Telegram
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
