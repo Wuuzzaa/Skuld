@@ -259,12 +259,12 @@ jobs:
           DB_CONTAINER="${{ needs.load-config.outputs.db_container }}"
           BACKUP_FILE="./${{ needs.fetch_db_backup.outputs.backup_file_name }}"
 
-          sudo docker stop skuld-frontend skuld-backend 2>/dev/null || true
+          docker stop skuld-frontend skuld-backend 2>/dev/null || true
 
           echo 'DROP DATABASE IF EXISTS "Skuld"; CREATE DATABASE "Skuld";' | \
-            sudo docker exec -i "$DB_CONTAINER" psql -U admin -d postgres
+            docker exec -i "$DB_CONTAINER" psql -U admin -d postgres
 
-          gzip -dc "$BACKUP_FILE" | sudo docker exec -i "$DB_CONTAINER" psql -U admin -d Skuld
+          gzip -dc "$BACKUP_FILE" | docker exec -i "$DB_CONTAINER" psql -U admin -d Skuld
 
           rm -f "$BACKUP_FILE"
 
@@ -351,7 +351,7 @@ jobs:
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }} << 'ENDSSH'
-            sudo docker image prune -af || true
+            docker image prune -af || true
             sudo mkdir -p /opt/skuld
             sudo chown -R $(whoami) /opt/skuld
           ENDSSH
@@ -477,8 +477,8 @@ jobs:
           set -x
           mkdir -p logs
 
-          sudo docker network create web >/dev/null 2>&1 || true
-          sudo docker network create postgres_setup_default >/dev/null 2>&1 || true
+          docker network create web >/dev/null 2>&1 || true
+          docker network create postgres_setup_default >/dev/null 2>&1 || true
 
           # ── Safe Deploy: wait for running data-collection jobs ──
           echo "=== Checking for running jobs in skuld-backend ==="
@@ -496,7 +496,7 @@ jobs:
           }
 
           is_job_running() {
-            sudo docker exec skuld-backend sh -c \
+            docker exec skuld-backend sh -c \
               'pgrep -f "python.*main\.py" || pgrep -f "run_data_collection\.sh"' \
               >/dev/null 2>&1
           }
@@ -524,45 +524,45 @@ jobs:
 
           # ── Stop old containers ──
           echo "=== Stopping old containers ==="
-          sudo docker rm -f skuld-streamlit 2>/dev/null || true
-          sudo docker rm -f skuld-frontend 2>/dev/null || true
-          sudo docker rm -f skuld-backend 2>/dev/null || true
+          docker rm -f skuld-streamlit 2>/dev/null || true
+          docker rm -f skuld-frontend 2>/dev/null || true
+          docker rm -f skuld-backend 2>/dev/null || true
 
           if [ "${CFG_SKIP_COMPOSE_DOWN}" != "true" ]; then
-            sudo docker rm -f authelia 2>/dev/null || true
-            sudo docker ps -a --filter "name=authelia" -q | xargs -r sudo docker rm -f 2>/dev/null || true
-            sudo docker ps -a --filter "name=skuld" -q | xargs -r sudo docker rm -f 2>/dev/null || true
-            sudo docker compose ${COMPOSE_ARGS} down --remove-orphans || true
+            docker rm -f authelia 2>/dev/null || true
+            docker ps -a --filter "name=authelia" -q | xargs -r docker rm -f 2>/dev/null || true
+            docker ps -a --filter "name=skuld" -q | xargs -r docker rm -f 2>/dev/null || true
+            docker compose ${COMPOSE_ARGS} down --remove-orphans || true
           fi
 
           # ── Build & start ──
           echo "=== Building image ==="
           if [ -n "${CFG_DEPLOY_SERVICES}" ]; then
-            sudo docker compose ${COMPOSE_ARGS} build --pull --no-cache ${CFG_DEPLOY_SERVICES}
+            docker compose ${COMPOSE_ARGS} build --pull --no-cache ${CFG_DEPLOY_SERVICES}
           else
-            sudo docker compose ${COMPOSE_ARGS} build --pull --no-cache
+            docker compose ${COMPOSE_ARGS} build --pull --no-cache
           fi
 
           echo "=== Starting containers ==="
           if [ -n "${CFG_DEPLOY_SERVICES}" ]; then
-            sudo docker compose ${COMPOSE_ARGS} up -d --no-deps ${CFG_DEPLOY_SERVICES}
+            docker compose ${COMPOSE_ARGS} up -d --no-deps ${CFG_DEPLOY_SERVICES}
           else
-            sudo docker compose ${COMPOSE_ARGS} up -d --remove-orphans
+            docker compose ${COMPOSE_ARGS} up -d --remove-orphans
           fi
 
           echo "=== Cleaning old images ==="
-          sudo docker image prune -f
+          docker image prune -f
 
           echo "=== Container status ==="
-          sudo docker compose ${COMPOSE_ARGS} ps
+          docker compose ${COMPOSE_ARGS} ps
 
           # ── Verify DB connectivity ──
           echo "=== Verifying DB connectivity ==="
-          sudo docker exec ${CFG_DB_CONTAINER} psql -U "${CFG_POSTGRES_USER}" -d "${CFG_POSTGRES_DB}" -c 'select 1;' >/dev/null
+          docker exec ${CFG_DB_CONTAINER} psql -U "${CFG_POSTGRES_USER}" -d "${CFG_POSTGRES_DB}" -c 'select 1;' >/dev/null
           echo "DB connectivity check passed"
 
           echo "=== Container logs ==="
-          sudo docker compose ${COMPOSE_ARGS} logs --tail=30
+          docker compose ${COMPOSE_ARGS} logs --tail=30
           REMOTESCRIPT
 
           # Execute the script on the remote server

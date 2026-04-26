@@ -115,7 +115,7 @@ jobs:
       - name: Stop app containers
         if: ${{ inputs.restart_app }}
         run: |
-          sudo docker stop skuld-frontend skuld-backend 2>/dev/null || true
+          docker stop skuld-frontend skuld-backend 2>/dev/null || true
 
       - name: Restore backup
         run: |
@@ -125,10 +125,10 @@ jobs:
 
           echo "Dropping and recreating Skuld database..."
           echo 'DROP DATABASE IF EXISTS "Skuld"; CREATE DATABASE "Skuld";' | \
-            sudo docker exec -i "$DB_CONTAINER" psql -U admin -d postgres
+            docker exec -i "$DB_CONTAINER" psql -U admin -d postgres
 
           echo "Restoring backup (this may take a while for large dumps)..."
-          gzip -dc "$BACKUP_FILE" | sudo docker exec -i "$DB_CONTAINER" psql -U admin -d Skuld
+          gzip -dc "$BACKUP_FILE" | docker exec -i "$DB_CONTAINER" psql -U admin -d Skuld
 
           echo "Cleaning up temp file..."
           rm -f "$BACKUP_FILE"
@@ -138,11 +138,11 @@ jobs:
       - name: Start app containers
         if: ${{ inputs.restart_app }}
         run: |
-          sudo docker start skuld-backend skuld-frontend 2>/dev/null || true
+          docker start skuld-backend skuld-frontend 2>/dev/null || true
 
       - name: Verify DB connectivity
         run: |
-          sudo docker exec ${{ steps.config.outputs.home_db_container }} \
+          docker exec ${{ steps.config.outputs.home_db_container }} \
             psql -U admin -d Skuld -c "SELECT NOW() as restored_at, pg_database_size(current_database()) as db_size_bytes;"
 
       - name: Notify via Telegram
