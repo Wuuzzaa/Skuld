@@ -559,7 +559,8 @@ jobs:
             docker compose ${COMPOSE_ARGS} up -d --remove-orphans
           fi
 
-          echo "=== Cleaning old images ==="
+          echo "=== Cleaning old containers and images ==="
+          docker container prune -f
           docker image prune -f
 
           echo "=== Container status ==="
