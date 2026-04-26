@@ -34,14 +34,27 @@ def get_version(cwd):
             timeout=5
         )
 
+        branch_result = subprocess.run(
+            ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+            capture_output=True,
+            text=True,
+            cwd=cwd,
+            timeout=5
+        )
+
         if all(r.returncode == 0 for r in [count_result, hash_result, date_result]):
             count = count_result.stdout.strip()
             hash_short = hash_result.stdout.strip()
             date_str = date_result.stdout.strip()
+            branch = branch_result.stdout.strip() if branch_result.returncode == 0 else ''
 
             # Parse datetime including time
             commit_datetime = datetime.fromisoformat(date_str.rsplit(' ', 1)[0])
             date_formatted = commit_datetime.strftime('%Y-%m-%d %H:%M')
+
+            # Set SKULD_BRANCH for footer display when running locally
+            if branch and not os.getenv('SKULD_BRANCH'):
+                os.environ['SKULD_BRANCH'] = branch
 
             return f"{count}-{hash_short} ({date_formatted})"
     except Exception:

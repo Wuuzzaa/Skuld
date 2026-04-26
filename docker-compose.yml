@@ -61,6 +61,7 @@ services:
       - PYTHONUNBUFFERED=1
       - TZ=Europe/Berlin
       - SKULD_VERSION=${SKULD_VERSION:-}
+      - SKULD_BRANCH=${SKULD_BRANCH:-}
     restart: unless-stopped
     networks:
       - web

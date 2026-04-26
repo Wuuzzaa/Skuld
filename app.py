@@ -58,5 +58,10 @@ page.run()
 
 # Footer for all pages
 st.divider()
-st.caption(f"SKULD Option Viewer - Data analysis tool for option trading strategies. Version: {VERSION}")
+skuld_env = os.getenv('SKULD_ENV', '')
+skuld_branch = os.getenv('SKULD_BRANCH', '')
+footer_text = f"SKULD Option Viewer - Data analysis tool for option trading strategies. Version: {VERSION}"
+if skuld_branch and skuld_env != 'Production':
+    footer_text += f" | Branch: {skuld_branch}"
+st.caption(footer_text)
 

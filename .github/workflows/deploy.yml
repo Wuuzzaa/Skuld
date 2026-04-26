@@ -384,10 +384,12 @@ jobs:
         id: get_version
         run: |
           cd "$SOURCE_DIR"
+          REF="${{ inputs.ref || github.ref_name }}"
           COUNT=$(git rev-list --count HEAD)
           HASH=$(git rev-parse --short HEAD)
           DATE=$(git log -1 --format=%cd --date=format:'%Y-%m-%d %H:%M')
           echo "VERSION=${COUNT}-${HASH} (${DATE})" >> $GITHUB_OUTPUT
+          echo "BRANCH=${REF}" >> $GITHUB_OUTPUT
 
       - name: Build and deploy
         env:
@@ -409,6 +411,7 @@ jobs:
           CFG_SKIP_COMPOSE_DOWN: ${{ needs.load-config.outputs.skip_compose_down }}
           CFG_AUTHELIA: ${{ needs.load-config.outputs.authelia }}
           SKULD_VERSION: ${{ steps.get_version.outputs.VERSION }}
+          SKULD_BRANCH: ${{ steps.get_version.outputs.BRANCH }}
           SECRET_TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           SECRET_MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY }}
           SECRET_MASSIVE_API_KEY_FLAT_FILES: ${{ secrets.MASSIVE_API_KEY_FLAT_FILES }}
@@ -438,6 +441,7 @@ jobs:
           MASSIVE_API_KEY=${SECRET_MASSIVE_API_KEY}
           MASSIVE_API_KEY_FLAT_FILES=${SECRET_MASSIVE_API_KEY_FLAT_FILES}
           SKULD_VERSION=${SKULD_VERSION}
+          SKULD_BRANCH=${SKULD_BRANCH}
           SKULD_ENV=${CFG_SKULD_ENV}
           POSTGRES_HOST=${CFG_POSTGRES_HOST}
           POSTGRES_DB=${CFG_POSTGRES_DB}
