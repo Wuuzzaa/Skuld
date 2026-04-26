@@ -1,0 +1,24 @@
+# Server / environment definitions for the SKULD CLI.
+#
+# Each entry maps a friendly name to the GitHub Actions environment
+# and the workflow inputs needed to target it.
+#
+# The CLI reads this file to translate e.g. "skuld deploy home" into
+# the correct `gh workflow run` call.
+
+repo: Wuuzzaa/Skuld
+
+environments:
+  production:
+    github_environment: production
+    description: "Hetzner production server"
+    default_branch: master
+    db_container: postgres_setup-db-1
+    compose_args: "-f docker-compose.yml"
+
+  home:
+    github_environment: home-server
+    description: "Home server (staging/test via Cloudflare Tunnel)"
+    default_branch: testsystem
+    db_container: skuld_staging_db
+    compose_args: "-f docker-compose.yml -f docker-compose.testing.yml"

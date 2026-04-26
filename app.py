@@ -34,6 +34,7 @@ multifactor_swingtrading = st.Page('pages/multifactor_swingtrading.py', title="M
 sector_rotation = st.Page('pages/sector_rotation.py', title="Sector Rotation")
 expected_value = st.Page('pages/expected_value.py', title="Expected Value")
 data_logs = st.Page("pages/data_change_logs.py", title="Data Logs")
+iron_condors = st.Page("pages/iron_condors.py", title="Iron Condors")
 symbolpage = st.Page("pages/symbolpage.py", title="Symbol Page")
 
 # Set up navigation
@@ -41,6 +42,7 @@ page = st.navigation(
     [
         analyst_prices,
         spreads,
+        iron_condors,
         marrieds,
         position_insurance,
         multifactor_swingtrading,
@@ -56,5 +58,10 @@ page.run()
 
 # Footer for all pages
 st.divider()
-st.caption(f"SKULD Option Viewer - Data analysis tool for option trading strategies. Version: {VERSION}")
+skuld_env = os.getenv('SKULD_ENV', '')
+skuld_branch = os.getenv('SKULD_BRANCH', '')
+footer_text = f"SKULD Option Viewer - Data analysis tool for option trading strategies. Version: {VERSION}"
+if skuld_branch and skuld_env != 'Production':
+    footer_text += f" | Branch: {skuld_branch}"
+st.caption(footer_text)
 

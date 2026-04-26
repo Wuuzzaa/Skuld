@@ -77,8 +77,7 @@ SELECT
     buy.iv AS buy_iv,
     buy.theta AS buy_theta,
     buy.option_open_interest AS buy_open_interest,
-    buy.expected_move AS buy_expected_move,
-    buy.day_volume AS buy_day_volume
+    buy.expected_move AS buy_expected_move
 FROM
     TargetOptions sell
 INNER JOIN
@@ -88,16 +87,8 @@ INNER JOIN
     AND sell.option_type = buy.option_type
     AND buy.strike = (
         CASE
-            WHEN :strategy_type = 'credit' THEN 
-                CASE
-                    WHEN sell.option_type = 'put' THEN sell.strike - :spread_width
-                    WHEN sell.option_type = 'call' THEN sell.strike + :spread_width
-                END
-            WHEN :strategy_type = 'debit' THEN
-                CASE
-                    WHEN sell.option_type = 'put' THEN sell.strike + :spread_width
-                    WHEN sell.option_type = 'call' THEN sell.strike - :spread_width
-                END
+            WHEN sell.option_type = 'put' THEN sell.strike - :spread_width
+            WHEN sell.option_type = 'call' THEN sell.strike + :spread_width
         END
     )
 WHERE

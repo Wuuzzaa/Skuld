@@ -1,423 +1,200 @@
 import pandas as pd
-import numpy as np
-from datetime import datetime
-from typing import Tuple, Dict, Any
-from config import NUM_SIMULATIONS, RANDOM_SEED, RISK_FREE_RATE
+import logging
+import os
+from typing import Dict, Any
 from src.decorator_log_function import log_function
-from src.monte_carlo_simulation import UniversalOptionsMonteCarloSimulator
+from src.options_utils import (
+    MULTIPLIER,
+    calculate_apdi,
+    create_earnings_warning,
+    format_strike,
+    format_expiration_date,
+    calculate_expected_value
+)
 
-# Constants
-MULTIPLIER = 100
-EARNINGS_WARNING_DAYS = 7
-DIVIDEND_YIELD = 0  # TODO: Insert the dividend from the symbol here
+# Setup logging
+logger = logging.getLogger(os.path.basename(__file__))
 
-# Column name constants
-COL_SYMBOL = 'symbol'
-COL_CLOSE = 'close'
-COL_STRIKE = 'strike'
-COL_OPTION_TYPE = 'option-type'
-COL_DELTA = 'delta'
-COL_PUTS = 'put'
-COL_CALLS = 'call'
+def _calculate_expected_value_for_symbol(row: pd.Series, strategy_type: str = 'credit', iv_correction: str = 'auto') -> Dict[str, Any]:
+    """Calculates the Expected Value and IV details for a single spread using Monte Carlo simulation."""
+    is_credit = strategy_type == 'credit'
+    
+    options = [
+        {
+            'strike': row['sell_strike'],
+            'premium': row['sell_last_option_price'],
+            'is_call': row['option_type'] == 'call',
+            'is_long': not is_credit  # In Debit Spread, the "sell" side from SQL is actually the bought one if we follow the naming
+        },
+        {
+            'strike': row['buy_strike'],
+            'premium': row['buy_last_option_price'],
+            'is_call': row['option_type'] == 'call',
+            'is_long': is_credit
+        }
+    ]
 
-
-def _calculate_expected_value_for_symbol(row: pd.Series) -> float:
-    monte_carlo_simulator = UniversalOptionsMonteCarloSimulator(
-        num_simulations=NUM_SIMULATIONS,
-        random_seed=RANDOM_SEED,
+    return calculate_expected_value(
         current_price=row['close'],
         dte=row['days_to_expiration'],
         volatility=row['sell_iv'],
-        risk_free_rate=RISK_FREE_RATE,
-        dividend_yield=DIVIDEND_YIELD,
+        options=options,
+        iv_correction=iv_correction,
+        return_details=True
     )
 
-    options = [
-        _create_option_config(row, is_sell=True),
-        _create_option_config(row, is_sell=False)
-    ]
+def _calculate_spread_metrics(df: pd.DataFrame, strategy_type: str = 'credit', iv_correction: str = 'auto') -> pd.DataFrame:
+    """Calculates all relevant metrics for the spreads."""
+    if df.empty:
+        return df
 
-    return monte_carlo_simulator.calculate_expected_value(options=options)
+    # Spread Width
+    df["spread_width"] = (df['sell_strike'] - df['buy_strike']).abs()
 
+    # Max Profit & Max Loss (BPR usually represents max loss for credit, but we clarify)
+    if strategy_type == 'credit':
+        # Credit Spread: Premium received
+        df["max_profit"] = MULTIPLIER * (df["sell_last_option_price"] - df["buy_last_option_price"])
+        # Buying Power Reduction (BPR) / Max Risk
+        df["bpr"] = df["spread_width"] * MULTIPLIER - df["max_profit"]
+    else:
+        # Debit Spread: Premium paid
+        # In Debit spreads, sell_strike is long and buy_strike is short
+        # Net Debit = Long Price - Short Price
+        df["max_loss"] = MULTIPLIER * (df["sell_last_option_price"] - df["buy_last_option_price"])
+        df["max_profit"] = (df["spread_width"] * MULTIPLIER) - df["max_loss"]
+        df["bpr"] = df["max_loss"]
+    
+    # Filter out negative profit spreads
+    df = df[df['max_profit'] > 0].copy()
+    if df.empty:
+        return df
 
-def _create_option_config(row: pd.Series, is_sell: bool) -> Dict[str, Any]:
-    """
-    Create option configuration dictionary for Monte Carlo simulation.
+    # Filter out negative BPR spreads
+    df = df[df['bpr'] > 0].copy()
+    if df.empty:
+        return df
 
-    Args:
-        row: DataFrame row containing options spread data
-        is_sell: True for sell option, False for buy option
+    # Profit to BPR ratio
+    df["profit_to_bpr"] = df["max_profit"] / df["bpr"]
 
-    Returns:
-        Dictionary with option configuration
-    """
-    prefix = 'sell_' if is_sell else 'buy_'
-    return {
-        'strike': row[f'{prefix}strike'],
-        'premium': row[f'{prefix}last_option_price'],
-        'is_call': row['option_type'] == COL_CALLS,
-        'is_long': not is_sell
-    }
+    # Spread Theta
+    if strategy_type == 'credit':
+        df["spread_theta"] = df["sell_theta"].fillna(0) - df["buy_theta"].fillna(0)
+    else:
+        # In Debit spreads, sell_strike is the LONG leg (closer to money), buy_strike is SHORT leg (further)
+        # Total Theta = Theta(Long) + Theta(Short)
+        # Long Theta is negative (time decay hurts), Short Theta is positive (time decay helps)
+        # In our SQL: sell_theta is from the long leg, buy_theta is from the short leg.
+        # So it should be: sell_theta (negative) + (-buy_theta) ? 
+        # Actually, option greeks in data are usually signed (negative for puts/calls theta).
+        # Short position flips the sign of the greek.
+        # Long Theta = sell_theta
+        # Short Theta = -buy_theta
+        df["spread_theta"] = df["sell_theta"].fillna(0) - df["buy_theta"].fillna(0)
 
+    # % Out-of-the-Money (OTM)
+    df["%_otm"] = (df["sell_strike"] - df["close"]).abs() / df["close"] * 100
 
-def _get_sell_options_by_delta_target(
-        df: pd.DataFrame,
-        delta_target: float
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    """
-    Find the sell options (put and call) per symbol by choosing the option
-    with the closest delta to the delta_target.
+    # Expected Value and IV Details
+    ev_results = df.apply(lambda r: _calculate_expected_value_for_symbol(r, strategy_type, iv_correction=iv_correction), axis=1)
+    df["expected_value"] = ev_results.apply(lambda x: x["expected_value"])
+    df["iv_correction_factor"] = ev_results.apply(lambda x: x["iv_correction_factor"])
 
-    For puts, the delta_target is automatically inverted to match the
-    negative delta values in the data.
+    # APDI
+    df["APDI"] = df.apply(lambda r: calculate_apdi(r["max_profit"], r["days_to_expiration"], r["bpr"]), axis=1)
+    df["APDI_EV"] = df.apply(lambda r: calculate_apdi(r["expected_value"], r["days_to_expiration"], r["bpr"]), axis=1)
 
-    Args:
-        df: DataFrame containing options data
-        delta_target: Target delta value (positive)
+    # Ensure Company name is handled correctly
+    if 'Company' in df.columns:
+        df["Company"] = df["Company"].replace("", None).fillna(df["symbol"])
+    else:
+        df["Company"] = df["symbol"]
 
-    Returns:
-        Tuple of (sell_puts, sell_calls) DataFrames
-    """
-    # Split into puts and calls
-    puts = df[df[COL_OPTION_TYPE] == COL_PUTS].copy()
-    calls = df[df[COL_OPTION_TYPE] == COL_CALLS].copy()
+    return df
 
-    # Invert delta_target for puts because put deltas are negative in the data
-    puts["delta_diff"] = (puts[COL_DELTA] - (-delta_target)).abs()
-    calls["delta_diff"] = (calls[COL_DELTA] - delta_target).abs()
+def _add_earnings_and_urls(df: pd.DataFrame, strategy_type: str = 'credit') -> pd.DataFrame:
+    """Adds earnings warnings and OptionStrat URLs."""
+    if df.empty:
+        return df
 
-    # Find the best matching option (smallest delta_diff) per symbol
-    sell_puts = puts.loc[puts.groupby(COL_SYMBOL)["delta_diff"].idxmin().dropna()]
-    sell_calls = calls.loc[calls.groupby(COL_SYMBOL)["delta_diff"].idxmin().dropna()]
+    df['earnings_date'] = pd.to_datetime(df['earnings_date'], errors='coerce')
+    df['expiration_date'] = pd.to_datetime(df['expiration_date'], errors='coerce')
 
-    return sell_puts, sell_calls
-
-
-def _add_buy_options(
-        df: pd.DataFrame,
-        sell_puts: pd.DataFrame,
-        sell_calls: pd.DataFrame,
-        spread_width: float
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    """
-    Find the long options based on the short options and spread width.
-
-    For puts: strike = sell_strike - spread_width
-    For calls: strike = sell_strike + spread_width
-
-    Note: Only perfect matching strikes (+/- spread_width) are selected.
-
-    Args:
-        df: DataFrame containing all options data
-        sell_puts: DataFrame containing selected sell puts
-        sell_calls: DataFrame containing selected sell calls
-        spread_width: Width of the spread in dollars
-
-    Returns:
-        Tuple of (put_spreads, call_spreads) DataFrames
-    """
-    puts = df[df[COL_OPTION_TYPE] == COL_PUTS].copy()
-    calls = df[df[COL_OPTION_TYPE] == COL_CALLS].copy()
-
-    # Merge for puts
-    put_spreads = sell_puts.merge(
-        puts,
-        how="left",
-        left_on=[COL_SYMBOL, COL_CLOSE, sell_puts[COL_STRIKE] - spread_width],
-        right_on=[COL_SYMBOL, COL_CLOSE, COL_STRIKE],
-        suffixes=("_sell", "_buy")
-    )
-
-    # Merge for calls
-    call_spreads = sell_calls.merge(
-        calls,
-        how="left",
-        left_on=[COL_SYMBOL, COL_CLOSE, sell_calls[COL_STRIKE] + spread_width],
-        right_on=[COL_SYMBOL, COL_CLOSE, COL_STRIKE],
-        suffixes=("_sell", "_buy")
-    )
-
-    return put_spreads, call_spreads
-
-
-def _calculate_spread_metrics(spreads: pd.DataFrame) -> pd.DataFrame:
-    # Calculate spread width
-    spreads["spread_width"] = abs(spreads['sell_strike'] - spreads['buy_strike'])
-
-    # Calculate max profit
-    spreads["max_profit"] = MULTIPLIER * (spreads["sell_last_option_price"] - spreads["buy_last_option_price"])
-
-    # Remove spreads without profit potential
-    spreads = spreads[spreads['max_profit'] > 0].reset_index(drop=True)
-
-    # Calculate buying power reduction (BPR)
-    spreads["bpr"] = spreads["spread_width"] * MULTIPLIER - spreads["max_profit"]
-
-    # Remove spreads with negative BPR
-    spreads = spreads[spreads['bpr'] > 0].reset_index(drop=True)
-
-    # Calculate profit-to-BPR ratio
-    spreads["profit_to_bpr"] = spreads["max_profit"] / spreads["bpr"]
-
-    # Calculate spread theta
-    spreads["spread_theta"] = spreads["sell_theta"] - spreads["buy_theta"]
-
-    # Calculate % Out-of-the-Money (OTM)
-    spreads["%_otm"] = abs(spreads["sell_strike"] - spreads["close"]) / spreads["close"] * 100
-
-    # Calculate expected value (computationally expensive)
-    spreads["expected_value"] = spreads.apply(
-        _calculate_expected_value_for_symbol,
+    df['earnings_warning'] = df.apply(
+        lambda r: create_earnings_warning(r['earnings_date'], r['expiration_date']), 
         axis=1
     )
+    df['optionstrat_url'] = df.apply(lambda r: _build_optionstrat_url(r, strategy_type), axis=1)
 
-    # Annualized Profit per Dollar Invested
-    spreads["APDI"] = (spreads["max_profit"] / spreads["days_to_expiration"] / spreads["bpr"]) * 36500
+    return df
 
-    # Annualized Profit per Dollar Invested with Expected Value as base instead of max profit
-    spreads["APDI_EV"] = (spreads["expected_value"] / spreads["days_to_expiration"] / spreads["bpr"]) * 36500
-
-    return spreads
-
-
-def _add_earnings_and_urls(spreads: pd.DataFrame) -> pd.DataFrame:
-    # Convert date fields to datetime
-    spreads['earnings_date'] = pd.to_datetime(
-        spreads['earnings_date'],
-        errors='coerce'
-    )
-    spreads['expiration_date'] = pd.to_datetime(
-        spreads['expiration_date'],
-        errors='coerce'
-    )
-
-    # Add earnings warning
-    spreads['earnings_warning'] = spreads.apply(_create_earnings_warning, axis=1)
-
-    # Generate OptionStrat URLs
-    if not spreads.empty:
-        spreads['optionstrat_url'] = spreads.apply(_build_optionstrat_url, axis=1)
+def _build_optionstrat_url(row: pd.Series, strategy_type: str = 'credit') -> str:
+    """Builds an OptionStrat URL for the spread."""
+    base_url = "https://optionstrat.com/build"
+    symbol = row['symbol'].upper()
+    date_str = format_expiration_date(row['expiration_date'])
+    opt_type = row['option_type'].lower()
+    
+    if strategy_type == 'credit':
+        if opt_type == 'put':
+            strategy = 'bull-put-spread'
+            lower_strike = min(row['sell_strike'], row['buy_strike'])
+            higher_strike = max(row['sell_strike'], row['buy_strike'])
+            options = f".{symbol}{date_str}P{format_strike(lower_strike)},-.{symbol}{date_str}P{format_strike(higher_strike)}"
+        else:
+            strategy = 'bear-call-spread'
+            lower_strike = min(row['sell_strike'], row['buy_strike'])
+            higher_strike = max(row['sell_strike'], row['buy_strike'])
+            options = f"-.{symbol}{date_str}C{format_strike(lower_strike)},.{symbol}{date_str}C{format_strike(higher_strike)}"
     else:
-        spreads['optionstrat_url'] = []
-
-    return spreads
-
-
-def _create_earnings_warning(row: pd.Series) -> str:
-    """
-    Create an earnings warning if earnings occur within EARNINGS_WARNING_DAYS
-    days before expiration.
-
-    Args:
-        row: DataFrame row containing earnings and expiration dates
-
-    Returns:
-        Warning string or empty string
-    """
-    if (pd.notna(row['earnings_date']) and
-            pd.notna(row['expiration_date']) and
-            row['earnings_date'] > pd.Timestamp.now()):
-
-        days_before_expiration = (
-                row['expiration_date'] - row['earnings_date']
-        ).days
-
-        # Warning only if earnings are before expiration and within warning period
-        if 0 <= days_before_expiration <= EARNINGS_WARNING_DAYS:
-            return f'⚠️ {days_before_expiration} days'
-
-    return ''
-
+        # Debit Spreads
+        if opt_type == 'call':
+            strategy = 'bull-call-spread'
+            # SQL: sell_strike is the closer ITM (buy), buy_strike is further OTM (sell)
+            options = f".{symbol}{date_str}C{format_strike(row['sell_strike'])},-.{symbol}{date_str}C{format_strike(row['buy_strike'])}"
+        else:
+            strategy = 'bear-put-spread'
+            options = f".{symbol}{date_str}P{format_strike(row['sell_strike'])},-.{symbol}{date_str}P{format_strike(row['buy_strike'])}"
+        
+    return f"{base_url}/{strategy}/{symbol}/{options}"
 
 @log_function
-def calc_spreads(
-        df: pd.DataFrame,
-) -> pd.DataFrame:
+def calc_spreads(df: pd.DataFrame, strategy_type: str = 'credit', iv_correction: str = 'auto') -> pd.DataFrame:
+    """Main calculation entry point for spreads."""
     if df.empty:
-        raise ValueError("Input DataFrame is empty no data")
-
-    # Calculate spread metrics
-    df = _calculate_spread_metrics(df)
-
-    # Add earnings warnings and URLs
-    df = _add_earnings_and_urls(df)
-
+        return df
+    
+    df = _calculate_spread_metrics(df, strategy_type, iv_correction=iv_correction)
+    df = _add_earnings_and_urls(df, strategy_type)
+    
     return df
 
-def get_page_spreads(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Use this for the Frontend. It calculates the spreads and get rid of not needed columns in the frontend.
-    """
-    df = calc_spreads(df)
+def get_page_spreads(df: pd.DataFrame, strategy_type: str = 'credit', iv_correction: str = 'auto') -> pd.DataFrame:
+    """Prepares the DataFrame for display in the frontend."""
+    if df.empty:
+        return df
+        
+    df = calc_spreads(df, strategy_type, iv_correction=iv_correction)
+    
+    if df.empty:
+        return df
 
     columns = [
-            #############
-            # symbol data
-            #############
-            'symbol',
-            'earnings_date',
-            'earnings_warning',
-            'close',
-            'analyst_mean_target',
-            # 'recommendation', #todo replace later with own recommendation based on technical indicators
-            "company_industry",
-            "company_sector",
-            "historical_volatility_30d",
-            "iv_rank",
-            "iv_percentile",
-            #'days_to_expiration',
-            'days_to_earnings',
-            #############
-            # sell option data
-            #############
-            'sell_strike',
-            'sell_last_option_price',
-            'sell_delta',
-            'sell_iv',
-            '%_otm',
-            #'sell_theta',
-            #'sell_open_interest',
-            'sell_expected_move',
-            "sell_day_volume",
-            #############
-            # buy option data
-            #############
-            'buy_strike',
-            'buy_last_option_price',
-            'buy_delta',
-            #'buy_iv',
-            #'buy_theta',
-            #'buy_open_interest',
-            #'buy_expected_move',
-            #############
-            # spread data
-            #############
-            #'spread_width',
-            'max_profit',
-            'bpr',
-            'profit_to_bpr',
-            #'spread_theta',
-            'expected_value',
-            'APDI',
-            'APDI_EV',
-            'optionstrat_url',
-
-            # needed for the ai promt drop later in the page :D
-            'option_type',
-            'expiration_date',
+        'symbol', 'Company', 'earnings_date', 'earnings_warning', 'close', 
+        'analyst_mean_target', 'company_industry', 'company_sector', 
+        'historical_volatility_30d', 'iv_rank', 'iv_percentile',
+        'spread_width', 'max_profit', 'bpr', 'profit_to_bpr', 'spread_theta', 
+        'expected_value', 'iv_correction_factor', 'APDI', 'APDI_EV', 'optionstrat_url',
+        'sell_strike', 'sell_last_option_price', 'sell_delta', 'sell_iv', '%_otm', 
+        'sell_theta', 'sell_open_interest', 'sell_expected_move', 'sell_day_volume',
+        'buy_strike', 'buy_last_option_price', 'buy_delta', 'buy_iv', 'buy_theta', 
+        'buy_open_interest', 'buy_expected_move', 'buy_day_volume',
+        'option_type', 'expiration_date', 'days_to_expiration', 'days_to_earnings'
     ]
-    df = df[columns]
-    pass
-
-
-    return df
-
-
-def _build_optionstrat_url(row: pd.Series) -> str:
-    """
-    Build an OptionStrat URL for the given spread.
-
-    Works for both Bull Put Spreads and Bear Call Spreads.
-
-    Args:
-        row: DataFrame row containing spread information
-
-    Returns:
-        Complete OptionStrat URL as string
-
-    Examples:
-        Bull Put: https://optionstrat.com/build/bull-put-spread/KO/.KO260220P57.5,-.KO260220P70
-        Bear Call: https://optionstrat.com/build/bear-call-spread/KO/-.KO260220C57.5,.KO260220C70
-    """
-    base_url = "https://optionstrat.com/build"
-
-    symbol = row['symbol'].upper()
-    date_str = _format_expiration_date(row['expiration_date'])
-    opt_type_str = row['option_type'].lower()
-
-    if opt_type_str == COL_PUTS:
-        strategy = 'bull-put-spread'
-        options_string = _build_put_spread_options(row, symbol, date_str)
-    else:  # calls
-        strategy = 'bear-call-spread'
-        options_string = _build_call_spread_options(row, symbol, date_str)
-
-    return f"{base_url}/{strategy}/{symbol}/{options_string}"
-
-
-def _format_expiration_date(exp_date: Any) -> str:
-    """
-    Format expiration date to YYMMDD string.
-
-    Args:
-        exp_date: Date as string or datetime object
-
-    Returns:
-        Formatted date string (YYMMDD)
-    """
-    if isinstance(exp_date, str):
-        exp_date = datetime.strptime(exp_date, '%Y-%m-%d')
-
-    return exp_date.strftime('%y%m%d')
-
-
-def _format_strike(strike: float) -> str:
-    """
-    Format strike price, removing unnecessary decimals.
-
-    Args:
-        strike: Strike price
-
-    Returns:
-        Formatted strike as string (68.0 -> "68", 57.5 -> "57.5")
-    """
-    return str(int(strike)) if strike == int(strike) else str(strike)
-
-
-def _build_put_spread_options(row: pd.Series, symbol: str, date_str: str) -> str:
-    """
-    Build options string for Bull Put Spread.
-
-    Bull Put: Sell LOWER strike, Buy HIGHER strike
-
-    Args:
-        row: DataFrame row with strike information
-        symbol: Ticker symbol
-        date_str: Formatted expiration date
-
-    Returns:
-        Options string for URL
-    """
-    lower_strike = min(row['sell_strike'], row['buy_strike'])
-    higher_strike = max(row['sell_strike'], row['buy_strike'])
-
-    first_option = f".{symbol}{date_str}P{_format_strike(lower_strike)}"
-    second_option = f"-.{symbol}{date_str}P{_format_strike(higher_strike)}"
-
-    return f"{first_option},{second_option}"
-
-
-def _build_call_spread_options(row: pd.Series, symbol: str, date_str: str) -> str:
-    """
-    Build options string for Bear Call Spread.
-
-    Bear Call: Buy LOWER strike, Sell HIGHER strike
-
-    Args:
-        row: DataFrame row with strike information
-        symbol: Ticker symbol
-        date_str: Formatted expiration date
-
-    Returns:
-        Options string for URL
-    """
-    lower_strike = min(row['sell_strike'], row['buy_strike'])
-    higher_strike = max(row['sell_strike'], row['buy_strike'])
-
-    first_option = f"-.{symbol}{date_str}C{_format_strike(lower_strike)}"
-    second_option = f".{symbol}{date_str}C{_format_strike(higher_strike)}"
-
-    return f"{first_option},{second_option}"
+    
+    existing_columns = [col for col in columns if col in df.columns]
+    return df[existing_columns]
 
 if __name__ == "__main__":
     """
@@ -428,7 +205,6 @@ if __name__ == "__main__":
     import logging
     from src.logger_config import setup_logging
     from src.database import select_into_dataframe
-    from util import get_dataframe_memory_usage # keep for debugging
 
     # enable logging
     setup_logging(component="script_spreads_calculation", log_level=logging.DEBUG, console_output=True)

@@ -22,13 +22,16 @@ def _add_claude_analysis_link(df: pd.DataFrame, page=None) -> pd.DataFrame:
         df['Claude'] = df.apply(_create_claude_prompt_default, axis=1)
     elif page == 'spreads':
         df['Claude'] = df.apply(_create_claude_prompt_page_spreads, axis=1)
+    elif page == 'iron_condors':
+        df['Claude'] = df.apply(_create_claude_prompt_page_iron_condors, axis=1)
     else:
         raise ValueError('Page not recognized')
     return df
 
-def _create_claude_prompt_page_spreads(row):
-    prompt = f"""
-Erstelle eine kompakte Aktienanalyse für {row['symbol']}:
+def _get_claude_prompt_header(symbol, company=None):
+    company_info = f" ({company})" if company else ""
+    return f"""
+Erstelle eine kompakte Aktienanalyse für {symbol}{company_info}:
 Unternehmen: Geschäftsmodell und Branche (1-2 Sätzen):
 
 Aktuelle News: Wichtigste Entwicklungen der letzten 4 Wochen
@@ -40,28 +43,51 @@ Aktuelles Kursziel (Analystenkonsens)
 Eigenes Kursziel durch Fundamentaldaten, News, Technische Analyse State of the Art.
 Wichtigste Chance und größtes Risiko. 
 
-Beurteile folgende Strategie mit Optionen für {row['symbol']} (So viele Sätze wie nötig): 
+Beurteile folgende Strategie mit Optionen für {symbol} (So viele Sätze wie nötig): 
 Gehe besonders auf die Gewinnwahrscheinlichkeit ein. Kombiniere hier fundamental, news, Vola technische indikatoren auf 
 maximalem Expertenwissen und gebe eine klare Empfehlung Strategie umsetzen oder nicht ab. 
 Begründe deine Entscheidung nachvollziehbar mit KPIs.
+"""
 
+def _get_claude_prompt_footer():
+    return """
+Format: Prägnant, faktenbasiert, keine Füllwörter, max. eine Seite.
+Rolle: Aktien und Finanzexperte.
+"""
+
+def _create_claude_prompt_page_spreads(row):
+    prompt = _get_claude_prompt_header(row['symbol'], row.get('Company'))
+    prompt += f"""
 Verkaufe einen {row['option_type']} Strike {row['sell_strike']} für eine Prämie von {row['sell_last_option_price']} bei einem Delta 
 von {row['sell_delta']}. Kaufe einen {row['option_type']} mit Strike {row['buy_strike']}
 für eine Prämie von {row['buy_last_option_price']}. Expirationdate ist jeweils {row['expiration_date']}
-
-Format: Prägnant, faktenbasiert, keine Füllwörter, max. eine Seite.
-Rolle: Aktien und Finanzexperte.
-    """
+"""
+    prompt += _get_claude_prompt_footer()
 
     # URL-encode the prompt
-    encoded_prompt = urllib.parse.quote(prompt)
+    encoded_prompt = urllib.parse.quote(prompt.strip())
+    return f'https://claude.ai/new?q={encoded_prompt}'
+
+def _create_claude_prompt_page_iron_condors(row):
+    prompt = _get_claude_prompt_header(row['symbol'], row.get('Company'))
+    prompt += f"""
+Iron Condor Strategie:
+Put-Seite: Verkauf Strike {row['sell_strike_put']} (Delta {row['sell_delta_put']}), Kauf Strike {row['buy_strike_put']}. Expiration: {row['expiration_date_put']}
+Call-Seite: Verkauf Strike {row['sell_strike_call']} (Delta {row['sell_delta_call']}), Kauf Strike {row['buy_strike_call']}. Expiration: {row['expiration_date_call']}
+"""
+    prompt += _get_claude_prompt_footer()
+
+    # URL-encode the prompt
+    encoded_prompt = urllib.parse.quote(prompt.strip())
     return f'https://claude.ai/new?q={encoded_prompt}'
 
 def _create_claude_prompt_default(row):
     symbol = row['symbol']
+    company = row.get('Company')
+    company_info = f" ({company})" if company else ""
 
     prompt = f"""
-Erstelle eine kompakte Aktienanalyse für {symbol}:
+Erstelle eine kompakte Aktienanalyse für {symbol}{company_info}:
 Unternehmen: Geschäftsmodell und Branche in 1-2 Sätzen
 Aktuelle News: Wichtigste Entwicklungen der letzten 4 Wochen
 Anstehende Events: Earnings, Produktlaunches oder relevante Termine
@@ -84,7 +110,9 @@ def page_display_dataframe(
         df: pd.DataFrame,
         page: str | None = None,
         symbol_column: str = 'symbol',
-        column_config: dict | None = None
+        column_config: dict | None = None,
+        on_select: str = "ignore",
+        selection_mode: str = "multi-row"
 ):
     """
     Displays DataFrame with TradingView links configured.
@@ -96,14 +124,55 @@ def page_display_dataframe(
         column_config: Optional dictionary of column configurations to merge with TradingView config.
                         These settings have higher priority than the default settings.
         page: String with the name of the page. Used for selecting the optimal prompt.
+        on_select: Streamlit on_select behavior ("ignore", "rerun", or callable)
+        selection_mode: Streamlit selection mode ("single-row", "multi-row")
     """
-    df = _add_tradingview_link(df, symbol_column)
-    df = _add_tradingview_superchart_link(df, symbol_column)
-    df = _add_claude_analysis_link(df, page)
+    df_to_display = df.copy()
+    df_to_display = _add_tradingview_link(df_to_display, symbol_column)
+    df_to_display = _add_tradingview_superchart_link(df_to_display, symbol_column)
+    df_to_display = _add_claude_analysis_link(df_to_display, page)
 
     if page == "spreads":
         # drop unnecessary columns which where needed for the AI prompt generation
-        df = df.drop(columns=['option_type', 'expiration_date'])
+        cols_to_drop = [
+            'option_type', 'expiration_date',
+            'sell_strike', 'sell_last_option_price', 'sell_delta', 'sell_iv',
+            '%_otm', 'sell_theta', 'sell_open_interest', 'sell_expected_move',
+            'sell_day_volume', 'buy_strike', 'buy_last_option_price', 'buy_delta',
+            'buy_iv', 'buy_theta', 'buy_open_interest', 'buy_expected_move',
+            'company_industry', 'company_sector', 'historical_volatility_30d',
+            'days_to_earnings', 'analyst_mean_target', 'spread_theta',
+            'TradingView', 'Chart', 'Claude', 'optionstrat_url'
+        ]
+        # Only drop columns that exist to avoid errors
+        cols_to_drop = [c for c in cols_to_drop if c in df_to_display.columns]
+        df_to_display = df_to_display.drop(columns=cols_to_drop)
+    elif page == "iron_condors":
+        # drop unnecessary columns which where needed for the AI prompt generation
+        cols_to_drop = [
+            'sell_delta_put', 'sell_delta_call', 
+            'expiration_date_put', 'expiration_date_call',
+            'close_call',
+            'sell_strike_put', 'buy_strike_put',
+            'sell_strike_call', 'buy_strike_call',
+            'sell_last_option_price_put', 'buy_last_option_price_put',
+            'sell_last_option_price_call', 'buy_last_option_price_call',
+            'sell_iv_put', 'buy_iv_put', 'sell_iv_call', 'buy_iv_call',
+            'sell_theta_put', 'buy_theta_put', 'sell_theta_call', 'buy_theta_call',
+            'sell_open_interest_put', 'buy_open_interest_put',
+            'sell_open_interest_call', 'buy_open_interest_call',
+            'buy_delta_put', 'buy_delta_call',
+            'sell_day_volume_put', 'buy_day_volume_put',
+            'sell_day_volume_call', 'buy_day_volume_call',
+            'sell_expected_move_put', 'buy_expected_move_put',
+            'sell_expected_move_call', 'buy_expected_move_call',
+            'historical_volatility_30d_put', 'industry', 'sector',
+            'analyst_target', 'total_theta',
+            'TradingView', 'Chart', 'Claude', 'optionstrat_url'
+        ]
+        # Only drop columns that exist to avoid errors
+        cols_to_drop = [c for c in cols_to_drop if c in df_to_display.columns]
+        df_to_display = df_to_display.drop(columns=cols_to_drop)
 
     # default configuration
     default_config = {
@@ -125,15 +194,15 @@ def page_display_dataframe(
     }
 
     # Auto-format all float columns to 2 decimal places
-    for col in df.columns:
-        if df[col].dtype in ['float64', 'float32']:
+    for col in df_to_display.columns:
+        if df_to_display[col].dtype in ['float64', 'float32']:
             default_config[col] = st.column_config.NumberColumn(
                 col,
                 format="%.2f"
             )
 
     # Apply styling: alternating row backgrounds
-    styled_df = df.style.apply(
+    styled_df = df_to_display.style.apply(
         lambda x: ['background-color: #1e1e1e' if i % 2 == 0 else 'background-color: #2a2a2a'
                    for i in range(len(x))],
         axis=0
@@ -142,7 +211,7 @@ def page_display_dataframe(
     # Color negative numbers red
     styled_df = styled_df.map(
         lambda val: 'color: #ff4444' if isinstance(val, (int, float)) and val < 0 else '',
-        subset=df.select_dtypes(include=['number']).columns
+        subset=df_to_display.select_dtypes(include=['number']).columns
     )
 
     # Merge with provided column_config if exists.
@@ -150,10 +219,12 @@ def page_display_dataframe(
     if column_config:
         default_config.update(column_config)
 
-    st.dataframe(
+    return st.dataframe(
         styled_df,
         column_config=default_config,
         hide_index=True,
         width="stretch",
+        on_select=on_select,
+        selection_mode=selection_mode
         #height="content",
     )
