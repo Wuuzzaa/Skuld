@@ -478,10 +478,11 @@ jobs:
           AUEOF
           fi
 
-          # ── Restart Authelia if secrets were written and we're doing a partial deploy ──
+          # ── Recreate Authelia if enabled and we're doing a partial deploy ──
+          # Force-recreate ensures new labels (ForwardAuth definition) are applied.
           if ( [ "${CFG_AUTHELIA}" = "true" ] || [ "${CFG_AUTHELIA}" = "True" ] ) && [ -n "${CFG_DEPLOY_SERVICES}" ]; then
-            echo "=== Restarting Authelia to pick up secrets ==="
-            docker restart authelia 2>/dev/null || true
+            echo "=== Recreating Authelia to pick up secrets and labels ==="
+            docker compose ${COMPOSE_ARGS} up -d --no-deps --force-recreate authelia
           fi
 
           set -x
