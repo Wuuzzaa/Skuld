@@ -462,7 +462,7 @@ jobs:
           done
 
           # ── Authelia secrets ──
-          if [ "${CFG_AUTHELIA}" = "true" ] && [ -z "${CFG_DEPLOY_SERVICES}" ]; then
+          if [ "${CFG_AUTHELIA}" = "true" ] || [ "${CFG_AUTHELIA}" = "True" ]; then
             echo "=== Creating Authelia configuration ==="
             mkdir -p authelia
             echo "${SECRET_AUTHELIA_JWT}" > authelia/jwt_secret
@@ -478,6 +478,12 @@ jobs:
                 - admins
                 - dev
           AUEOF
+          fi
+
+          # ── Restart Authelia if secrets were written and we're doing a partial deploy ──
+          if ( [ "${CFG_AUTHELIA}" = "true" ] || [ "${CFG_AUTHELIA}" = "True" ] ) && [ -n "${CFG_DEPLOY_SERVICES}" ]; then
+            echo "=== Restarting Authelia to pick up secrets ==="
+            docker restart authelia 2>/dev/null || true
           fi
 
           set -x
