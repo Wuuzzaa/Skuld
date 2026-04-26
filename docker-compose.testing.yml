@@ -30,29 +30,21 @@ services:
       postgres:
         condition: service_healthy
     labels:
-      # Define a dedicated Staging Router with higher priority to override the base one
-      # We skip the 'enable=false' trick because it's prone to failure
       # Define a dedicated Staging Router by overriding the base 'skuld' router
       - "traefik.http.routers.skuld.rule=Host(`test.skuld-options.com`)"
       - "traefik.http.routers.skuld.entrypoints=web"
-      
-      # Ensure middleware is attached (overriding base if needed)
-      # We chain 'force-https' BEFORE 'authelia' so Authelia sees the correct proto
-      - "traefik.http.routers.skuld.middlewares=force-https,authelia"
+
+      # No Authelia middleware on staging — direct access
+      - "traefik.http.routers.skuld.middlewares=force-https"
 
       # Explicitly disable TLS on this router just in case
       - "traefik.http.routers.skuld.tls=false"
 
       # Networking Fixes
       - "traefik.docker.network=web"
-      
+
       # Middleware: Force HTTPS Scheme (Fix for Cloudflare Tunnel -> HTTP Traefik)
       - "traefik.http.middlewares.force-https.headers.customrequestheaders.X-Forwarded-Proto=https"
-
-      # Override Authelia Middleware to allow HTTP scheme check bypass
-      # We tell Authelia to redirect back to HTTPS (public URL)
-      - "traefik.http.middlewares.authelia.forwardauth.address=http://authelia:9091/api/verify?rd=https://${AUTH_DOMAIN}/"
-      - "traefik.http.middlewares.authelia.forwardauth.trustForwardHeader=true"
 
   authelia:
     labels:
