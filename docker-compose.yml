@@ -83,13 +83,15 @@ services:
       - "${TRAEFIK_CERTRESOLVER_LABEL_SKULD}"
       - "traefik.http.services.skuld.loadbalancer.server.port=8501"
 
-      # Authelia ForwardAuth Middleware
+      # Authelia ForwardAuth Middleware definition
       - "traefik.http.middlewares.authelia.forwardauth.address=http://authelia:9091/api/verify?rd=${AUTH_SCHEME}://${AUTH_DOMAIN}/"
       - "traefik.http.middlewares.authelia.forwardauth.trustForwardHeader=true"
       - "traefik.http.middlewares.authelia.forwardauth.authResponseHeaders=Remote-User,Remote-Groups,Remote-Name,Remote-Email"
 
-      # Apply Authelia Middleware
-      - "traefik.http.routers.skuld.middlewares=authelia"
+      # Middleware assignment: controlled via SKULD_MIDDLEWARES env var
+      # Production: SKULD_MIDDLEWARES=authelia  -> applies auth
+      # Staging:    SKULD_MIDDLEWARES=          -> no middleware (set via testing.yml override)
+      - "traefik.http.routers.skuld.middlewares=${SKULD_MIDDLEWARES:-authelia}"
 
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8501/_stcore/health" ]

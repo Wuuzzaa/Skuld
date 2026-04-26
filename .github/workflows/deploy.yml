@@ -109,6 +109,7 @@ jobs:
       auth_scheme: ${{ steps.parse.outputs.auth_scheme }}
       authelia: ${{ steps.parse.outputs.authelia }}
       skuld_env: ${{ steps.parse.outputs.skuld_env }}
+      skuld_middlewares: ${{ steps.parse.outputs.skuld_middlewares }}
       deploy_services: ${{ steps.parse.outputs.deploy_services }}
       skip_compose_down: ${{ steps.parse.outputs.skip_compose_down }}
       postgres_host: ${{ steps.parse.outputs.postgres_host }}
@@ -403,6 +404,7 @@ jobs:
           CFG_POSTGRES_PORT: ${{ needs.load-config.outputs.postgres_port }}
           CFG_DB_CONTAINER: ${{ needs.load-config.outputs.db_container }}
           CFG_SKULD_ENV: ${{ needs.load-config.outputs.skuld_env }}
+          CFG_SKULD_MIDDLEWARES: ${{ needs.load-config.outputs.skuld_middlewares }}
           CFG_DEPLOY_SERVICES: ${{ needs.load-config.outputs.deploy_services }}
           CFG_SKIP_COMPOSE_DOWN: ${{ needs.load-config.outputs.skip_compose_down }}
           CFG_AUTHELIA: ${{ needs.load-config.outputs.authelia }}
@@ -442,6 +444,7 @@ jobs:
           POSTGRES_USER=${CFG_POSTGRES_USER}
           POSTGRES_PASSWORD=${SECRET_POSTGRES_PASSWORD}
           POSTGRES_PORT=${CFG_POSTGRES_PORT}
+          SKULD_MIDDLEWARES=${CFG_SKULD_MIDDLEWARES}
           ENVEOF
 
           # Validate critical DB vars
@@ -592,6 +595,7 @@ jobs:
              CFG_POSTGRES_PORT='${CFG_POSTGRES_PORT}' \
              CFG_DB_CONTAINER='${CFG_DB_CONTAINER}' \
              CFG_SKULD_ENV='${CFG_SKULD_ENV}' \
+             CFG_SKULD_MIDDLEWARES='${CFG_SKULD_MIDDLEWARES}' \
              CFG_DEPLOY_SERVICES='${CFG_DEPLOY_SERVICES}' \
              CFG_SKIP_COMPOSE_DOWN='${CFG_SKIP_COMPOSE_DOWN}' \
              CFG_AUTHELIA='${CFG_AUTHELIA}' \

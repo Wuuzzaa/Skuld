@@ -26,6 +26,7 @@ production:
   certresolver_authelia: "traefik.http.routers.authelia.tls.certresolver=letsencrypt"
   auth_scheme: https
   authelia: "true"
+  skuld_middlewares: "authelia"
   skuld_env: Production
   deploy_services: ""
   skip_compose_down: "false"
@@ -48,6 +49,7 @@ home:
   certresolver_authelia: "traefik.enable=true"
   auth_scheme: http
   authelia: "true"
+  skuld_middlewares: ""
   skuld_env: Staging
   deploy_services: "skuld-frontend skuld-backend"
   skip_compose_down: "true"
