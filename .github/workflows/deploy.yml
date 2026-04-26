@@ -548,7 +548,7 @@ jobs:
 
           echo "=== Starting containers ==="
           if [ -n "${CFG_DEPLOY_SERVICES}" ]; then
-            docker compose ${COMPOSE_ARGS} up -d --no-deps ${CFG_DEPLOY_SERVICES}
+            docker compose ${COMPOSE_ARGS} up -d --no-deps --force-recreate ${CFG_DEPLOY_SERVICES}
             # Restart Traefik so it picks up new container labels
             echo "=== Restarting Traefik to pick up label changes ==="
             docker restart traefik_staging 2>/dev/null || docker restart traefik 2>/dev/null || true
