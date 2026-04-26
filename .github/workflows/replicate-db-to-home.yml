@@ -1,32 +1,31 @@
 name: "Replicate DB To Home"
 
 # ============================================================================
-# Explicit cross-environment workflow to copy the latest backup from a chosen
-# source environment to the home server and restore it into the staging
-# database container.
+# Copy the latest DB backup from a source environment to the home server.
 #
-# This is intentionally separate from trigger-jobs.yml so production deploys,
-# home deploys, and source-to-home database restores stay easy to reason about
-# in the GitHub Actions UI.
+# Runs entirely on the self-hosted runner (home server):
+#   1. SCP backup directly from source server to local /tmp/
+#   2. Restore into the local staging DB container
+#
+# No GitHub Environments needed — uses Repository Secrets + environments.yaml.
 # ============================================================================
 
 on:
   workflow_dispatch:
     inputs:
-      source_environment:
-        description: "Source environment for the backup"
+      source:
+        description: "Source environment to pull DB from"
         required: true
         type: choice
         options:
           - production
-          - dev-hetzner
         default: production
       backup_path:
-        description: "Optional absolute backup path on the source server (default: latest backup)"
+        description: "Optional: specific backup path on source (default: latest)"
         required: false
         default: ""
       restart_app:
-        description: "Restart frontend/backend on home server after restore"
+        description: "Restart frontend/backend after restore"
         type: boolean
         default: true
       confirm_restore:
@@ -35,128 +34,141 @@ on:
         default: ""
 
 jobs:
-  validate:
-    name: Validate request
-    runs-on: ubuntu-latest
+  replicate:
+    name: "Replicate DB: ${{ inputs.source }} → home"
+    runs-on: self-hosted
+    timeout-minutes: 120
     steps:
-      - name: Confirm destructive restore intent
+      - name: Validate confirmation
         run: |
           if [ "${{ inputs.confirm_restore }}" != "RESTORE_HOME_DB" ]; then
-            echo "Confirmation missing. Type RESTORE_HOME_DB to run this workflow." >&2
+            echo "::error::Confirmation missing. Set confirm_restore=RESTORE_HOME_DB."
             exit 1
           fi
 
-  fetch_backup:
-    name: Fetch source backup
-    needs: validate
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.source_environment }}
-    outputs:
-      backup_file_name: ${{ steps.select_backup.outputs.backup_file_name }}
-      backup_remote_path: ${{ steps.select_backup.outputs.backup_remote_path }}
-    steps:
+      - name: Checkout for config
+        uses: actions/checkout@v4
+
+      - name: Load config
+        id: config
+        run: |
+          python3 - "${{ inputs.source }}" <<'PYEOF'
+          import yaml, sys, os
+          source = sys.argv[1]
+          with open("ops/environments.yaml") as f:
+              cfg = yaml.safe_load(f)
+
+          src = cfg[source]
+          home = cfg["home"]
+          gh = os.environ.get("GITHUB_OUTPUT", "/dev/null")
+          with open(gh, "a") as out:
+              out.write(f"source_host={src['host']}\n")
+              out.write(f"source_user={src['user']}\n")
+              out.write(f"home_db_container={home['db_container']}\n")
+              out.write(f"home_compose_args={home['compose_args']}\n")
+              out.write(f"home_telegram_chat_id={home['telegram_chat_id']}\n")
+          PYEOF
+
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
           printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" | tr -d '\r' > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
 
-      - name: Select backup on source server
-        id: select_backup
+      - name: Find latest backup on source
+        id: find_backup
         run: |
+          SOURCE_HOST="${{ steps.config.outputs.source_host }}"
+          SOURCE_USER="${{ steps.config.outputs.source_user }}"
           REQUESTED_PATH="${{ inputs.backup_path }}"
 
           if [ -n "$REQUESTED_PATH" ]; then
             BACKUP_PATH="$REQUESTED_PATH"
           else
             BACKUP_PATH=$(ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-              ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+              ${SOURCE_USER}@${SOURCE_HOST} \
               'ls -t ~/backups/postgres/skuld_*.sql.gz ~/backups/postgres/skuld_manual_*.sql.gz 2>/dev/null | head -n 1')
           fi
 
           if [ -z "$BACKUP_PATH" ]; then
-            echo "No backup found on source environment ${{ inputs.source_environment }}." >&2
+            echo "::error::No backup found on ${{ inputs.source }}."
             exit 1
           fi
 
-          echo "backup_remote_path=$BACKUP_PATH" >> $GITHUB_OUTPUT
-          echo "backup_file_name=$(basename "$BACKUP_PATH")" >> $GITHUB_OUTPUT
-          echo "## Selected source backup" >> $GITHUB_STEP_SUMMARY
-          echo "Source environment: ${{ inputs.source_environment }}" >> $GITHUB_STEP_SUMMARY
-          echo "$BACKUP_PATH" >> $GITHUB_STEP_SUMMARY
+          BACKUP_NAME=$(basename "$BACKUP_PATH")
+          echo "backup_path=$BACKUP_PATH" >> $GITHUB_OUTPUT
+          echo "backup_name=$BACKUP_NAME" >> $GITHUB_OUTPUT
+          echo "Found backup: $BACKUP_PATH"
 
-      - name: Download backup from source server
+      - name: Download backup from source
         run: |
+          echo "Downloading ${{ steps.find_backup.outputs.backup_name }} from ${{ inputs.source }}..."
           scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ steps.select_backup.outputs.backup_remote_path }} \
-            ./${{ steps.select_backup.outputs.backup_file_name }}
+            ${{ steps.config.outputs.source_user }}@${{ steps.config.outputs.source_host }}:${{ steps.find_backup.outputs.backup_path }} \
+            /tmp/${{ steps.find_backup.outputs.backup_name }}
 
-      - name: Upload backup artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: source-db-backup
-          path: ./${{ steps.select_backup.outputs.backup_file_name }}
-          if-no-files-found: error
-          retention-days: 1
+          FILESIZE=$(du -h /tmp/${{ steps.find_backup.outputs.backup_name }} | cut -f1)
+          echo "Downloaded: ${FILESIZE}"
 
-  restore_home:
-    name: Restore backup on home server
-    needs: fetch_backup
-    runs-on: self-hosted
-    environment: home-server
-    steps:
-      - name: Download backup artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: source-db-backup
-
-      - name: Setup SSH key
+      - name: Stop app containers
+        if: ${{ inputs.restart_app }}
         run: |
-          mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" | tr -d '\r' > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
+          sudo docker stop skuld-frontend skuld-backend 2>/dev/null || true
 
-      - name: Copy backup to home server
+      - name: Restore backup
         run: |
-          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-            ./${{ needs.fetch_backup.outputs.backup_file_name }} \
-            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/${{ needs.fetch_backup.outputs.backup_file_name }}
-
-      - name: Restore backup on home server
-        run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} 'bash -s' <<EOF
           set -euo pipefail
+          DB_CONTAINER="${{ steps.config.outputs.home_db_container }}"
+          BACKUP_FILE="/tmp/${{ steps.find_backup.outputs.backup_name }}"
 
-          BACKUP_FILE="/tmp/${{ needs.fetch_backup.outputs.backup_file_name }}"
-          RESTART_APP="${{ inputs.restart_app }}"
-
-          if [ "\$RESTART_APP" = "true" ]; then
-            docker stop skuld-frontend skuld-backend || true
-          fi
-
-          echo "Dropping and recreating Skuld database on home server..."
+          echo "Dropping and recreating Skuld database..."
           echo 'DROP DATABASE IF EXISTS "Skuld"; CREATE DATABASE "Skuld";' | \
-            docker exec -i skuld_staging_db psql -U admin -d postgres
+            sudo docker exec -i "$DB_CONTAINER" psql -U admin -d postgres
 
-          echo "Restoring backup into home-server database..."
-          gzip -dc "\$BACKUP_FILE" | docker exec -i skuld_staging_db psql -U admin -d Skuld
+          echo "Restoring backup (this may take a while for large dumps)..."
+          gzip -dc "$BACKUP_FILE" | sudo docker exec -i "$DB_CONTAINER" psql -U admin -d Skuld
 
-          rm -f "\$BACKUP_FILE"
+          echo "Cleaning up temp file..."
+          rm -f "$BACKUP_FILE"
 
-          if [ "\$RESTART_APP" = "true" ]; then
-            docker start schuld-backend schuld-frontend 2>/dev/null || true
-            docker start skuld-backend skuld-frontend 2>/dev/null || true
+          echo "Restore complete."
+
+      - name: Start app containers
+        if: ${{ inputs.restart_app }}
+        run: |
+          sudo docker start skuld-backend skuld-frontend 2>/dev/null || true
+
+      - name: Verify DB connectivity
+        run: |
+          sudo docker exec ${{ steps.config.outputs.home_db_container }} \
+            psql -U admin -d Skuld -c "SELECT NOW() as restored_at, pg_database_size(current_database()) as db_size_bytes;"
+
+      - name: Notify via Telegram
+        if: always()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ steps.config.outputs.home_telegram_chat_id }}
+        run: |
+          STATUS="${{ job.status }}"
+          if [ "$STATUS" = "success" ]; then
+            ICON="✅"
+          else
+            ICON="❌"
           fi
-          EOF
+          TEXT="${ICON} <b>DB Replication ${STATUS}</b>%0A%0A📥 Source: ${{ inputs.source }}%0A📦 Backup: ${{ steps.find_backup.outputs.backup_name }}%0A👤 ${{ github.actor }}"
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d text="${TEXT}" \
+            -d parse_mode=HTML >/dev/null 2>&1 || true
 
       - name: Write summary
+        if: always()
         run: |
-          echo "## DB replicated to home server" >> $GITHUB_STEP_SUMMARY
+          echo "## DB Replication: ${{ inputs.source }} → home" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Setting | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|---------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Source environment | ${{ inputs.source_environment }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Source backup | ${{ needs.fetch_backup.outputs.backup_remote_path }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Home DB container | skuld_staging_db |" >> $GITHUB_STEP_SUMMARY
+          echo "| Source | ${{ inputs.source }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Backup | ${{ steps.find_backup.outputs.backup_name }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Restart app | ${{ inputs.restart_app }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Status | ${{ job.status }} |" >> $GITHUB_STEP_SUMMARY

@@ -74,5 +74,5 @@ You can save your defaults in the `.env` file to skip typing them every time (ex
 REMOTE_DB_HOST=91.98.156.116
 REMOTE_DB_USER=deploy
 REMOTE_DB_PATH=/home/deploy/backups/postgres
-SSH_KEY_PATH=C:\Users\MyName\.ssh\my_key  # Optional: Set default key path
+SSH_KEY_PATH=C:\Users\DeinName\.ssh\dein_key  # Optional: Set default key path
 ```

@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Traefik Reverse Proxy for Staging
   # (Production usually has this running externally, but Staging uses a self-contained one)

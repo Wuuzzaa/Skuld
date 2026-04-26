@@ -3,13 +3,9 @@ name: "Trigger Jobs"
 # ============================================================================
 # Manual trigger for remote jobs on a single selected target.
 #
-# Scope of this workflow:
-#   - Data collection jobs on the selected server
-#   - PostgreSQL backup on the selected server
-#   - Database healthcheck on the selected server
-#
-# Cross-environment database copy is intentionally handled in a separate
-# workflow so production operations and home-server restore stay explicit.
+# Configuration:
+#   - Environment-specific settings from ops/environments.yaml
+#   - Shared secrets as Repository Secrets
 # ============================================================================
 
 on:
@@ -21,8 +17,7 @@ on:
         type: choice
         options:
           - production
-          - dev-hetzner
-          - home-server
+          - home
         default: production
       job:
         description: "Job to trigger on that server"
@@ -42,13 +37,47 @@ on:
         default: false
 
 jobs:
+  load-config:
+    name: Load environment config
+    runs-on: ubuntu-latest
+    outputs:
+      host: ${{ steps.parse.outputs.host }}
+      user: ${{ steps.parse.outputs.user }}
+      db_container: ${{ steps.parse.outputs.db_container }}
+      compose_args: ${{ steps.parse.outputs.compose_args }}
+      telegram_chat_id: ${{ steps.parse.outputs.telegram_chat_id }}
+      skuld_env: ${{ steps.parse.outputs.skuld_env }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse environments.yaml
+        id: parse
+        run: |
+          python3 - "${{ inputs.target }}" <<'PYEOF'
+          import yaml, sys, os
+          target = sys.argv[1]
+          with open("ops/environments.yaml") as f:
+              cfg = yaml.safe_load(f)
+          if target not in cfg:
+              print(f"::error::Unknown target '{target}'. Available: {list(cfg.keys())}")
+              sys.exit(1)
+          env = cfg[target]
+          gh = os.environ.get("GITHUB_OUTPUT", "/dev/null")
+          with open(gh, "a") as out:
+              for key in ["host", "user", "db_container", "compose_args", "telegram_chat_id", "skuld_env"]:
+                  out.write(f"{key}={env[key]}\n")
+          PYEOF
+
   trigger:
     name: "${{ inputs.target }}: ${{ inputs.job }}"
-    runs-on: ${{ inputs.target == 'home-server' && 'self-hosted' || 'ubuntu-latest' }}
-    environment: ${{ inputs.target }}
+    needs: load-config
+    runs-on: ${{ inputs.target == 'home' && 'self-hosted' || 'ubuntu-latest' }}
     timeout-minutes: 360
     env:
-      TARGET_LABEL: ${{ inputs.target == 'production' && 'Production' || inputs.target == 'home-server' && 'Home Server' || 'Dev Hetzner' }}
+      TARGET_LABEL: ${{ needs.load-config.outputs.skuld_env }}
+      DEPLOY_HOST: ${{ needs.load-config.outputs.host }}
+      DEPLOY_USER: ${{ needs.load-config.outputs.user }}
+      DB_CONTAINER: ${{ needs.load-config.outputs.db_container }}
+      COMPOSE_CMD: docker compose ${{ needs.load-config.outputs.compose_args }}
 
     steps:
       - name: Initialize
@@ -70,7 +99,7 @@ jobs:
         if: ${{ inputs.dry_run == false }}
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_CHAT_ID: ${{ needs.load-config.outputs.telegram_chat_id }}
         run: |
           TEXT="⚡ <b>[${{ env.TARGET_LABEL }}] Manual Job gestartet</b>%0A%0A👤 <b>${{ github.actor }}</b>%0A🎯 <code>${{ inputs.job }}</code>"
           curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
@@ -87,16 +116,7 @@ jobs:
       - name: Prepare remote command
         id: cmd
         run: |
-          TARGET="${{ inputs.target }}"
           JOB="${{ inputs.job }}"
-
-          if [ "$TARGET" = "home-server" ]; then
-            DB_CONTAINER="skuld_staging_db"
-            COMPOSE_CMD="docker compose -f /opt/skuld/docker-compose.yml -f /opt/skuld/docker-compose.testing.yml"
-          else
-            DB_CONTAINER="postgres_setup-db-1"
-            COMPOSE_CMD="docker compose -f /opt/skuld/docker-compose.yml"
-          fi
 
           if [ "$JOB" = "db_backup" ]; then
             DESCRIPTION="Database backup"
@@ -106,34 +126,34 @@ jobs:
             BACKUP_DIR=\$HOME/backups/postgres
             BACKUP_FILE="\${BACKUP_DIR}/skuld_manual_\${TIMESTAMP}.sql.gz"
             mkdir -p "\${BACKUP_DIR}"
-            echo "Starting pg_dump from ${DB_CONTAINER}..."
-            docker exec ${DB_CONTAINER} pg_dump -U admin -d Skuld | gzip > "\${BACKUP_FILE}"
+            echo "Starting pg_dump from ${{ env.DB_CONTAINER }}..."
+            docker exec ${{ env.DB_CONTAINER }} pg_dump -U admin -d Skuld | gzip > "\${BACKUP_FILE}"
             FILESIZE=\$(du -h "\${BACKUP_FILE}" | cut -f1)
             echo "Backup complete: \${BACKUP_FILE} (\${FILESIZE})"
             ls -t "\${BACKUP_DIR}"/skuld_manual_*.sql.gz 2>/dev/null | tail -n +4 | xargs -r rm -f
-            EOF
+          EOF
           elif [ "$JOB" = "db_healthcheck" ]; then
             DESCRIPTION="Database healthcheck"
             cat > /tmp/remote_cmd.sh <<EOF
             set -euo pipefail
             echo "=== Docker containers ==="
-            ${COMPOSE_CMD} ps || true
+            ${{ env.COMPOSE_CMD }} -f /opt/skuld/docker-compose.yml ps 2>/dev/null || docker ps --format 'table {{.Names}}\t{{.Status}}' || true
             echo
             echo "=== PostgreSQL ping ==="
-            docker exec ${DB_CONTAINER} psql -U admin -d Skuld -c "select now() as db_time, current_database() as db_name;"
+            docker exec ${{ env.DB_CONTAINER }} psql -U admin -d Skuld -c "select now() as db_time, current_database() as db_name;"
             echo
             echo "=== Required view check ==="
-            docker exec ${DB_CONTAINER} psql -U admin -d Skuld -tAc "select 1 from pg_views where viewname = 'OptionDataMerged';"
+            docker exec ${{ env.DB_CONTAINER }} psql -U admin -d Skuld -tAc "select 1 from pg_views where viewname = 'OptionDataMerged';"
             echo
             echo "=== View list filter ==="
-            docker exec ${DB_CONTAINER} psql -U admin -d Skuld -c "\\dv" | grep OptionDataMerged
-            EOF
+            docker exec ${{ env.DB_CONTAINER }} psql -U admin -d Skuld -c "\dv" | grep OptionDataMerged
+          EOF
           else
             DESCRIPTION="Data collection: ${JOB}"
             cat > /tmp/remote_cmd.sh <<EOF
             set -euo pipefail
             docker exec skuld-backend /bin/bash /app/Skuld/run_data_collection.sh ${JOB}
-            EOF
+          EOF
           fi
 
           chmod 700 /tmp/remote_cmd.sh
@@ -157,7 +177,7 @@ jobs:
           set +e
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             -o ConnectTimeout=10 -o ServerAliveInterval=30 -o ServerAliveCountMax=5 \
-            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} 'bash -s' < /tmp/remote_cmd.sh > /tmp/remote_output.txt 2>&1
+            ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }} 'bash -s' < /tmp/remote_cmd.sh > /tmp/remote_output.txt 2>&1
           EXIT_CODE=$?
           set -e
 
@@ -193,7 +213,7 @@ jobs:
         if: ${{ always() && inputs.dry_run == false }}
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_CHAT_ID: ${{ needs.load-config.outputs.telegram_chat_id }}
         run: |
           STATUS="${{ job.status }}"
           ICON="❌"

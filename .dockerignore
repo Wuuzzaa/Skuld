@@ -11,6 +11,7 @@ __pycache__
 .Python
 env/
 venv/
+.venv/
 pip-log.txt
 pip-delete-this-directory.txt
 
@@ -31,3 +32,27 @@ service_account.json
 # IDE
 .vscode
 .idea
+
+# Ops / Infrastructure (not needed in app image)
+ops/
+setup_scripts/
+docs/
+
+# Docker (avoid recursive context)
+docker-compose*.yml
+Dockerfile
+.dockerignore
+
+# Documentation
+*.md
+LICENSE
+
+# Local dev DB
+docker-compose.local-db.yml
+
+# Tests (not needed in production image)
+tests/
+pytest.ini
+.pytest_cache/
+.coverage
+htmlcov/
