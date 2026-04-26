@@ -3,7 +3,7 @@ server:
   address: 'tcp://0.0.0.0:9091'
 
 log:
-  level: 'info'
+  level: 'debug'
   format: 'text'
 
 theme: 'dark'
@@ -35,9 +35,7 @@ authentication_backend:
 access_control:
   default_policy: 'deny'
   rules:
-    - domain: 'app.skuld-options.com'
-      policy: 'one_factor'
-    - domain: 'test.skuld-options.com'
+    - domain: '*.skuld-options.com'
       policy: 'one_factor'
 
 notifier:
