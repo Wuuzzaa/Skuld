@@ -16,6 +16,11 @@ name: Deploy SKULD
 on:
   push:
     branches: [master]
+    paths-ignore:
+      - '*.md'
+      - 'docs/**'
+      - 'ops/skuld-cli/**'
+      - '.github/workflows/**'
   workflow_dispatch:
     inputs:
       target:
