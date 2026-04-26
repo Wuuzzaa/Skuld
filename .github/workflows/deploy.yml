@@ -364,14 +364,6 @@ jobs:
 
       - name: Sync files to server
         run: |
-          EXTRA_EXCLUDES=""
-          AUTHELIA="${{ needs.load-config.outputs.authelia }}"
-          # If authelia config is managed on server (home), exclude it from sync
-          DEPLOY_SERVICES="${{ needs.load-config.outputs.deploy_services }}"
-          if [ -n "$DEPLOY_SERVICES" ]; then
-            EXTRA_EXCLUDES="--exclude authelia/**"
-          fi
-
           rsync -avz --delete \
             -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectionAttempts=1" \
             --exclude 'logs/' \
@@ -385,7 +377,6 @@ jobs:
             --exclude 'authelia/session_secret' \
             --exclude 'authelia/jwt_secret' \
             --exclude 'authelia/storage_encryption_key' \
-            $EXTRA_EXCLUDES \
             "$SOURCE_DIR"/ ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }}:/opt/skuld/
 
       - name: Get version

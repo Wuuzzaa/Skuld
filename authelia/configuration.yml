@@ -37,6 +37,8 @@ access_control:
   rules:
     - domain: 'app.skuld-options.com'
       policy: 'one_factor'
+    - domain: 'test.skuld-options.com'
+      policy: 'one_factor'
 
 notifier:
   filesystem:
