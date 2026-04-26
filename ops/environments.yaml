@@ -25,10 +25,10 @@ production:
   certresolver_skuld: "traefik.http.routers.skuld.tls.certresolver=letsencrypt"
   certresolver_authelia: "traefik.http.routers.authelia.tls.certresolver=letsencrypt"
   auth_scheme: https
-  authelia: true
+  authelia: "true"
   skuld_env: Production
   deploy_services: ""
-  skip_compose_down: false
+  skip_compose_down: "false"
   postgres_host: postgres_setup-db-1
   postgres_db: Skuld
   postgres_user: admin
@@ -47,10 +47,10 @@ home:
   certresolver_skuld: "traefik.enable=true"
   certresolver_authelia: "traefik.enable=true"
   auth_scheme: http
-  authelia: true
+  authelia: "true"
   skuld_env: Staging
   deploy_services: "skuld-frontend skuld-backend"
-  skip_compose_down: true
+  skip_compose_down: "true"
   postgres_host: postgres
   postgres_db: Skuld
   postgres_user: admin

@@ -1,157 +1,142 @@
 # Developer Setup Guide
 
-Schritt-fuer-Schritt Anleitung fuer neue Entwickler.
+Schritt-fuer-Schritt Anleitung fuer neue Entwickler (Windows + Mac).
 
-## Voraussetzungen
+> **Kurzversion:** Git + Python + Docker + GitHub CLI installieren, Repo klonen,
+> `skuld doctor` ausfuehren. Alles weitere steht im [README](../README.md).
 
-- **Git** + Push-Zugang zum Repo `Wuuzzaa/Skuld`
-- **Python 3.10+**
-- **Docker Desktop** (installiert und gestartet)
-- **GitHub CLI** (`gh`): https://cli.github.com/ (nur fuer Deployments)
+## 1. Tools installieren
 
-## 1. Repo klonen
+### Windows
+
+```powershell
+winget install Git.Git
+winget install Docker.DockerDesktop
+winget install GitHub.cli
+```
+
+Python 3.10+ von https://python.org/downloads installieren.
+
+### Mac
+
+```bash
+brew install git python@3.13 gh
+brew install --cask docker
+```
+
+## 2. GitHub CLI authentifizieren
+
+```bash
+gh auth login
+```
+
+Waehle: **GitHub.com** > **HTTPS** > **Login with a web browser**
+
+> **Windows PowerShell Tipp:** Falls `gh` nicht erkannt wird:
+> ```powershell
+> & "C:\Program Files\GitHub CLI\gh.exe" auth login
+> ```
+
+## 3. Repo klonen
 
 ```bash
 git clone https://github.com/Wuuzzaa/Skuld.git
 cd Skuld
 ```
 
-## 2. Python-Umgebung einrichten
+## 4. Python-Umgebung einrichten
 
 ```bash
 python -m venv .venv
+```
 
-# Windows
+Aktivieren:
+
+```bash
+# Windows PowerShell
 .venv\Scripts\activate
 
-# Linux/Mac
+# Mac / Linux
 source .venv/bin/activate
+```
 
+Dependencies:
+
+```bash
 pip install -r requirements.txt
 ```
 
-## 3. Lokale Datenbank starten
+## 5. skuld-cli installieren
 
-### Option A: Leere DB (schnell, kein SSH noetig)
+```bash
+cd ops/skuld-cli
+pip install -e .
+cd ../..
+```
+
+## 6. Setup pruefen
+
+```bash
+skuld doctor
+```
+
+Erwartete Ausgabe:
+
+```
+OK  gh CLI found
+OK  gh authenticated
+OK  Repository Wuuzzaa/Skuld accessible
+All checks passed.
+```
+
+## 7. Deployen
+
+Siehe [README.md](../README.md#deployment) fuer alle Befehle. Kurzfassung:
+
+```bash
+# Production: einfach auf master pushen
+git push origin master
+
+# Staging: beliebigen Branch auf Heimserver deployen
+skuld deploy home --branch mein-feature
+
+# DB von Prod auf Staging kopieren
+skuld db replicate --source production
+```
+
+## 8. Lokale Datenbank (optional)
+
+Fuer lokale Entwicklung ohne Server-Zugang:
 
 ```powershell
+# Windows
 .\setup_scripts\manage_local_db.ps1
 # Waehle Option 3: "Start with EMPTY database"
 ```
 
-Das startet PostgreSQL + PgAdmin lokal in Docker:
-
 | Service | URL / Port |
 |---------|-----------|
 | PostgreSQL | `localhost:5432` (User: `dev`, Pass: `dev`, DB: `skuld_dev`) |
-| PgAdmin | `http://localhost:5051` (Login: `admin@admin.com` / `admin`) |
+| PgAdmin | http://localhost:5051 (Login: `admin@admin.com` / `admin`) |
 
-### Option B: Mit Production-Daten (braucht SSH-Zugang)
+Fuer lokale Entwicklung **mit Production-Daten** (ca. 17 GB) wird SSH-Zugang zum
+Production-Server benoetigt. SSH-Key generieren und Public Key an Admin schicken:
 
-Die Produktions-DB ist ~17 GB (6 GB komprimiert). Der Download dauert je nach Leitung 10-30 Minuten.
-
-**Einmalig: SSH-Zugang einrichten**
-
-1. SSH-Key generieren (falls noch keiner existiert):
-   ```bash
-   ssh-keygen -t ed25519 -C "dein.name@firma.com"
-   ```
-
-2. Public Key an Daniel schicken:
-   ```bash
-   cat ~/.ssh/id_ed25519.pub
-   ```
-   Daniel hinterlegt den Key auf dem Production-Server. Danach:
-
-3. Testen:
-   ```bash
-   ssh deploy@91.98.156.116 "echo OK"
-   ```
-
-**DB herunterladen und importieren:**
-
-```powershell
-.\setup_scripts\manage_local_db.ps1
-# Waehle Option 2: "Download latest from Remote Server"
-# Host: 91.98.156.116 (Enter fuer Default)
-# User: deploy (Enter fuer Default)
-# Path: (Enter fuer Default)
-# SSH Key: Pfad zu deinem Private Key, z.B. C:\Users\DeinName\.ssh\id_ed25519
+```bash
+ssh-keygen -t ed25519 -C "dein.name@email.com"
+cat ~/.ssh/id_ed25519.pub  # An Admin schicken
 ```
 
-Die `.env`-Datei speichert die Defaults, damit du sie nicht jedes Mal eingeben musst:
-
-```dotenv
-# .env (wird automatisch erstellt)
-REMOTE_DB_HOST=91.98.156.116
-REMOTE_DB_USER=deploy
-REMOTE_DB_PATH=/home/deploy/backups/postgres
-SSH_KEY_PATH=C:\Users\DeinName\.ssh\id_ed25519
-```
-
-## 4. Streamlit-App starten
+## 9. App lokal starten
 
 ```bash
 streamlit run Skuld/app.py
 ```
 
-Die App laeuft dann auf `http://localhost:8501`.
+Laeuft auf http://localhost:8501 (braucht laufende PostgreSQL-DB aus Schritt 8).
 
-> **Hinweis:** Die App erwartet eine laufende PostgreSQL-Datenbank (Schritt 3).
-
-## 5. Tests ausfuehren
+## 10. Tests
 
 ```bash
 pytest
 ```
-
-## 6. Deployen (optional)
-
-Fuer Deployments brauchst du die GitHub CLI und Push-Rechte:
-
-```bash
-# Einmalig
-gh auth login
-
-# CLI installieren
-cd ops/skuld-cli
-pip install -e .
-skuld doctor
-
-# Deployen
-skuld deploy production              # Production (Hetzner)
-skuld deploy home --branch feature/x # Staging (Heimserver)
-```
-
-Kein SSH-Key noetig — alles geht ueber GitHub Actions.
-
-Siehe `ops/skuld-cli/README.md` fuer alle Befehle.
-
-## SSH-Key Onboarding (fuer Admins)
-
-Um den Public Key eines neuen Entwicklers auf dem Production-Server zu hinterlegen:
-
-```bash
-# Vom Heimserver aus (hat bereits deploy_key Zugang):
-./ops/add-developer-key.sh "ssh-ed25519 AAAAC3Nza... developer@laptop"
-
-# Oder:
-cat developer_key.pub | ./ops/add-developer-key.sh
-```
-
-## Architektur-Ueberblick
-
-```
-Entwickler-Laptop              GitHub Actions              Server
-──────────────────            ──────────────              ──────
-git push master ────────> deploy.yml ───────────> Production (Hetzner)
-                                                  91.98.156.116
-
-skuld deploy home ──────> deploy.yml ───────────> Staging (Heimserver)
-                           (self-hosted runner)   192.168.0.235
-
-manage_local_db.ps1 ──── SCP ──────────────────> Production Backup
-                          (SSH direkt)            ~/backups/postgres/
-```
-
-Alle Secrets liegen als GitHub Repository Secrets. Environment-spezifische Konfiguration steht in `ops/environments.yaml`.

@@ -130,20 +130,29 @@ jobs:
           echo "Restoring backup (this may take a while for large dumps)..."
           gzip -dc "$BACKUP_FILE" | docker exec -i "$DB_CONTAINER" psql -U admin -d Skuld
 
-          echo "Cleaning up temp file..."
-          rm -f "$BACKUP_FILE"
-
           echo "Restore complete."
+
+      - name: Reset migration flag so backend re-runs migrations on next start
+        if: ${{ inputs.restart_app }}
+        run: |
+          docker exec skuld-backend rm -f /app/.migrations_done 2>/dev/null || true
 
       - name: Start app containers
         if: ${{ inputs.restart_app }}
         run: |
-          docker start skuld-backend skuld-frontend 2>/dev/null || true
+          docker restart skuld-backend skuld-frontend 2>/dev/null || true
+          echo "Waiting 15s for backend to connect to DB and run migrations..."
+          sleep 15
 
       - name: Verify DB connectivity
         run: |
           docker exec ${{ steps.config.outputs.home_db_container }} \
             psql -U admin -d Skuld -c "SELECT NOW() as restored_at, pg_database_size(current_database()) as db_size_bytes;"
+
+      - name: Clean up temp file
+        if: always()
+        run: |
+          rm -f /tmp/skuld_*.sql.gz 2>/dev/null || true
 
       - name: Notify via Telegram
         if: always()

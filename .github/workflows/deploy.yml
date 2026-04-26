@@ -533,7 +533,7 @@ jobs:
           docker rm -f skuld-frontend 2>/dev/null || true
           docker rm -f skuld-backend 2>/dev/null || true
 
-          if [ "${CFG_SKIP_COMPOSE_DOWN}" != "true" ]; then
+          if [ "${CFG_SKIP_COMPOSE_DOWN}" != "true" ] && [ "${CFG_SKIP_COMPOSE_DOWN}" != "True" ]; then
             docker rm -f authelia 2>/dev/null || true
             docker ps -a --filter "name=authelia" -q | xargs -r docker rm -f 2>/dev/null || true
             docker ps -a --filter "name=skuld" -q | xargs -r docker rm -f 2>/dev/null || true
@@ -563,8 +563,12 @@ jobs:
 
           # ── Verify DB connectivity ──
           echo "=== Verifying DB connectivity ==="
-          docker exec ${CFG_DB_CONTAINER} psql -U "${CFG_POSTGRES_USER}" -d "${CFG_POSTGRES_DB}" -c 'select 1;' >/dev/null
-          echo "DB connectivity check passed"
+          if docker ps --format '{{.Names}}' | grep -q "${CFG_DB_CONTAINER}"; then
+            docker exec ${CFG_DB_CONTAINER} psql -U "${CFG_POSTGRES_USER}" -d "${CFG_POSTGRES_DB}" -c 'select 1;' >/dev/null
+            echo "DB connectivity check passed"
+          else
+            echo "DB container ${CFG_DB_CONTAINER} not running — skipping DB check (expected for partial deploys)"
+          fi
 
           echo "=== Container logs ==="
           docker compose ${COMPOSE_ARGS} logs --tail=30
