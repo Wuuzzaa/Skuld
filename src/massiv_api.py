@@ -208,6 +208,16 @@ def _option_chains_to_dataframe(option_chains: List[dict]) -> pd.DataFrame:
     if "day_last_updated" in df.columns:
         df["day_last_updated"] = pd.to_datetime(df["day_last_updated"], unit='ns', utc=True)
 
+    # FIX: Remove duplicate option contracts (same option_osi from different underlying symbols).
+    # The Massive API can return the same option contract under multiple tickers (e.g. GOOG/GOOGL).
+    # Without this, COPY FROM fails with: duplicate key value violates unique constraint "OptionDataMassive_pkey"
+    # To revert: remove the next 4 lines.
+    if "option_osi" in df.columns:
+        before = len(df)
+        df = df.drop_duplicates(subset=["option_osi"], keep="last")
+        if len(df) < before:
+            logger.warning(f"Removed {before - len(df)} duplicate option_osi entries within batch (kept last occurrence).")
+
     return df
 
 async def _fetch_option_chains_tickers_async(tickers: List[str], limit: int = 250) -> List[dict]:
@@ -249,14 +259,26 @@ def load_option_chains(symbols: List[str]):
 
         batch_size = 1000
         total_options = 0
-        
+        # FIX: Track inserted option_osi values across batches to prevent cross-batch PK violations.
+        # The Massive API can return the same option contract under different symbols in different batches.
+        # To revert: remove seen_option_osis and the df filtering block below.
+        seen_option_osis = set()
+
         for i in range(0, len(symbols), batch_size):
             symbol_batch = symbols[i:i + batch_size]
             logger.info(f"Fetching Massive API option data for batch {i//batch_size + 1}...")
-            
+
             df = get_option_chains_df(tickers=symbol_batch)
 
             if not df.empty:
+                # Remove option_osi values already inserted in previous batches
+                cross_batch_dupes = df["option_osi"].isin(seen_option_osis)
+                if cross_batch_dupes.any():
+                    logger.warning(f"Removed {cross_batch_dupes.sum()} cross-batch duplicate option_osi entries in batch {i//batch_size + 1}.")
+                    df = df[~cross_batch_dupes]
+
+                seen_option_osis.update(df["option_osi"].tolist())
+
                 insert_into_table_bulk(
                     conn,
                     table_name=TABLE_OPTION_DATA_MASSIVE,
