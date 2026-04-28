@@ -42,6 +42,9 @@ COPY <<'BACKEND_SCRIPT' /app/start_backend.sh
 set -e
 echo "Starting SKULD Backend..."
 
+# Ensure logs directory exists
+mkdir -p /app/Skuld/logs
+
 # Export environment variables for Cron
 printenv | grep -E "TELEGRAM|PYTHON|MASSIVE|POSTGRES" > /app/env.sh
 chmod 0644 /app/env.sh
@@ -95,6 +98,7 @@ COPY <<'FRONTEND_SCRIPT' /app/start_frontend.sh
 #!/bin/bash
 set -e
 echo "Starting SKULD Frontend..."
+mkdir -p /app/Skuld/logs
 exec streamlit run /app/Skuld/app.py --server.headless=true --server.enableCORS=false --server.port=8501 --server.address=0.0.0.0 --server.fileWatcherType=none
 FRONTEND_SCRIPT
 RUN chmod +x /app/start_frontend.sh

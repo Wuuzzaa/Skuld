@@ -19,3 +19,7 @@ PYTHONPATH=/app/Skuld
 
 # Historization: Montag bis Freitag, 21:30 UTC (22:30 MEZ)
 30 21 * * 1-5 /bin/bash /app/Skuld/run_data_collection.sh historization
+
+#############################################################################################
+# Log Cleanup: Taeglich um 03:00 UTC - Logs aelter als 14 Tage loeschen
+0 3 * * * find /app/Skuld/logs -type f -mtime +14 -delete && find /app/Skuld/logs -type d -empty -delete

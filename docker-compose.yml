@@ -62,6 +62,8 @@ services:
       - TZ=Europe/Berlin
       - SKULD_VERSION=${SKULD_VERSION:-}
       - SKULD_BRANCH=${SKULD_BRANCH:-}
+    volumes:
+      - ./logs:/app/Skuld/logs
     restart: unless-stopped
     networks:
       - web
@@ -114,6 +116,8 @@ services:
       - PYTHONUNBUFFERED=1
       - TZ=Europe/Berlin
       - SKULD_VERSION=${SKULD_VERSION:-}
+    volumes:
+      - ./logs:/app/Skuld/logs
     restart: unless-stopped
     networks:
       - web
