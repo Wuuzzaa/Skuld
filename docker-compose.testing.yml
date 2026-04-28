@@ -120,12 +120,18 @@ services:
     image: dpage/pgadmin4:latest
     container_name: skuld_staging_pgadmin
     environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@skuld.local}
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@skuld.dev}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
     ports:
       - "127.0.0.1:5053:80"
+    volumes:
+      - /opt/skuld/pgadmin_servers.json:/pgadmin4/servers.json:ro
     networks:
       - postgres_setup_default
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
