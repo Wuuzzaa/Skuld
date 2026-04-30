@@ -4,10 +4,11 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getSectorRotation } from '@/lib/api';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { DataTable } from '@/components/ui/data-table';
+import { Card, CardContent } from '@/components/ui/card';
+import { DataTable, Column } from '@/components/ui/data-table';
 import { LoadingState } from '@/components/ui/spinner';
 import { formatNumber } from '@/lib/utils';
+import { Filter } from 'lucide-react';
 import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Label } from 'recharts';
 
 export default function SectorRotationPage() {
@@ -18,21 +19,53 @@ export default function SectorRotationPage() {
     lookback_days: 120,
     tail_days: 6,
   });
+  const [showFilters, setShowFilters] = useState(false);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isFetching } = useQuery({
     queryKey: ['sector-rotation', params],
     queryFn: () => getSectorRotation(params),
   });
 
   const snapshot = data?.snapshot || [];
 
-  const columns = [
-    { key: 'symbol', label: 'Ticker' },
-    { key: 'sector_name', label: 'Sector' },
-    { key: 'rs_ratio', label: 'RS-Ratio', format: (v: number) => formatNumber(v) },
-    { key: 'rs_momentum', label: 'RS-Momentum', format: (v: number) => formatNumber(v) },
-    { key: 'quadrant', label: 'Quadrant' },
-    { key: 'volatility_signal', label: 'Vol Signal' },
+  const columns: Column[] = [
+    {
+      key: 'symbol',
+      label: 'Ticker',
+      sortable: true,
+      format: (v: string) => <span className="font-semibold text-foreground">{v}</span>,
+    },
+    { key: 'sector_name', label: 'Sector', sortable: true },
+    { key: 'rs_ratio', label: 'RS-Ratio', format: (v: number) => formatNumber(v), sortable: true, align: 'right' },
+    { key: 'rs_momentum', label: 'RS-Mom.', format: (v: number) => formatNumber(v), sortable: true, align: 'right' },
+    {
+      key: 'quadrant',
+      label: 'Quadrant',
+      sortable: true,
+      format: (v: string) => (
+        <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium ${
+          v === 'Leading' ? 'bg-emerald-500/20 text-emerald-400' :
+          v === 'Weakening' ? 'bg-yellow-500/20 text-yellow-400' :
+          v === 'Lagging' ? 'bg-red-500/20 text-red-400' :
+          v === 'Improving' ? 'bg-blue-500/20 text-blue-400' :
+          'bg-secondary text-muted-foreground'
+        }`}>
+          {v}
+        </span>
+      ),
+    },
+    {
+      key: 'volatility_signal',
+      label: 'Vol Signal',
+      sortable: true,
+      format: (v: string) => (
+        <span className={`text-xs ${
+          v === 'Low' ? 'text-emerald-400' : v === 'High' ? 'text-red-400' : 'text-muted-foreground'
+        }`}>
+          {v}
+        </span>
+      ),
+    },
   ];
 
   const chartData = snapshot.map((s: any) => ({
@@ -43,82 +76,141 @@ export default function SectorRotationPage() {
     quadrant: s.quadrant,
   }));
 
+  const getPointColor = (quadrant: string) => {
+    switch (quadrant) {
+      case 'Leading': return 'hsl(160 60% 50%)';
+      case 'Weakening': return 'hsl(45 90% 55%)';
+      case 'Lagging': return 'hsl(0 65% 55%)';
+      case 'Improving': return 'hsl(217 91% 60%)';
+      default: return 'hsl(215 20% 55%)';
+    }
+  };
+
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">S&P 500 Sector Rotation</h1>
-      <p className="text-sm text-muted-foreground">Benchmark: SPY. Sectors via SPDR Sector ETFs.</p>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold">Sector Rotation</h1>
+          {isFetching && <div className="w-2 h-2 rounded-full bg-pink-400 animate-pulse" />}
+          <span className="text-xs text-muted-foreground bg-secondary/60 px-2 py-0.5 rounded-full">Benchmark: SPY</span>
+        </div>
+        <button
+          onClick={() => setShowFilters(!showFilters)}
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer ${
+            showFilters ? 'bg-primary/20 text-primary border border-primary/30' : 'bg-secondary/60 text-muted-foreground border border-border/50 hover:text-foreground'
+          }`}
+        >
+          <Filter className="w-3 h-3" /> Parameters
+        </button>
+      </div>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Parameters</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-            <div>
-              <label className="text-xs text-muted-foreground">Short WMA</label>
-              <Input type="number" value={params.short_window} onChange={(e) => setParams({ ...params, short_window: +e.target.value })} />
+      {/* Parameters */}
+      {showFilters && (
+        <Card className="border-pink-500/20">
+          <CardContent className="pt-4">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              <div>
+                <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Short WMA</label>
+                <Input type="number" value={params.short_window} onChange={(e) => setParams({ ...params, short_window: +e.target.value })} className="h-8 mt-1" />
+              </div>
+              <div>
+                <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Long WMA</label>
+                <Input type="number" value={params.long_window} onChange={(e) => setParams({ ...params, long_window: +e.target.value })} className="h-8 mt-1" />
+              </div>
+              <div>
+                <label className="text-[11px] text-muted-foreground uppercase tracking-wider">HV Window</label>
+                <Input type="number" value={params.volatility_window} onChange={(e) => setParams({ ...params, volatility_window: +e.target.value })} className="h-8 mt-1" />
+              </div>
+              <div>
+                <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Lookback</label>
+                <Input type="number" value={params.lookback_days} onChange={(e) => setParams({ ...params, lookback_days: +e.target.value })} className="h-8 mt-1" />
+              </div>
+              <div>
+                <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Tail Days</label>
+                <Input type="number" value={params.tail_days} onChange={(e) => setParams({ ...params, tail_days: +e.target.value })} className="h-8 mt-1" />
+              </div>
             </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Long WMA</label>
-              <Input type="number" value={params.long_window} onChange={(e) => setParams({ ...params, long_window: +e.target.value })} />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">HV Window</label>
-              <Input type="number" value={params.volatility_window} onChange={(e) => setParams({ ...params, volatility_window: +e.target.value })} />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Lookback Days</label>
-              <Input type="number" value={params.lookback_days} onChange={(e) => setParams({ ...params, lookback_days: +e.target.value })} />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Tail Days</label>
-              <Input type="number" value={params.tail_days} onChange={(e) => setParams({ ...params, tail_days: +e.target.value })} />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {isLoading ? (
         <LoadingState message="Calculating sector rotation..." />
       ) : (
         <>
-          {/* Scatter chart */}
+          {/* Quadrant Legend */}
+          <div className="flex flex-wrap gap-3">
+            {['Leading', 'Weakening', 'Lagging', 'Improving'].map((q) => (
+              <span key={q} className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span className={`w-2.5 h-2.5 rounded-full`} style={{ background: getPointColor(q) }} />
+                {q}
+              </span>
+            ))}
+          </div>
+
+          {/* Scatter Chart */}
           {chartData.length > 0 && (
-            <Card>
-              <CardContent className="pt-6">
-                <ResponsiveContainer width="100%" height={500}>
-                  <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(217 33% 17%)" />
-                    <XAxis type="number" dataKey="x" name="RS-Ratio" domain={['auto', 'auto']}>
-                      <Label value="RS-Ratio" position="bottom" style={{ fill: 'hsl(215 20% 55%)' }} />
+            <Card className="border-border/40">
+              <CardContent className="pt-4">
+                <ResponsiveContainer width="100%" height={450}>
+                  <ScatterChart margin={{ top: 10, right: 20, bottom: 30, left: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(217 33% 14%)" />
+                    <XAxis type="number" dataKey="x" name="RS-Ratio" domain={['auto', 'auto']} tick={{ fill: 'hsl(215 20% 55%)', fontSize: 11 }}>
+                      <Label value="RS-Ratio →" position="bottom" offset={10} style={{ fill: 'hsl(215 20% 55%)', fontSize: 11 }} />
                     </XAxis>
-                    <YAxis type="number" dataKey="y" name="RS-Momentum" domain={['auto', 'auto']}>
-                      <Label value="RS-Momentum" angle={-90} position="left" style={{ fill: 'hsl(215 20% 55%)' }} />
+                    <YAxis type="number" dataKey="y" name="RS-Momentum" domain={['auto', 'auto']} tick={{ fill: 'hsl(215 20% 55%)', fontSize: 11 }}>
+                      <Label value="RS-Momentum →" angle={-90} position="left" offset={5} style={{ fill: 'hsl(215 20% 55%)', fontSize: 11 }} />
                     </YAxis>
-                    <ReferenceLine x={100} stroke="hsl(215 20% 35%)" strokeDasharray="5 5" />
-                    <ReferenceLine y={100} stroke="hsl(215 20% 35%)" strokeDasharray="5 5" />
+                    <ReferenceLine x={100} stroke="hsl(215 20% 30%)" strokeDasharray="5 5" />
+                    <ReferenceLine y={100} stroke="hsl(215 20% 30%)" strokeDasharray="5 5" />
                     <Tooltip
                       content={({ payload }) => {
                         if (!payload?.length) return null;
                         const d = payload[0].payload;
                         return (
-                          <div className="bg-card border rounded p-2 text-xs">
-                            <p className="font-semibold">{d.name} - {d.sector}</p>
-                            <p>RS-Ratio: {d.x?.toFixed(2)}</p>
-                            <p>RS-Momentum: {d.y?.toFixed(2)}</p>
-                            <p>Quadrant: {d.quadrant}</p>
+                          <div className="bg-card border border-border/50 rounded-lg p-2.5 text-xs shadow-lg">
+                            <p className="font-bold text-foreground">{d.name}</p>
+                            <p className="text-muted-foreground">{d.sector}</p>
+                            <div className="mt-1.5 space-y-0.5">
+                              <p>RS-Ratio: <span className="font-mono">{d.x?.toFixed(2)}</span></p>
+                              <p>RS-Momentum: <span className="font-mono">{d.y?.toFixed(2)}</span></p>
+                              <p>Quadrant: <span className="font-medium" style={{ color: getPointColor(d.quadrant) }}>{d.quadrant}</span></p>
+                            </div>
                           </div>
                         );
                       }}
                     />
-                    <Scatter data={chartData} fill="hsl(217 91% 60%)" />
+                    <Scatter
+                      data={chartData}
+                      shape={(props: any) => {
+                        const { cx, cy, payload } = props;
+                        return (
+                          <circle
+                            cx={cx}
+                            cy={cy}
+                            r={6}
+                            fill={getPointColor(payload.quadrant)}
+                            fillOpacity={0.8}
+                            stroke={getPointColor(payload.quadrant)}
+                            strokeWidth={1}
+                          />
+                        );
+                      }}
+                    />
                   </ScatterChart>
                 </ResponsiveContainer>
               </CardContent>
             </Card>
           )}
 
-          <DataTable data={snapshot} columns={columns} />
+          {/* Table */}
+          <DataTable
+            data={snapshot}
+            columns={columns}
+            defaultSort={{ key: 'rs_ratio', direction: 'desc' }}
+            striped
+          />
         </>
       )}
     </div>

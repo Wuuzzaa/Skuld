@@ -33,3 +33,9 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer utilities {
+  .font-mono {
+    font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+  }
+}
