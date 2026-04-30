@@ -1,0 +1,101 @@
+# Docker Compose for SKULD React Frontend + FastAPI Backend
+# Usage: docker compose -f docker-compose.react.yml up --build
+#
+# This runs the new React/FastAPI stack alongside or instead of the
+# Streamlit frontend. For deployment, add this to the testing.yml override.
+
+services:
+  # --- FastAPI Backend (REST API) ---
+  skuld-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: skuld-api
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TZ=Europe/Berlin
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+    restart: unless-stopped
+    networks:
+      - web
+      - postgres_setup_default
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.skuld-api.rule=Host(`${DOMAIN_NAME}`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.skuld-api.entrypoints=${TRAEFIK_ENTRYPOINT}"
+      - "${TRAEFIK_CERTRESOLVER_LABEL_SKULD}"
+      - "traefik.http.services.skuld-api.loadbalancer.server.port=8000"
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # --- React/Next.js Frontend ---
+  skuld-react:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: skuld-react
+    environment:
+      - NEXT_PUBLIC_API_URL=http://skuld-api:8000
+      - NODE_ENV=production
+    restart: unless-stopped
+    networks:
+      - web
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+        reservations:
+          cpus: '0.05'
+          memory: 64M
+
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.skuld-react.rule=Host(`${DOMAIN_NAME}`) && !PathPrefix(`/api`)"
+      - "traefik.http.routers.skuld-react.entrypoints=${TRAEFIK_ENTRYPOINT}"
+      - "${TRAEFIK_CERTRESOLVER_LABEL_SKULD}"
+      - "traefik.http.services.skuld-react.loadbalancer.server.port=3000"
+      - "traefik.http.routers.skuld-react.middlewares=${SKULD_MIDDLEWARES:-}"
+
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+networks:
+  web:
+    external: true
+  postgres_setup_default:
+    external: true
