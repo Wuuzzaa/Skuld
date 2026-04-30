@@ -72,6 +72,12 @@ jobs:
           echo "=== Test expirations endpoint ==="
           curl -s http://localhost:3101/api/spreads/expirations -H "Authorization: Bearer $TOKEN" | head -c 500
           echo ""
+          echo "=== Test spreads endpoint ==="
+          curl -s "http://localhost:3101/api/spreads/?expiration_date=2026-05-04&option_type=put&delta_target=0.2&spread_width=5&strategy_type=credit&min_open_interest=100&min_day_volume=20&min_iv_rank=0&min_iv_percentile=0" -H "Authorization: Bearer $TOKEN" | head -c 1000
+          echo ""
+          echo "=== skuld-api error logs ==="
+          docker logs skuld-api 2>&1 | grep -A10 "Error\|Traceback\|Exception\|ModuleNotFound" | tail -30
+          echo ""
           echo "=== Traefik Router Debug ==="
           curl -s http://localhost:8080/api/http/routers 2>/dev/null | python3 -m json.tool 2>/dev/null || echo "Traefik API not reachable"
           echo ""
