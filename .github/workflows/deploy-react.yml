@@ -47,12 +47,18 @@ jobs:
           echo "Building and starting React + API containers..."
           docker compose -f docker-compose.react.yml up --build -d
           echo ""
+          echo "Restarting Traefik to pick up new routes..."
+          docker restart traefik_staging
+          echo ""
           echo "Waiting for containers to be healthy..."
           sleep 10
           docker compose -f docker-compose.react.yml ps
           echo ""
           echo "=== Traefik Router Debug ==="
           curl -s http://localhost:8080/api/http/routers 2>/dev/null | python3 -m json.tool 2>/dev/null || echo "Traefik API not reachable"
+          echo ""
+          echo "=== Traefik Logs (last 30) ==="
+          docker logs traefik_staging --tail 30 2>&1 || true
           echo ""
           echo "=== Container Labels ==="
           docker inspect skuld-react --format '{{json .Config.Labels}}' 2>/dev/null | python3 -m json.tool 2>/dev/null || true
