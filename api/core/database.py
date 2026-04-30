@@ -38,7 +38,8 @@ def execute_sql(sql: str, params: dict | None = None):
 
 def df_to_json_safe(df: pd.DataFrame) -> list[dict]:
     """Convert DataFrame to JSON-safe list of dicts (handles NaN/Inf/timestamps)."""
+    import json
+
     df = df.replace([np.inf, -np.inf], np.nan)
-    for col in df.select_dtypes(include=["datetime64"]).columns:
-        df[col] = df[col].astype(str)
-    return df.where(df.notna(), None).to_dict(orient="records")
+    # Use pandas to_json which handles NaN -> null natively, then parse back
+    return json.loads(df.to_json(orient="records", date_format="iso"))
