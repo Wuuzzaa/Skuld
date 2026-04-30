@@ -45,9 +45,11 @@ jobs:
         if: inputs.action == 'deploy'
         run: |
           echo "Building and starting React + API containers..."
-          # Remove old containers from default project name if they exist
+          # Remove old containers from previous project names if they exist
+          docker compose -p skuld-react -f docker-compose.react.yml down 2>/dev/null || true
           docker compose -f docker-compose.react.yml down 2>/dev/null || true
-          docker compose -p skuld-react -f docker-compose.react.yml up --build -d
+          # Start using the SAME compose project as the staging stack
+          docker compose -f docker-compose.yml -f docker-compose.testing.yml -f docker-compose.react.yml up --build -d skuld-api skuld-react
           echo ""
           echo "Waiting for containers to be ready..."
           sleep 15
