@@ -59,11 +59,21 @@ jobs:
           echo "=== Traefik Router Debug ==="
           curl -s http://localhost:8080/api/http/routers 2>/dev/null | python3 -m json.tool 2>/dev/null || echo "Traefik API not reachable"
           echo ""
-          echo "=== Traefik Logs (last 30) ==="
-          docker logs traefik_staging --tail 30 2>&1 || true
+          echo "=== Network IDs ==="
+          echo "All web networks:"
+          docker network ls | grep web
           echo ""
-          echo "=== Container Labels ==="
-          docker inspect skuld-react --format '{{json .Config.Labels}}' 2>/dev/null | python3 -m json.tool 2>/dev/null || true
+          echo "Traefik network:"
+          docker inspect traefik_staging --format '{{json .NetworkSettings.Networks}}' 2>/dev/null | python3 -m json.tool 2>/dev/null || true
+          echo ""
+          echo "React container network:"
+          docker inspect skuld-react --format '{{json .NetworkSettings.Networks}}' 2>/dev/null | python3 -m json.tool 2>/dev/null || true
+          echo ""
+          echo "=== Traefik full command ==="
+          docker inspect traefik_staging --format '{{json .Config.Cmd}}' 2>/dev/null || true
+          echo ""
+          echo "=== Traefik env ==="
+          docker inspect traefik_staging --format '{{json .Config.Env}}' 2>/dev/null || true
           echo ""
           echo "=== Network check ==="
           docker inspect skuld-react --format '{{json .NetworkSettings.Networks}}' 2>/dev/null | python3 -m json.tool 2>/dev/null || true
