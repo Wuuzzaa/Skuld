@@ -51,6 +51,15 @@ jobs:
           sleep 10
           docker compose -f docker-compose.react.yml ps
           echo ""
+          echo "=== Traefik Router Debug ==="
+          curl -s http://localhost:8080/api/http/routers 2>/dev/null | python3 -m json.tool 2>/dev/null || echo "Traefik API not reachable"
+          echo ""
+          echo "=== Container Labels ==="
+          docker inspect skuld-react --format '{{json .Config.Labels}}' 2>/dev/null | python3 -m json.tool 2>/dev/null || true
+          echo ""
+          echo "=== Network check ==="
+          docker inspect skuld-react --format '{{json .NetworkSettings.Networks}}' 2>/dev/null | python3 -m json.tool 2>/dev/null || true
+          echo ""
           echo "React frontend should be available at: https://react-test.skuld-options.com"
 
       - name: Teardown React containers
