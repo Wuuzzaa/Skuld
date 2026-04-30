@@ -50,8 +50,7 @@ jobs:
           docker stop skuld-react skuld-api 2>/dev/null || true
           docker rm skuld-react skuld-api 2>/dev/null || true
           # Build and start fresh
-          docker compose -f docker-compose.react.yml build --no-cache skuld-api
-          docker compose -f docker-compose.react.yml up -d
+          docker compose -f docker-compose.react.yml up -d --build
           echo ""
           echo "Waiting for containers to be ready..."
           sleep 15
