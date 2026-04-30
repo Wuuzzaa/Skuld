@@ -14,7 +14,8 @@ export function DataTable({ data, columns, onRowClick, selectedIndex, className,
     return <p className="text-muted-foreground text-center py-8">No data available.</p>;
   }
 
-  const cols = columns || Object.keys(data[0]).map((key) => ({ key, label: key }));
+  const cols: { key: string; label: string; format?: (v: any) => string }[] =
+    columns || Object.keys(data[0]).map((key) => ({ key, label: key }));
 
   return (
     <div className={cn('overflow-auto border rounded-md', className)} style={{ maxHeight }}>
