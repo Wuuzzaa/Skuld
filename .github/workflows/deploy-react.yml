@@ -47,11 +47,11 @@ jobs:
           echo "Building and starting React + API containers..."
           docker compose -f docker-compose.react.yml up --build -d
           echo ""
+          echo "Waiting for containers to be ready..."
+          sleep 15
           echo "Restarting Traefik to pick up new routes..."
           docker restart traefik_staging
-          echo ""
-          echo "Waiting for containers to be healthy..."
-          sleep 10
+          sleep 5
           docker compose -f docker-compose.react.yml ps
           echo ""
           echo "=== Traefik Router Debug ==="
