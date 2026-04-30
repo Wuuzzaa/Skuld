@@ -2,7 +2,7 @@
 # Runs PARALLEL to existing Streamlit on its own subdomain.
 #
 # Required env vars (set in .env or via deploy workflow):
-#   REACT_DOMAIN - e.g. "react.test.skuld-options.com"
+#   REACT_DOMAIN - e.g. "react-test.skuld-options.com"
 #   TRAEFIK_ENTRYPOINT - "web" or "websecure"
 #   POSTGRES_HOST, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, POSTGRES_PORT
 #
@@ -49,7 +49,7 @@ services:
 
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.skuld-api.rule=Host(`${REACT_DOMAIN:-react.test.skuld-options.com}`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.skuld-api.rule=Host(`${REACT_DOMAIN:-react-test.skuld-options.com}`) && PathPrefix(`/api`)"
       - "traefik.http.routers.skuld-api.entrypoints=${TRAEFIK_ENTRYPOINT:-web}"
       - "traefik.http.services.skuld-api.loadbalancer.server.port=8000"
 
@@ -91,7 +91,7 @@ services:
 
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.skuld-react.rule=Host(`${REACT_DOMAIN:-react.test.skuld-options.com}`)"
+      - "traefik.http.routers.skuld-react.rule=Host(`${REACT_DOMAIN:-react-test.skuld-options.com}`)"
       - "traefik.http.routers.skuld-react.entrypoints=${TRAEFIK_ENTRYPOINT:-web}"
       - "traefik.http.services.skuld-react.loadbalancer.server.port=3000"
       # No Authelia middleware - React has its own JWT auth

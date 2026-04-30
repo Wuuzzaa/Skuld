@@ -37,7 +37,7 @@ jobs:
           fi
           # Add React-specific vars
           echo "" >> .env
-          echo "REACT_DOMAIN=react.test.skuld-options.com" >> .env
+          echo "REACT_DOMAIN=react-test.skuld-options.com" >> .env
           echo "SECRET_KEY=$(openssl rand -hex 32)" >> .env
           echo "TRAEFIK_ENTRYPOINT=web" >> .env
 
@@ -51,7 +51,7 @@ jobs:
           sleep 10
           docker compose -f docker-compose.react.yml ps
           echo ""
-          echo "React frontend should be available at: http://react.test.skuld-options.com"
+          echo "React frontend should be available at: https://react-test.skuld-options.com"
 
       - name: Teardown React containers
         if: inputs.action == 'teardown'
