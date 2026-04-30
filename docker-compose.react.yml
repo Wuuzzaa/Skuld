@@ -54,6 +54,10 @@ services:
       - "traefik.http.services.skuld-api.loadbalancer.server.port=8000"
       - "traefik.docker.network=web"
 
+    # Direct port exposure as Traefik bypass (not strictly needed if Next.js rewrites work)
+    ports:
+      - "3101:8000"
+
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -71,7 +75,10 @@ services:
     container_name: skuld-react
     environment:
       - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://skuld-api:8000
     restart: unless-stopped
+    ports:
+      - "3100:3000"
     networks:
       - web
 

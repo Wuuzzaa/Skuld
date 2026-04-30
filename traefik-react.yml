@@ -1,0 +1,23 @@
+# Traefik dynamic configuration for React frontend
+http:
+  routers:
+    skuld-react:
+      rule: "Host(`react-test.skuld-options.com`)"
+      entryPoints:
+        - web
+      service: skuld-react
+    skuld-api:
+      rule: "Host(`react-test.skuld-options.com`) && PathPrefix(`/api`)"
+      entryPoints:
+        - web
+      service: skuld-api
+
+  services:
+    skuld-react:
+      loadBalancer:
+        servers:
+          - url: "http://skuld-react:3000"
+    skuld-api:
+      loadBalancer:
+        servers:
+          - url: "http://skuld-api:8000"

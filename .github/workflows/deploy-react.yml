@@ -82,6 +82,9 @@ jobs:
           docker inspect skuld-react --format '{{json .NetworkSettings.Networks}}' 2>/dev/null | python3 -m json.tool 2>/dev/null || true
           echo ""
           echo "React frontend should be available at: https://react-test.skuld-options.com"
+          echo "Direct ports (bypass Traefik): React=3100, API=3101"
+          echo ""
+          echo "IMPORTANT: Cloudflare Tunnel must route react-test.skuld-options.com -> http://localhost:3100"
 
       - name: Teardown React containers
         if: inputs.action == 'teardown'
