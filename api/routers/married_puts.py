@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Query
 
 from api.core.auth import get_current_user
 from api.core.database import query_sql_file, df_to_json_safe
+from api.core import cache
 
 router = APIRouter()
 
@@ -19,6 +20,19 @@ async def get_married_puts(
     current_user: dict = Depends(get_current_user),
 ):
     """Get married put analysis with dividend growth stocks."""
+    all_params = {
+        "strike_multiplier": strike_multiplier,
+        "min_roi": min_roi,
+        "max_roi": max_roi,
+        "min_days": min_days,
+        "max_days": max_days,
+        "max_results": max_results,
+    }
+
+    cached = cache.get("married_puts", all_params)
+    if cached is not None:
+        return cached
+
     df = query_sql_file("married_put.sql", {"strike_multiplier": strike_multiplier})
 
     if df.empty:
@@ -34,4 +48,6 @@ async def get_married_puts(
 
     df = df.head(max_results)
 
-    return df_to_json_safe(df)
+    result = df_to_json_safe(df)
+    cache.set("married_puts", all_params, result, ttl=300)
+    return result

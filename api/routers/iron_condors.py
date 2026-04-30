@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Query
 
 from api.core.auth import get_current_user
 from api.core.database import query_sql_file, df_to_json_safe
+from api.core import cache
 
 router = APIRouter()
 
@@ -23,6 +24,23 @@ async def get_iron_condors(
     current_user: dict = Depends(get_current_user),
 ):
     """Calculate iron condors from put and call spreads."""
+    all_params = {
+        "expiration_date_put": expiration_date_put,
+        "expiration_date_call": expiration_date_call,
+        "delta_put": delta_put,
+        "delta_call": delta_call,
+        "width_put": width_put,
+        "width_call": width_call,
+        "min_open_interest": min_open_interest,
+        "min_day_volume": min_day_volume,
+        "min_iv_rank": min_iv_rank,
+        "min_iv_percentile": min_iv_percentile,
+    }
+
+    cached = cache.get("iron_condors", all_params)
+    if cached is not None:
+        return cached
+
     common_params = {
         "min_open_interest": min_open_interest,
         "min_day_volume": min_day_volume,
@@ -59,4 +77,6 @@ async def get_iron_condors(
     ic_df = calc_iron_condors(put_df, call_df, iv_correction="auto")
     ic_df = get_page_iron_condors(ic_df)
 
-    return df_to_json_safe(ic_df)
+    result = df_to_json_safe(ic_df)
+    cache.set("iron_condors", all_params, result, ttl=300)
+    return result

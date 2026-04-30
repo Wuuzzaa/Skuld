@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Query
 
 from api.core.auth import get_current_user
 from api.core.database import query_sql_file, df_to_json_safe
+from api.core import cache
 
 router = APIRouter()
 
@@ -17,6 +18,17 @@ async def get_multifactor_swingtrading(
     current_user: dict = Depends(get_current_user),
 ):
     """Calculate multifactor swingtrading candidates using value scoring."""
+    params = {
+        "top_percentile_value_score": top_percentile_value_score,
+        "top_n": top_n,
+        "drop_missing_values": drop_missing_values,
+        "drop_weak_value_factors": drop_weak_value_factors,
+    }
+
+    cached = cache.get("multifactor", params)
+    if cached is not None:
+        return cached
+
     df = query_sql_file("multifactor_swingtrading.sql")
 
     if df.empty:
@@ -35,4 +47,6 @@ async def get_multifactor_swingtrading(
         drop_weak_value_factors=drop_weak_value_factors,
     )
 
-    return df_to_json_safe(result_df)
+    result = df_to_json_safe(result_df)
+    cache.set("multifactor", params, result, ttl=300)
+    return result

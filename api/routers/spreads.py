@@ -5,6 +5,7 @@ import pandas as pd
 
 from api.core.auth import get_current_user
 from api.core.database import query_dataframe, query_sql_file, df_to_json_safe
+from api.core import cache
 
 router = APIRouter()
 
@@ -12,6 +13,10 @@ router = APIRouter()
 @router.get("/expirations")
 async def get_expirations(current_user: dict = Depends(get_current_user)):
     """Get available expiration dates with DTE, day of week, and expiration type."""
+    cached = cache.get("expirations")
+    if cached is not None:
+        return cached
+
     df = query_sql_file("expiration_dte_asc.sql")
 
     if not df.empty:
@@ -25,7 +30,9 @@ async def get_expirations(current_user: dict = Depends(get_current_user)):
         df['day_of_week'] = df['expiration_date'].dt.strftime('%A')
         df['expiration_type'] = df['expiration_date'].apply(get_expiration_type)
 
-    return df_to_json_safe(df)
+    result = df_to_json_safe(df)
+    cache.set("expirations", None, result, ttl=600)  # 10 min cache
+    return result
 
 
 @router.get("/")
@@ -53,6 +60,11 @@ async def get_spreads(
         "min_iv_rank": min_iv_rank,
         "min_iv_percentile": min_iv_percentile,
     }
+
+    cached = cache.get("spreads", params)
+    if cached is not None:
+        return cached
+
     df = query_sql_file("spreads_input.sql", params)
 
     if df.empty:
@@ -66,4 +78,6 @@ async def get_spreads(
 
     spreads_df = get_page_spreads(df, strategy_type=strategy_type, iv_correction="auto")
 
-    return df_to_json_safe(spreads_df)
+    result = df_to_json_safe(spreads_df)
+    cache.set("spreads", params, result, ttl=300)  # 5 min cache
+    return result

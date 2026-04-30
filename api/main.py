@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.core.config import settings
 from api.core.database import engine
+from api.core import cache
 from api.routers import (
     auth,
     analyst_prices,
@@ -61,3 +62,10 @@ app.include_router(multifactor_swingtrading.router, prefix="/api/multifactor-swi
 @app.get("/api/health")
 async def health_check():
     return {"status": "ok", "version": settings.APP_VERSION}
+
+
+@app.post("/api/cache/clear")
+async def clear_cache():
+    """Clear all API caches. Useful after data refresh."""
+    cache.invalidate()
+    return {"status": "cleared"}
