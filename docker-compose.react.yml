@@ -71,7 +71,7 @@ services:
       context: .
       dockerfile: Dockerfile.frontend
       args:
-        - NEXT_PUBLIC_API_URL=
+        - NEXT_PUBLIC_API_URL=http://skuld-api:8000
     container_name: skuld-react
     environment:
       - NODE_ENV=production
