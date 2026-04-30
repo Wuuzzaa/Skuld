@@ -52,6 +52,7 @@ services:
       - "traefik.http.routers.skuld-api.rule=Host(`${REACT_DOMAIN:-react-test.skuld-options.com}`) && PathPrefix(`/api`)"
       - "traefik.http.routers.skuld-api.entrypoints=${TRAEFIK_ENTRYPOINT:-web}"
       - "traefik.http.services.skuld-api.loadbalancer.server.port=8000"
+      - "traefik.docker.network=web"
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -94,6 +95,7 @@ services:
       - "traefik.http.routers.skuld-react.rule=Host(`${REACT_DOMAIN:-react-test.skuld-options.com}`)"
       - "traefik.http.routers.skuld-react.entrypoints=${TRAEFIK_ENTRYPOINT:-web}"
       - "traefik.http.services.skuld-react.loadbalancer.server.port=3000"
+      - "traefik.docker.network=web"
       # No Authelia middleware - React has its own JWT auth
       - "traefik.http.routers.skuld-react.priority=1"
 
