@@ -1,6 +1,7 @@
 """Spreads router - credit and debit vertical spreads."""
 
 from fastapi import APIRouter, Depends, Query
+import pandas as pd
 
 from api.core.auth import get_current_user
 from api.core.database import query_dataframe, query_sql_file, df_to_json_safe
@@ -10,8 +11,20 @@ router = APIRouter()
 
 @router.get("/expirations")
 async def get_expirations(current_user: dict = Depends(get_current_user)):
-    """Get available expiration dates with DTE."""
+    """Get available expiration dates with DTE, day of week, and expiration type."""
     df = query_sql_file("expiration_dte_asc.sql")
+
+    if not df.empty:
+        # Add day of week and expiration type classification
+        import sys
+        from pathlib import Path
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+        from src.utils.option_utils import get_expiration_type
+
+        df['expiration_date'] = pd.to_datetime(df['expiration_date'])
+        df['day_of_week'] = df['expiration_date'].dt.strftime('%A')
+        df['expiration_type'] = df['expiration_date'].apply(get_expiration_type)
+
     return df_to_json_safe(df)
 
 

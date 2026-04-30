@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { LoadingState } from '@/components/ui/spinner';
+import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { useState } from 'react';
 
 const navItems = [
@@ -88,13 +89,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           })}
         </nav>
 
-        {/* Collapse toggle */}
-        <button
-          onClick={() => setCollapsed(!collapsed)}
-          className="p-2 mx-2 mb-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
-        >
-          {collapsed ? <ChevronRight className="h-4 w-4 mx-auto" /> : <ChevronLeft className="h-4 w-4" />}
-        </button>
+        {/* Controls: theme toggle + collapse */}
+        <div className="flex items-center justify-between px-2 mb-2">
+          <ThemeToggle />
+          <button
+            onClick={() => setCollapsed(!collapsed)}
+            className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
+          >
+            {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+          </button>
+        </div>
 
         {/* User section */}
         <div className="p-3 border-t border-border/50">
