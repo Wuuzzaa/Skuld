@@ -1,8 +1,13 @@
 # Docker Compose for SKULD React Frontend + FastAPI Backend
-# Usage: docker compose -f docker-compose.react.yml up --build
+# Runs PARALLEL to existing Streamlit on its own subdomain.
 #
-# This runs the new React/FastAPI stack alongside or instead of the
-# Streamlit frontend. For deployment, add this to the testing.yml override.
+# Required env vars (set in .env or via deploy workflow):
+#   REACT_DOMAIN - e.g. "react.test.skuld-options.com"
+#   TRAEFIK_ENTRYPOINT - "web" or "websecure"
+#   POSTGRES_HOST, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, POSTGRES_PORT
+#
+# Usage:
+#   docker compose -f docker-compose.react.yml up --build
 
 services:
   # --- FastAPI Backend (REST API) ---
@@ -17,6 +22,11 @@ services:
       - PYTHONUNBUFFERED=1
       - TZ=Europe/Berlin
       - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_USER=${POSTGRES_USER:-admin}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB:-Skuld}
     restart: unless-stopped
     networks:
       - web
@@ -39,9 +49,8 @@ services:
 
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.skuld-api.rule=Host(`${DOMAIN_NAME}`) && PathPrefix(`/api`)"
-      - "traefik.http.routers.skuld-api.entrypoints=${TRAEFIK_ENTRYPOINT}"
-      - "${TRAEFIK_CERTRESOLVER_LABEL_SKULD}"
+      - "traefik.http.routers.skuld-api.rule=Host(`${REACT_DOMAIN:-react.test.skuld-options.com}`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.skuld-api.entrypoints=${TRAEFIK_ENTRYPOINT:-web}"
       - "traefik.http.services.skuld-api.loadbalancer.server.port=8000"
 
     healthcheck:
@@ -56,9 +65,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.frontend
+      args:
+        - NEXT_PUBLIC_API_URL=
     container_name: skuld-react
     environment:
-      - NEXT_PUBLIC_API_URL=http://skuld-api:8000
       - NODE_ENV=production
     restart: unless-stopped
     networks:
@@ -81,11 +91,11 @@ services:
 
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.skuld-react.rule=Host(`${DOMAIN_NAME}`) && !PathPrefix(`/api`)"
-      - "traefik.http.routers.skuld-react.entrypoints=${TRAEFIK_ENTRYPOINT}"
-      - "${TRAEFIK_CERTRESOLVER_LABEL_SKULD}"
+      - "traefik.http.routers.skuld-react.rule=Host(`${REACT_DOMAIN:-react.test.skuld-options.com}`)"
+      - "traefik.http.routers.skuld-react.entrypoints=${TRAEFIK_ENTRYPOINT:-web}"
       - "traefik.http.services.skuld-react.loadbalancer.server.port=3000"
-      - "traefik.http.routers.skuld-react.middlewares=${SKULD_MIDDLEWARES:-}"
+      # No Authelia middleware - React has its own JWT auth
+      - "traefik.http.routers.skuld-react.priority=1"
 
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
