@@ -8,7 +8,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { DataTable, Column } from '@/components/ui/data-table';
 import { LoadingState } from '@/components/ui/spinner';
 import { formatCurrency, formatPercent, formatNumber } from '@/lib/utils';
-import { Layers, Filter, X, ExternalLink } from 'lucide-react';
+import { Filter, X, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export default function IronCondorsPage() {
@@ -26,15 +26,23 @@ export default function IronCondorsPage() {
   const [selectedRow, setSelectedRow] = useState<any>(null);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [expTypeFilter, setExpTypeFilter] = useState<'all' | 'Monthly' | 'Weekly' | 'Daily'>('all');
 
   const { data: expirations } = useQuery({
     queryKey: ['expirations'],
     queryFn: getExpirations,
   });
 
+  // Filter expirations by type
+  const filteredExpirations = useMemo(() => {
+    if (!expirations?.length) return [];
+    if (expTypeFilter === 'all') return expirations;
+    return expirations.filter((e: any) => e.expiration_type === expTypeFilter);
+  }, [expirations, expTypeFilter]);
+
   // Auto-select ~30 DTE
-  if (expirations?.length && !expPut) {
-    const target = expirations.find((e: any) => e.days_to_expiration >= 28) || expirations[expirations.length - 1];
+  if (filteredExpirations.length && !expPut) {
+    const target = filteredExpirations.find((e: any) => e.days_to_expiration >= 28) || filteredExpirations[filteredExpirations.length - 1];
     setExpPut(target.expiration_date);
     setExpCall(target.expiration_date);
   }
@@ -124,16 +132,32 @@ export default function IronCondorsPage() {
 
       {/* Quick Controls */}
       <div className="flex items-center gap-3 flex-wrap">
+        {/* Expiration type filter pills */}
+        <div className="flex items-center gap-1">
+          {(['all', 'Monthly', 'Weekly', 'Daily'] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setExpTypeFilter(t)}
+              className={`px-2 py-1 rounded text-[11px] font-medium transition-all ${
+                expTypeFilter === t
+                  ? 'bg-primary/20 text-primary'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {t === 'all' ? 'All' : t}
+            </button>
+          ))}
+        </div>
         <div className="flex items-center gap-2">
           <label className="text-xs text-muted-foreground">Put Exp</label>
           <select
-            className="h-8 rounded-md border border-input bg-background px-2 text-sm min-w-[160px]"
+            className="h-8 rounded-md border border-input bg-background px-2 text-sm min-w-[260px]"
             value={expPut}
             onChange={(e) => setExpPut(e.target.value)}
           >
-            {(expirations || []).map((exp: any) => (
+            {filteredExpirations.map((exp: any) => (
               <option key={exp.expiration_date} value={exp.expiration_date}>
-                {exp.days_to_expiration} DTE - {exp.expiration_date.split('T')[0]}
+                {exp.days_to_expiration} DTE - {exp.day_of_week || ''} {exp.expiration_date.split('T')[0]} - {exp.expiration_type || ''}
               </option>
             ))}
           </select>
@@ -141,13 +165,13 @@ export default function IronCondorsPage() {
         <div className="flex items-center gap-2">
           <label className="text-xs text-muted-foreground">Call Exp</label>
           <select
-            className="h-8 rounded-md border border-input bg-background px-2 text-sm min-w-[160px]"
+            className="h-8 rounded-md border border-input bg-background px-2 text-sm min-w-[260px]"
             value={expCall}
             onChange={(e) => setExpCall(e.target.value)}
           >
-            {(expirations || []).map((exp: any) => (
+            {filteredExpirations.map((exp: any) => (
               <option key={exp.expiration_date} value={exp.expiration_date}>
-                {exp.days_to_expiration} DTE - {exp.expiration_date.split('T')[0]}
+                {exp.days_to_expiration} DTE - {exp.day_of_week || ''} {exp.expiration_date.split('T')[0]} - {exp.expiration_type || ''}
               </option>
             ))}
           </select>

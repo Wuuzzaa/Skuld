@@ -107,3 +107,9 @@ export async function getDataLogs() {
   const { data } = await api.get('/data-logs/');
   return data;
 }
+
+// Multifactor Swingtrading
+export async function getMultifactorSwingtrading(params: Record<string, any>) {
+  const { data } = await api.get('/multifactor-swingtrading/', { params });
+  return data;
+}

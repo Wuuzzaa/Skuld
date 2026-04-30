@@ -17,6 +17,7 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
+  Zap,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { LoadingState } from '@/components/ui/spinner';
@@ -31,6 +32,7 @@ const navItems = [
   { href: '/analyst-prices', label: 'Analyst Prices', icon: Target, color: 'text-cyan-400' },
   { href: '/sector-rotation', label: 'Sector Rotation', icon: PieChart, color: 'text-pink-400' },
   { href: '/expected-value', label: 'Expected Value', icon: Calculator, color: 'text-yellow-400' },
+  { href: '/multifactor-swingtrading', label: 'Multifactor', icon: Zap, color: 'text-amber-400' },
   { href: '/symbols', label: 'Symbols', icon: Search, color: 'text-indigo-400' },
   { href: '/data-logs', label: 'Data Logs', icon: Database, color: 'text-gray-400' },
 ];

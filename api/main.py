@@ -17,6 +17,7 @@ from api.routers import (
     expected_value,
     symbols,
     data_logs,
+    multifactor_swingtrading,
 )
 
 
@@ -54,6 +55,7 @@ app.include_router(sector_rotation.router, prefix="/api/sector-rotation", tags=[
 app.include_router(expected_value.router, prefix="/api/expected-value", tags=["Expected Value"])
 app.include_router(symbols.router, prefix="/api/symbols", tags=["Symbols"])
 app.include_router(data_logs.router, prefix="/api/data-logs", tags=["Data Logs"])
+app.include_router(multifactor_swingtrading.router, prefix="/api/multifactor-swingtrading", tags=["Multifactor Swingtrading"])
 
 
 @app.get("/api/health")
