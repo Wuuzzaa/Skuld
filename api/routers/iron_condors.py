@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, Query
 
 from api.core.auth import get_current_user
-from api.core.database import query_sql_file
+from api.core.database import query_sql_file, df_to_json_safe
 
 router = APIRouter()
 
@@ -59,7 +59,4 @@ async def get_iron_condors(
     ic_df = calc_iron_condors(put_df, call_df, iv_correction="auto")
     ic_df = get_page_iron_condors(ic_df)
 
-    for col in ic_df.select_dtypes(include=["datetime64"]).columns:
-        ic_df[col] = ic_df[col].astype(str)
-
-    return ic_df.to_dict(orient="records")
+    return df_to_json_safe(ic_df)

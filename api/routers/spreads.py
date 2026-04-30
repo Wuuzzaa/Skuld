@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, Query
 
 from api.core.auth import get_current_user
-from api.core.database import query_dataframe, query_sql_file
+from api.core.database import query_dataframe, query_sql_file, df_to_json_safe
 
 router = APIRouter()
 
@@ -12,7 +12,7 @@ router = APIRouter()
 async def get_expirations(current_user: dict = Depends(get_current_user)):
     """Get available expiration dates with DTE."""
     df = query_sql_file("expiration_dte_asc.sql")
-    return df.to_dict(orient="records")
+    return df_to_json_safe(df)
 
 
 @router.get("/")
@@ -53,8 +53,4 @@ async def get_spreads(
 
     spreads_df = get_page_spreads(df, strategy_type=strategy_type, iv_correction="auto")
 
-    # Convert timestamps for JSON serialization
-    for col in spreads_df.select_dtypes(include=["datetime64"]).columns:
-        spreads_df[col] = spreads_df[col].astype(str)
-
-    return spreads_df.to_dict(orient="records")
+    return df_to_json_safe(spreads_df)

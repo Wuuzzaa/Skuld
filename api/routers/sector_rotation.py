@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Depends, Query
 
 from api.core.auth import get_current_user
+from api.core.database import df_to_json_safe
 
 router = APIRouter()
 
@@ -49,13 +50,7 @@ async def get_sector_rotation(
 
     snapshot = build_latest_sector_snapshot(rotation_data)
 
-    # Convert dates for JSON
-    for col in snapshot.select_dtypes(include=["datetime64"]).columns:
-        snapshot[col] = snapshot[col].astype(str)
-    for col in rotation_data.select_dtypes(include=["datetime64"]).columns:
-        rotation_data[col] = rotation_data[col].astype(str)
-
     return {
-        "snapshot": snapshot.to_dict(orient="records"),
-        "timeseries": rotation_data.to_dict(orient="records"),
+        "snapshot": df_to_json_safe(snapshot),
+        "timeseries": df_to_json_safe(rotation_data),
     }

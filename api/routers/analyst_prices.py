@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends
 
 from api.core.auth import get_current_user
-from api.core.database import query_sql_file
+from api.core.database import query_sql_file, df_to_json_safe
 
 router = APIRouter()
 
@@ -18,4 +18,4 @@ async def get_analyst_prices(current_user: dict = Depends(get_current_user)):
         "target-close$": "difference_dollar",
         "target-close%": "difference_percent",
     })
-    return df.to_dict(orient="records")
+    return df_to_json_safe(df)

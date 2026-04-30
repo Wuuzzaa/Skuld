@@ -4,7 +4,7 @@ import pandas as pd
 from fastapi import APIRouter, Depends, Query
 
 from api.core.auth import get_current_user
-from api.core.database import query_sql_file
+from api.core.database import query_sql_file, df_to_json_safe
 
 router = APIRouter()
 
@@ -29,12 +29,8 @@ async def get_position_insurance(
     puts = df[df["contract_type"] == "put"].copy()
     calls = df[df["contract_type"] == "call"].copy()
 
-    for frame in [puts, calls]:
-        for col in frame.select_dtypes(include=["datetime64"]).columns:
-            frame[col] = frame[col].astype(str)
-
     return {
-        "puts": puts.to_dict(orient="records"),
-        "calls": calls.to_dict(orient="records"),
+        "puts": df_to_json_safe(puts),
+        "calls": df_to_json_safe(calls),
         "current_price": current_price,
     }

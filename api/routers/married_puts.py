@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, Query
 
 from api.core.auth import get_current_user
-from api.core.database import query_sql_file
+from api.core.database import query_sql_file, df_to_json_safe
 
 router = APIRouter()
 
@@ -34,7 +34,4 @@ async def get_married_puts(
 
     df = df.head(max_results)
 
-    for col in df.select_dtypes(include=["datetime64"]).columns:
-        df[col] = df[col].astype(str)
-
-    return df.to_dict(orient="records")
+    return df_to_json_safe(df)

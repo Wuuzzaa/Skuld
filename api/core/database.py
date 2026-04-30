@@ -1,5 +1,6 @@
 """Database connection for FastAPI - reuses existing SKULD DB layer."""
 
+import numpy as np
 import pandas as pd
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import QueuePool
@@ -33,3 +34,11 @@ def execute_sql(sql: str, params: dict | None = None):
     with engine.connect() as conn:
         conn.execute(text(sql), params or {})
         conn.commit()
+
+
+def df_to_json_safe(df: pd.DataFrame) -> list[dict]:
+    """Convert DataFrame to JSON-safe list of dicts (handles NaN/Inf/timestamps)."""
+    df = df.replace([np.inf, -np.inf], np.nan)
+    for col in df.select_dtypes(include=["datetime64"]).columns:
+        df[col] = df[col].astype(str)
+    return df.where(df.notna(), None).to_dict(orient="records")
