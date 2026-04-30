@@ -59,6 +59,15 @@ jobs:
           sleep 5
           docker compose -f docker-compose.react.yml ps
           echo ""
+          echo "=== skuld-api logs ==="
+          docker logs skuld-api 2>&1 | tail -50
+          echo ""
+          echo "=== Test API health ==="
+          curl -s http://localhost:3101/health || echo "Health check failed"
+          echo ""
+          echo "=== Test login endpoint ==="
+          curl -s -X POST http://localhost:3101/api/auth/login -H "Content-Type: application/json" -d '{"username":"admin","password":"skuld2024"}' || echo "Login test failed"
+          echo ""
           echo "=== Traefik Router Debug ==="
           curl -s http://localhost:8080/api/http/routers 2>/dev/null | python3 -m json.tool 2>/dev/null || echo "Traefik API not reachable"
           echo ""
