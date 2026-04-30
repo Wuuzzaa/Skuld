@@ -66,7 +66,11 @@ jobs:
           curl -s http://localhost:3101/health || echo "Health check failed"
           echo ""
           echo "=== Test login endpoint ==="
-          curl -s -X POST http://localhost:3101/api/auth/login -H "Content-Type: application/json" -d '{"username":"admin","password":"skuld2024"}' || echo "Login test failed"
+          TOKEN=$(curl -s -X POST http://localhost:3101/api/auth/login -H "Content-Type: application/json" -d '{"username":"admin","password":"skuld2024"}' | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))")
+          echo "Token: ${TOKEN:0:20}..."
+          echo ""
+          echo "=== Test expirations endpoint ==="
+          curl -s http://localhost:3101/api/spreads/expirations -H "Authorization: Bearer $TOKEN" | head -c 500
           echo ""
           echo "=== Traefik Router Debug ==="
           curl -s http://localhost:8080/api/http/routers 2>/dev/null | python3 -m json.tool 2>/dev/null || echo "Traefik API not reachable"
