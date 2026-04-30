@@ -47,9 +47,10 @@ jobs:
           echo "Building and starting React + API containers..."
           # Remove old containers from previous project names if they exist
           docker compose -p skuld-react -f docker-compose.react.yml down 2>/dev/null || true
-          docker compose -f docker-compose.react.yml down 2>/dev/null || true
-          # Start using the SAME compose project as the staging stack
-          docker compose -f docker-compose.yml -f docker-compose.testing.yml -f docker-compose.react.yml up --build -d skuld-api skuld-react
+          docker stop skuld-react skuld-api 2>/dev/null || true
+          docker rm skuld-react skuld-api 2>/dev/null || true
+          # Build and start fresh
+          docker compose -f docker-compose.react.yml up --build -d
           echo ""
           echo "Waiting for containers to be ready..."
           sleep 15
@@ -86,5 +87,5 @@ jobs:
         if: inputs.action == 'teardown'
         run: |
           echo "Stopping and removing React containers..."
-          docker compose -p skuld-react -f docker-compose.react.yml down --rmi local
+          docker compose -f docker-compose.react.yml down --rmi local
           echo "Done. React containers removed."
