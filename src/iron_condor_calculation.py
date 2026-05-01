@@ -17,15 +17,28 @@ from src.options_utils import (
 # Setup logging
 logger = logging.getLogger(os.path.basename(__file__))
 
-def _calculate_combined_metrics(row: pd.Series, iv_correction: str = 'auto') -> pd.Series:
+def _calculate_combined_metrics(row: pd.Series, iv_correction: str = 'auto', 
+                               take_profit: float = None, stop_loss: float = None, dte_close: int = None) -> pd.Series:
     """Calculates all metrics for an Iron Condor using the generic calculator."""
     legs = [
         # Put side
-        OptionLeg(strike=row['sell_strike_put'], premium=row['sell_last_option_price_put'], is_call=False, is_long=False, theta=row.get('sell_theta_put')),
-        OptionLeg(strike=row['buy_strike_put'], premium=row['buy_last_option_price_put'], is_call=False, is_long=True, theta=row.get('buy_theta_put')),
+        OptionLeg(
+            strike=row['sell_strike_put'], premium=row['sell_last_option_price_put'], is_call=False, is_long=False, 
+            theta=row.get('sell_theta_put'), take_profit_pct=take_profit, stop_loss_pct=stop_loss, dte_close=dte_close
+        ),
+        OptionLeg(
+            strike=row['buy_strike_put'], premium=row['buy_last_option_price_put'], is_call=False, is_long=True, 
+            theta=row.get('buy_theta_put'), take_profit_pct=take_profit, stop_loss_pct=stop_loss, dte_close=dte_close
+        ),
         # Call side
-        OptionLeg(strike=row['sell_strike_call'], premium=row['sell_last_option_price_call'], is_call=True, is_long=False, theta=row.get('sell_theta_call')),
-        OptionLeg(strike=row['buy_strike_call'], premium=row['buy_last_option_price_call'], is_call=True, is_long=True, theta=row.get('buy_theta_call')),
+        OptionLeg(
+            strike=row['sell_strike_call'], premium=row['sell_last_option_price_call'], is_call=True, is_long=False, 
+            theta=row.get('sell_theta_call'), take_profit_pct=take_profit, stop_loss_pct=stop_loss, dte_close=dte_close
+        ),
+        OptionLeg(
+            strike=row['buy_strike_call'], premium=row['buy_last_option_price_call'], is_call=True, is_long=True, 
+            theta=row.get('buy_theta_call'), take_profit_pct=take_profit, stop_loss_pct=stop_loss, dte_close=dte_close
+        ),
     ]
 
     metrics = calculate_strategy_metrics(
@@ -54,7 +67,8 @@ def _calculate_combined_metrics(row: pd.Series, iv_correction: str = 'auto') -> 
         "sell_iv": (row["sell_iv_put"] + row["sell_iv_call"]) / 2
     })
 
-def _calculate_iron_condor_metrics(df: pd.DataFrame, iv_correction: str = 'auto') -> pd.DataFrame:
+def _calculate_iron_condor_metrics(df: pd.DataFrame, iv_correction: str = 'auto',
+                                   take_profit: float = None, stop_loss: float = None, dte_close: int = None) -> pd.DataFrame:
     if df.empty:
         return df
 
@@ -95,7 +109,10 @@ def _calculate_iron_condor_metrics(df: pd.DataFrame, iv_correction: str = 'auto'
     df["width_call"] = (df["buy_strike_call"] - df["sell_strike_call"]).abs()
 
     # Calculate all generic metrics
-    metrics_df = df.apply(lambda r: _calculate_combined_metrics(r, iv_correction=iv_correction), axis=1)
+    metrics_df = df.apply(lambda r: _calculate_combined_metrics(
+        r, iv_correction=iv_correction,
+        take_profit=take_profit, stop_loss=stop_loss, dte_close=dte_close
+    ), axis=1)
     df = pd.concat([df, metrics_df], axis=1)
 
     # % OTM
@@ -131,7 +148,8 @@ def _build_optionstrat_url(row: pd.Series) -> str:
     return f"{base_url}/{symbol}/{p_buy},{p_sell},{c_sell},{c_buy}"
 
 @log_function
-def calc_iron_condors(put_spreads: pd.DataFrame, call_spreads: pd.DataFrame, iv_correction: str = 'auto') -> pd.DataFrame:
+def calc_iron_condors(put_spreads: pd.DataFrame, call_spreads: pd.DataFrame, iv_correction: str = 'auto',
+                      take_profit: float = None, stop_loss: float = None, dte_close: int = None) -> pd.DataFrame:
     if put_spreads.empty or call_spreads.empty:
         return pd.DataFrame()
 
@@ -145,12 +163,14 @@ def calc_iron_condors(put_spreads: pd.DataFrame, call_spreads: pd.DataFrame, iv_
         return combined
 
     logger.debug(f"Combined DF before metrics: {combined[['symbol', 'sell_theta_put', 'buy_theta_put', 'sell_theta_call', 'buy_theta_call']].head()}")
-    combined = _calculate_iron_condor_metrics(combined, iv_correction=iv_correction)
+    combined = _calculate_iron_condor_metrics(combined, iv_correction=iv_correction,
+                                              take_profit=take_profit, stop_loss=stop_loss, dte_close=dte_close)
     combined = _add_earnings_and_urls(combined)
 
     return combined
 
-def get_page_iron_condors(df: pd.DataFrame) -> pd.DataFrame:
+def get_page_iron_condors(df: pd.DataFrame, iv_correction: str = 'auto', 
+                            take_profit: float = None, stop_loss: float = None, dte_close: int = None) -> pd.DataFrame:
     if df.empty:
         return df
 

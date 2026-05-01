@@ -32,6 +32,11 @@ DEFAULT_MIN_SELL_IV = 0.3
 DEFAULT_MAX_SELL_IV = 0.9
 DEFAULT_MIN_MAX_PROFIT = 100.0
 
+# Management Defaults
+DEFAULT_TAKE_PROFIT = 50
+DEFAULT_STOP_LOSS = 200
+DEFAULT_DTE_CLOSE = 21
+
 st.title("Iron Condors")
 
 # Default values mapping for UI utils
@@ -51,7 +56,10 @@ DEFAULTS = {
     'ic_iv_correction': IV_CORRECTION_MODE,
     'ic_min_day_volume': DEFAULT_MIN_DAY_VOLUME,
     'ic_min_open_interest': DEFAULT_MIN_OPEN_INTEREST,
-    'ic_min_iv_rank': DEFAULT_MIN_IV_RANK
+    'ic_min_iv_rank': DEFAULT_MIN_IV_RANK,
+    'ic_take_profit': DEFAULT_TAKE_PROFIT,
+    'ic_stop_loss': DEFAULT_STOP_LOSS,
+    'ic_dte_close': DEFAULT_DTE_CLOSE
 }
 
 init_session_state(DEFAULTS)
@@ -73,6 +81,9 @@ def clear_all_filters():
     st.session_state.ic_min_day_volume = 0
     st.session_state.ic_min_open_interest = 0
     st.session_state.ic_min_iv_rank = 0
+    st.session_state.ic_take_profit = 0
+    st.session_state.ic_stop_loss = 500
+    st.session_state.ic_dte_close = 0
 
 with st.expander("Documentation"):
     st.markdown(get_iron_condor_documentation())
@@ -174,17 +185,29 @@ with st.expander("Configuration and Filters", expanded=True):
     with col16:
         st.info("IV correction mode: 'auto' (Automatic), 0.0-1.0 (Manual reduction), 0.0 (No correction)")
 
+    st.divider()
+    st.markdown("### Management Strategy")
+    m_col1, m_col2, m_col3 = st.columns(3)
+    with m_col1:
+        st.number_input("Take Profit %", min_value=0, max_value=500, step=10, key="ic_take_profit")
+    with m_col2:
+        st.number_input("Stop Loss %", min_value=0, max_value=500, step=10, key="ic_stop_loss")
+    with m_col3:
+        st.number_input("DTE Close", min_value=0, max_value=365, step=1, key="ic_dte_close")
+
 @st.cache_data
 def _cached_select_into_dataframe(sql_file_path, params):
     return select_into_dataframe(sql_file_path=sql_file_path, params=params)
 
 @st.cache_data
-def _cached_calc_iron_condors(put_df, call_df, iv_correction):
-    return calc_iron_condors(put_df, call_df, iv_correction=iv_correction)
+def _cached_calc_iron_condors(put_df, call_df, iv_correction, take_profit=None, stop_loss=None, dte_close=None):
+    return calc_iron_condors(put_df, call_df, iv_correction=iv_correction,
+                            take_profit=take_profit, stop_loss=stop_loss, dte_close=dte_close)
 
 @st.cache_data
-def _cached_get_page_iron_condors(ic_df_raw):
-    return get_page_iron_condors(ic_df_raw)
+def _cached_get_page_iron_condors(ic_df_raw, iv_correction, take_profit=None, stop_loss=None, dte_close=None):
+    return get_page_iron_condors(ic_df_raw, iv_correction=iv_correction,
+                                 take_profit=take_profit, stop_loss=stop_loss, dte_close=dte_close)
 
 
 with st.spinner("Calculating Iron Condors..."):
@@ -205,8 +228,18 @@ with st.spinner("Calculating Iron Condors..."):
     call_params = {**common_params, "expiration_date": expiration_date_call, "option_type": "call", "delta_target": st.session_state.ic_delta_call, "spread_width": st.session_state.ic_width_call}
     call_df = _cached_select_into_dataframe(sql_file_path=sql_query_path, params=call_params)
     
-    ic_df_raw = _cached_calc_iron_condors(put_df, call_df, st.session_state.ic_iv_correction)
-    ic_df = _cached_get_page_iron_condors(ic_df_raw)
+    ic_df_raw = _cached_calc_iron_condors(
+        put_df, call_df, st.session_state.ic_iv_correction,
+        take_profit=st.session_state.ic_take_profit,
+        stop_loss=st.session_state.ic_stop_loss,
+        dte_close=st.session_state.ic_dte_close
+    )
+    ic_df = _cached_get_page_iron_condors(
+        ic_df_raw, st.session_state.ic_iv_correction,
+        take_profit=st.session_state.ic_take_profit,
+        stop_loss=st.session_state.ic_stop_loss,
+        dte_close=st.session_state.ic_dte_close
+    )
 
 if not ic_df.empty:
     # Apply filters

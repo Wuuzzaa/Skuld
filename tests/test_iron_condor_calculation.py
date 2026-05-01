@@ -73,6 +73,20 @@ def test_calc_iron_condors_basic(sample_ic_data):
     # Strategy Theta = 0.05 + 0.04 = 0.09
     assert row['total_theta'] == pytest.approx(0.09)
 
+def test_calc_iron_condors_managed(sample_ic_data):
+    puts, calls = sample_ic_data
+    # Run with management parameters
+    result = calc_iron_condors(puts, calls, take_profit=50, stop_loss=200, dte_close=21)
+    
+    assert not result.empty
+    row = result.iloc[0]
+    assert 'expected_value_managed' in row
+    assert 'delta' in row
+    assert 'gamma' in row
+    assert 'vega' in row
+    # Greeks should be non-zero for a standard IC
+    assert row['delta'] != 0 or row['gamma'] != 0 or row['vega'] != 0
+
 def test_get_page_iron_condors_columns(sample_ic_data):
     puts, calls = sample_ic_data
     result = get_page_iron_condors(calc_iron_condors(puts, calls))
