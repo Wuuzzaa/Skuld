@@ -322,9 +322,8 @@ if st.session_state.show_only_spreads_with_no_earnings_till_expiration:
         )
     ]
 
-# Convert 'earnings_date' to datetime and format it
-filtered_df['earnings_date'] = pd.to_datetime(filtered_df['earnings_date'])
-filtered_df['earnings_date'] = filtered_df['earnings_date'].dt.strftime('%d.%m.%Y')
+# Reset index to ensure the zebra style works on the dataframe
+filtered_df.reset_index(drop=True, inplace=True)
 
 # Min sell IV
 filtered_df = filtered_df[filtered_df['sell_iv'] >= min_sell_iv]
@@ -332,8 +331,11 @@ filtered_df = filtered_df[filtered_df['sell_iv'] >= min_sell_iv]
 # Max sell IV
 filtered_df = filtered_df[filtered_df['sell_iv'] <= max_sell_iv]
 
-# Reset index to ensure the zebra style works on the dataframe
+# Re-reset index after all filters are applied
 filtered_df.reset_index(drop=True, inplace=True)
+
+# Format 'earnings_date' for display (do this AFTER all calculations and filtering)
+filtered_df['earnings_date'] = pd.to_datetime(filtered_df['earnings_date']).dt.strftime('%d.%m.%Y')
 
 # Pre-format columns that we want to show in details but not in the main table
 # This ensures they are available in 'row' even after page_display_dataframe might have dropped them from display
@@ -361,58 +363,59 @@ event = page_display_dataframe(
 )
 
 # Leg Details View
-selected_rows = event.selection.rows if hasattr(event, "selection") else []
-if selected_rows and not filtered_df.empty:
-    selected_idx = selected_rows[0]
-    row = filtered_df.iloc[selected_idx]
+if not filtered_df.empty:
+    selected_rows = event.selection.rows if hasattr(event, "selection") else []
+    if selected_rows:
+        selected_idx = selected_rows[0]
+        row = filtered_df.iloc[selected_idx]
 
-    st.divider()
-    
-    is_credit = strategy_type == "credit"
-    
-    legs = [
-        OptionLeg(
-            strike=row['sell_strike'], premium=row['sell_last_option_price'], 
-            is_call=row['option_type'] == 'call', is_long=not is_credit,
-            delta=row.get('sell_delta'), iv=row.get('sell_iv'), 
-            theta=row.get('sell_theta'), oi=row.get('sell_open_interest')
-        ),
-        OptionLeg(
-            strike=row['buy_strike'], premium=row['buy_last_option_price'], 
-            is_call=row['option_type'] == 'call', is_long=is_credit,
-            delta=row.get('buy_delta'), iv=row.get('buy_iv'), 
-            theta=row.get('buy_theta'), oi=row.get('buy_open_interest')
+        st.divider()
+        
+        is_credit = strategy_type == "credit"
+        
+        legs = [
+            OptionLeg(
+                strike=row['sell_strike'], premium=row['sell_last_option_price'], 
+                is_call=row['option_type'] == 'call', is_long=not is_credit,
+                delta=row.get('sell_delta'), iv=row.get('sell_iv'), 
+                theta=row.get('sell_theta'), oi=row.get('sell_open_interest')
+            ),
+            OptionLeg(
+                strike=row['buy_strike'], premium=row['buy_last_option_price'], 
+                is_call=row['option_type'] == 'call', is_long=is_credit,
+                delta=row.get('buy_delta'), iv=row.get('buy_iv'), 
+                theta=row.get('buy_theta'), oi=row.get('buy_open_interest')
+            )
+        ]
+
+        metrics = StrategyMetrics(
+            max_profit=row['max_profit'],
+            max_loss=row['max_loss'] if 'max_loss' in row else row['bpr'],
+            bpr=row['bpr'],
+            expected_value=row['expected_value'],
+            total_theta=row.get('spread_theta', 0),
+            profit_to_bpr=row.get('profit_to_bpr', 0),
+            apdi=row.get('APDI', 0),
+            apdi_ev=row.get('APDI_EV', 0),
+            iv_correction_factor=row.get('iv_correction_factor', 1),
+            corrected_volatility=row.get('corrected_volatility', row.get('sell_iv', 0))
         )
-    ]
 
-    metrics = StrategyMetrics(
-        max_profit=row['max_profit'],
-        max_loss=row['max_loss'] if 'max_loss' in row else row['bpr'],
-        bpr=row['bpr'],
-        expected_value=row['expected_value'],
-        total_theta=row.get('spread_theta', 0),
-        profit_to_bpr=row.get('profit_to_bpr', 0),
-        apdi=row.get('APDI', 0),
-        apdi_ev=row.get('APDI_EV', 0),
-        iv_correction_factor=row.get('iv_correction_factor', 1),
-        corrected_volatility=row.get('corrected_volatility', row.get('sell_iv', 0))
-    )
+        extra_info = {
+            'iv_rank': row.get('iv_rank'),
+            'iv_percentile': row.get('iv_percentile'),
+            'company_sector': row.get('company_sector'),
+            'company_industry': row.get('company_industry'),
+            'analyst_mean_target': row.get('analyst_mean_target'),
+            'close': row.get('close'),
+            'optionstrat_url': row.get('optionstrat_url'),
+            'Claude': row.get('Claude')
+        }
 
-    extra_info = {
-        'iv_rank': row.get('iv_rank'),
-        'iv_percentile': row.get('iv_percentile'),
-        'company_sector': row.get('company_sector'),
-        'company_industry': row.get('company_industry'),
-        'analyst_mean_target': row.get('analyst_mean_target'),
-        'close': row.get('close'),
-        'optionstrat_url': row.get('optionstrat_url'),
-        'Claude': row.get('Claude')
-    }
+        display_strategy_details(row['symbol'], row.get('Company', 'N/A'), legs, metrics, extra_info)
 
-    display_strategy_details(row['symbol'], row.get('Company', 'N/A'), legs, metrics, extra_info)
-
-else:
-    st.caption("💡 Klicke auf eine Zeile in der Tabelle, um die Details der einzelnen Legs zu sehen.")
+    else:
+        st.caption("💡 Klicke auf eine Zeile in der Tabelle, um die Details der einzelnen Legs zu sehen.")
 
 # Show documentation
 with st.expander("📖 Documentation - Fields Overview", expanded=False):

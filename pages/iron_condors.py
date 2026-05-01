@@ -234,10 +234,12 @@ if not ic_df.empty:
         ic_df = ic_df[ic_df['sell_iv'] >= st.session_state.ic_min_sell_iv]
         ic_df = ic_df[ic_df['sell_iv'] <= st.session_state.ic_max_sell_iv]
 
+    # Re-reset index after all filters are applied
+    ic_df.reset_index(drop=True, inplace=True)
+
     # Format earnings date for display
     if not ic_df.empty:
         ic_df['earnings_date'] = pd.to_datetime(ic_df['earnings_date']).dt.strftime('%d.%m.%Y')
-        ic_df.reset_index(drop=True, inplace=True)
 
 if not ic_df.empty:
     st.markdown(f"### {len(ic_df)} Results")
