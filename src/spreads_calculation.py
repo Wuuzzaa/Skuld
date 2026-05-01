@@ -13,6 +13,7 @@ from src.options_utils import (
     OptionLeg,
     calculate_strategy_metrics
 )
+from src.monte_carlo_simulation import UniversalOptionsMonteCarloSimulator
 
 # Setup logging
 logger = logging.getLogger(os.path.basename(__file__))
@@ -82,7 +83,7 @@ def _calculate_metrics_for_row(row: pd.Series, strategy_type: str = 'credit', iv
 
 def _calculate_spread_metrics(df: pd.DataFrame, strategy_type: str = 'credit', iv_correction: str = 'auto',
                              take_profit: float = None, stop_loss: float = None, dte_close: int = None) -> pd.DataFrame:
-    """Calculates all relevant metrics for the spreads."""
+    """Calculates all relevant metrics for the spreads using batch processing."""
     if df.empty:
         return df
 
@@ -92,12 +93,119 @@ def _calculate_spread_metrics(df: pd.DataFrame, strategy_type: str = 'credit', i
     # % Out-of-the-Money (OTM)
     df["%_otm"] = (df["sell_strike"] - df["close"]).abs() / df["close"] * 100
 
-    # Calculate all generic metrics
-    metrics_df = df.apply(lambda r: _calculate_metrics_for_row(
-        r, strategy_type, iv_correction=iv_correction,
-        take_profit=take_profit, stop_loss=stop_loss, dte_close=dte_close
-    ), axis=1)
-    df = pd.concat([df, metrics_df], axis=1)
+    # Grouping by ticker (and other simulation parameters) to use batch simulation
+    # Parameters for simulation: current_price (close), volatility (sell_iv), dte (days_to_expiration)
+    # We round these slightly to increase grouping potential (e.g. if close varies by 0.01)
+    df['_sim_group'] = df.apply(lambda r: f"{r['symbol']}_{round(r['close'], 2)}_{round(r['sell_iv'], 3)}_{r['days_to_expiration']}", axis=1)
+    
+    all_results = []
+    
+    for group_id, group_df in df.groupby('_sim_group'):
+        first_row = group_df.iloc[0]
+        
+        # Initialize simulator for this group
+        # Use num_simulations=2500 for screening to be extra fast, or use default
+        from src.options_utils import NUM_SIMULATIONS
+        # If it's a large screening, we might want to reduce simulations
+        n_sim = 5000 if len(group_df) < 20 else 2500
+        
+        simulator = UniversalOptionsMonteCarloSimulator(
+            current_price=first_row['close'],
+            volatility=first_row['sell_iv'],
+            dte=int(first_row['days_to_expiration']),
+            num_simulations=n_sim,
+            iv_correction=iv_correction
+        )
+        
+        # Prepare strategies for batch
+        strategies = []
+        is_credit = strategy_type == 'credit'
+        
+        for idx, row in group_df.iterrows():
+            legs = [
+                {
+                    'strike': row['sell_strike'],
+                    'premium': row['sell_last_option_price'],
+                    'is_call': row['option_type'] == 'call',
+                    'is_long': not is_credit,
+                    'take_profit_pct': take_profit,
+                    'stop_loss_pct': stop_loss,
+                    'dte_close': dte_close
+                },
+                {
+                    'strike': row['buy_strike'],
+                    'premium': row['buy_last_option_price'],
+                    'is_call': row['option_type'] == 'call',
+                    'is_long': is_credit,
+                    'take_profit_pct': take_profit,
+                    'stop_loss_pct': stop_loss,
+                    'dte_close': dte_close
+                }
+            ]
+            strategies.append(legs)
+            
+        # 1. Batch EV Managed
+        ev_managed_list = simulator.calculate_expected_value_batch(strategies)
+        
+        # 2. Batch EV Static (for comparison)
+        static_strategies = []
+        for s in strategies:
+            static_s = [leg.copy() for leg in s]
+            for leg in static_s:
+                leg['take_profit_pct'] = None
+                leg['stop_loss_pct'] = None
+                leg['dte_close'] = None
+            static_strategies.append(static_s)
+        ev_static_list = simulator.calculate_expected_value_batch(static_strategies)
+        
+        # 3. Batch Greeks
+        # Only calculate Greeks for strategies that are potentially profitable
+        greeks_results = simulator.calculate_greeks_batch(strategies)
+        
+        # 4. Other metrics
+        group_results = []
+        for i, (idx, row) in enumerate(group_df.iterrows()):
+            # Analytical fields
+            if is_credit:
+                max_profit = (row['sell_last_option_price'] - row['buy_last_option_price']) * 100
+                max_loss = (row['spread_width'] * 100) - max_profit
+            else:
+                # Debit: row['sell_last_option_price'] is ITM price, row['buy_last_option_price'] is OTM price
+                max_loss = (row['sell_last_option_price'] - row['buy_last_option_price']) * 100
+                max_profit = (row['spread_width'] * 100) - max_loss
+            
+            bpr = max(0.0, max_loss)
+            
+            greeks = greeks_results[i]
+            
+            res = {
+                "max_profit": max_profit,
+                "max_loss": max_loss,
+                "bpr": bpr,
+                "expected_value": ev_static_list[i],
+                "expected_value_managed": ev_managed_list[i],
+                "spread_theta": (row.get('sell_theta', 0) or 0) * (-1 if is_credit else 1) + (row.get('buy_theta', 0) or 0) * (1 if is_credit else -1),
+                "profit_to_bpr": (max_profit / bpr * 100) if bpr > 0 else 0,
+                "iv_correction_factor": simulator.iv_correction_factor,
+                "corrected_volatility": simulator.volatility,
+                "delta": greeks['delta'],
+                "gamma": greeks['gamma'],
+                "vega": greeks['vega']
+            }
+            # APDI
+            res["APDI"] = (res["max_profit"] / max(1, row['days_to_expiration']) / max(1, res["bpr"]) * 100)
+            res["APDI_EV"] = (res["expected_value_managed"] / max(1, row['days_to_expiration']) / max(1, res["bpr"]) * 100)
+            
+            group_results.append(res)
+            
+        group_res_df = pd.DataFrame(group_results, index=group_df.index)
+        all_results.append(group_res_df)
+        
+    if all_results:
+        metrics_df = pd.concat(all_results).sort_index()
+        df = pd.concat([df, metrics_df], axis=1)
+    
+    df.drop(columns=['_sim_group'], inplace=True)
 
     # Filter out invalid spreads
     df = df[df['max_profit'] > 0].copy()

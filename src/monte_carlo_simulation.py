@@ -3,6 +3,8 @@ import pandas as pd
 from typing import List, Dict, Tuple, Union, Optional
 from scipy.stats import norm
 import functools
+import logging
+from src.decorator_log_function import log_function
 
 from config import TRANSACTION_COST_PER_CONTRACT, RANDOM_SEED, NUM_SIMULATIONS, RISK_FREE_RATE, IV_CORRECTION_MODE
 
@@ -285,40 +287,41 @@ class UniversalOptionsMonteCarloSimulator:
     def _black_scholes_vectorized(self, S, K, T, r, sigma, is_call):
         """
         Internal vectorized Black-Scholes price calculation
-
-        Args:
-            S: Stock price (scalar or array)
-            K: Strike prices (array)
-            T: Time to expiration in years (scalar or array)
-            r: Risk-free rate (scalar)
-            sigma: Volatility (scalar)
-            is_call: Boolean array (True for call, False for put)
-
-        Returns:
-            np.ndarray: Matrix/Array of option prices
+        Highly optimized for performance.
         """
-        # Ensure inputs are arrays for broadcasting
-        # S can be (num_simulations, num_steps)
-        # K is (num_legs,)
-        # T is (num_steps,)
-        
         # Handle expiration (T=0)
-        # Replace T=0 with very small value to avoid division by zero in d1
         T_safe = np.where(T > 0, T, 1e-9)
         
         sqrt_T = np.sqrt(T_safe)
         d1 = (np.log(S / K) + (r + 0.5 * sigma ** 2) * T_safe) / (sigma * sqrt_T)
         d2 = d1 - sigma * sqrt_T
 
-        nd1 = norm.cdf(d1)
-        nd2 = norm.cdf(d2)
+        # Fast approximation of norm.cdf for performance (Abramowitz & Stegun)
+        # significantly faster than scipy.stats.norm.cdf
+        def fast_norm_cdf(x):
+            abs_x = np.abs(x)
+            t = 1.0 / (1.0 + 0.2316419 * abs_x)
+            a1 = 0.319381530
+            a2 = -0.356563782
+            a3 = 1.781477937
+            a4 = -1.821255978
+            a5 = 1.330274429
+            
+            p = 0.3989422804014327  # 1/sqrt(2*pi)
+            
+            prob = 1.0 - p * np.exp(-0.5 * x * x) * (
+                a1 * t + a2 * t**2 + a3 * t**3 + a4 * t**4 + a5 * t**5
+            )
+            return np.where(x >= 0, prob, 1.0 - prob)
+
+        nd1 = fast_norm_cdf(d1)
+        nd2 = fast_norm_cdf(d2)
         exp_rt = np.exp(-r * T_safe)
 
         # Call price: S * N(d1) - K * e^(-rT) * N(d2)
         call_prices = S * nd1 - K * exp_rt * nd2
         
         # Put price: K * e^(-rT) * N(-d2) - S * N(-d1)
-        # Using N(-x) = 1 - N(x)
         put_prices = K * exp_rt * (1 - nd2) - S * (1 - nd1)
 
         prices = np.where(is_call, call_prices, put_prices)
@@ -514,6 +517,7 @@ class UniversalOptionsMonteCarloSimulator:
 
         return price_paths[:, -1], total_payoffs, initial_cashflow
 
+    @log_function
     def calculate_expected_value(self, options: List[Dict]) -> float:
         """
         Calculate only the expected value of the strategy (fast computation)
@@ -546,6 +550,121 @@ class UniversalOptionsMonteCarloSimulator:
         self.expected_value = expected_value_raw * discount_factor
 
         return self.expected_value
+
+    def calculate_expected_value_batch(self, strategies: List[List[Dict]]) -> List[float]:
+        """
+        Calculate expected values for multiple strategies sharing the same underlying parameters.
+        Highly optimized for screening large numbers of strategies.
+        """
+        # Check if any strategy needs management
+        any_management = False
+        for options in strategies:
+            if any(
+                opt.get('take_profit_pct') is not None or 
+                opt.get('stop_loss_pct') is not None or 
+                opt.get('dte_close') is not None or
+                (opt.get('planned_dte') is not None and opt.get('planned_dte') < self.dte)
+                for opt in options
+            ):
+                any_management = True
+                break
+        
+        # 1. Simulate price paths once (or reuse from cache)
+        if any_management:
+            # Need full paths for management
+            price_paths = self.simulate_stock_price_paths()
+            simulated_prices_at_exp = price_paths[:, -1]
+        else:
+            # Only need expiration prices
+            simulated_prices_at_exp = self.simulate_stock_prices()
+            price_paths = None
+        
+        results = []
+        discount_factor = np.exp(-self.risk_free_rate * self.time_to_expiration)
+        
+        for options in strategies:
+            # Check for management
+            has_management = any(
+                opt.get('take_profit_pct') is not None or 
+                opt.get('stop_loss_pct') is not None or 
+                opt.get('dte_close') is not None or
+                (opt.get('planned_dte') is not None and opt.get('planned_dte') < self.dte)
+                for opt in options
+            )
+            
+            if has_management:
+                # Still use managed logic (already vectorized within one strategy)
+                # Note: self.simulate_stock_price_paths() will return the cached paths
+                _, total_payoffs, _ = self._calculate_managed_strategy_payoffs(options)
+            else:
+                # Optimized non-managed calculation
+                total_payoffs = np.zeros(self.num_simulations)
+                for opt in options:
+                    strike = opt['strike']
+                    premium = opt['premium']
+                    is_call = opt['is_call']
+                    is_long = opt['is_long']
+                    
+                    if is_call:
+                        intrinsic = np.maximum(simulated_prices_at_exp - strike, 0)
+                    else:
+                        intrinsic = np.maximum(strike - simulated_prices_at_exp, 0)
+                        
+                    premium_100 = premium * 100
+                    intrinsic_100 = intrinsic * 100
+                    cost = self.transaction_cost_per_contract
+                    
+                    if is_long:
+                        total_payoffs += (intrinsic_100 - premium_100 - cost)
+                    else:
+                        total_payoffs += (premium_100 - intrinsic_100 - cost)
+            
+            results.append(float(np.mean(total_payoffs) * discount_factor))
+            
+        return results
+
+    def calculate_greeks_batch(self, strategies: List[List[Dict]]) -> List[Dict[str, float]]:
+        """
+        Calculate Greeks for multiple strategies in batch mode.
+        """
+        # Save original state
+        original_price = self.current_price
+        original_vol = self.volatility
+        
+        # 1. EV Base for all
+        ev_base_list = self.calculate_expected_value_batch(strategies)
+        
+        # 2. Shift Price for Delta/Gamma
+        ds = max(original_price * 0.005, 0.01)
+        self.current_price = original_price + ds
+        # No need to clear cache since params changed, lru_cache handles it
+        ev_up_list = self.calculate_expected_value_batch(strategies)
+        
+        self.current_price = original_price - ds
+        ev_down_list = self.calculate_expected_value_batch(strategies)
+        
+        # 3. Shift Vol for Vega
+        self.current_price = original_price
+        dv = 0.01 # 1% vol shift
+        self.volatility = original_vol + dv
+        ev_vega_list = self.calculate_expected_value_batch(strategies)
+        
+        # Restore original state
+        self.volatility = original_vol
+        
+        results = []
+        for i in range(len(strategies)):
+            delta = (ev_up_list[i] - ev_down_list[i]) / (2 * ds)
+            gamma = (ev_up_list[i] - 2 * ev_base_list[i] + ev_down_list[i]) / (ds ** 2)
+            vega = (ev_vega_list[i] - ev_base_list[i]) / (dv * 100)
+            
+            results.append({
+                "delta": float(delta / 100),
+                "gamma": float(gamma / 100),
+                "vega": float(vega)
+            })
+            
+        return results
 
     def find_breakeven_from_simulations(self,
                                         simulated_prices: np.ndarray,
@@ -606,6 +725,7 @@ class UniversalOptionsMonteCarloSimulator:
 
         return breakeven_points
 
+    @log_function
     def calculate_greeks(self, options: List[Dict]) -> Dict[str, float]:
         """
         Calculate strategy Greeks using Monte Carlo simulation and finite differences.
@@ -651,6 +771,7 @@ class UniversalOptionsMonteCarloSimulator:
             "vega": float(vega)
         }
 
+    @log_function
     def analyze_strategy(self, options: List[Dict]) -> Dict:
         """
         Analyze an arbitrary multi-leg options strategy with full metrics
