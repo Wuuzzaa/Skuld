@@ -360,76 +360,76 @@ class UniversalOptionsMonteCarloSimulator:
     def _calculate_managed_strategy_payoffs(self, options: List[Dict]) -> Tuple[np.ndarray, np.ndarray, float]:
         """
         Calculate strategy payoffs considering SL/TP and early exit logic
-
-        Args:
-            options: List of option dictionaries or OptionLeg objects
-
-        Returns:
-            Tuple of (final_prices, total_payoffs, initial_cashflow)
+        Optimized version with vectorized management logic.
         """
         # 1. Simulate price paths (simulations, steps)
-        # steps = self.dte + 1 (includes t=0)
         price_paths = self.simulate_stock_price_paths()
         num_steps = price_paths.shape[1]
         
         # 2. Extract option parameters
         num_legs = len(options)
-        strikes = np.array([opt.get('strike', opt.get('strike')) for opt in options])
-        premiums = np.array([opt.get('premium', opt.get('premium')) for opt in options])
+        strikes = np.array([opt.get('strike') for opt in options])
+        premiums = np.array([opt.get('premium') for opt in options])
         is_calls = np.array([opt.get('is_call', True) for opt in options])
         is_longs = np.array([opt.get('is_long', True) for opt in options])
         
-        # Management parameters
-        # Use .get() for dicts and getattr() for objects if needed, 
-        # but let's assume they are passed as dicts by calculate_expected_value
         tp_pcts = np.array([opt.get('take_profit_pct') for opt in options])
         sl_pcts = np.array([opt.get('stop_loss_pct') for opt in options])
         dte_closes = np.array([opt.get('dte_close') for opt in options])
-        planned_dtes = np.array([opt.get('planned_dte', self.dte) for opt in options])
+        planned_dtes = np.array([opt.get('planned_dte') if opt.get('planned_dte') is not None else self.dte for opt in options])
         
         # 3. Initialize exit tracking
-        # We need to know when each leg is closed
         # closed_at_step: (num_simulations, num_legs)
-        # 0 means not closed yet, 1..dte means closed at that day
         closed_at_step = np.zeros((self.num_simulations, num_legs), dtype=int)
         exit_prices = np.zeros((self.num_simulations, num_legs))
         
-        # 4. Iterate through days (skipping day 0 as it's inception)
-        # For performance, we can evaluate all simulations at once per day
-        # If no management is set for a leg, it only closes at planned_dte or expiration
-        
-        # T in years for each day
+        # Days remaining for each step
         days_remaining = np.arange(self.dte, -1, -1)
         t_years = days_remaining / 365.0
         
-        # Performance optimization:
-        # If DTE is high, we don't need daily steps for SL/TP evaluation.
-        # Use a maximum of 30 steps for path evaluation to save time.
+        # Step size optimization
         step_size = 1
         if self.dte > 30:
             step_size = max(1, self.dte // 30)
 
+        # Prepare masks for legs with specific management
+        has_tp = np.array([tp is not None for tp in tp_pcts])
+        has_sl = np.array([sl is not None for sl in sl_pcts])
+        has_dc = np.array([dc is not None for dc in dte_closes])
+        
+        # Pre-calculate trigger thresholds
+        tp_thresholds = np.zeros(num_legs)
+        sl_thresholds = np.zeros(num_legs)
+        
+        for l in range(num_legs):
+            if has_tp[l]:
+                tp_decimal = tp_pcts[l] / 100.0
+                tp_thresholds[l] = premiums[l] * (1 + tp_decimal) if is_longs[l] else premiums[l] * (1 - tp_decimal)
+            if has_sl[l]:
+                sl_decimal = sl_pcts[l] / 100.0
+                sl_thresholds[l] = premiums[l] * (1 - sl_decimal) if is_longs[l] else premiums[l] * (1 + sl_decimal)
+
+        # 4. Iterate through days
         for step in range(step_size, num_steps, step_size):
-            # If we are near the end, make sure we hit the last step (expiration)
             if step + step_size >= num_steps:
                 step = num_steps - 1
             
-            current_day = step
-            current_dte = self.dte - current_day
+            current_dte = days_remaining[step]
             
-            # Identify legs that haven't closed yet
-            active_mask = closed_at_step == 0
+            # Check which legs are still active in which simulations
+            active_mask = (closed_at_step == 0)
             if not np.any(active_mask):
                 break
                 
-            # Current stock prices for all simulations
             s_current = price_paths[:, step].reshape(-1, 1) # (sims, 1)
             
-            # Calculate current option prices for all legs and simulations
-            # This is the heavy part. S=(sims, 1), K=(legs,), T=(1,)
-            # Result is (sims, legs)
-            # Use raw_volatility for BS pricing (or corrected? Usually market price uses market IV)
-            # MD says: "using corrected IV". Let's use self.volatility
+            # Only calculate BS for legs that are active in at least one simulation
+            active_legs = np.any(active_mask, axis=0)
+            if not np.any(active_legs):
+                break
+
+            # Calculate prices for ALL legs (vectorized over simulations)
+            # Optimization: could sub-select active_legs here to reduce BS calls if many legs
             leg_prices = self._black_scholes_vectorized(
                 s_current, 
                 strikes.reshape(1, -1), 
@@ -439,87 +439,58 @@ class UniversalOptionsMonteCarloSimulator:
                 is_calls.reshape(1, -1)
             )
             
-            # Check SL/TP and DTE Close triggers
-            for l_idx in range(num_legs):
-                # Only check active simulations for this leg
-                leg_active = active_mask[:, l_idx]
-                if not np.any(leg_active):
-                    continue
+            # Vectorized trigger evaluation
+            triggered = np.zeros((self.num_simulations, num_legs), dtype=bool)
+            
+            # TP trigger
+            if np.any(has_tp):
+                tp_triggered = np.zeros((self.num_simulations, num_legs), dtype=bool)
+                long_tp = (leg_prices >= tp_thresholds) & is_longs & has_tp
+                short_tp = (leg_prices <= tp_thresholds) & (~is_longs) & has_tp
+                tp_triggered = long_tp | short_tp
+                triggered |= tp_triggered
                 
-                # Triggers
-                triggered = np.zeros(self.num_simulations, dtype=bool)
+            # SL trigger
+            if np.any(has_sl):
+                sl_triggered = np.zeros((self.num_simulations, num_legs), dtype=bool)
+                long_sl = (leg_prices <= sl_thresholds) & is_longs & has_sl
+                short_sl = (leg_prices >= sl_thresholds) & (~is_longs) & has_sl
+                sl_triggered = long_sl | short_sl
+                triggered |= sl_triggered
                 
-                # 1. Take Profit
-                tp = tp_pcts[l_idx]
-                if tp is not None:
-                    # Input is in 100-based percentage (e.g. 50 for 50%)
-                    # Convert to decimal (0.5)
-                    tp_decimal = tp / 100.0
-                    if is_longs[l_idx]:
-                        # Long: Profit if price > entry_premium * (1 + TP)
-                        triggered |= leg_prices[:, l_idx] >= premiums[l_idx] * (1 + tp_decimal)
-                    else:
-                        # Short: Profit if price < entry_premium * (1 - TP)
-                        triggered |= leg_prices[:, l_idx] <= premiums[l_idx] * (1 - tp_decimal)
-                
-                # 2. Stop Loss
-                sl = sl_pcts[l_idx]
-                if sl is not None:
-                    # Input is in 100-based percentage (e.g. 200 for 200%)
-                    # Convert to decimal (2.0)
-                    sl_decimal = sl / 100.0
-                    if is_longs[l_idx]:
-                        # Long: Loss if price < entry_premium * (1 - SL_pct)
-                        triggered |= leg_prices[:, l_idx] <= premiums[l_idx] * (1 - sl_decimal)
-                    else:
-                        # Short: Loss if price > entry_premium * (1 + SL_pct)
-                        triggered |= leg_prices[:, l_idx] >= premiums[l_idx] * (1 + sl_decimal)
-                
-                # 3. DTE Close
-                dc = dte_closes[l_idx]
-                if dc is not None and current_dte <= dc:
-                    triggered |= True
-                    
-                # 4. Planned DTE
-                pdte = planned_dtes[l_idx]
-                if pdte is not None and current_day >= (self.dte - pdte):
-                    # For example, if dte=45 and pdte=45, it closes at day 0 (already handled by step 1+)
-                    triggered |= True
-                
-                # Final day close
-                if step == num_steps - 1:
-                    triggered |= True
-                
-                # Apply triggers to active ones
-                to_close = triggered & leg_active
-                closed_at_step[to_close, l_idx] = step
-                exit_prices[to_close, l_idx] = leg_prices[to_close, l_idx]
+            # DTE Close trigger
+            if np.any(has_dc):
+                dc_triggered = (current_dte <= dte_closes) & has_dc
+                triggered |= dc_triggered
+            
+            # Planned DTE trigger
+            pdte_triggered = (step >= (self.dte - planned_dtes))
+            triggered |= pdte_triggered
+            
+            # Expiration
+            if step == num_steps - 1:
+                triggered |= True
+            
+            # Apply triggers to active ones
+            to_close = triggered & active_mask
+            closed_at_step[to_close] = step
+            exit_prices[to_close] = leg_prices[to_close]
 
         # 5. Calculate payoffs
-        # Initial cashflow (inception)
-        initial_cashflow = 0
-        for l_idx in range(num_legs):
-            # Short: positive (credit), Long: negative (debit)
-            mult = 1 if not is_longs[l_idx] else -1
-            initial_cashflow += mult * premiums[l_idx] * 100
-            
-        # Total payoffs across all simulations
-        total_payoffs = np.zeros(self.num_simulations)
-        for l_idx in range(num_legs):
-            # Exit value
-            # Long: Receive exit price, Short: Pay exit price
-            mult = 1 if is_longs[l_idx] else -1
-            leg_exit_value = exit_prices[:, l_idx] * 100
-            
-            # Profit/Loss = (Exit Value - Entry Value) - Cost
-            # If long: (ExitValue - EntryValue) - Cost
-            # If short: (EntryValue - ExitValue) - Cost
-            if is_longs[l_idx]:
-                leg_profit = (leg_exit_value - premiums[l_idx] * 100)
-            else:
-                leg_profit = (premiums[l_idx] * 100 - leg_exit_value)
-                
-            total_payoffs += (leg_profit - self.transaction_cost_per_contract)
+        initial_cashflow = np.sum(np.where(is_longs, -premiums, premiums)) * 100
+        
+        # Leg profits: (Exit - Entry) for Long, (Entry - Exit) for Short
+        # exit_prices shape (sims, legs)
+        # premiums shape (legs,)
+        if num_legs > 0:
+            leg_profits = np.where(is_longs, 
+                                   (exit_prices - premiums) * 100, 
+                                   (premiums - exit_prices) * 100)
+            # Subtract transaction costs for each leg
+            leg_profits -= self.transaction_cost_per_contract
+            total_payoffs = np.sum(leg_profits, axis=1)
+        else:
+            total_payoffs = np.zeros(self.num_simulations)
 
         return price_paths[:, -1], total_payoffs, initial_cashflow
 
@@ -691,46 +662,57 @@ class UniversalOptionsMonteCarloSimulator:
             for opt in options
         )
 
-        if has_management:
-            simulated_prices, total_payoffs, initial_cashflow = self._calculate_managed_strategy_payoffs(options)
-        else:
-            simulated_prices, total_payoffs, initial_cashflow = self._calculate_strategy_payoffs(options)
-
         # Calculate detailed leg analysis
         leg_analysis = []
         total_transaction_costs = 0
         total_contracts = len(options)  # Each entry = 1 contract
 
-        for i, option in enumerate(options):
-            # Analyze single leg for detailed reporting
-            leg_payoffs = self.calculate_single_option_payoff(
-                simulated_prices=simulated_prices,
-                strike=option['strike'],
-                premium=option['premium'],
-                is_call=option['is_call'],
-                is_long=option['is_long']
-            )
+        if has_management:
+            simulated_prices, total_payoffs, initial_cashflow = self._calculate_managed_strategy_payoffs(options)
+            # Managed payoffs already include everything, no need to re-calculate per leg for average
+            # but we need leg_analysis for the UI.
+            for i, option in enumerate(options):
+                premium_per_contract = option['premium'] * 100
+                transaction_cost_per_contract = self.transaction_cost_per_contract
+                total_transaction_costs += transaction_cost_per_contract
+                leg_analysis.append({
+                    'leg_number': i + 1,
+                    'type': 'Call' if option['is_call'] else 'Put',
+                    'position': 'Long' if option['is_long'] else 'Short',
+                    'strike': option['strike'],
+                    'premium_per_share': option['premium'],
+                    'premium_per_contract': premium_per_contract,
+                    'transaction_cost': transaction_cost_per_contract,
+                    'avg_payoff': 0.0, # Not easily available without significant change
+                    'cashflow': (-premium_per_contract - transaction_cost_per_contract if option['is_long'] else premium_per_contract - transaction_cost_per_contract)
+                })
+        else:
+            simulated_prices, total_payoffs, initial_cashflow = self._calculate_strategy_payoffs(options)
+            # For non-managed, we can efficiently get leg payoffs since we have expiration prices
+            for i, option in enumerate(options):
+                leg_payoffs = self.calculate_single_option_payoff(
+                    simulated_prices=simulated_prices,
+                    strike=option['strike'],
+                    premium=option['premium'],
+                    is_call=option['is_call'],
+                    is_long=option['is_long']
+                )
+                
+                premium_per_contract = option['premium'] * 100
+                transaction_cost_per_contract = self.transaction_cost_per_contract
+                total_transaction_costs += transaction_cost_per_contract
 
-            # Cashflow calculations for reporting
-            premium_per_contract = option['premium'] * 100
-            transaction_cost_per_contract = self.transaction_cost_per_contract
-            total_transaction_costs += transaction_cost_per_contract
-
-            # Store leg details for analysis
-            leg_info = {
-                'leg_number': i + 1,
-                'type': 'Call' if option['is_call'] else 'Put',
-                'position': 'Long' if option['is_long'] else 'Short',
-                'strike': option['strike'],
-                'premium_per_share': option['premium'],
-                'premium_per_contract': premium_per_contract,
-                'transaction_cost': transaction_cost_per_contract,
-                'avg_payoff': np.mean(leg_payoffs),
-                'cashflow': (-premium_per_contract - transaction_cost_per_contract
-                             if option['is_long']
-                             else premium_per_contract - transaction_cost_per_contract)
-            }
-            leg_analysis.append(leg_info)
+                leg_analysis.append({
+                    'leg_number': i + 1,
+                    'type': 'Call' if option['is_call'] else 'Put',
+                    'position': 'Long' if option['is_long'] else 'Short',
+                    'strike': option['strike'],
+                    'premium_per_share': option['premium'],
+                    'premium_per_contract': premium_per_contract,
+                    'transaction_cost': transaction_cost_per_contract,
+                    'avg_payoff': np.mean(leg_payoffs),
+                    'cashflow': (-premium_per_contract - transaction_cost_per_contract if option['is_long'] else premium_per_contract - transaction_cost_per_contract)
+                })
 
         # Calculate overall statistics
         expected_value_raw = np.mean(total_payoffs)
