@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Traefik Reverse Proxy for Staging
   # (Production usually has this running externally, but Staging uses a self-contained one)
@@ -32,14 +30,11 @@ services:
       postgres:
         condition: service_healthy
     labels:
-      # Define a dedicated Staging Router with higher priority to override the base one
-      # We skip the 'enable=false' trick because it's prone to failure
       # Define a dedicated Staging Router by overriding the base 'skuld' router
       - "traefik.http.routers.skuld.rule=Host(`test.skuld-options.com`)"
       - "traefik.http.routers.skuld.entrypoints=web"
-      
-      # Ensure middleware is attached (overriding base if needed)
-      # We chain 'force-https' BEFORE 'authelia' so Authelia sees the correct proto
+
+      # Middleware chain: fix X-Forwarded-Proto for Cloudflare Tunnel, then authenticate via Authelia
       - "traefik.http.routers.skuld.middlewares=force-https,authelia"
 
       # Explicitly disable TLS on this router just in case
@@ -47,14 +42,9 @@ services:
 
       # Networking Fixes
       - "traefik.docker.network=web"
-      
+
       # Middleware: Force HTTPS Scheme (Fix for Cloudflare Tunnel -> HTTP Traefik)
       - "traefik.http.middlewares.force-https.headers.customrequestheaders.X-Forwarded-Proto=https"
-
-      # Override Authelia Middleware to allow HTTP scheme check bypass
-      # We tell Authelia to redirect back to HTTPS (public URL)
-      - "traefik.http.middlewares.authelia.forwardauth.address=http://authelia:9091/api/verify?rd=https://${AUTH_DOMAIN}/"
-      - "traefik.http.middlewares.authelia.forwardauth.trustForwardHeader=true"
 
   authelia:
     labels:
@@ -130,12 +120,18 @@ services:
     image: dpage/pgadmin4:latest
     container_name: skuld_staging_pgadmin
     environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@skuld.local}
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@skuld.dev}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
     ports:
       - "127.0.0.1:5053:80"
+    volumes:
+      - /opt/skuld/pgadmin_servers.json:/pgadmin4/servers.json:ro
     networks:
       - postgres_setup_default
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:

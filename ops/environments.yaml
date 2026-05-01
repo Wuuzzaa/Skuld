@@ -1,0 +1,59 @@
+# SKULD Environment Configuration
+#
+# This file defines ALL environment-specific settings.
+# Shared secrets (API keys, bot token, DB password, Authelia) are stored
+# as GitHub Repository Secrets — not per-environment.
+#
+# To add a new server:
+#   1. Add a block below
+#   2. Set up the server (ops/setup-home-server.sh or cloud-init)
+#   3. Add the deploy_key public key to the server's authorized_keys
+#   4. Push — done
+#
+# Workflow_dispatch menus are generated from the keys in this file.
+
+production:
+  host: 91.98.156.116
+  user: deploy
+  runner: ubuntu-latest
+  domain: app.skuld-options.com
+  auth_domain: auth.skuld-options.com
+  telegram_chat_id: "-1003610692224"
+  db_container: postgres_setup-db-1
+  compose_args: "-f docker-compose.yml"
+  traefik_entrypoint: websecure
+  certresolver_skuld: "traefik.http.routers.skuld.tls.certresolver=letsencrypt"
+  certresolver_authelia: "traefik.http.routers.authelia.tls.certresolver=letsencrypt"
+  auth_scheme: https
+  authelia: "true"
+  skuld_middlewares: "authelia"
+  skuld_env: Production
+  deploy_services: ""
+  skip_compose_down: "false"
+  postgres_host: postgres_setup-db-1
+  postgres_db: Skuld
+  postgres_user: admin
+  postgres_port: "5432"
+
+home:
+  host: localhost
+  user: deploy
+  runner: self-hosted
+  domain: test.skuld-options.com
+  auth_domain: auth-test.skuld-options.com
+  telegram_chat_id: "-5262458068"
+  db_container: skuld_staging_db
+  compose_args: "-f docker-compose.yml -f docker-compose.testing.yml"
+  traefik_entrypoint: web
+  certresolver_skuld: "traefik.enable=true"
+  certresolver_authelia: "traefik.enable=true"
+  auth_scheme: http
+  authelia: "true"
+  skuld_middlewares: "force-https,authelia"
+  skuld_env: Staging
+  deploy_services: "skuld-frontend skuld-backend"
+  skip_compose_down: "true"
+  postgres_host: postgres
+  postgres_db: Skuld
+  postgres_user: admin
+  postgres_port: "5432"

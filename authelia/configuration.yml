@@ -35,7 +35,7 @@ authentication_backend:
 access_control:
   default_policy: 'deny'
   rules:
-    - domain: 'app.skuld-options.com'
+    - domain: '*.skuld-options.com'
       policy: 'one_factor'
 
 notifier:

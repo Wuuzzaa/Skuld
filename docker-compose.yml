@@ -36,6 +36,11 @@ services:
       - "${TRAEFIK_CERTRESOLVER_LABEL_AUTHELIA}"
       - "traefik.http.services.authelia.loadbalancer.server.port=9091"
 
+      # ForwardAuth Middleware definition (used by skuld-frontend router when SKULD_MIDDLEWARES=authelia)
+      - "traefik.http.middlewares.authelia.forwardauth.address=http://authelia:9091/api/verify?rd=${AUTH_SCHEME}://${AUTH_DOMAIN}/"
+      - "traefik.http.middlewares.authelia.forwardauth.trustForwardHeader=true"
+      - "traefik.http.middlewares.authelia.forwardauth.authResponseHeaders=Remote-User,Remote-Groups,Remote-Name,Remote-Email"
+
     healthcheck:
       test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9091/api/health" ]
       interval: 30s
@@ -56,6 +61,9 @@ services:
       - PYTHONUNBUFFERED=1
       - TZ=Europe/Berlin
       - SKULD_VERSION=${SKULD_VERSION:-}
+      - SKULD_BRANCH=${SKULD_BRANCH:-}
+    volumes:
+      - ./logs:/app/Skuld/logs
     restart: unless-stopped
     networks:
       - web
@@ -83,13 +91,10 @@ services:
       - "${TRAEFIK_CERTRESOLVER_LABEL_SKULD}"
       - "traefik.http.services.skuld.loadbalancer.server.port=8501"
 
-      # Authelia ForwardAuth Middleware
-      - "traefik.http.middlewares.authelia.forwardauth.address=http://authelia:9091/api/verify?rd=${AUTH_SCHEME}://${AUTH_DOMAIN}/"
-      - "traefik.http.middlewares.authelia.forwardauth.trustForwardHeader=true"
-      - "traefik.http.middlewares.authelia.forwardauth.authResponseHeaders=Remote-User,Remote-Groups,Remote-Name,Remote-Email"
-
-      # Apply Authelia Middleware
-      - "traefik.http.routers.skuld.middlewares=authelia"
+      # Middleware assignment: controlled via SKULD_MIDDLEWARES env var
+      # Production: SKULD_MIDDLEWARES=authelia  -> applies auth
+      # Staging:    SKULD_MIDDLEWARES=          -> no middleware (set via testing.yml override)
+      - "traefik.http.routers.skuld.middlewares=${SKULD_MIDDLEWARES:-authelia}"
 
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8501/_stcore/health" ]
@@ -111,6 +116,8 @@ services:
       - PYTHONUNBUFFERED=1
       - TZ=Europe/Berlin
       - SKULD_VERSION=${SKULD_VERSION:-}
+    volumes:
+      - ./logs:/app/Skuld/logs
     restart: unless-stopped
     networks:
       - web

@@ -1,0 +1,61 @@
+name: Deploy React Frontend
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Action to perform"
+        required: true
+        type: choice
+        options:
+          - deploy
+          - teardown
+        default: deploy
+      ref:
+        description: "Git ref to deploy"
+        required: false
+        default: frontend-migration-react
+
+concurrency:
+  group: deploy-react
+  cancel-in-progress: false
+
+jobs:
+  deploy-react:
+    name: Deploy React to Home Server
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Create .env for React stack
+        run: |
+          # Re-use existing .env from main deployment for DB credentials
+          if [ -f /opt/skuld/.env ]; then
+            cp /opt/skuld/.env .env
+          fi
+          # Add React-specific vars
+          echo "" >> .env
+          echo "REACT_DOMAIN=react-test.skuld-options.com" >> .env
+          echo "SECRET_KEY=$(openssl rand -hex 32)" >> .env
+          echo "TRAEFIK_ENTRYPOINT=web" >> .env
+
+      - name: Deploy React containers
+        if: inputs.action == 'deploy'
+        run: |
+          echo "Building and starting React + API containers..."
+          docker compose -f docker-compose.react.yml up --build -d
+          echo ""
+          echo "Waiting for containers to be healthy..."
+          sleep 10
+          docker compose -f docker-compose.react.yml ps
+          echo ""
+          echo "React frontend should be available at: https://react-test.skuld-options.com"
+
+      - name: Teardown React containers
+        if: inputs.action == 'teardown'
+        run: |
+          echo "Stopping and removing React containers..."
+          docker compose -f docker-compose.react.yml down --rmi local
+          echo "Done. React containers removed."

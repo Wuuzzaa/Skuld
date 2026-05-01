@@ -3,23 +3,25 @@ name: Deploy SKULD
 # ============================================================================
 # Unified deployment workflow for all environments.
 #
+# Configuration:
+#   - Environment-specific settings live in ops/environments.yaml
+#   - Shared secrets (SSH key, API keys, DB password) are Repository Secrets
+#   - No GitHub Environments needed
+#
 # Triggers:
-#   - push to master  -> auto-deploy to production only
-#   - workflow_dispatch -> choose target (production / dev-hetzner / home-server) + git ref
-#
-# Each target maps to a GitHub Environment that holds its own
-# secrets (DEPLOY_HOST, DEPLOY_SSH_KEY, ...) and variables
-# (DOMAIN_NAME, AUTH_DOMAIN, ...).
-#
-# Environments:
-#   production  -> Helsinki / Falkenstein (whichever is current prod)
-#   dev-hetzner -> Dev server
-#   home-server -> Home server / staging
+#   - push to master  -> auto-deploy to production
+#   - workflow_dispatch -> choose target + git ref
 # ============================================================================
 
 on:
   push:
     branches: [master]
+    paths-ignore:
+      - '*.md'
+      - 'docs/**'
+      - 'ops/skuld-cli/**'
+      - 'ops/environments.yaml'
+      - '.github/workflows/**'
   workflow_dispatch:
     inputs:
       target:
@@ -28,25 +30,23 @@ on:
         type: choice
         options:
           - production
-          - dev-hetzner
-          - home-server
+          - home
         default: production
       ref:
         description: "Git ref to deploy (branch, tag, or SHA)"
         required: false
         default: master
       restore_db_from_source:
-        description: "Only for home-server: restore DB from source before deploy"
+        description: "Only for home: restore DB from source before deploy"
         type: boolean
         required: false
         default: false
-      db_source_environment:
+      db_source:
         description: "Source environment for DB restore"
         required: false
         type: choice
         options:
           - production
-          - dev-hetzner
         default: production
       db_backup_path:
         description: "Optional absolute backup path on source server (default: latest)"
@@ -62,6 +62,107 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # ========================================================================
+  # Guard: only master can be deployed to production
+  # ========================================================================
+  guard:
+    name: Validate deploy request
+    runs-on: ubuntu-latest
+    steps:
+      - name: Block non-master deploys to production
+        run: |
+          TARGET="${{ github.event_name == 'push' && 'production' || inputs.target }}"
+          REF="${{ inputs.ref || github.ref_name }}"
+
+          if [ "$TARGET" = "production" ] && [ "$REF" != "master" ]; then
+            echo "::error::Production deploys are only allowed from 'master'. Got: '$REF'"
+            echo ""
+            echo "Deploy deinen Branch zuerst auf 'home' zum Testen:"
+            echo "  skuld deploy home --branch $REF"
+            echo ""
+            echo "Wenn alles passt: Branch in master mergen, dann wird automatisch deployed."
+            exit 1
+          fi
+
+          echo "✅ Deploy allowed: target=$TARGET, ref=$REF"
+
+  # ========================================================================
+  # Load environment config from ops/environments.yaml
+  # ========================================================================
+  load-config:
+    name: Load environment config
+    needs: [guard]
+    runs-on: ubuntu-latest
+    outputs:
+      target: ${{ steps.parse.outputs.target }}
+      host: ${{ steps.parse.outputs.host }}
+      user: ${{ steps.parse.outputs.user }}
+      runner: ${{ steps.parse.outputs.runner }}
+      domain: ${{ steps.parse.outputs.domain }}
+      auth_domain: ${{ steps.parse.outputs.auth_domain }}
+      telegram_chat_id: ${{ steps.parse.outputs.telegram_chat_id }}
+      db_container: ${{ steps.parse.outputs.db_container }}
+      compose_args: ${{ steps.parse.outputs.compose_args }}
+      traefik_entrypoint: ${{ steps.parse.outputs.traefik_entrypoint }}
+      certresolver_skuld: ${{ steps.parse.outputs.certresolver_skuld }}
+      certresolver_authelia: ${{ steps.parse.outputs.certresolver_authelia }}
+      auth_scheme: ${{ steps.parse.outputs.auth_scheme }}
+      authelia: ${{ steps.parse.outputs.authelia }}
+      skuld_env: ${{ steps.parse.outputs.skuld_env }}
+      skuld_middlewares: ${{ steps.parse.outputs.skuld_middlewares }}
+      deploy_services: ${{ steps.parse.outputs.deploy_services }}
+      skip_compose_down: ${{ steps.parse.outputs.skip_compose_down }}
+      postgres_host: ${{ steps.parse.outputs.postgres_host }}
+      postgres_db: ${{ steps.parse.outputs.postgres_db }}
+      postgres_user: ${{ steps.parse.outputs.postgres_user }}
+      postgres_port: ${{ steps.parse.outputs.postgres_port }}
+      deploy_label: ${{ steps.parse.outputs.deploy_label }}
+      # Source environment (for DB restore)
+      source_host: ${{ steps.parse.outputs.source_host }}
+      source_user: ${{ steps.parse.outputs.source_user }}
+      source_db_container: ${{ steps.parse.outputs.source_db_container }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - name: Parse environments.yaml
+        id: parse
+        run: |
+          TARGET="${{ github.event_name == 'push' && 'production' || inputs.target }}"
+
+          python3 - "$TARGET" "${{ inputs.db_source || '' }}" <<'PYEOF'
+          import yaml, sys, os
+
+          target = sys.argv[1]
+          db_source = sys.argv[2] if len(sys.argv) > 2 else ""
+
+          with open("ops/environments.yaml") as f:
+              cfg = yaml.safe_load(f)
+
+          if target not in cfg:
+              print(f"::error::Unknown target '{target}'. Available: {list(cfg.keys())}")
+              sys.exit(1)
+
+          env = cfg[target]
+          gh = os.environ.get("GITHUB_OUTPUT", "/dev/null")
+          with open(gh, "a") as out:
+              out.write(f"target={target}\n")
+              out.write(f"deploy_label={env.get('skuld_env', target)}\n")
+              for key, val in env.items():
+                  out.write(f"{key}={val}\n")
+
+              # Source environment for DB restore
+              if db_source and db_source in cfg:
+                  src = cfg[db_source]
+                  out.write(f"source_host={src['host']}\n")
+                  out.write(f"source_user={src['user']}\n")
+                  out.write(f"source_db_container={src['db_container']}\n")
+          PYEOF
+
+  # ========================================================================
+  # Validate DB restore request (only for workflow_dispatch)
+  # ========================================================================
   validate_restore_request:
     name: Validate optional DB restore
     runs-on: ubuntu-latest
@@ -70,7 +171,6 @@ jobs:
       - name: Validate restore parameters
         run: |
           set -euo pipefail
-
           TARGET="${{ inputs.target }}"
           RESTORE="${{ inputs.restore_db_from_source }}"
 
@@ -79,24 +179,26 @@ jobs:
             exit 0
           fi
 
-          if [ "$TARGET" != "home-server" ]; then
-            echo "DB restore from source is only allowed when target=home-server." >&2
+          if [ "$TARGET" != "home" ]; then
+            echo "::error::DB restore is only allowed when target=home." >&2
             exit 1
           fi
 
           if [ "${{ inputs.confirm_db_restore }}" != "RESTORE_HOME_DB" ]; then
-            echo "Confirmation missing. Set confirm_db_restore=RESTORE_HOME_DB." >&2
+            echo "::error::Confirmation missing. Set confirm_db_restore=RESTORE_HOME_DB." >&2
             exit 1
           fi
 
           echo "Restore request validated."
 
+  # ========================================================================
+  # Fetch DB backup from source (runs on ubuntu-latest, SSHs to source)
+  # ========================================================================
   fetch_db_backup:
     name: Fetch source DB backup
     runs-on: ubuntu-latest
-    needs: validate_restore_request
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.target == 'home-server' && inputs.restore_db_from_source }}
-    environment: ${{ inputs.db_source_environment }}
+    needs: [load-config, validate_restore_request]
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.target == 'home' && inputs.restore_db_from_source }}
     outputs:
       backup_file_name: ${{ steps.select_backup.outputs.backup_file_name }}
       backup_remote_path: ${{ steps.select_backup.outputs.backup_remote_path }}
@@ -110,18 +212,20 @@ jobs:
       - name: Select backup on source server
         id: select_backup
         run: |
+          SOURCE_HOST="${{ needs.load-config.outputs.source_host }}"
+          SOURCE_USER="${{ needs.load-config.outputs.source_user }}"
           REQUESTED_PATH="${{ inputs.db_backup_path }}"
 
           if [ -n "$REQUESTED_PATH" ]; then
             BACKUP_PATH="$REQUESTED_PATH"
           else
             BACKUP_PATH=$(ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-              ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+              ${SOURCE_USER}@${SOURCE_HOST} \
               'ls -t ~/backups/postgres/skuld_*.sql.gz ~/backups/postgres/skuld_manual_*.sql.gz 2>/dev/null | head -n 1')
           fi
 
           if [ -z "$BACKUP_PATH" ]; then
-            echo "No backup found on source environment ${{ inputs.db_source_environment }}." >&2
+            echo "::error::No backup found on source." >&2
             exit 1
           fi
 
@@ -131,7 +235,7 @@ jobs:
       - name: Download backup from source server
         run: |
           scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ steps.select_backup.outputs.backup_remote_path }} \
+            ${{ needs.load-config.outputs.source_user }}@${{ needs.load-config.outputs.source_host }}:${{ steps.select_backup.outputs.backup_remote_path }} \
             ./${{ steps.select_backup.outputs.backup_file_name }}
 
       - name: Upload backup artifact
@@ -142,65 +246,60 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  # ========================================================================
+  # Restore DB on home server
+  # ========================================================================
   restore_db_on_home:
-    name: Restore DB on home-server
+    name: Restore DB on home server
     runs-on: self-hosted
-    needs: fetch_db_backup
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.target == 'home-server' && inputs.restore_db_from_source }}
-    environment: home-server
+    needs: [load-config, fetch_db_backup]
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.target == 'home' && inputs.restore_db_from_source }}
     steps:
       - name: Download backup artifact
         uses: actions/download-artifact@v4
         with:
           name: source-db-backup
 
-      - name: Setup home SSH key
+      - name: Restore backup
         run: |
-          mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" | tr -d '\r' > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
+          set -euo pipefail
+          DB_CONTAINER="${{ needs.load-config.outputs.db_container }}"
+          BACKUP_FILE="./${{ needs.fetch_db_backup.outputs.backup_file_name }}"
 
-      - name: Copy backup to home server
-        run: |
-          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-            ./${{ needs.fetch_db_backup.outputs.backup_file_name }} \
-            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/${{ needs.fetch_db_backup.outputs.backup_file_name }}
+          docker stop skuld-frontend skuld-backend 2>/dev/null || true
 
-      - name: Restore backup on home server
-        run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} 'bash -s' <<EOF
-            set -euo pipefail
+          echo 'DROP DATABASE IF EXISTS "Skuld"; CREATE DATABASE "Skuld";' | \
+            docker exec -i "$DB_CONTAINER" psql -U admin -d postgres
 
-            BACKUP_FILE="/tmp/${{ needs.fetch_db_backup.outputs.backup_file_name }}"
+          gzip -dc "$BACKUP_FILE" | docker exec -i "$DB_CONTAINER" psql -U admin -d Skuld
 
-            docker stop skuld-frontend skuld-backend 2>/dev/null || true
+          rm -f "$BACKUP_FILE"
 
-            echo 'DROP DATABASE IF EXISTS "Skuld"; CREATE DATABASE "Skuld";' | \
-              docker exec -i skuld_staging_db psql -U admin -d postgres
-
-            gzip -dc "$BACKUP_FILE" | docker exec -i skuld_staging_db psql -U admin -d Skuld
-
-            rm -f "$BACKUP_FILE"
-          EOF
-
+  # ========================================================================
+  # Main deploy job
+  # ========================================================================
   deploy:
-    name: "Deploy to ${{ github.event_name == 'push' && 'production' || inputs.target }}"
+    name: "Deploy to ${{ needs.load-config.outputs.deploy_label }}"
     needs:
+      - guard
+      - load-config
       - validate_restore_request
       - fetch_db_backup
       - restore_db_on_home
     if: |
       always() &&
+      needs.guard.result == 'success' &&
+      needs.load-config.result == 'success' &&
       (needs.validate_restore_request.result == 'success' || needs.validate_restore_request.result == 'skipped') &&
       (needs.fetch_db_backup.result == 'success' || needs.fetch_db_backup.result == 'skipped') &&
       (needs.restore_db_on_home.result == 'success' || needs.restore_db_on_home.result == 'skipped')
-    runs-on: ${{ github.event_name == 'workflow_dispatch' && inputs.target == 'home-server' && 'self-hosted' || 'ubuntu-latest' }}
-    environment: ${{ github.event_name == 'push' && 'production' || inputs.target }}
+    runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.target == 'home') && 'self-hosted' || 'ubuntu-latest' }}
     env:
-      DEPLOY_TARGET: ${{ github.event_name == 'push' && 'production' || inputs.target }}
-      DEPLOY_LABEL: ${{ github.event_name == 'push' && 'Production' || inputs.target == 'production' && 'Production' || inputs.target == 'home-server' && 'Home Server' || 'Dev Hetzner' }}
-      COMPOSE_ARGS: ${{ github.event_name == 'push' && '-f docker-compose.yml' || inputs.target == 'home-server' && '-f docker-compose.yml -f docker-compose.testing.yml' || '-f docker-compose.yml' }}
+      DEPLOY_TARGET: ${{ needs.load-config.outputs.target }}
+      DEPLOY_LABEL: ${{ needs.load-config.outputs.deploy_label }}
+      COMPOSE_ARGS: ${{ needs.load-config.outputs.compose_args }}
+      DEPLOY_HOST: ${{ needs.load-config.outputs.host }}
+      DEPLOY_USER: ${{ needs.load-config.outputs.user }}
 
     steps:
       - name: Initialize source directory
@@ -208,14 +307,14 @@ jobs:
           echo "SOURCE_DIR=$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
 
       - name: Checkout code
-        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.target == 'home-server') }}
+        if: ${{ needs.load-config.outputs.runner == 'ubuntu-latest' }}
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref || '' }}
           clean: false
 
-      - name: Fetch source for home-server deploy
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.target == 'home-server' }}
+      - name: Fetch source for self-hosted deploy
+        if: ${{ needs.load-config.outputs.runner == 'self-hosted' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -231,10 +330,46 @@ jobs:
           git checkout --detach FETCH_HEAD
           echo "SOURCE_DIR=$SOURCE_DIR" >> "$GITHUB_ENV"
 
+      # Always overlay infrastructure files from master so that any branch
+      # can be deployed without carrying its own copy of compose/infra config.
+      - name: Overlay infrastructure from master
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd "$SOURCE_DIR"
+          REF="${{ inputs.ref || github.ref_name }}"
+
+          # Skip if we're already deploying master
+          if [ "$REF" = "master" ] || [ "$REF" = "refs/heads/master" ]; then
+            echo "Deploying master — no overlay needed"
+            exit 0
+          fi
+
+          echo "=== Overlaying infrastructure files from master ==="
+          INFRA_DIR="$RUNNER_TEMP/skuld-infra-${GITHUB_RUN_ID}"
+          rm -rf "$INFRA_DIR"
+          mkdir -p "$INFRA_DIR"
+          git clone --depth 1 --branch master \
+            "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" \
+            "$INFRA_DIR"
+
+          # Overlay infra files (compose, authelia config, ops)
+          for f in docker-compose.yml docker-compose.testing.yml authelia/configuration.yml; do
+            if [ -f "$INFRA_DIR/$f" ]; then
+              echo "  Overlaying $f"
+              mkdir -p "$(dirname "$f")"
+              cp "$INFRA_DIR/$f" "$f"
+            fi
+          done
+
+          rm -rf "$INFRA_DIR"
+          echo "=== Infrastructure overlay complete ==="
+
       - name: Notify deploy started via Telegram
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_CHAT_ID: ${{ needs.load-config.outputs.telegram_chat_id }}
         run: |
           cd "$SOURCE_DIR"
           ACTOR="${{ github.actor }}"
@@ -258,25 +393,14 @@ jobs:
       - name: Prepare remote server
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'ENDSSH'
-            _DEPLOY_PASS='${{ secrets.DEPLOY_PASSWORD }}'
-            if [ -n "$_DEPLOY_PASS" ]; then
-              mysudo() { echo "$_DEPLOY_PASS" | sudo -S "$@"; }
-            else
-              mysudo() { sudo "$@"; }
-            fi
-            mysudo docker image prune -af || true
-            mysudo mkdir -p /opt/skuld
-            mysudo chown -R $(whoami) /opt/skuld
+            ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }} << 'ENDSSH'
+            docker image prune -af || true
+            sudo mkdir -p /opt/skuld
+            sudo chown -R $(whoami) /opt/skuld
           ENDSSH
 
       - name: Sync files to server
         run: |
-          EXTRA_EXCLUDES=""
-          if [ "${{ env.DEPLOY_TARGET }}" = "home-server" ]; then
-            EXTRA_EXCLUDES="--exclude authelia/**"
-          fi
-
           rsync -avz --delete \
             -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectionAttempts=1" \
             --exclude 'logs/' \
@@ -290,248 +414,250 @@ jobs:
             --exclude 'authelia/session_secret' \
             --exclude 'authelia/jwt_secret' \
             --exclude 'authelia/storage_encryption_key' \
-            $EXTRA_EXCLUDES \
-            "$SOURCE_DIR"/ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/skuld/
+            "$SOURCE_DIR"/ ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }}:/opt/skuld/
 
       - name: Get version
         id: get_version
         run: |
           cd "$SOURCE_DIR"
+          REF="${{ inputs.ref || github.ref_name }}"
           COUNT=$(git rev-list --count HEAD)
           HASH=$(git rev-parse --short HEAD)
           DATE=$(git log -1 --format=%cd --date=format:'%Y-%m-%d %H:%M')
           echo "VERSION=${COUNT}-${HASH} (${DATE})" >> $GITHUB_OUTPUT
+          echo "BRANCH=${REF}" >> $GITHUB_OUTPUT
 
       - name: Build and deploy
+        env:
+          CFG_DOMAIN: ${{ needs.load-config.outputs.domain }}
+          CFG_AUTH_DOMAIN: ${{ needs.load-config.outputs.auth_domain }}
+          CFG_TRAEFIK_ENTRYPOINT: ${{ needs.load-config.outputs.traefik_entrypoint }}
+          CFG_CERTRESOLVER_SKULD: ${{ needs.load-config.outputs.certresolver_skuld }}
+          CFG_CERTRESOLVER_AUTHELIA: ${{ needs.load-config.outputs.certresolver_authelia }}
+          CFG_AUTH_SCHEME: ${{ needs.load-config.outputs.auth_scheme }}
+          CFG_TELEGRAM_CHAT_ID: ${{ needs.load-config.outputs.telegram_chat_id }}
+          CFG_POSTGRES_HOST: ${{ needs.load-config.outputs.postgres_host }}
+          CFG_POSTGRES_DB: ${{ needs.load-config.outputs.postgres_db }}
+          CFG_POSTGRES_USER: ${{ needs.load-config.outputs.postgres_user }}
+          CFG_POSTGRES_PORT: ${{ needs.load-config.outputs.postgres_port }}
+          CFG_DB_CONTAINER: ${{ needs.load-config.outputs.db_container }}
+          CFG_SKULD_ENV: ${{ needs.load-config.outputs.skuld_env }}
+          CFG_SKULD_MIDDLEWARES: ${{ needs.load-config.outputs.skuld_middlewares }}
+          CFG_DEPLOY_SERVICES: ${{ needs.load-config.outputs.deploy_services }}
+          CFG_SKIP_COMPOSE_DOWN: ${{ needs.load-config.outputs.skip_compose_down }}
+          CFG_AUTHELIA: ${{ needs.load-config.outputs.authelia }}
+          SKULD_VERSION: ${{ steps.get_version.outputs.VERSION }}
+          SKULD_BRANCH: ${{ steps.get_version.outputs.BRANCH }}
+          SECRET_TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          SECRET_MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY }}
+          SECRET_MASSIVE_API_KEY_FLAT_FILES: ${{ secrets.MASSIVE_API_KEY_FLAT_FILES }}
+          SECRET_POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          SECRET_AUTHELIA_JWT: ${{ secrets.AUTHELIA_JWT_SECRET }}
+          SECRET_AUTHELIA_SESSION: ${{ secrets.AUTHELIA_SESSION_SECRET }}
+          SECRET_AUTHELIA_STORAGE: ${{ secrets.AUTHELIA_STORAGE_ENCRYPTION_KEY }}
+          SECRET_AUTHELIA_HASH: ${{ secrets.AUTHELIA_PASSWORD_HASH }}
         run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'ENDSSH'
-            set -euo pipefail
+          # Build the remote script locally, then pipe it over SSH.
+          # This avoids GitHub expression injection in heredocs.
+          cat > /tmp/deploy_remote.sh <<'REMOTESCRIPT'
+          set -euo pipefail
+          cd /opt/skuld
 
-            _DEPLOY_PASS='${{ secrets.DEPLOY_PASSWORD }}'
-            if [ -n "$_DEPLOY_PASS" ]; then
-              mysudo() { echo "$_DEPLOY_PASS" | sudo -S "$@"; }
-            else
-              mysudo() { sudo "$@"; }
+          # ── Create .env ──
+          echo "=== Creating .env file ==="
+          cat > .env <<ENVEOF
+          DOMAIN_NAME=${CFG_DOMAIN}
+          AUTH_DOMAIN=${CFG_AUTH_DOMAIN}
+          TRAEFIK_ENTRYPOINT=${CFG_TRAEFIK_ENTRYPOINT}
+          TRAEFIK_CERTRESOLVER_LABEL_SKULD=${CFG_CERTRESOLVER_SKULD}
+          TRAEFIK_CERTRESOLVER_LABEL_AUTHELIA=${CFG_CERTRESOLVER_AUTHELIA}
+          AUTH_SCHEME=${CFG_AUTH_SCHEME}
+          TELEGRAM_BOT_TOKEN=${SECRET_TELEGRAM_BOT_TOKEN}
+          TELEGRAM_CHAT_ID=${CFG_TELEGRAM_CHAT_ID}
+          MASSIVE_API_KEY=${SECRET_MASSIVE_API_KEY}
+          MASSIVE_API_KEY_FLAT_FILES=${SECRET_MASSIVE_API_KEY_FLAT_FILES}
+          SKULD_VERSION=${SKULD_VERSION}
+          SKULD_BRANCH=${SKULD_BRANCH}
+          SKULD_ENV=${CFG_SKULD_ENV}
+          POSTGRES_HOST=${CFG_POSTGRES_HOST}
+          POSTGRES_DB=${CFG_POSTGRES_DB}
+          POSTGRES_USER=${CFG_POSTGRES_USER}
+          POSTGRES_PASSWORD=${SECRET_POSTGRES_PASSWORD}
+          POSTGRES_PORT=${CFG_POSTGRES_PORT}
+          SKULD_MIDDLEWARES=${CFG_SKULD_MIDDLEWARES}
+          ENVEOF
+
+          # Validate critical DB vars
+          for k in POSTGRES_HOST POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD POSTGRES_PORT; do
+            if ! grep -q "^${k}=.\+" .env; then
+              echo "Missing required DB setting: ${k}" >&2
+              exit 1
             fi
+          done
 
-            cd /opt/skuld
+          # ── Authelia secrets ──
+          if [ "${CFG_AUTHELIA}" = "true" ] || [ "${CFG_AUTHELIA}" = "True" ]; then
+            echo "=== Creating Authelia configuration ==="
+            mkdir -p authelia
+            echo "${SECRET_AUTHELIA_JWT}" > authelia/jwt_secret
+            echo "${SECRET_AUTHELIA_SESSION}" > authelia/session_secret
+            echo "${SECRET_AUTHELIA_STORAGE}" > authelia/storage_encryption_key
+            cat > authelia/users_database.yml <<AUEOF
+          users:
+            admin:
+              displayname: "Admin"
+              password: "${SECRET_AUTHELIA_HASH}"
+              email: admin@skuld.com
+              groups:
+                - admins
+                - dev
+          AUEOF
+          fi
 
-            # ── Create .env from GitHub Environment vars/secrets ──
-            echo "=== Creating .env file ==="
+          # ── Recreate Authelia if enabled and we're doing a partial deploy ──
+          # Force-recreate ensures new labels (ForwardAuth definition) are applied.
+          if ( [ "${CFG_AUTHELIA}" = "true" ] || [ "${CFG_AUTHELIA}" = "True" ] ) && [ -n "${CFG_DEPLOY_SERVICES}" ]; then
+            echo "=== Recreating Authelia to pick up secrets and labels ==="
+            docker compose ${COMPOSE_ARGS} up -d --no-deps --force-recreate authelia
+          fi
 
-            POSTGRES_HOST_VALUE='${{ vars.POSTGRES_HOST }}'
-            POSTGRES_DB_VALUE='${{ vars.POSTGRES_DB }}'
-            POSTGRES_USER_VALUE='${{ vars.POSTGRES_USER }}'
-            POSTGRES_PORT_VALUE='${{ vars.POSTGRES_PORT }}'
-            TELEGRAM_BOT_TOKEN_VALUE='${{ secrets.TELEGRAM_BOT_TOKEN }}'
-            TELEGRAM_CHAT_ID_VALUE='${{ secrets.TELEGRAM_CHAT_ID }}'
-            MASSIVE_API_KEY_VALUE='${{ secrets.MASSIVE_API_KEY }}'
-            MASSIVE_API_KEY_FLAT_FILES_VALUE='${{ secrets.MASSIVE_API_KEY_FLAT_FILES }}'
+          set -x
+          mkdir -p logs
 
-            read_existing_env_value() {
-              local key="$1"
-              if [ -f .env ]; then
-                grep -m1 "^${key}=" .env | cut -d= -f2- || true
-              fi
-            }
+          docker network create web >/dev/null 2>&1 || true
+          docker network create postgres_setup_default >/dev/null 2>&1 || true
 
-            pick_env_value() {
-              local existing_key="$1"
-              local fallback_value="$2"
-              local default_value="${3:-}"
-              local existing_value
+          # ── Safe Deploy: wait for running data-collection jobs ──
+          echo "=== Checking for running jobs in skuld-backend ==="
+          MAX_WAIT=3600
+          POLL_INTERVAL=30
+          WAITED=0
+          NOTIFIED=0
 
-              existing_value=$(read_existing_env_value "$existing_key")
-              if [ -n "$existing_value" ]; then
-                printf '%s\n' "$existing_value"
-              elif [ -n "$fallback_value" ]; then
-                printf '%s\n' "$fallback_value"
-              else
-                printf '%s\n' "$default_value"
-              fi
-            }
+          send_telegram() {
+            local msg="$1"
+            curl -s -X POST "https://api.telegram.org/bot${SECRET_TELEGRAM_BOT_TOKEN}/sendMessage" \
+              -d chat_id="${CFG_TELEGRAM_CHAT_ID}" \
+              -d text="${msg}" \
+              -d parse_mode=HTML >/dev/null 2>&1 || true
+          }
 
-            # Home server runs the staging DB from docker-compose.testing.yml.
-            # Ensure sane defaults even if environment vars are missing.
-            # Preserve the existing home-server configuration instead of rewriting infra values.
-            if [ "${{ env.DEPLOY_TARGET }}" = "home-server" ]; then
-              DOMAIN_NAME_VALUE=$(pick_env_value DOMAIN_NAME "${{ vars.DOMAIN_NAME }}")
-              AUTH_DOMAIN_VALUE=$(pick_env_value AUTH_DOMAIN "${{ vars.AUTH_DOMAIN }}")
-              TRAEFIK_ENTRYPOINT_VALUE=$(pick_env_value TRAEFIK_ENTRYPOINT "${{ vars.TRAEFIK_ENTRYPOINT }}")
-              TRAEFIK_CERTRESOLVER_LABEL_SKULD_VALUE=$(pick_env_value TRAEFIK_CERTRESOLVER_LABEL_SKULD "${{ vars.TRAEFIK_CERTRESOLVER_LABEL_SKULD }}")
-              TRAEFIK_CERTRESOLVER_LABEL_AUTHELIA_VALUE=$(pick_env_value TRAEFIK_CERTRESOLVER_LABEL_AUTHELIA "${{ vars.TRAEFIK_CERTRESOLVER_LABEL_AUTHELIA }}")
-              AUTH_SCHEME_VALUE=$(pick_env_value AUTH_SCHEME "${{ vars.AUTH_SCHEME }}")
-              TELEGRAM_BOT_TOKEN_VALUE=$(pick_env_value TELEGRAM_BOT_TOKEN "$TELEGRAM_BOT_TOKEN_VALUE")
-              TELEGRAM_CHAT_ID_VALUE=$(pick_env_value TELEGRAM_CHAT_ID "$TELEGRAM_CHAT_ID_VALUE")
-              MASSIVE_API_KEY_VALUE=$(pick_env_value MASSIVE_API_KEY "$MASSIVE_API_KEY_VALUE")
-              MASSIVE_API_KEY_FLAT_FILES_VALUE=$(pick_env_value MASSIVE_API_KEY_FLAT_FILES "$MASSIVE_API_KEY_FLAT_FILES_VALUE")
-              POSTGRES_HOST_VALUE=$(pick_env_value POSTGRES_HOST "$POSTGRES_HOST_VALUE" postgres)
-              POSTGRES_DB_VALUE=$(pick_env_value POSTGRES_DB "$POSTGRES_DB_VALUE" Skuld)
-              POSTGRES_USER_VALUE=$(pick_env_value POSTGRES_USER "$POSTGRES_USER_VALUE" admin)
-              POSTGRES_PORT_VALUE=$(pick_env_value POSTGRES_PORT "$POSTGRES_PORT_VALUE" 5432)
-              POSTGRES_PASSWORD_VALUE=$(pick_env_value POSTGRES_PASSWORD "${{ secrets.POSTGRES_PASSWORD }}")
-            else
-              DOMAIN_NAME_VALUE='${{ vars.DOMAIN_NAME }}'
-              AUTH_DOMAIN_VALUE='${{ vars.AUTH_DOMAIN }}'
-              TRAEFIK_ENTRYPOINT_VALUE='${{ vars.TRAEFIK_ENTRYPOINT }}'
-              TRAEFIK_CERTRESOLVER_LABEL_SKULD_VALUE='${{ vars.TRAEFIK_CERTRESOLVER_LABEL_SKULD }}'
-              TRAEFIK_CERTRESOLVER_LABEL_AUTHELIA_VALUE='${{ vars.TRAEFIK_CERTRESOLVER_LABEL_AUTHELIA }}'
-              AUTH_SCHEME_VALUE='${{ vars.AUTH_SCHEME }}'
-              POSTGRES_PASSWORD_VALUE='${{ secrets.POSTGRES_PASSWORD }}'
+          is_job_running() {
+            docker exec skuld-backend sh -c \
+              'pgrep -f "python.*main\.py" || pgrep -f "run_data_collection\.sh"' \
+              >/dev/null 2>&1
+          }
+
+          while is_job_running; do
+            if [ "$NOTIFIED" -eq 0 ]; then
+              echo "⏳ main.py is running – waiting for job to finish..."
+              send_telegram "⏳ <b>Deploy triggered</b> but <code>main.py</code> is still running. Waiting..."
+              NOTIFIED=1
             fi
-
-            echo "DOMAIN_NAME=${DOMAIN_NAME_VALUE}" > .env
-            echo "AUTH_DOMAIN=${AUTH_DOMAIN_VALUE}" >> .env
-            echo "TRAEFIK_ENTRYPOINT=${TRAEFIK_ENTRYPOINT_VALUE}" >> .env
-            echo "TRAEFIK_CERTRESOLVER_LABEL_SKULD=${TRAEFIK_CERTRESOLVER_LABEL_SKULD_VALUE}" >> .env
-            echo "TRAEFIK_CERTRESOLVER_LABEL_AUTHELIA=${TRAEFIK_CERTRESOLVER_LABEL_AUTHELIA_VALUE}" >> .env
-            echo "AUTH_SCHEME=${AUTH_SCHEME_VALUE}" >> .env
-            echo "TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN_VALUE}" >> .env
-            echo "TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID_VALUE}" >> .env
-            echo "MASSIVE_API_KEY=${MASSIVE_API_KEY_VALUE}" >> .env
-            echo "MASSIVE_API_KEY_FLAT_FILES=${MASSIVE_API_KEY_FLAT_FILES_VALUE}" >> .env
-            echo "SKULD_VERSION=${{ steps.get_version.outputs.VERSION }}" >> .env
-            echo "POSTGRES_HOST=${POSTGRES_HOST_VALUE}" >> .env
-            echo "POSTGRES_DB=${POSTGRES_DB_VALUE}" >> .env
-            echo "POSTGRES_USER=${POSTGRES_USER_VALUE}" >> .env
-            echo "POSTGRES_PASSWORD=${POSTGRES_PASSWORD_VALUE}" >> .env
-            echo "POSTGRES_PORT=${POSTGRES_PORT_VALUE}" >> .env
-
-            # Fail fast on missing critical DB vars.
-            REQUIRED_DB_VARS="POSTGRES_HOST POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD POSTGRES_PORT"
-            for k in $REQUIRED_DB_VARS; do
-              if ! grep -q "^${k}=.\+" .env; then
-                echo "Missing required DB setting: ${k}" >&2
-                exit 1
-              fi
-            done
-
-            # ── Authelia secrets ──
-            if [ "${{ env.DEPLOY_TARGET }}" != "home-server" ]; then
-              echo "=== Creating Authelia configuration ==="
-              mkdir -p authelia
-              echo "${{ secrets.AUTHELIA_JWT_SECRET }}" > authelia/jwt_secret
-              echo "${{ secrets.AUTHELIA_SESSION_SECRET }}" > authelia/session_secret
-              echo "${{ secrets.AUTHELIA_STORAGE_ENCRYPTION_KEY }}" > authelia/storage_encryption_key
-
-              AUTHELIA_HASH='${{ secrets.AUTHELIA_PASSWORD_HASH }}'
-              echo "users:" > authelia/users_database.yml
-              echo "  admin:" >> authelia/users_database.yml
-              echo "    displayname: \"Admin\"" >> authelia/users_database.yml
-              echo "    password: \"$AUTHELIA_HASH\"" >> authelia/users_database.yml
-              echo "    email: admin@skuld.com" >> authelia/users_database.yml
-              echo "    groups:" >> authelia/users_database.yml
-              echo "      - admins" >> authelia/users_database.yml
-              echo "      - dev" >> authelia/users_database.yml
+            if [ "$WAITED" -ge "$MAX_WAIT" ]; then
+              echo "⚠️ Timeout after ${MAX_WAIT}s – proceeding anyway"
+              send_telegram "⚠️ <b>Deploy timeout</b>: waited ${MAX_WAIT}s. Proceeding."
+              break
             fi
+            sleep $POLL_INTERVAL
+            WAITED=$((WAITED + POLL_INTERVAL))
+            echo "   … still waiting (${WAITED}s / ${MAX_WAIT}s)"
+          done
 
-            set -x
-            mkdir -p logs
+          if [ "$NOTIFIED" -eq 1 ] && [ "$WAITED" -lt "$MAX_WAIT" ]; then
+            echo "✅ Job finished after ${WAITED}s – proceeding"
+            send_telegram "✅ <b>Job finished</b> after ${WAITED}s. Deploying..."
+          fi
 
-            # Ensure external networks exist before compose (especially on fresh home-server installs).
-            mysudo docker network create web >/dev/null 2>&1 || true
-            mysudo docker network create postgres_setup_default >/dev/null 2>&1 || true
+          # ── Stop old containers ──
+          echo "=== Stopping old containers ==="
+          docker rm -f skuld-streamlit 2>/dev/null || true
+          docker rm -f skuld-frontend 2>/dev/null || true
+          docker rm -f skuld-backend 2>/dev/null || true
 
-            # ── Safe Deploy: wait for running data-collection jobs ──
-            echo "=== Checking for running jobs in skuld-backend ==="
-            TELEGRAM_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
-            TELEGRAM_CHAT="${{ secrets.TELEGRAM_CHAT_ID }}"
-            MAX_WAIT=3600
-            POLL_INTERVAL=30
-            WAITED=0
-            NOTIFIED=0
+          if [ "${CFG_SKIP_COMPOSE_DOWN}" != "true" ] && [ "${CFG_SKIP_COMPOSE_DOWN}" != "True" ]; then
+            docker rm -f authelia 2>/dev/null || true
+            docker ps -a --filter "name=authelia" -q | xargs -r docker rm -f 2>/dev/null || true
+            docker ps -a --filter "name=skuld" -q | xargs -r docker rm -f 2>/dev/null || true
+            docker compose ${COMPOSE_ARGS} down --remove-orphans || true
+          fi
 
-            send_telegram() {
-              local msg="$1"
-              curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-                -d chat_id="${TELEGRAM_CHAT}" \
-                -d text="${msg}" \
-                -d parse_mode=HTML >/dev/null 2>&1 || true
-            }
+          # ── Build & start ──
+          echo "=== Building image ==="
+          if [ -n "${CFG_DEPLOY_SERVICES}" ]; then
+            docker compose ${COMPOSE_ARGS} build --pull --no-cache ${CFG_DEPLOY_SERVICES}
+          else
+            docker compose ${COMPOSE_ARGS} build --pull --no-cache
+          fi
 
-            is_job_running() {
-              mysudo docker exec skuld-backend sh -c \
-                'pgrep -f "python.*main\.py" || pgrep -f "run_data_collection\.sh"' \
-                >/dev/null 2>&1
-            }
+          echo "=== Starting containers ==="
+          if [ -n "${CFG_DEPLOY_SERVICES}" ]; then
+            docker compose ${COMPOSE_ARGS} up -d --no-deps --force-recreate ${CFG_DEPLOY_SERVICES}
+            # Restart Traefik so it picks up new container labels
+            echo "=== Restarting Traefik to pick up label changes ==="
+            docker restart traefik_staging 2>/dev/null || docker restart traefik 2>/dev/null || true
+          else
+            docker compose ${COMPOSE_ARGS} up -d --remove-orphans
+          fi
 
-            while is_job_running; do
-              if [ "$NOTIFIED" -eq 0 ]; then
-                echo "⏳ main.py is running – waiting for job to finish..."
-                send_telegram "⏳ <b>Deploy triggered</b> but <code>main.py</code> is still running. Waiting..."
-                NOTIFIED=1
-              fi
-              if [ "$WAITED" -ge "$MAX_WAIT" ]; then
-                echo "⚠️ Timeout after ${MAX_WAIT}s – proceeding anyway"
-                send_telegram "⚠️ <b>Deploy timeout</b>: waited ${MAX_WAIT}s. Proceeding."
-                break
-              fi
-              sleep $POLL_INTERVAL
-              WAITED=$((WAITED + POLL_INTERVAL))
-              echo "   … still waiting (${WAITED}s / ${MAX_WAIT}s)"
-            done
+          echo "=== Cleaning old containers and images ==="
+          docker container prune -f
+          docker image prune -f
 
-            if [ "$NOTIFIED" -eq 1 ] && [ "$WAITED" -lt "$MAX_WAIT" ]; then
-              echo "✅ Job finished after ${WAITED}s – proceeding"
-              send_telegram "✅ <b>Job finished</b> after ${WAITED}s. Deploying..."
-            fi
+          echo "=== Container status ==="
+          docker compose ${COMPOSE_ARGS} ps
 
-            # ── Stop old containers ──
-            echo "=== Stopping old containers ==="
-            mysudo docker rm -f skuld-streamlit 2>/dev/null || true
-            mysudo docker rm -f skuld-frontend 2>/dev/null || true
-            mysudo docker rm -f skuld-backend 2>/dev/null || true
-            if [ "${{ env.DEPLOY_TARGET }}" = "home-server" ]; then
-              true
-            else
-              mysudo docker rm -f authelia 2>/dev/null || true
-              mysudo docker ps -a --filter "name=authelia" -q | xargs -r mysudo docker rm -f 2>/dev/null || true
-              mysudo docker ps -a --filter "name=skuld" -q | xargs -r mysudo docker rm -f 2>/dev/null || true
-            fi
-            if [ "${{ env.DEPLOY_TARGET }}" != "home-server" ]; then
-              mysudo docker compose ${{ env.COMPOSE_ARGS }} down --remove-orphans || true
-            fi
-
-            # ── Build & start ──
-            echo "=== Building image ==="
-            if [ "${{ env.DEPLOY_TARGET }}" = "home-server" ]; then
-              mysudo docker compose ${{ env.COMPOSE_ARGS }} build --pull --no-cache skuld-frontend skuld-backend
-            else
-              mysudo docker compose ${{ env.COMPOSE_ARGS }} build --pull --no-cache
-            fi
-
-            echo "=== Starting containers ==="
-            if [ "${{ env.DEPLOY_TARGET }}" = "home-server" ]; then
-              mysudo docker compose ${{ env.COMPOSE_ARGS }} up -d --no-deps skuld-frontend skuld-backend
-            else
-              mysudo docker compose ${{ env.COMPOSE_ARGS }} up -d --remove-orphans
-            fi
-
-            echo "=== Cleaning old images ==="
-            mysudo docker image prune -f
-
-            echo "=== Container status ==="
-            mysudo docker compose ${{ env.COMPOSE_ARGS }} ps
-
-            # Verify DB connectivity from the runtime stack so branch choice cannot break DB wiring silently.
-            echo "=== Verifying DB connectivity ==="
-            if [ "${{ env.DEPLOY_TARGET }}" = "home-server" ]; then
-              mysudo docker exec skuld_staging_db psql -U "${POSTGRES_USER_VALUE}" -d "${POSTGRES_DB_VALUE}" -c 'select 1;' >/dev/null
-            else
-              mysudo docker exec postgres_setup-db-1 psql -U "${POSTGRES_USER_VALUE}" -d "${POSTGRES_DB_VALUE}" -c 'select 1;' >/dev/null
-            fi
+          # ── Verify DB connectivity ──
+          echo "=== Verifying DB connectivity ==="
+          if docker ps --format '{{.Names}}' | grep -q "${CFG_DB_CONTAINER}"; then
+            docker exec ${CFG_DB_CONTAINER} psql -U "${CFG_POSTGRES_USER}" -d "${CFG_POSTGRES_DB}" -c 'select 1;' >/dev/null
             echo "DB connectivity check passed"
+          else
+            echo "DB container ${CFG_DB_CONTAINER} not running — skipping DB check (expected for partial deploys)"
+          fi
 
-            echo "=== Container logs ==="
-            mysudo docker compose ${{ env.COMPOSE_ARGS }} logs --tail=30
-          ENDSSH
+          echo "=== Container logs ==="
+          docker compose ${COMPOSE_ARGS} logs --tail=30
+          REMOTESCRIPT
+
+          # Execute the script on the remote server
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }} \
+            "COMPOSE_ARGS='${{ env.COMPOSE_ARGS }}' \
+             CFG_DOMAIN='${CFG_DOMAIN}' \
+             CFG_AUTH_DOMAIN='${CFG_AUTH_DOMAIN}' \
+             CFG_TRAEFIK_ENTRYPOINT='${CFG_TRAEFIK_ENTRYPOINT}' \
+             CFG_CERTRESOLVER_SKULD='${CFG_CERTRESOLVER_SKULD}' \
+             CFG_CERTRESOLVER_AUTHELIA='${CFG_CERTRESOLVER_AUTHELIA}' \
+             CFG_AUTH_SCHEME='${CFG_AUTH_SCHEME}' \
+             CFG_TELEGRAM_CHAT_ID='${CFG_TELEGRAM_CHAT_ID}' \
+             CFG_POSTGRES_HOST='${CFG_POSTGRES_HOST}' \
+             CFG_POSTGRES_DB='${CFG_POSTGRES_DB}' \
+             CFG_POSTGRES_USER='${CFG_POSTGRES_USER}' \
+             CFG_POSTGRES_PORT='${CFG_POSTGRES_PORT}' \
+             CFG_DB_CONTAINER='${CFG_DB_CONTAINER}' \
+             CFG_SKULD_ENV='${CFG_SKULD_ENV}' \
+             CFG_SKULD_MIDDLEWARES='${CFG_SKULD_MIDDLEWARES}' \
+             CFG_DEPLOY_SERVICES='${CFG_DEPLOY_SERVICES}' \
+             CFG_SKIP_COMPOSE_DOWN='${CFG_SKIP_COMPOSE_DOWN}' \
+             CFG_AUTHELIA='${CFG_AUTHELIA}' \
+             SKULD_VERSION='${SKULD_VERSION}' \
+             SKULD_BRANCH='${SKULD_BRANCH}' \
+             SECRET_TELEGRAM_BOT_TOKEN='${SECRET_TELEGRAM_BOT_TOKEN}' \
+             SECRET_MASSIVE_API_KEY='${SECRET_MASSIVE_API_KEY}' \
+             SECRET_MASSIVE_API_KEY_FLAT_FILES='${SECRET_MASSIVE_API_KEY_FLAT_FILES}' \
+             SECRET_POSTGRES_PASSWORD='${SECRET_POSTGRES_PASSWORD}' \
+             SECRET_AUTHELIA_JWT='${SECRET_AUTHELIA_JWT}' \
+             SECRET_AUTHELIA_SESSION='${SECRET_AUTHELIA_SESSION}' \
+             SECRET_AUTHELIA_STORAGE='${SECRET_AUTHELIA_STORAGE}' \
+             SECRET_AUTHELIA_HASH='${SECRET_AUTHELIA_HASH}' \
+             bash -s" < /tmp/deploy_remote.sh
 
       - name: Notify deploy success via Telegram
         if: success()
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_CHAT_ID: ${{ needs.load-config.outputs.telegram_chat_id }}
         run: |
           cd "$SOURCE_DIR"
           COMMIT_MSG=$(git log -1 --format='%s' 2>/dev/null || echo "workflow_dispatch")
@@ -547,7 +673,7 @@ jobs:
         if: failure()
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_CHAT_ID: ${{ needs.load-config.outputs.telegram_chat_id }}
         run: |
           cd "$SOURCE_DIR" 2>/dev/null || true
           ACTOR="${{ github.actor }}"
@@ -560,4 +686,3 @@ jobs:
             -d chat_id="${TELEGRAM_CHAT_ID}" \
             -d text="${TEXT}" \
             -d parse_mode=HTML >/dev/null 2>&1 || true
-
