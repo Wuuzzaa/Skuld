@@ -42,9 +42,31 @@ Trotz der soliden Basis gibt es Bereiche, die optimiert werden können, um Perfo
   - **Gamma:** Zweite Ableitung via Preis-Shifts.
   Dies erfordert zusätzliche Simulationsläufe mit leicht veränderten Startparametern.
 
+## 4. SL/TP Strategie-Optimierung & UI-Feedback
+
+Um die profitabelste Strategie zu finden, bietet das System einen direkten Vergleich zwischen der klassischen "Hold-to-Expiration"-Variante und der aktiven Management-Strategie (SL/TP).
+
+### A. Bestimmung der optimalen Parameter
+Die optimale SL/TP-Strategie wird durch den Vergleich des Erwartungswerts (EV) ermittelt:
+- **Baseline EV:** Erwarteter Gewinn ohne vorzeitiges Schließen.
+- **Managed EV:** Erwarteter Gewinn unter Berücksichtigung der SL/TP-Trigger und Pfad-Simulation.
+- **Feedback-Metrik:** Die Differenz (`Managed EV - Baseline EV`) zeigt den "Management-Alpha" an. Wenn dieser negativ ist, wäre statistisch gesehen das Halten bis zum Verfall profitabler.
+
+### B. UI-Integration (Spreads & Iron Condor)
+In den Seiten `spreads.py` und `iron_condors.py` werden im Konfigurations-Bereich folgende Felder ergänzt:
+- **Take Profit (% der Prämie):** Standardmäßig oft 50%. Definiert, bei wie viel Gewinn die Position glattgestellt wird.
+- **Stop Loss (% der Prämie):** Standardmäßig oft 200%. Definiert die Verlusttoleranz.
+- **Planned Close DTE:** Ermöglicht das Schließen der Position X Tage vor Verfall (z.B. bei 21 DTE), um Gamma-Risiken zu reduzieren.
+- **Leg-spezifische DTEs:** (Besonders für Iron Condors) Option, die Put- und Call-Seite mit unterschiedlichen Laufzeiten zu simulieren.
+
+### C. Feedback in der Ergebnisliste
+Für jeden gefundenen Trade wird neben dem Standard-EV auch der "Managed EV" angezeigt:
+- **Status-Indikator:** Ein Icon (z.B. 🎯) signalisiert, ob die gewählten SL/TP-Einstellungen den EV verbessern oder verschlechtern.
+- **Optimaler TP/SL Vorschlag:** Basierend auf der Simulation kann das System einen Korridor vorschlagen (z.B. "Für diesen Spread ist ein TP von 40% optimal").
+
 ---
 
-## 4. Performance-Ziele & Optimierung
+## 5. Performance-Ziele & Optimierung
 
 Durch die Umstellung auf eine Pfad-Simulation und die Berechnung der Greeks steigt die Rechenlast erheblich (Faktor 200x bis 500x). Um die "Realtime"-Usability der Streamlit-Anwendung zu erhalten, werden folgende Optimierungen implementiert:
 
@@ -60,9 +82,11 @@ Durch die Umstellung auf eine Pfad-Simulation und die Berechnung der Greeks stei
 
 ---
 
-## 5. Nächste Schritte
+## 6. Nächste Schritte
 Sobald dieses Konzept bestätigt ist, werden folgende Änderungen im Code vorgenommen:
 1.  **Erweiterung der `OptionLeg` Struktur** (Dataclass) um SL/TP, Custom DTE und Schließtag.
-2.  **Anpassung von `simulate_stock_prices`** für Pfad-Generierung.
-3.  **Implementierung der SL/TP/Close-Logik** in der Payoff-Berechnung unter Verwendung von Black-Scholes für Zwischenpreise.
-4.  **Hinzufügen einer Greeks-Berechnungsmethode** in den Simulator.
+2.  **Anpassung von `spreads.py` und `iron_condors.py` UI:** Integration der SL/TP-Eingabefelder im Konfigurations-Expander.
+3.  **Anpassung von `simulate_stock_prices`** für Pfad-Generierung.
+4.  **Implementierung der SL/TP/Close-Logik** in der Payoff-Berechnung unter Verwendung von Black-Scholes für Zwischenpreise.
+5.  **Hinzufügen einer Greeks-Berechnungsmethode** in den Simulator.
+6.  **Erweiterung der UI-Anzeige:** Vergleich von Baseline-EV und Managed-EV in den Ergebnislisten.
