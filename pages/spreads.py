@@ -267,6 +267,16 @@ with st.expander("Configuration and Filters", expanded=True):
     with col18:
         st.info("IV correction mode: 'auto' (Automatic), 0.0-1.0 (Manual reduction), 0.0 (No correction)")
 
+@st.cache_data
+def _cached_select_into_dataframe(sql_file_path, params):
+    return select_into_dataframe(sql_file_path=sql_file_path, params=params)
+
+
+@st.cache_data
+def _cached_get_page_spreads(df, strategy_type, iv_correction):
+    return get_page_spreads(df, strategy_type=strategy_type, iv_correction=iv_correction)
+
+
 # Calculate the spread values with a loading indicator
 with st.spinner("Calculating spreads..."):
     params = {
@@ -284,10 +294,10 @@ with st.spinner("Calculating spreads..."):
     logging.debug(f"Params for database query: {params}")
 
     sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'spreads_input.sql'
-    df = select_into_dataframe(sql_file_path=sql_file_path, params=params)
+    df = _cached_select_into_dataframe(sql_file_path=sql_file_path, params=params)
     logging.debug(f"Input data head: {df.head()}")
 
-    spreads_df = get_page_spreads(df, strategy_type=strategy_type, iv_correction=st.session_state.iv_correction)
+    spreads_df = _cached_get_page_spreads(df, strategy_type=strategy_type, iv_correction=st.session_state.iv_correction)
     logging.debug(f"Calculated spreads head: {spreads_df.head()}")
 
 # Apply spread filters

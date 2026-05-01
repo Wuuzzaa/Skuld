@@ -176,6 +176,11 @@ def _cached_select_into_dataframe(sql_file_path, params):
 def _cached_calc_iron_condors(put_df, call_df, iv_correction):
     return calc_iron_condors(put_df, call_df, iv_correction=iv_correction)
 
+@st.cache_data
+def _cached_get_page_iron_condors(ic_df_raw):
+    return get_page_iron_condors(ic_df_raw)
+
+
 with st.spinner("Calculating Iron Condors..."):
     common_params = {
         "min_open_interest": min_open_interest,
@@ -195,7 +200,7 @@ with st.spinner("Calculating Iron Condors..."):
     call_df = _cached_select_into_dataframe(sql_file_path=sql_query_path, params=call_params)
     
     ic_df_raw = _cached_calc_iron_condors(put_df, call_df, st.session_state.ic_iv_correction)
-    ic_df = get_page_iron_condors(ic_df_raw)
+    ic_df = _cached_get_page_iron_condors(ic_df_raw)
 
 if not ic_df.empty:
     # Apply filters
