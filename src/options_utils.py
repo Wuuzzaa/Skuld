@@ -84,7 +84,7 @@ def calculate_expected_value(
     options: List[Dict[str, Any]],
     risk_free_rate: float = RISK_FREE_RATE,
     dividend_yield: float = DIVIDEND_YIELD,
-    num_simulations: int = NUM_SIMULATIONS,
+    num_simulations: int = 5000,
     random_seed: int = RANDOM_SEED,
     iv_correction: str = IV_CORRECTION_MODE,
     return_details: bool = False
@@ -117,7 +117,7 @@ def calculate_strategy_metrics(
     legs: List[OptionLeg],
     risk_free_rate: float = RISK_FREE_RATE,
     dividend_yield: float = DIVIDEND_YIELD,
-    num_simulations: int = NUM_SIMULATIONS,
+    num_simulations: int = 5000,
     random_seed: int = RANDOM_SEED,
     iv_correction: str = IV_CORRECTION_MODE
 ) -> StrategyMetrics:
@@ -147,20 +147,19 @@ def calculate_strategy_metrics(
         for opt in options_sim
     )
     
-    ev_details = calculate_expected_value(
+    # 1. Initialize Simulator and Calculate Expected Value & IV Correction
+    simulator = UniversalOptionsMonteCarloSimulator(
+        num_simulations=num_simulations,
         current_price=current_price,
-        dte=dte,
+        dte=int(dte),
         volatility=volatility,
-        options=options_sim,
         risk_free_rate=risk_free_rate,
         dividend_yield=dividend_yield,
-        num_simulations=num_simulations,
         random_seed=random_seed,
-        iv_correction=iv_correction,
-        return_details=True
+        iv_correction=iv_correction
     )
 
-    ev_managed = ev_details['expected_value']
+    ev_managed = simulator.calculate_expected_value(options=options_sim)
     
     # Also calculate static EV for comparison if management is active
     if has_management:
@@ -171,17 +170,7 @@ def calculate_strategy_metrics(
             opt['dte_close'] = None
             opt['planned_dte'] = None
             
-        ev_static = calculate_expected_value(
-            current_price=current_price,
-            dte=dte,
-            volatility=volatility,
-            options=options_static,
-            risk_free_rate=risk_free_rate,
-            dividend_yield=dividend_yield,
-            num_simulations=num_simulations,
-            random_seed=random_seed,
-            iv_correction=iv_correction
-        )
+        ev_static = simulator.calculate_expected_value(options=options_static)
     else:
         ev_static = ev_managed
 
@@ -193,31 +182,11 @@ def calculate_strategy_metrics(
     if ev_managed == 0.0:
         logger.warning(f"Calculated EV Managed is 0.0 for strategy with current_price={current_price}")
 
-    # Calculate Greeks using the simulator
-    simulator = UniversalOptionsMonteCarloSimulator(
-        num_simulations=num_simulations,
-        current_price=current_price,
-        dte=int(dte),
-        volatility=volatility,
-        risk_free_rate=risk_free_rate,
-        dividend_yield=dividend_yield,
-        random_seed=random_seed,
-        iv_correction=iv_correction
-    )
+    # Calculate Greeks using the same simulator
     greeks = simulator.calculate_greeks(options_sim)
     
     # 2. Max Profit, Max Loss, BPR
-    # To calculate Max Profit/Loss/BPR we use a simulation approach or analytical if possible.
-    # For arbitrary legs, we can use the simulator's payoff analysis.
-    simulator = UniversalOptionsMonteCarloSimulator(
-        num_simulations=1000, # Fewer for metrics is okay if we just want min/max
-        current_price=current_price,
-        dte=int(dte),
-        volatility=volatility,
-        iv_correction='none' # No correction for static metrics
-    )
-    
-    # We need a range of stock prices to find max profit/loss
+    # For arbitrary legs, we use a range of stock prices to find max profit/loss (analytical)
     # Use a wide range around current price and strikes
     strikes = [leg.strike for leg in legs]
     min_strike = min(strikes) if strikes else current_price
@@ -256,7 +225,7 @@ def calculate_strategy_metrics(
     # 4. Ratios
     profit_to_bpr = max_profit / bpr if bpr > 0 else 0
     apdi = calculate_apdi(max_profit, dte, bpr)
-    apdi_ev = calculate_apdi(ev_details['expected_value'], dte, bpr)
+    apdi_ev = calculate_apdi(ev_managed, dte, bpr)
 
     return StrategyMetrics(
         max_profit=max_profit,
@@ -268,8 +237,8 @@ def calculate_strategy_metrics(
         profit_to_bpr=profit_to_bpr,
         apdi=apdi,
         apdi_ev=apdi_ev,
-        iv_correction_factor=ev_details['iv_correction_factor'],
-        corrected_volatility=ev_details['corrected_volatility'],
+        iv_correction_factor=simulator.iv_correction_factor,
+        corrected_volatility=simulator.volatility,
         delta=greeks.get('delta', 0.0),
         gamma=greeks.get('gamma', 0.0),
         vega=greeks.get('vega', 0.0)

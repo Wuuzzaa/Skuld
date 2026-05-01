@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from typing import List, Dict, Tuple, Union, Optional
 from scipy.stats import norm
+import functools
 
 from config import TRANSACTION_COST_PER_CONTRACT, RANDOM_SEED, NUM_SIMULATIONS, RISK_FREE_RATE, IV_CORRECTION_MODE
 
@@ -149,45 +150,64 @@ class UniversalOptionsMonteCarloSimulator:
         # Ensure corrected IV is positive and reasonable
         return max(0.01, corrected_iv)  # Minimum 1% IV
 
-    def simulate_stock_price_paths(self) -> np.ndarray:
+    @staticmethod
+    @functools.lru_cache(maxsize=128)
+    def _generate_price_paths_cached(current_price: float, volatility: float, dte: int,
+                                    risk_free_rate: float, dividend_yield: float,
+                                    num_simulations: int, random_seed: int) -> np.ndarray:
         """
-        Simulate stock price paths using geometric Brownian motion
-
-        Returns:
-            np.ndarray: Matrix of simulated stock prices (num_simulations, dte + 1)
+        Internal cached method for generating price paths.
+        Parameters must be hashable.
         """
         # For Monte-Carlo option valuation: Risk-neutral drift
-        drift = self.risk_free_rate - self.dividend_yield
+        drift = risk_free_rate - dividend_yield
 
         # Reset random seed for consistent results
-        if self.random_seed is not None:
-            np.random.seed(self.random_seed)
+        if random_seed is not None:
+            np.random.seed(random_seed)
 
         # Time steps: daily
         dt = 1 / 365
-        num_steps = self.dte
+        num_steps = dte
 
-        # Matrix to store paths: (simulations, steps)
-        # S(t+dt) = S(t) * exp((r - q - 0.5*sigma^2)*dt + sigma*sqrt(dt)*epsilon)
-        
         # Generate all random shocks at once
-        random_shocks = np.random.standard_normal((self.num_simulations, num_steps))
+        random_shocks = np.random.standard_normal((num_simulations, num_steps))
         
         # Calculate daily log returns
-        log_returns = ((drift - 0.5 * self.volatility ** 2) * dt +
-                       self.volatility * np.sqrt(dt) * random_shocks)
+        log_returns = ((drift - 0.5 * volatility ** 2) * dt +
+                       volatility * np.sqrt(dt) * random_shocks)
         
         # Cumulative sum of log returns to get price paths
         cumulative_log_returns = np.cumsum(log_returns, axis=1)
         
         # Prepend zeros for the starting price (at t=0)
-        starting_log_returns = np.zeros((self.num_simulations, 1))
+        starting_log_returns = np.zeros((num_simulations, 1))
         all_log_returns = np.hstack([starting_log_returns, cumulative_log_returns])
         
         # Calculate price paths
-        price_paths = self.current_price * np.exp(all_log_returns)
+        price_paths = current_price * np.exp(all_log_returns)
         
         return price_paths
+
+    def simulate_stock_price_paths(self) -> np.ndarray:
+        """
+        Simulate stock price paths using geometric Brownian motion.
+        Uses a static cached method to reuse paths if parameters are identical.
+
+        Returns:
+            np.ndarray: Matrix of simulated stock prices (num_simulations, dte + 1)
+        """
+        # We must ensure all parameters are of types that can be hashed by lru_cache
+        # float, int are fine.
+        return self._generate_price_paths_cached(
+            float(self.current_price),
+            float(self.volatility),
+            int(self.dte),
+            float(self.risk_free_rate),
+            float(self.dividend_yield),
+            int(self.num_simulations),
+            int(self.random_seed) if self.random_seed is not None else None
+        )
 
     def simulate_stock_prices(self) -> np.ndarray:
         """
@@ -591,15 +611,11 @@ class UniversalOptionsMonteCarloSimulator:
         Calculate strategy Greeks using Monte Carlo simulation and finite differences.
         Uses Common Random Numbers (CRN) for noise reduction.
         """
-        # Ensure we use a fixed seed for CRN during greeks calculation
-        old_seed = self.random_seed
-        self.random_seed = 42 # Force deterministic paths for CRN
-        
         # Save original state
         original_price = self.current_price
         original_vol = self.volatility
         
-        # 1. EV(S)
+        # 1. EV(S) - Reuse cached paths if possible
         ev_base = self.calculate_expected_value(options)
 
         # 2. Delta & Gamma
@@ -628,9 +644,6 @@ class UniversalOptionsMonteCarloSimulator:
         self.volatility = original_vol
         
         vega = (ev_vega - ev_base) / (dv * 100) # per 1% point
-        
-        # Restore seed
-        self.random_seed = old_seed
         
         return {
             "delta": float(delta / 100), # per share
