@@ -1,0 +1,52 @@
+# Analyse: Universal Monte Carlo Simulation in Skuld
+
+## 1. Verständnis der Datei `monte_carlo_simulation.py`
+
+Die Datei implementiert den `UniversalOptionsMonteCarloSimulator`, ein zentrales Werkzeug im Skuld-Projekt zur Bewertung von Optionsstrategien. Anders als klassische Black-Scholes-Modelle, die oft auf einzelne Optionen oder einfache Spreads beschränkt sind, ermöglicht dieser Simulator die Analyse beliebiger Multi-Leg-Strategien durch numerische Simulation.
+
+### Kernfunktionalität
+- **Geometrische Brownsche Bewegung (GBM):** Der Simulator modelliert den Aktienpreis am Verfallstag basierend auf der aktuellen Volatilität, der Laufzeit (DTE) und dem risikofreien Zinssatz.
+- **Risikoneutrale Bewertung:** Die Simulation nutzt den risikofreien Zinssatz (abzüglich Dividendenrendite) als Drift, was die Grundlage für die Optionspreisbewertung nach der modernen Finanztheorie ist.
+- **IV-Korrektur (Auto-Modus):** Ein besonderes Merkmal ist die systematische Korrektur der impliziten Volatilität (IV). Basierend auf Forschungsergebnissen zur Volatilitätsrisikoprämie (VRP) und dem "Contango"-Effekt der VIX-Terminstruktur wird die Markt-IV reduziert, um realistischere Erwartungswerte zu erhalten.
+- **Transaktionskosten:** Diese werden pro Kontrakt (100 Aktien) berücksichtigt, was für eine realistische Netto-Profit-Berechnung unerlässlich ist.
+- **Vielseitigkeit:** Jede Strategie wird als Liste von "Legs" (Optionen) definiert, wodurch komplexe Gebilde wie Iron Condors, Butterflies oder benutzerdefinierte Spreads einheitlich bewertet werden können.
+
+### Rolle im Skuld-Ökosystem
+- **`options_utils.py`:** Fungiert als Brücke. Hier wird der Simulator instanziiert, um den `expected_value` und andere Metriken für die UI zu berechnen.
+- **`spreads_calculation.py` & `spreads.py`:** Diese nutzen die berechneten Werte, um dem Nutzer profitable Trades (z. B. mit positivem Erwartungswert) anzuzeigen und zu filtern.
+
+---
+
+## 2. Mögliche Verbesserungen & Refactoring
+
+Trotz der soliden Basis gibt es Bereiche, die optimiert werden können, um Performance, Genauigkeit und Wartbarkeit zu steigern.
+
+### A. Performance & Vektorisierung
+- **Vektorisierung der Payoff-Berechnung:** In `_calculate_strategy_payoffs` wird über die Legs iteriert und für jedes Leg `calculate_single_option_payoff` aufgerufen. Während die Simulation selbst vektorisiert ist, könnte die gesamte Strategie-Matrix (Simulations x Legs) noch effizienter in einem einzigen NumPy-Block verarbeitet werden.
+- **NumPy Random Generator:** Die Verwendung von `np.random.seed` und `np.random.standard_normal` ist zwar funktional, aber veraltet. Der neuere `np.random.default_rng()` ist schneller und bietet eine bessere statistische Qualität.
+
+### B. Mathematische & Fachliche Erweiterungen (Geplante Features)
+- **Pfadabhängige Simulation:** Um Stop-Loss (SL) und Take-Profit (TP) während der Laufzeit zu bewerten, wird von einer reinen Endpreis-Simulation auf eine Pfad-Simulation (z.B. tägliche Schritte) umgestellt.
+- **Stop-Loss & Take-Profit:** Implementierung einer Logik, die Optionen schließt, sobald die Prämie einen Schwellenwert erreicht (z.B. TP bei 50% der Prämie, SL bei 200%).
+- **Leg-spezifische Parameter:** Unterstützung für unterschiedliche DTEs pro Leg und die Möglichkeit, für jedes Leg einen geplanten Schließtag ("planned close day") festzulegen.
+- **Fester DTE Close:** Globale oder Leg-spezifische Einstellung, um Positionen bei Erreichen eines bestimmten DTE-Werts (z.B. 21 DTE) glattzustellen.
+- **Griechische Variablen (Greeks):** Monte-Carlo-basierte Schätzung von Delta, Gamma und Vega durch kleine Preis- und Volatilitäts-Shifts in der Simulation.
+- **Realtime-Performance:** Sicherstellung, dass die Pfad-Simulation durch effiziente NumPy-Vektorisierung flüssig bleibt.
+
+### C. Technische Details der Umsetzung (Konzept)
+- **Pfad-Simulation:** Nutzung von geometrischer Brownscher Bewegung (GBM) über mehrere Zeitschritte.
+- **Zwischenbewertung:** Da SL/TP auf dem aktuellen Optionspreis basieren, wird während der Pfad-Simulation an jedem Schritt der Black-Scholes-Preis für jedes Leg berechnet.
+- **Greeks-Berechnung:**
+  - **Delta:** `(EV(S+ds) - EV(S)) / ds`
+  - **Vega:** `(EV(vol+dv) - EV(vol)) / dv`
+  - **Gamma:** Zweite Ableitung via Preis-Shifts.
+  Dies erfordert zusätzliche Simulationsläufe mit leicht veränderten Startparametern.
+
+---
+
+## 3. Nächste Schritte
+Sobald dieses Konzept bestätigt ist, werden folgende Änderungen im Code vorgenommen:
+1.  **Erweiterung der `OptionLeg` Struktur** (Dataclass) um SL/TP, Custom DTE und Schließtag.
+2.  **Anpassung von `simulate_stock_prices`** für Pfad-Generierung.
+3.  **Implementierung der SL/TP/Close-Logik** in der Payoff-Berechnung unter Verwendung von Black-Scholes für Zwischenpreise.
+4.  **Hinzufügen einer Greeks-Berechnungsmethode** in den Simulator.
