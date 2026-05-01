@@ -408,13 +408,15 @@ if not filtered_df.empty:
                 strike=row['sell_strike'], premium=row['sell_last_option_price'], 
                 is_call=row['option_type'] == 'call', is_long=not is_credit,
                 delta=row.get('sell_delta'), iv=row.get('sell_iv'), 
-                theta=row.get('sell_theta'), oi=row.get('sell_open_interest')
+                theta=row.get('sell_theta'), oi=row.get('sell_open_interest'),
+                volume=row.get('sell_day_volume'), expected_move=row.get('sell_expected_move')
             ),
             OptionLeg(
                 strike=row['buy_strike'], premium=row['buy_last_option_price'], 
                 is_call=row['option_type'] == 'call', is_long=is_credit,
                 delta=row.get('buy_delta'), iv=row.get('buy_iv'), 
-                theta=row.get('buy_theta'), oi=row.get('buy_open_interest')
+                theta=row.get('buy_theta'), oi=row.get('buy_open_interest'),
+                volume=row.get('buy_day_volume'), expected_move=row.get('buy_expected_move')
             )
         ]
 

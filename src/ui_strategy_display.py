@@ -28,12 +28,12 @@ def display_strategy_details(
             "Action": "Long" if leg.is_long else "Short",
             "Strike": leg.strike,
             "Price": leg.premium,
-            "Delta": leg.delta,
-            "IV": leg.iv,
-            "Theta": leg.theta,
-            "OI": leg.oi,
-            "Volume": leg.volume,
-            "Exp Move": leg.expected_move
+            "Delta": f"{leg.delta:.4f}" if leg.delta is not None else "N/A",
+            "IV": f"{leg.iv*100:.1f}%" if leg.iv is not None else "N/A",
+            "Theta": f"{leg.theta:.4f}" if leg.theta is not None else "N/A",
+            "OI": leg.oi if leg.oi is not None else "N/A",
+            "Volume": leg.volume if leg.volume is not None else "N/A",
+            "Exp Move": f"${leg.expected_move:.2f}" if leg.expected_move is not None else "N/A"
         })
     
     details_df = pd.DataFrame(legs_data)

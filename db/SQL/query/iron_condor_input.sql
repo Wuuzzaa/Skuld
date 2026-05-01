@@ -77,7 +77,8 @@ SELECT
     buy.iv AS buy_iv,
     buy.theta AS buy_theta,
     buy.option_open_interest AS buy_open_interest,
-    buy.expected_move AS buy_expected_move
+    buy.expected_move AS buy_expected_move,
+    buy.day_volume AS buy_day_volume
 FROM
     TargetOptions sell
 INNER JOIN

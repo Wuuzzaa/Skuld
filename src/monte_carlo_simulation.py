@@ -620,12 +620,19 @@ class UniversalOptionsMonteCarloSimulator:
         Calculate strategy Greeks using Monte Carlo simulation and finite differences.
         Uses Common Random Numbers (CRN) for noise reduction.
         """
+        # Ensure we use a fixed seed for CRN during greeks calculation
+        old_seed = self.random_seed
+        self.random_seed = 42 # Force deterministic paths for CRN
+        
         # Save original state
         original_price = self.current_price
         original_vol = self.volatility
         
-        # 1. Delta & Gamma
-        ds = original_price * 0.01 # 1% shift
+        # 1. EV(S)
+        ev_base = self.calculate_expected_value(options)
+
+        # 2. Delta & Gamma
+        ds = max(original_price * 0.005, 0.01) # 0.5% shift
         
         # EV(S + ds)
         self.current_price = original_price + ds
@@ -635,14 +642,13 @@ class UniversalOptionsMonteCarloSimulator:
         self.current_price = original_price - ds
         ev_minus = self.calculate_expected_value(options)
         
-        # Restore price to calculate ev_base at original price
-        self.current_price = original_price
-        ev_base = self.calculate_expected_value(options)
-        
         delta = (ev_plus - ev_minus) / (2 * ds)
         gamma = (ev_plus - 2 * ev_base + ev_minus) / (ds ** 2)
         
-        # 2. Vega
+        # Restore price
+        self.current_price = original_price
+
+        # 3. Vega
         dv = 0.01 # 1% IV shift
         self.volatility = original_vol + dv
         ev_vega = self.calculate_expected_value(options)
@@ -652,7 +658,9 @@ class UniversalOptionsMonteCarloSimulator:
         
         vega = (ev_vega - ev_base) / (dv * 100) # per 1% point
         
-        # Ensure they are not exactly 0.0 unless they really are
+        # Restore seed
+        self.random_seed = old_seed
+        
         return {
             "delta": float(delta / 100), # per share
             "gamma": float(gamma / 100),

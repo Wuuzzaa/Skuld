@@ -24,20 +24,32 @@ def _calculate_combined_metrics(row: pd.Series, iv_correction: str = 'auto',
         # Put side
         OptionLeg(
             strike=row['sell_strike_put'], premium=row['sell_last_option_price_put'], is_call=False, is_long=False, 
-            theta=row.get('sell_theta_put'), take_profit_pct=take_profit, stop_loss_pct=stop_loss, dte_close=dte_close
+            delta=row.get('sell_delta_put'), iv=row.get('sell_iv_put'), theta=row.get('sell_theta_put'),
+            oi=row.get('sell_open_interest_put'), volume=row.get('sell_day_volume_put'),
+            expected_move=row.get('sell_expected_move_put'),
+            take_profit_pct=take_profit, stop_loss_pct=stop_loss, dte_close=dte_close
         ),
         OptionLeg(
             strike=row['buy_strike_put'], premium=row['buy_last_option_price_put'], is_call=False, is_long=True, 
-            theta=row.get('buy_theta_put'), take_profit_pct=take_profit, stop_loss_pct=stop_loss, dte_close=dte_close
+            delta=row.get('buy_delta_put'), iv=row.get('buy_iv_put'), theta=row.get('buy_theta_put'),
+            oi=row.get('buy_open_interest_put'), volume=row.get('buy_day_volume_put'),
+            expected_move=row.get('buy_expected_move_put'),
+            take_profit_pct=take_profit, stop_loss_pct=stop_loss, dte_close=dte_close
         ),
         # Call side
         OptionLeg(
             strike=row['sell_strike_call'], premium=row['sell_last_option_price_call'], is_call=True, is_long=False, 
-            theta=row.get('sell_theta_call'), take_profit_pct=take_profit, stop_loss_pct=stop_loss, dte_close=dte_close
+            delta=row.get('sell_delta_call'), iv=row.get('sell_iv_call'), theta=row.get('sell_theta_call'),
+            oi=row.get('sell_open_interest_call'), volume=row.get('sell_day_volume_call'),
+            expected_move=row.get('sell_expected_move_call'),
+            take_profit_pct=take_profit, stop_loss_pct=stop_loss, dte_close=dte_close
         ),
         OptionLeg(
             strike=row['buy_strike_call'], premium=row['buy_last_option_price_call'], is_call=True, is_long=True, 
-            theta=row.get('buy_theta_call'), take_profit_pct=take_profit, stop_loss_pct=stop_loss, dte_close=dte_close
+            delta=row.get('buy_delta_call'), iv=row.get('buy_iv_call'), theta=row.get('buy_theta_call'),
+            oi=row.get('buy_open_interest_call'), volume=row.get('buy_day_volume_call'),
+            expected_move=row.get('buy_expected_move_call'),
+            take_profit_pct=take_profit, stop_loss_pct=stop_loss, dte_close=dte_close
         ),
     ]
 
