@@ -69,9 +69,36 @@ Profit to BPR = Max Profit / BPR
 ```
 *Höhere Werte bedeuten effizientere Kapitalnutzung*
 
-**Expected Value** - Erwarteter Gewinn basierend auf Monte-Carlo-Simulation
-- Berücksichtigt alle möglichen Kursverläufe
-- Realistischer als Max Profit
+**Expected Value (Static)** - Erwarteter Gewinn basierend auf Monte-Carlo-Simulation bei Halten bis zum Verfall.
+- Berücksichtigt alle möglichen Kursverläufe.
+- Realistischer als Max Profit.
+
+**EV (Managed)** - Erwarteter Gewinn unter Berücksichtigung von Management-Regeln.
+- Simuliert das Schließen der Position bei Erreichen von:
+    - **Take Profit %** (z.B. 50% des Max Profits)
+    - **Stop Loss %** (z.B. 200% des Max Profits)
+    - **DTE Close** (Schließen X Tage vor Verfall)
+- Dies ist oft die wichtigste Kennzahl, da sie den tatsächlichen Trading-Stil widerspiegelt.
+
+---
+
+### Simulation Greeks
+
+Die Greeks werden mittels der Monte-Carlo-Simulation berechnet, indem der Preis und die Volatilität leicht verschoben werden (Finite-Differenzen-Methode).
+
+**Delta** - Richtungsrisiko der Strategie.
+- Gibt an, um wie viel sich der Wert des Spreads ändert, wenn der Basiswert um $1 steigt.
+- Positives Delta (Bullish): Spread gewinnt bei steigenden Kursen.
+- Negatives Delta (Bearish): Spread gewinnt bei fallenden Kursen.
+
+**Gamma** - Stabilität des Deltas.
+- Gibt an, wie stark sich das Delta ändert, wenn der Basiswert um $1 steigt.
+- Ein hohes Gamma bedeutet, dass das Richtungsrisiko (Delta) bei Kursbewegungen schnell zunimmt.
+
+**Vega** - Volatilitätsrisiko.
+- Gibt an, um wie viel sich der Wert des Spreads ändert, wenn die implizite Volatilität um 1%-Punkt steigt.
+- Negatives Vega (Short Vega): Profitabel bei sinkender Volatilität (typisch für Credit Spreads).
+- Positives Vega (Long Vega): Profitabel bei steigender Volatilität (typisch für Debit Spreads).
 
 ---
 
@@ -83,11 +110,11 @@ APDI = (Max Profit / Days to Expiration / BPR) × 36,500
 ```
 *Zeigt theoretische Jahresrendite bei perfektem Ausgang*
 
-**APDI_EV (APDI mit Expected Value)** - Annualisierte Rendite auf Expected Value Basis
+**APDI_EV (APDI mit Expected Value)** - Annualisierte Rendite auf Basis des **Managed Expected Value** (wenn vorhanden, sonst Static EV).
 ```
-APDI_EV = (Expected Value / Days to Expiration / BPR) × 36,500
+APDI_EV = (EV / Days to Expiration / BPR) × 36,500
 ```
-*Realistischere Renditekennzahl basierend auf Simulation*
+*Realistischere Renditekennzahl basierend auf Simulation und Management-Regeln.*
 
 ---
 
@@ -154,11 +181,11 @@ APDI_EV = (Expected Value / Days to Expiration / BPR) × 36,500
 
 ### Wichtige Hinweise
 
-⚠️ **Risiko**: Der maximale Verlust bei Spreads ist die Differenz zwischen Max Profit und BPR
+⚠️ **Risiko**: Der maximale Verlust bei Spreads ist die Differenz zwischen Max Profit und BPR (eigentlich ist BPR das Risiko, Max Profit ist das Ziel).
 
-📊 **Monte Carlo**: Die Expected Value Berechnung verwendet eine stochastische Simulation
+📊 **Monte Carlo**: Die Expected Value Berechnung verwendet eine stochastische Simulation mit Tausenden von Pfaden.
 
-💡 **APDI vs APDI_EV**: APDI_EV ist konservativer und realistischer als APDI
+💡 **APDI vs APDI_EV**: APDI_EV ist deutlich aussagekräftiger, da es die Gewinnwahrscheinlichkeit und Management-Regeln einpreist.
 
 ---
 
@@ -169,7 +196,7 @@ APDI_EV = (Expected Value / Days to Expiration / BPR) × 36,500
 ⚠️ **IV Correction (Implied Volatility Correction)**:
 - Standardmäßig wird die Implizite Volatilität (IV) des Marktes um ca. 8-15% nach unten korrigiert.
 - Dies basiert auf historischer Forschung, die zeigt, dass die IV die tatsächliche Schwankung meist überschätzt.
-- **Folge**: Dies begünstigt **Credit Spreads** (Verkauf) und führt bei **Debit Spreads** (Kauf) häufig zu negativen Expected Values, da die Wahrscheinlichkeit für starke Kursbewegungen geringer eingeschätzt wird.
+- **Folge**: Dies begünstigt **Credit Spreads** (Verkauf) und führt bei **Debit Spreads** (Kauf) häufig zu negativen Expected Values, da die Wahrscheinlichkeit für starke Kursbewegungen geringer eingeschätzt wird. Managed EV zeigt oft noch bessere Werte für Credit Spreads, da Gewinne früh mitgenommen und Verluste begrenzt werden.
 
 💡 **Debit Spreads & Delta**:
 - Bei Debit Spreads (Bull Call / Bear Put) ist ein **Delta Target von 0.60 bis 0.70** oft sinnvoller. 

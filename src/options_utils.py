@@ -1,5 +1,7 @@
 import pandas as pd
 import numpy as np
+import logging
+import os
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Union
 from dataclasses import dataclass
@@ -10,6 +12,9 @@ from src.monte_carlo_simulation import UniversalOptionsMonteCarloSimulator
 MULTIPLIER = 100
 EARNINGS_WARNING_DAYS = 7
 DIVIDEND_YIELD = 0
+
+# Setup logging
+logger = logging.getLogger(os.path.basename(__file__))
 
 @dataclass
 class OptionLeg:
@@ -24,6 +29,11 @@ class OptionLeg:
     oi: Optional[int] = None
     volume: Optional[int] = None
     expected_move: Optional[float] = None
+    # Management parameters
+    take_profit_pct: Optional[float] = None  # e.g., 50 for 50%
+    stop_loss_pct: Optional[float] = None    # e.g., 200 for 200%
+    dte_close: Optional[int] = None          # e.g., 21 for 21 DTE
+    planned_dte: Optional[int] = None       # Custom DTE for this leg
 
 @dataclass
 class StrategyMetrics:
@@ -37,6 +47,10 @@ class StrategyMetrics:
     apdi_ev: float
     iv_correction_factor: float
     corrected_volatility: float
+    expected_value_managed: float = 0.0
+    delta: float = 0.0
+    gamma: float = 0.0
+    vega: float = 0.0
 
 def calculate_apdi(profit: float, dte: float, bpr: float) -> float:
     """Calculates Annualized Profit per Dollar Invested."""
@@ -111,9 +125,27 @@ def calculate_strategy_metrics(
     
     # 1. Expected Value & IV Correction
     options_sim = [
-        {'strike': leg.strike, 'premium': leg.premium, 'is_call': leg.is_call, 'is_long': leg.is_long}
+        {
+            'strike': leg.strike, 
+            'premium': leg.premium, 
+            'is_call': leg.is_call, 
+            'is_long': leg.is_long,
+            'take_profit_pct': leg.take_profit_pct,
+            'stop_loss_pct': leg.stop_loss_pct,
+            'dte_close': leg.dte_close,
+            'planned_dte': leg.planned_dte
+        }
         for leg in legs
     ]
+
+    # Check if any management parameters are present
+    has_management = any(
+        opt.get('take_profit_pct') is not None or 
+        opt.get('stop_loss_pct') is not None or 
+        opt.get('dte_close') is not None or
+        (opt.get('planned_dte') is not None and opt.get('planned_dte') < dte)
+        for opt in options_sim
+    )
     
     ev_details = calculate_expected_value(
         current_price=current_price,
@@ -127,6 +159,52 @@ def calculate_strategy_metrics(
         iv_correction=iv_correction,
         return_details=True
     )
+
+    ev_managed = ev_details['expected_value']
+    
+    # Also calculate static EV for comparison if management is active
+    if has_management:
+        options_static = [opt.copy() for opt in options_sim]
+        for opt in options_static:
+            opt['take_profit_pct'] = None
+            opt['stop_loss_pct'] = None
+            opt['dte_close'] = None
+            opt['planned_dte'] = None
+            
+        ev_static = calculate_expected_value(
+            current_price=current_price,
+            dte=dte,
+            volatility=volatility,
+            options=options_static,
+            risk_free_rate=risk_free_rate,
+            dividend_yield=dividend_yield,
+            num_simulations=num_simulations,
+            random_seed=random_seed,
+            iv_correction=iv_correction
+        )
+    else:
+        ev_static = ev_managed
+
+    # Ensure we use floats to avoid any 0-display issues if they were objects
+    ev_static = float(ev_static)
+    ev_managed = float(ev_managed)
+    
+    # Extra check to log if they are suspiciously 0
+    if ev_managed == 0.0:
+        logger.warning(f"Calculated EV Managed is 0.0 for strategy with current_price={current_price}")
+
+    # Calculate Greeks using the simulator
+    simulator = UniversalOptionsMonteCarloSimulator(
+        num_simulations=num_simulations,
+        current_price=current_price,
+        dte=int(dte),
+        volatility=volatility,
+        risk_free_rate=risk_free_rate,
+        dividend_yield=dividend_yield,
+        random_seed=random_seed,
+        iv_correction=iv_correction
+    )
+    greeks = simulator.calculate_greeks(options_sim)
     
     # 2. Max Profit, Max Loss, BPR
     # To calculate Max Profit/Loss/BPR we use a simulation approach or analytical if possible.
@@ -184,11 +262,15 @@ def calculate_strategy_metrics(
         max_profit=max_profit,
         max_loss=max_loss,
         bpr=bpr,
-        expected_value=ev_details['expected_value'],
+        expected_value=ev_static,
+        expected_value_managed=ev_managed,
         total_theta=total_theta,
         profit_to_bpr=profit_to_bpr,
         apdi=apdi,
         apdi_ev=apdi_ev,
         iv_correction_factor=ev_details['iv_correction_factor'],
-        corrected_volatility=ev_details['corrected_volatility']
+        corrected_volatility=ev_details['corrected_volatility'],
+        delta=greeks.get('delta', 0.0),
+        gamma=greeks.get('gamma', 0.0),
+        vega=greeks.get('vega', 0.0)
     )

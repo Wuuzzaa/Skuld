@@ -49,6 +49,8 @@ def display_strategy_details(
         st.metric("BPR", f"${metrics.bpr:.2f}")
     with col_info2:
         st.metric("Expected Value", f"${metrics.expected_value:.2f}")
+        if metrics.expected_value_managed != metrics.expected_value:
+             st.metric("EV (Managed)", f"${metrics.expected_value_managed:.2f}")
         st.metric("APDI", f"{metrics.apdi:.2f}%")
     with col_info3:
         if extra_info:
@@ -61,6 +63,18 @@ def display_strategy_details(
         avg_sell_iv = sum(leg.iv for leg in legs if not leg.is_long) / sum(1 for leg in legs if not leg.is_long) if any(not leg.is_long for leg in legs) else 0
         st.metric("Sell IV (Avg)", f"{avg_sell_iv*100:.1f}%")
         st.metric("Theta", f"{metrics.total_theta:.4f}")
+
+    # Greeks from Simulation
+    st.markdown("#### Simulation Greeks")
+    col_greeks1, col_greeks2, col_greeks3, col_greeks4 = st.columns(4)
+    with col_greeks1:
+        st.metric("Delta", f"{metrics.delta:.4f}")
+    with col_greeks2:
+        st.metric("Gamma", f"{metrics.gamma:.4f}")
+    with col_greeks3:
+        st.metric("Vega", f"{metrics.vega:.4f}")
+    with col_greeks4:
+        st.write("") # Empty placeholder
 
     # IV Correction info
     iv_corr_display = f"{metrics.iv_correction_factor*100:.1f}%"

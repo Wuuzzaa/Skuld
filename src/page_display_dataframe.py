@@ -142,6 +142,7 @@ def page_display_dataframe(
             'buy_iv', 'buy_theta', 'buy_open_interest', 'buy_expected_move',
             'company_industry', 'company_sector', 'historical_volatility_30d',
             'days_to_earnings', 'analyst_mean_target', 'spread_theta',
+            'iv_correction_factor',
             'TradingView', 'Chart', 'Claude', 'optionstrat_url'
         ]
         # Only drop columns that exist to avoid errors
@@ -167,7 +168,7 @@ def page_display_dataframe(
             'sell_expected_move_put', 'buy_expected_move_put',
             'sell_expected_move_call', 'buy_expected_move_call',
             'historical_volatility_30d_put', 'industry', 'sector',
-            'analyst_target', 'total_theta',
+            'analyst_target', 'total_theta', 'iv_correction_factor',
             'TradingView', 'Chart', 'Claude', 'optionstrat_url'
         ]
         # Only drop columns that exist to avoid errors

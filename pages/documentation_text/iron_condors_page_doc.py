@@ -40,9 +40,36 @@ Max Profit = (Credit Put Spread + Credit Call Spread) × 100
 BPR = Max(Width Put Spread, Width Call Spread) × 100 - Max Profit
 ```
 
-**Expected Value (EV)** - Erwarteter Gewinn basierend auf einer kombinierten Monte-Carlo-Simulation aller 4 Legs.
+**Expected Value (Static)** - Erwarteter Gewinn basierend auf einer kombinierten Monte-Carlo-Simulation aller 4 Legs bei Halten bis zum Verfall.
 - Berücksichtigt die Korrelation und Wahrscheinlichkeiten beider Seiten gleichzeitig.
 - Ein positiver EV ist ein Indikator für einen statistischen Vorteil.
+
+**EV (Managed)** - Erwarteter Gewinn unter Berücksichtigung von Management-Regeln.
+- Simuliert das Schließen des gesamten Condors bei Erreichen von:
+    - **Take Profit %** (z.B. 50% des Max Profits)
+    - **Stop Loss %** (z.B. 200% des Max Profits)
+    - **DTE Close** (Schließen X Tage vor Verfall)
+- Dies spiegelt die reale Performance bei aktiver Verwaltung wider.
+
+---
+
+### Simulation Greeks
+
+Die Greeks für den gesamten Iron Condor (Summe aller 4 Legs) werden mittels Monte-Carlo-Simulation berechnet.
+
+**Delta** - Richtungsrisiko des Condors.
+- Da ein Iron Condor zwei Seiten hat, heben sich die Deltas oft teilweise auf.
+- Nahe Null: Marktneutral.
+- Positiv: Leichte Tendenz (Bullish).
+- Negativ: Leichte Tendenz (Bearish).
+
+**Gamma** - Risiko bei starken Bewegungen.
+- Gibt an, wie schnell sich das Delta ändert. Bei einem Iron Condor ist Gamma meist negativ (Short Gamma), was bedeutet, dass das Richtungsrisiko bei Annäherung an die Short-Strikes schnell zunimmt.
+
+**Vega** - Volatilitätsrisiko.
+- Iron Condors sind typischerweise "Short Vega".
+- Profitieren von sinkender impliziter Volatilität (IV Crush).
+- Leiden bei stark steigender Volatilität.
 
 ---
 
@@ -53,8 +80,8 @@ BPR = Max(Width Put Spread, Width Call Spread) × 100 - Max Profit
 APDI = (Max Profit / Max Days to Expiration / BPR) × 36,500
 ```
 
-**APDI_EV (APDI mit Expected Value)** - Annualisierte Rendite auf Basis des simulierten Erwartungswerts.
-- Dies ist die realistischste Kennzahl für die langfristige Performance.
+**APDI_EV (APDI mit Expected Value)** - Annualisierte Rendite auf Basis des **Managed Expected Value** (wenn vorhanden, sonst Static EV).
+- Dies ist die realistischste Kennzahl für die langfristige Performance unter Einbeziehung von Management-Regeln.
 
 ---
 

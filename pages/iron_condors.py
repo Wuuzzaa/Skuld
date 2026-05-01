@@ -48,7 +48,10 @@ DEFAULTS = {
     'ic_min_sell_iv': DEFAULT_MIN_SELL_IV,
     'ic_max_sell_iv': DEFAULT_MAX_SELL_IV,
     'ic_min_max_profit': DEFAULT_MIN_MAX_PROFIT,
-    'ic_iv_correction': IV_CORRECTION_MODE
+    'ic_iv_correction': IV_CORRECTION_MODE,
+    'ic_min_day_volume': DEFAULT_MIN_DAY_VOLUME,
+    'ic_min_open_interest': DEFAULT_MIN_OPEN_INTEREST,
+    'ic_min_iv_rank': DEFAULT_MIN_IV_RANK
 }
 
 init_session_state(DEFAULTS)
@@ -67,6 +70,9 @@ def clear_all_filters():
     st.session_state.ic_min_sell_iv = 0.0
     st.session_state.ic_max_sell_iv = 999.0
     st.session_state.ic_min_max_profit = 0.0
+    st.session_state.ic_min_day_volume = 0
+    st.session_state.ic_min_open_interest = 0
+    st.session_state.ic_min_iv_rank = 0
 
 with st.expander("Documentation"):
     st.markdown(get_iron_condor_documentation())
@@ -132,11 +138,11 @@ with st.expander("Configuration and Filters", expanded=True):
 
     col7, col8, col9 = st.columns(3)
     with col7:
-        min_day_volume = st.number_input("Min Day Volume", 0, value=DEFAULT_MIN_DAY_VOLUME)
+        st.number_input("Min Day Volume", 0, key="ic_min_day_volume")
     with col8:
-        min_open_interest = st.number_input("Min Open Interest", 0, value=DEFAULT_MIN_OPEN_INTEREST)
+        st.number_input("Min Open Interest", 0, key="ic_min_open_interest")
     with col9:
-        min_iv_rank = st.number_input("Min IV Rank", 0, 100, value=DEFAULT_MIN_IV_RANK)
+        st.number_input("Min IV Rank", 0, 100, key="ic_min_iv_rank")
 
     col10, col11, col12 = st.columns(3)
     with col10:
@@ -183,9 +189,9 @@ def _cached_get_page_iron_condors(ic_df_raw):
 
 with st.spinner("Calculating Iron Condors..."):
     common_params = {
-        "min_open_interest": min_open_interest,
-        "min_day_volume": min_day_volume,
-        "min_iv_rank": min_iv_rank,
+        "min_open_interest": st.session_state.ic_min_open_interest,
+        "min_day_volume": st.session_state.ic_min_day_volume,
+        "min_iv_rank": st.session_state.ic_min_iv_rank,
         "min_iv_percentile": 0
     }
     
@@ -264,6 +270,7 @@ if not ic_df.empty:
         row = ic_df.iloc[selected_idx]
 
         st.divider()
+        st.info("💡 Klicke auf eine Zeile in der Tabelle, um Details wie EV (Managed) und Simulations-Griechen zu sehen.")
         
         # Legs data for the generic display
         legs = [
@@ -290,12 +297,16 @@ if not ic_df.empty:
             max_loss=row['max_loss'] if 'max_loss' in row else row['bpr'],
             bpr=row['bpr'],
             expected_value=row['expected_value'],
-            total_theta=row.get('total_theta', 0),
-            profit_to_bpr=row.get('profit_to_bpr', 0),
-            apdi=row.get('APDI', 0),
-            apdi_ev=row.get('APDI_EV', 0),
-            iv_correction_factor=row.get('iv_correction_factor', 1),
-            corrected_volatility=row.get('corrected_volatility', row.get('sell_iv', 0))
+            expected_value_managed=float(row.get('expected_value_managed', 0.0)),
+            total_theta=float(row.get('total_theta', 0)),
+            profit_to_bpr=float(row.get('profit_to_bpr', 0)),
+            apdi=float(row.get('APDI', 0)),
+            apdi_ev=float(row.get('APDI_EV', 0)),
+            iv_correction_factor=float(row.get('iv_correction_factor', 1)),
+            corrected_volatility=float(row.get('corrected_volatility', row.get('sell_iv', 0))),
+            delta=float(row.get('delta', 0.0)),
+            gamma=float(row.get('gamma', 0.0)),
+            vega=float(row.get('vega', 0.0))
         )
         
         extra_info = {

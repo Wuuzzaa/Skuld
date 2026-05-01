@@ -25,7 +25,7 @@ Trotz der soliden Basis gibt es Bereiche, die optimiert werden können, um Perfo
 - **Vektorisierung der Payoff-Berechnung:** In `_calculate_strategy_payoffs` wird über die Legs iteriert und für jedes Leg `calculate_single_option_payoff` aufgerufen. Während die Simulation selbst vektorisiert ist, könnte die gesamte Strategie-Matrix (Simulations x Legs) noch effizienter in einem einzigen NumPy-Block verarbeitet werden.
 - **NumPy Random Generator:** Die Verwendung von `np.random.seed` und `np.random.standard_normal` ist zwar funktional, aber veraltet. Der neuere `np.random.default_rng()` ist schneller und bietet eine bessere statistische Qualität.
 
-### B. Mathematische & Fachliche Erweiterungen (Geplante Features)
+### B. Mathematische & Fachliche Erweiterungen
 - **Pfadabhängige Simulation:** Um Stop-Loss (SL) und Take-Profit (TP) während der Laufzeit zu bewerten, wird von einer reinen Endpreis-Simulation auf eine Pfad-Simulation (z.B. tägliche Schritte) umgestellt.
 - **Stop-Loss & Take-Profit:** Implementierung einer Logik, die Optionen schließt, sobald die Prämie einen Schwellenwert erreicht (z.B. TP bei 50% der Prämie, SL bei 200%).
 - **Leg-spezifische Parameter:** Unterstützung für unterschiedliche DTEs pro Leg und die Möglichkeit, für jedes Leg einen geplanten Schließtag ("planned close day") festzulegen.
@@ -33,40 +33,36 @@ Trotz der soliden Basis gibt es Bereiche, die optimiert werden können, um Perfo
 - **Griechische Variablen (Greeks):** Monte-Carlo-basierte Schätzung von Delta, Gamma und Vega durch kleine Preis- und Volatilitäts-Shifts in der Simulation.
 - **Realtime-Performance:** Sicherstellung, dass die Pfad-Simulation durch effiziente NumPy-Vektorisierung flüssig bleibt.
 
-### C. Technische Details der Umsetzung (Konzept)
-- **Pfad-Simulation:** Nutzung von geometrischer Brownscher Bewegung (GBM) über mehrere Zeitschritte.
-- **Zwischenbewertung:** Da SL/TP auf dem aktuellen Optionspreis basieren, wird während der Pfad-Simulation an jedem Schritt der Black-Scholes-Preis für jedes Leg berechnet.
-- **Greeks-Berechnung:**
-  - **Delta:** `(EV(S+ds) - EV(S)) / ds`
-  - **Vega:** `(EV(vol+dv) - EV(vol)) / dv`
-  - **Gamma:** Zweite Ableitung via Preis-Shifts.
-  Dies erfordert zusätzliche Simulationsläufe mit leicht veränderten Startparametern.
+### C. Technische Details der Umsetzung
+- **Pfad-Simulation:** Nutzung von geometrischer Brownscher Bewegung (GBM) über mehrere Zeitschritte. Bei langen Laufzeiten (hohe DTE) werden die Schritte optimiert (bis zu 30 Schritte), um die Performance stabil zu halten.
+- **Zwischenbewertung:** Da SL/TP auf dem aktuellen Optionspreis basieren, wird während der Pfad-Simulation der Black-Scholes-Preis für jedes Leg vektorisiert berechnet.
+- **Management-Triggers:**
+  - **Take Profit (TP):** Schließt die Position, wenn der Gewinn den definierten Prozentsatz der Prämie erreicht.
+  - **Stop Loss (SL):** Schließt die Position, wenn der Verlust den definierten Prozentsatz erreicht.
+  - **DTE Close:** Schließt die Position automatisch bei Erreichen einer bestimmten Restlaufzeit (z.B. 21 DTE).
+- **Greeks-Berechnung (Finite Differenzen):**
+  - **Delta:** `(EV(S+ds) - EV(S-ds)) / (2*ds)`
+  - **Vega:** `(EV(vol+dv) - EV(vol-dv)) / (2*dv)`
+  - **Gamma:** Zweite Ableitung `(EV(S+ds) - 2*EV(S) + EV(S-ds)) / ds^2`
+  Dies nutzt **Common Random Numbers (CRN)**, um Rauschen zu minimieren und präzise Ergebnisse bei 10.000 Simulationen zu liefern.
 
-## 4. SL/TP Strategie-Optimierung & UI-Feedback
+## 4. UI-Integration & Anzeige
 
-Um die profitabelste Strategie zu finden, bietet das System einen direkten Vergleich zwischen der klassischen "Hold-to-Expiration"-Variante und der aktiven Management-Strategie (SL/TP).
+Die Ergebnisse der Simulation werden in den Detailansichten der Strategien (`spreads.py`, `iron_condors.py`) angezeigt.
 
-### A. Bestimmung der optimalen Parameter
-Die optimale SL/TP-Strategie wird durch den Vergleich des Erwartungswerts (EV) ermittelt:
-- **Baseline EV:** Erwarteter Gewinn ohne vorzeitiges Schließen.
-- **Managed EV:** Erwarteter Gewinn unter Berücksichtigung der SL/TP-Trigger und Pfad-Simulation.
-- **Feedback-Metrik:** Die Differenz (`Managed EV - Baseline EV`) zeigt den "Management-Alpha" an. Wenn dieser negativ ist, wäre statistisch gesehen das Halten bis zum Verfall profitabler.
+### A. Erwartungswerte (EV)
+- **Expected Value (Static):** Der Erwartungswert, wenn die Position bis zum Verfall gehalten wird.
+- **EV (Managed):** Der Erwartungswert unter Berücksichtigung der aktiven Management-Strategie (SL, TP, DTE Close). Dieser wird nur angezeigt, wenn Management-Parameter gesetzt sind und sich vom statischen EV unterscheiden.
 
-### B. UI-Integration (Spreads & Iron Condor)
-In den Seiten `spreads.py` und `iron_condors.py` werden im Konfigurations-Bereich folgende Felder ergänzt:
-- **Take Profit (% der Prämie):** Standardmäßig oft 50%. Definiert, bei wie viel Gewinn die Position glattgestellt wird.
-- **Stop Loss (% der Prämie):** Standardmäßig oft 200%. Definiert die Verlusttoleranz.
-- **Planned Close DTE:** Ermöglicht das Schließen der Position X Tage vor Verfall (z.B. bei 21 DTE), um Gamma-Risiken zu reduzieren.
-- **Leg-spezifische DTEs:** (Besonders für Iron Condors) Option, die Put- und Call-Seite mit unterschiedlichen Laufzeiten zu simulieren.
-
-### C. Feedback in der Ergebnisliste
-Für jeden gefundenen Trade wird neben dem Standard-EV auch der "Managed EV" angezeigt:
-- **Status-Indikator:** Ein Icon (z.B. 🎯) signalisiert, ob die gewählten SL/TP-Einstellungen den EV verbessern oder verschlechtern.
-- **Optimaler TP/SL Vorschlag:** Basierend auf der Simulation kann das System einen Korridor vorschlagen (z.B. "Für diesen Spread ist ein TP von 40% optimal").
+### B. Simulation Greeks
+Diese Werte geben an, wie empfindlich der *gesamte Erwartungswert* der Strategie auf Marktveränderungen reagiert:
+- **Delta:** Änderung des EV bei einer Preisänderung des Basiswerts um $1.
+- **Gamma:** Änderung des Delta bei einer Preisänderung des Basiswerts um $1.
+- **Vega:** Änderung des EV bei einer Änderung der impliziten Volatilität um 1% (0.01).
 
 ---
 
-## 5. Performance-Ziele & Optimierung
+## 5. Performance-Optimierung
 
 Durch die Umstellung auf eine Pfad-Simulation und die Berechnung der Greeks steigt die Rechenlast erheblich (Faktor 200x bis 500x). Um die "Realtime"-Usability der Streamlit-Anwendung zu erhalten, werden folgende Optimierungen implementiert:
 

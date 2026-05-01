@@ -39,6 +39,10 @@ DEFAULT_MIN_MAX_PROFIT = 80.0
 DEFAULT_MIN_IV_RANK = 0
 DEFAULT_MIN_IV_PERCENTILE = 0
 DEFAULT_STRATEGY_TYPE = "credit"
+# Management Defaults
+DEFAULT_TAKE_PROFIT = 50
+DEFAULT_STOP_LOSS = 200
+DEFAULT_DTE_CLOSE = 21
 
 # Page header
 st.title("Spreads")
@@ -61,7 +65,10 @@ DEFAULTS = {
     'min_iv_rank': DEFAULT_MIN_IV_RANK,
     'min_iv_percentile': DEFAULT_MIN_IV_PERCENTILE,
     'strategy_type': DEFAULT_STRATEGY_TYPE,
-    'iv_correction': IV_CORRECTION_MODE
+    'iv_correction': IV_CORRECTION_MODE,
+    'take_profit': DEFAULT_TAKE_PROFIT,
+    'stop_loss': DEFAULT_STOP_LOSS,
+    'dte_close': DEFAULT_DTE_CLOSE
 }
 
 init_session_state(DEFAULTS)
@@ -87,6 +94,9 @@ def clear_all_filters():
     st.session_state.min_max_profit = 0.0
     st.session_state.min_iv_rank = 0
     st.session_state.min_iv_percentile = 0
+    st.session_state.take_profit = 0
+    st.session_state.stop_loss = 500
+    st.session_state.dte_close = 0
 
 
 # Filter with expander section
@@ -141,7 +151,7 @@ with st.expander("Configuration and Filters", expanded=True):
     with col2:
         # Suggest different delta for debit
         default_delta = 0.6 if st.session_state.strategy_type == "debit" else 0.2
-        delta_target = st.number_input(
+        st.number_input(
             "Delta Target",
             min_value=0.0,
             max_value=1.0,
@@ -149,11 +159,12 @@ with st.expander("Configuration and Filters", expanded=True):
             step=0.01,
             key="delta_target_input"
         )
-        # We need to handle the session state correctly if it was already set
-        st.session_state.delta_target = delta_target
+        # No need to manually update session_state.delta_target here if we use the same key,
+        # but the key is different. So we keep the manual update but clean up.
+        st.session_state.delta_target = st.session_state.delta_target_input
 
     with col3:
-        spread_width = st.number_input(
+        st.number_input(
             "Spread Width",
             min_value=1,
             max_value=20,
@@ -162,13 +173,13 @@ with st.expander("Configuration and Filters", expanded=True):
         )
 
     with col4:
-        strategy_type = st.selectbox("Strategy Type", ["credit", "debit"], key="strategy_type")
+        st.selectbox("Strategy Type", ["credit", "debit"], key="strategy_type")
 
     # Second row
     col5, col6, col7, col8 = st.columns(4)
 
     with col5:
-        option_type = st.selectbox("Option Type", ["put", "call"], key="option_type")
+        st.selectbox("Option Type", ["put", "call"], key="option_type")
 
     with col6:
         st.checkbox("Show Monthly", key="show_monthly")
@@ -189,7 +200,7 @@ with st.expander("Configuration and Filters", expanded=True):
         )
 
     with col10:
-        min_day_volume = st.number_input(
+        st.number_input(
             "Min dayvolume",
             min_value=0,
             step=1,
@@ -197,7 +208,7 @@ with st.expander("Configuration and Filters", expanded=True):
         )
 
     with col11:
-        min_open_interest = st.number_input(
+        st.number_input(
             "Min Open Interest",
             min_value=0,
             step=100,
@@ -205,7 +216,7 @@ with st.expander("Configuration and Filters", expanded=True):
         )
 
     with col12:
-        min_sell_iv = st.number_input(
+        st.number_input(
             "Min sell iv",
             min_value=0.0,
             step=0.05,
@@ -217,7 +228,7 @@ with st.expander("Configuration and Filters", expanded=True):
     col13, col14, col15, col16 = st.columns(4)
 
     with col13:
-        max_sell_iv = st.number_input(
+        st.number_input(
             "Max sell iv",
             min_value=0.0,
             step=0.05,
@@ -226,7 +237,7 @@ with st.expander("Configuration and Filters", expanded=True):
         )
 
     with col14:
-        min_max_profit = st.number_input(
+        st.number_input(
             "Min Max Profit",
             min_value=0.0,
             step=1.0,
@@ -235,7 +246,7 @@ with st.expander("Configuration and Filters", expanded=True):
         )
 
     with col15:
-        min_iv_rank = st.number_input(
+        st.number_input(
             "Min iv rank",
             min_value=0,
             max_value=100,
@@ -244,7 +255,7 @@ with st.expander("Configuration and Filters", expanded=True):
         )
 
     with col16:
-        min_iv_percentile = st.number_input(
+        st.number_input(
             "Min iv percentile",
             min_value=0,
             max_value=100,
@@ -267,28 +278,39 @@ with st.expander("Configuration and Filters", expanded=True):
     with col18:
         st.info("IV correction mode: 'auto' (Automatic), 0.0-1.0 (Manual reduction), 0.0 (No correction)")
 
+    st.divider()
+    st.markdown("### Management Strategy")
+    m_col1, m_col2, m_col3 = st.columns(3)
+    with m_col1:
+        st.number_input("Take Profit %", min_value=0, max_value=500, step=10, key="take_profit")
+    with m_col2:
+        st.number_input("Stop Loss %", min_value=0, max_value=500, step=10, key="stop_loss")
+    with m_col3:
+        st.number_input("DTE Close", min_value=0, max_value=365, step=1, key="dte_close")
+
 @st.cache_data
 def _cached_select_into_dataframe(sql_file_path, params):
     return select_into_dataframe(sql_file_path=sql_file_path, params=params)
 
 
 @st.cache_data
-def _cached_get_page_spreads(df, strategy_type, iv_correction):
-    return get_page_spreads(df, strategy_type=strategy_type, iv_correction=iv_correction)
+def _cached_get_page_spreads(df, strategy_type, iv_correction, take_profit=None, stop_loss=None, dte_close=None):
+    return get_page_spreads(df, strategy_type=strategy_type, iv_correction=iv_correction,
+                            take_profit=take_profit, stop_loss=stop_loss, dte_close=dte_close)
 
 
 # Calculate the spread values with a loading indicator
 with st.spinner("Calculating spreads..."):
     params = {
         "expiration_date": expiration_date,
-        "option_type": option_type,
+        "option_type": st.session_state.option_type,
         "delta_target": st.session_state.delta_target,
-        "min_open_interest": min_open_interest,
-        "spread_width": spread_width,
-        "min_day_volume": min_day_volume,
-        "min_iv_rank": min_iv_rank,
-        "min_iv_percentile": min_iv_percentile,
-        "strategy_type": strategy_type
+        "min_open_interest": st.session_state.min_open_interest,
+        "spread_width": st.session_state.spread_width,
+        "min_day_volume": st.session_state.min_day_volume,
+        "min_iv_rank": st.session_state.min_iv_rank,
+        "min_iv_percentile": st.session_state.min_iv_percentile,
+        "strategy_type": st.session_state.strategy_type
     }
 
     logging.debug(f"Params for database query: {params}")
@@ -297,14 +319,21 @@ with st.spinner("Calculating spreads..."):
     df = _cached_select_into_dataframe(sql_file_path=sql_file_path, params=params)
     logging.debug(f"Input data head: {df.head()}")
 
-    spreads_df = _cached_get_page_spreads(df, strategy_type=strategy_type, iv_correction=st.session_state.iv_correction)
+    spreads_df = _cached_get_page_spreads(
+        df, 
+        strategy_type=st.session_state.strategy_type, 
+        iv_correction=st.session_state.iv_correction,
+        take_profit=st.session_state.take_profit,
+        stop_loss=st.session_state.stop_loss,
+        dte_close=st.session_state.dte_close
+    )
     logging.debug(f"Calculated spreads head: {spreads_df.head()}")
 
 # Apply spread filters
 filtered_df = spreads_df.copy()
 
 # Min max profit
-filtered_df = filtered_df[filtered_df['max_profit'] >= min_max_profit]
+filtered_df = filtered_df[filtered_df['max_profit'] >= st.session_state.min_max_profit]
 
 # Only positive expected value
 if st.session_state.show_only_positiv_expected_value:
@@ -326,10 +355,10 @@ if st.session_state.show_only_spreads_with_no_earnings_till_expiration:
 filtered_df.reset_index(drop=True, inplace=True)
 
 # Min sell IV
-filtered_df = filtered_df[filtered_df['sell_iv'] >= min_sell_iv]
+filtered_df = filtered_df[filtered_df['sell_iv'] >= st.session_state.min_sell_iv]
 
 # Max sell IV
-filtered_df = filtered_df[filtered_df['sell_iv'] <= max_sell_iv]
+filtered_df = filtered_df[filtered_df['sell_iv'] <= st.session_state.max_sell_iv]
 
 # Re-reset index after all filters are applied
 filtered_df.reset_index(drop=True, inplace=True)
@@ -370,8 +399,9 @@ if not filtered_df.empty:
         row = filtered_df.iloc[selected_idx]
 
         st.divider()
+        st.info("💡 Klicke auf eine Zeile in der Tabelle, um Details wie EV (Managed) und Simulations-Griechen zu sehen.")
         
-        is_credit = strategy_type == "credit"
+        is_credit = st.session_state.strategy_type == "credit"
         
         legs = [
             OptionLeg(
@@ -393,12 +423,16 @@ if not filtered_df.empty:
             max_loss=row['max_loss'] if 'max_loss' in row else row['bpr'],
             bpr=row['bpr'],
             expected_value=row['expected_value'],
-            total_theta=row.get('spread_theta', 0),
-            profit_to_bpr=row.get('profit_to_bpr', 0),
-            apdi=row.get('APDI', 0),
-            apdi_ev=row.get('APDI_EV', 0),
-            iv_correction_factor=row.get('iv_correction_factor', 1),
-            corrected_volatility=row.get('corrected_volatility', row.get('sell_iv', 0))
+            expected_value_managed=float(row.get('expected_value_managed', 0.0)),
+            total_theta=float(row.get('spread_theta', 0)),
+            profit_to_bpr=float(row.get('profit_to_bpr', 0)),
+            apdi=float(row.get('APDI', 0)),
+            apdi_ev=float(row.get('APDI_EV', 0)),
+            iv_correction_factor=float(row.get('iv_correction_factor', 1)),
+            corrected_volatility=float(row.get('corrected_volatility', row.get('sell_iv', 0))),
+            delta=float(row.get('delta', 0.0)),
+            gamma=float(row.get('gamma', 0.0)),
+            vega=float(row.get('vega', 0.0))
         )
 
         extra_info = {

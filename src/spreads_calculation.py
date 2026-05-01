@@ -17,7 +17,8 @@ from src.options_utils import (
 # Setup logging
 logger = logging.getLogger(os.path.basename(__file__))
 
-def _calculate_metrics_for_row(row: pd.Series, strategy_type: str = 'credit', iv_correction: str = 'auto') -> pd.Series:
+def _calculate_metrics_for_row(row: pd.Series, strategy_type: str = 'credit', iv_correction: str = 'auto', 
+                               take_profit: float = None, stop_loss: float = None, dte_close: int = None) -> pd.Series:
     """Calculates all metrics for a single spread using the generic calculator."""
     is_credit = strategy_type == 'credit'
     
@@ -27,14 +28,20 @@ def _calculate_metrics_for_row(row: pd.Series, strategy_type: str = 'credit', iv
             premium=row['sell_last_option_price'],
             is_call=row['option_type'] == 'call',
             is_long=not is_credit,
-            theta=row.get('sell_theta')
+            theta=row.get('sell_theta'),
+            take_profit_pct=take_profit,
+            stop_loss_pct=stop_loss,
+            dte_close=dte_close
         ),
         OptionLeg(
             strike=row['buy_strike'],
             premium=row['buy_last_option_price'],
             is_call=row['option_type'] == 'call',
             is_long=is_credit,
-            theta=row.get('buy_theta')
+            theta=row.get('buy_theta'),
+            take_profit_pct=take_profit,
+            stop_loss_pct=stop_loss,
+            dte_close=dte_close
         )
     ]
 
@@ -51,15 +58,20 @@ def _calculate_metrics_for_row(row: pd.Series, strategy_type: str = 'credit', iv
         "max_loss": metrics.max_loss,
         "bpr": metrics.bpr,
         "expected_value": metrics.expected_value,
+        "expected_value_managed": metrics.expected_value_managed,
         "spread_theta": metrics.total_theta,
         "profit_to_bpr": metrics.profit_to_bpr,
         "APDI": metrics.apdi,
         "APDI_EV": metrics.apdi_ev,
         "iv_correction_factor": metrics.iv_correction_factor,
-        "corrected_volatility": metrics.corrected_volatility
+        "corrected_volatility": metrics.corrected_volatility,
+        "delta": metrics.delta,
+        "gamma": metrics.gamma,
+        "vega": metrics.vega
     })
 
-def _calculate_spread_metrics(df: pd.DataFrame, strategy_type: str = 'credit', iv_correction: str = 'auto') -> pd.DataFrame:
+def _calculate_spread_metrics(df: pd.DataFrame, strategy_type: str = 'credit', iv_correction: str = 'auto',
+                             take_profit: float = None, stop_loss: float = None, dte_close: int = None) -> pd.DataFrame:
     """Calculates all relevant metrics for the spreads."""
     if df.empty:
         return df
@@ -71,7 +83,10 @@ def _calculate_spread_metrics(df: pd.DataFrame, strategy_type: str = 'credit', i
     df["%_otm"] = (df["sell_strike"] - df["close"]).abs() / df["close"] * 100
 
     # Calculate all generic metrics
-    metrics_df = df.apply(lambda r: _calculate_metrics_for_row(r, strategy_type, iv_correction=iv_correction), axis=1)
+    metrics_df = df.apply(lambda r: _calculate_metrics_for_row(
+        r, strategy_type, iv_correction=iv_correction,
+        take_profit=take_profit, stop_loss=stop_loss, dte_close=dte_close
+    ), axis=1)
     df = pd.concat([df, metrics_df], axis=1)
 
     # Filter out invalid spreads
@@ -133,22 +148,26 @@ def _build_optionstrat_url(row: pd.Series, strategy_type: str = 'credit') -> str
     return f"{base_url}/{strategy}/{symbol}/{options}"
 
 @log_function
-def calc_spreads(df: pd.DataFrame, strategy_type: str = 'credit', iv_correction: str = 'auto') -> pd.DataFrame:
+def calc_spreads(df: pd.DataFrame, strategy_type: str = 'credit', iv_correction: str = 'auto',
+                 take_profit: float = None, stop_loss: float = None, dte_close: int = None) -> pd.DataFrame:
     """Main calculation entry point for spreads."""
     if df.empty:
         return df
     
-    df = _calculate_spread_metrics(df, strategy_type, iv_correction=iv_correction)
+    df = _calculate_spread_metrics(df, strategy_type, iv_correction=iv_correction,
+                                   take_profit=take_profit, stop_loss=stop_loss, dte_close=dte_close)
     df = _add_earnings_and_urls(df, strategy_type)
     
     return df
 
-def get_page_spreads(df: pd.DataFrame, strategy_type: str = 'credit', iv_correction: str = 'auto') -> pd.DataFrame:
+def get_page_spreads(df: pd.DataFrame, strategy_type: str = 'credit', iv_correction: str = 'auto',
+                     take_profit: float = None, stop_loss: float = None, dte_close: int = None) -> pd.DataFrame:
     """Prepares the DataFrame for display in the frontend."""
     if df.empty:
         return df
         
-    df = calc_spreads(df, strategy_type, iv_correction=iv_correction)
+    df = calc_spreads(df, strategy_type, iv_correction=iv_correction,
+                      take_profit=take_profit, stop_loss=stop_loss, dte_close=dte_close)
     
     if df.empty:
         return df
@@ -158,7 +177,8 @@ def get_page_spreads(df: pd.DataFrame, strategy_type: str = 'credit', iv_correct
         'analyst_mean_target', 'company_industry', 'company_sector', 
         'historical_volatility_30d', 'iv_rank', 'iv_percentile',
         'spread_width', 'max_profit', 'bpr', 'profit_to_bpr', 'spread_theta', 
-        'expected_value', 'iv_correction_factor', 'APDI', 'APDI_EV', 'optionstrat_url',
+        'expected_value', 'expected_value_managed', 'iv_correction_factor', 'APDI', 'APDI_EV', 'optionstrat_url',
+        'delta', 'gamma', 'vega',
         'sell_strike', 'sell_last_option_price', 'sell_delta', 'sell_iv', '%_otm', 
         'sell_theta', 'sell_open_interest', 'sell_expected_move', 'sell_day_volume',
         'buy_strike', 'buy_last_option_price', 'buy_delta', 'buy_iv', 'buy_theta', 

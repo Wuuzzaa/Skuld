@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
-from typing import List, Dict, Tuple, Union
+from typing import List, Dict, Tuple, Union, Optional
+from scipy.stats import norm
 
 from config import TRANSACTION_COST_PER_CONTRACT, RANDOM_SEED, NUM_SIMULATIONS, RISK_FREE_RATE, IV_CORRECTION_MODE
 
@@ -148,11 +149,12 @@ class UniversalOptionsMonteCarloSimulator:
         # Ensure corrected IV is positive and reasonable
         return max(0.01, corrected_iv)  # Minimum 1% IV
 
-    def simulate_stock_prices(self) -> np.ndarray:
+    def simulate_stock_price_paths(self) -> np.ndarray:
         """
-        Simulate stock prices at expiration using geometric Brownian motion
+        Simulate stock price paths using geometric Brownian motion
 
-        Uses risk-neutral valuation for options pricing models with corrected IV
+        Returns:
+            np.ndarray: Matrix of simulated stock prices (num_simulations, dte + 1)
         """
         # For Monte-Carlo option valuation: Risk-neutral drift
         drift = self.risk_free_rate - self.dividend_yield
@@ -161,17 +163,41 @@ class UniversalOptionsMonteCarloSimulator:
         if self.random_seed is not None:
             np.random.seed(self.random_seed)
 
-        # Normally distributed random shocks
-        random_shocks = np.random.standard_normal(self.num_simulations)
+        # Time steps: daily
+        dt = 1 / 365
+        num_steps = self.dte
 
-        # Lognormal price simulation using CORRECTED volatility
-        # S(T) = S(0) * exp((r-q-σ²/2)*T + σ*√T*ε)
-        log_returns = ((drift - 0.5 * self.volatility ** 2) * self.time_to_expiration +
-                       self.volatility * np.sqrt(self.time_to_expiration) * random_shocks)
+        # Matrix to store paths: (simulations, steps)
+        # S(t+dt) = S(t) * exp((r - q - 0.5*sigma^2)*dt + sigma*sqrt(dt)*epsilon)
+        
+        # Generate all random shocks at once
+        random_shocks = np.random.standard_normal((self.num_simulations, num_steps))
+        
+        # Calculate daily log returns
+        log_returns = ((drift - 0.5 * self.volatility ** 2) * dt +
+                       self.volatility * np.sqrt(dt) * random_shocks)
+        
+        # Cumulative sum of log returns to get price paths
+        cumulative_log_returns = np.cumsum(log_returns, axis=1)
+        
+        # Prepend zeros for the starting price (at t=0)
+        starting_log_returns = np.zeros((self.num_simulations, 1))
+        all_log_returns = np.hstack([starting_log_returns, cumulative_log_returns])
+        
+        # Calculate price paths
+        price_paths = self.current_price * np.exp(all_log_returns)
+        
+        return price_paths
 
-        simulated_prices = self.current_price * np.exp(log_returns)
+    def simulate_stock_prices(self) -> np.ndarray:
+        """
+        Simulate stock prices at expiration using geometric Brownian motion
 
-        return simulated_prices
+        Uses risk-neutral valuation for options pricing models with corrected IV
+        """
+        # Legacy support: return only the final prices
+        price_paths = self.simulate_stock_price_paths()
+        return price_paths[:, -1]
 
     def calculate_option_intrinsic_value(self,
                                          stock_price: float,
@@ -236,6 +262,56 @@ class UniversalOptionsMonteCarloSimulator:
 
         return payoffs_per_contract
 
+    def _black_scholes_vectorized(self, S, K, T, r, sigma, is_call):
+        """
+        Internal vectorized Black-Scholes price calculation
+
+        Args:
+            S: Stock price (scalar or array)
+            K: Strike prices (array)
+            T: Time to expiration in years (scalar or array)
+            r: Risk-free rate (scalar)
+            sigma: Volatility (scalar)
+            is_call: Boolean array (True for call, False for put)
+
+        Returns:
+            np.ndarray: Matrix/Array of option prices
+        """
+        # Ensure inputs are arrays for broadcasting
+        # S can be (num_simulations, num_steps)
+        # K is (num_legs,)
+        # T is (num_steps,)
+        
+        # Handle expiration (T=0)
+        # Replace T=0 with very small value to avoid division by zero in d1
+        T_safe = np.where(T > 0, T, 1e-9)
+        
+        sqrt_T = np.sqrt(T_safe)
+        d1 = (np.log(S / K) + (r + 0.5 * sigma ** 2) * T_safe) / (sigma * sqrt_T)
+        d2 = d1 - sigma * sqrt_T
+
+        nd1 = norm.cdf(d1)
+        nd2 = norm.cdf(d2)
+        exp_rt = np.exp(-r * T_safe)
+
+        # Call price: S * N(d1) - K * e^(-rT) * N(d2)
+        call_prices = S * nd1 - K * exp_rt * nd2
+        
+        # Put price: K * e^(-rT) * N(-d2) - S * N(-d1)
+        # Using N(-x) = 1 - N(x)
+        put_prices = K * exp_rt * (1 - nd2) - S * (1 - nd1)
+
+        prices = np.where(is_call, call_prices, put_prices)
+        
+        # At expiration (T=0), use intrinsic value
+        if np.any(T <= 0):
+            intrinsic_call = np.maximum(S - K, 0)
+            intrinsic_put = np.maximum(K - S, 0)
+            intrinsic = np.where(is_call, intrinsic_call, intrinsic_put)
+            prices = np.where(T > 0, prices, intrinsic)
+
+        return prices
+
     def _calculate_strategy_payoffs(self, options: List[Dict]) -> Tuple[np.ndarray, np.ndarray, float]:
         """
         Helper method to calculate strategy payoffs and initial cashflow
@@ -281,6 +357,172 @@ class UniversalOptionsMonteCarloSimulator:
 
         return simulated_prices, total_payoffs, initial_cashflow
 
+    def _calculate_managed_strategy_payoffs(self, options: List[Dict]) -> Tuple[np.ndarray, np.ndarray, float]:
+        """
+        Calculate strategy payoffs considering SL/TP and early exit logic
+
+        Args:
+            options: List of option dictionaries or OptionLeg objects
+
+        Returns:
+            Tuple of (final_prices, total_payoffs, initial_cashflow)
+        """
+        # 1. Simulate price paths (simulations, steps)
+        # steps = self.dte + 1 (includes t=0)
+        price_paths = self.simulate_stock_price_paths()
+        num_steps = price_paths.shape[1]
+        
+        # 2. Extract option parameters
+        num_legs = len(options)
+        strikes = np.array([opt.get('strike', opt.get('strike')) for opt in options])
+        premiums = np.array([opt.get('premium', opt.get('premium')) for opt in options])
+        is_calls = np.array([opt.get('is_call', True) for opt in options])
+        is_longs = np.array([opt.get('is_long', True) for opt in options])
+        
+        # Management parameters
+        # Use .get() for dicts and getattr() for objects if needed, 
+        # but let's assume they are passed as dicts by calculate_expected_value
+        tp_pcts = np.array([opt.get('take_profit_pct') for opt in options])
+        sl_pcts = np.array([opt.get('stop_loss_pct') for opt in options])
+        dte_closes = np.array([opt.get('dte_close') for opt in options])
+        planned_dtes = np.array([opt.get('planned_dte', self.dte) for opt in options])
+        
+        # 3. Initialize exit tracking
+        # We need to know when each leg is closed
+        # closed_at_step: (num_simulations, num_legs)
+        # 0 means not closed yet, 1..dte means closed at that day
+        closed_at_step = np.zeros((self.num_simulations, num_legs), dtype=int)
+        exit_prices = np.zeros((self.num_simulations, num_legs))
+        
+        # 4. Iterate through days (skipping day 0 as it's inception)
+        # For performance, we can evaluate all simulations at once per day
+        # If no management is set for a leg, it only closes at planned_dte or expiration
+        
+        # T in years for each day
+        days_remaining = np.arange(self.dte, -1, -1)
+        t_years = days_remaining / 365.0
+        
+        # Performance optimization:
+        # If DTE is high, we don't need daily steps for SL/TP evaluation.
+        # Use a maximum of 30 steps for path evaluation to save time.
+        step_size = 1
+        if self.dte > 30:
+            step_size = max(1, self.dte // 30)
+
+        for step in range(step_size, num_steps, step_size):
+            # If we are near the end, make sure we hit the last step (expiration)
+            if step + step_size >= num_steps:
+                step = num_steps - 1
+            
+            current_day = step
+            current_dte = self.dte - current_day
+            
+            # Identify legs that haven't closed yet
+            active_mask = closed_at_step == 0
+            if not np.any(active_mask):
+                break
+                
+            # Current stock prices for all simulations
+            s_current = price_paths[:, step].reshape(-1, 1) # (sims, 1)
+            
+            # Calculate current option prices for all legs and simulations
+            # This is the heavy part. S=(sims, 1), K=(legs,), T=(1,)
+            # Result is (sims, legs)
+            # Use raw_volatility for BS pricing (or corrected? Usually market price uses market IV)
+            # MD says: "using corrected IV". Let's use self.volatility
+            leg_prices = self._black_scholes_vectorized(
+                s_current, 
+                strikes.reshape(1, -1), 
+                t_years[step], 
+                self.risk_free_rate, 
+                self.volatility, 
+                is_calls.reshape(1, -1)
+            )
+            
+            # Check SL/TP and DTE Close triggers
+            for l_idx in range(num_legs):
+                # Only check active simulations for this leg
+                leg_active = active_mask[:, l_idx]
+                if not np.any(leg_active):
+                    continue
+                
+                # Triggers
+                triggered = np.zeros(self.num_simulations, dtype=bool)
+                
+                # 1. Take Profit
+                tp = tp_pcts[l_idx]
+                if tp is not None:
+                    # Input is in 100-based percentage (e.g. 50 for 50%)
+                    # Convert to decimal (0.5)
+                    tp_decimal = tp / 100.0
+                    if is_longs[l_idx]:
+                        # Long: Profit if price > entry_premium * (1 + TP)
+                        triggered |= leg_prices[:, l_idx] >= premiums[l_idx] * (1 + tp_decimal)
+                    else:
+                        # Short: Profit if price < entry_premium * (1 - TP)
+                        triggered |= leg_prices[:, l_idx] <= premiums[l_idx] * (1 - tp_decimal)
+                
+                # 2. Stop Loss
+                sl = sl_pcts[l_idx]
+                if sl is not None:
+                    # Input is in 100-based percentage (e.g. 200 for 200%)
+                    # Convert to decimal (2.0)
+                    sl_decimal = sl / 100.0
+                    if is_longs[l_idx]:
+                        # Long: Loss if price < entry_premium * (1 - SL_pct)
+                        triggered |= leg_prices[:, l_idx] <= premiums[l_idx] * (1 - sl_decimal)
+                    else:
+                        # Short: Loss if price > entry_premium * (1 + SL_pct)
+                        triggered |= leg_prices[:, l_idx] >= premiums[l_idx] * (1 + sl_decimal)
+                
+                # 3. DTE Close
+                dc = dte_closes[l_idx]
+                if dc is not None and current_dte <= dc:
+                    triggered |= True
+                    
+                # 4. Planned DTE
+                pdte = planned_dtes[l_idx]
+                if pdte is not None and current_day >= (self.dte - pdte):
+                    # For example, if dte=45 and pdte=45, it closes at day 0 (already handled by step 1+)
+                    triggered |= True
+                
+                # Final day close
+                if step == num_steps - 1:
+                    triggered |= True
+                
+                # Apply triggers to active ones
+                to_close = triggered & leg_active
+                closed_at_step[to_close, l_idx] = step
+                exit_prices[to_close, l_idx] = leg_prices[to_close, l_idx]
+
+        # 5. Calculate payoffs
+        # Initial cashflow (inception)
+        initial_cashflow = 0
+        for l_idx in range(num_legs):
+            # Short: positive (credit), Long: negative (debit)
+            mult = 1 if not is_longs[l_idx] else -1
+            initial_cashflow += mult * premiums[l_idx] * 100
+            
+        # Total payoffs across all simulations
+        total_payoffs = np.zeros(self.num_simulations)
+        for l_idx in range(num_legs):
+            # Exit value
+            # Long: Receive exit price, Short: Pay exit price
+            mult = 1 if is_longs[l_idx] else -1
+            leg_exit_value = exit_prices[:, l_idx] * 100
+            
+            # Profit/Loss = (Exit Value - Entry Value) - Cost
+            # If long: (ExitValue - EntryValue) - Cost
+            # If short: (EntryValue - ExitValue) - Cost
+            if is_longs[l_idx]:
+                leg_profit = (leg_exit_value - premiums[l_idx] * 100)
+            else:
+                leg_profit = (premiums[l_idx] * 100 - leg_exit_value)
+                
+            total_payoffs += (leg_profit - self.transaction_cost_per_contract)
+
+        return price_paths[:, -1], total_payoffs, initial_cashflow
+
     def calculate_expected_value(self, options: List[Dict]) -> float:
         """
         Calculate only the expected value of the strategy (fast computation)
@@ -291,7 +533,19 @@ class UniversalOptionsMonteCarloSimulator:
         Returns:
             Expected value of the strategy (discounted to present value)
         """
-        _, total_payoffs, _ = self._calculate_strategy_payoffs(options)
+        # Check if any management parameters are present
+        has_management = any(
+            opt.get('take_profit_pct') is not None or 
+            opt.get('stop_loss_pct') is not None or 
+            opt.get('dte_close') is not None or
+            (opt.get('planned_dte') is not None and opt.get('planned_dte') < self.dte)
+            for opt in options
+        )
+
+        if has_management:
+            _, total_payoffs, _ = self._calculate_managed_strategy_payoffs(options)
+        else:
+            _, total_payoffs, _ = self._calculate_strategy_payoffs(options)
 
         # Calculate expected value
         expected_value_raw = np.mean(total_payoffs)
@@ -361,6 +615,50 @@ class UniversalOptionsMonteCarloSimulator:
 
         return breakeven_points
 
+    def calculate_greeks(self, options: List[Dict]) -> Dict[str, float]:
+        """
+        Calculate strategy Greeks using Monte Carlo simulation and finite differences.
+        Uses Common Random Numbers (CRN) for noise reduction.
+        """
+        # Save original state
+        original_price = self.current_price
+        original_vol = self.volatility
+        
+        # 1. Delta & Gamma
+        ds = original_price * 0.01 # 1% shift
+        
+        # EV(S + ds)
+        self.current_price = original_price + ds
+        ev_plus = self.calculate_expected_value(options)
+        
+        # EV(S - ds)
+        self.current_price = original_price - ds
+        ev_minus = self.calculate_expected_value(options)
+        
+        # Restore price to calculate ev_base at original price
+        self.current_price = original_price
+        ev_base = self.calculate_expected_value(options)
+        
+        delta = (ev_plus - ev_minus) / (2 * ds)
+        gamma = (ev_plus - 2 * ev_base + ev_minus) / (ds ** 2)
+        
+        # 2. Vega
+        dv = 0.01 # 1% IV shift
+        self.volatility = original_vol + dv
+        ev_vega = self.calculate_expected_value(options)
+        
+        # Restore volatility
+        self.volatility = original_vol
+        
+        vega = (ev_vega - ev_base) / (dv * 100) # per 1% point
+        
+        # Ensure they are not exactly 0.0 unless they really are
+        return {
+            "delta": float(delta / 100), # per share
+            "gamma": float(gamma / 100),
+            "vega": float(vega)
+        }
+
     def analyze_strategy(self, options: List[Dict]) -> Dict:
         """
         Analyze an arbitrary multi-leg options strategy with full metrics
@@ -376,8 +674,19 @@ class UniversalOptionsMonteCarloSimulator:
         Returns:
             Dictionary with all analysis results
         """
-        # Get basic payoff calculations
-        simulated_prices, total_payoffs, initial_cashflow = self._calculate_strategy_payoffs(options)
+        # Management parameters
+        has_management = any(
+            opt.get('take_profit_pct') is not None or 
+            opt.get('stop_loss_pct') is not None or 
+            opt.get('dte_close') is not None or
+            (opt.get('planned_dte') is not None and opt.get('planned_dte') < self.dte)
+            for opt in options
+        )
+
+        if has_management:
+            simulated_prices, total_payoffs, initial_cashflow = self._calculate_managed_strategy_payoffs(options)
+        else:
+            simulated_prices, total_payoffs, initial_cashflow = self._calculate_strategy_payoffs(options)
 
         # Calculate detailed leg analysis
         leg_analysis = []

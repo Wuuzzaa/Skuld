@@ -41,12 +41,16 @@ def _calculate_combined_metrics(row: pd.Series, iv_correction: str = 'auto') -> 
         "max_loss": metrics.max_loss,
         "bpr": metrics.bpr,
         "expected_value": metrics.expected_value,
+        "expected_value_managed": metrics.expected_value_managed,
         "total_theta": metrics.total_theta,
         "profit_to_bpr": metrics.profit_to_bpr,
         "APDI": metrics.apdi,
         "APDI_EV": metrics.apdi_ev,
         "iv_correction_factor": metrics.iv_correction_factor,
         "corrected_volatility": metrics.corrected_volatility,
+        "delta": metrics.delta,
+        "gamma": metrics.gamma,
+        "vega": metrics.vega,
         "sell_iv": (row["sell_iv_put"] + row["sell_iv_call"]) / 2
     })
 
@@ -164,7 +168,11 @@ def get_page_iron_condors(df: pd.DataFrame) -> pd.DataFrame:
         'max_profit',
         'bpr',
         'expected_value',
+        'expected_value_managed',
         'sell_iv',
+        'delta',
+        'gamma',
+        'vega',
         'APDI',
         'APDI_EV',
         'optionstrat_url',

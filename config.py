@@ -99,7 +99,7 @@ SYMBOLS = list(SYMBOLS_EXCHANGE.keys())
 RANDOM_SEED=42
 IV_CORRECTION_MODE= 'auto'
 RISK_FREE_RATE = 0.03
-NUM_SIMULATIONS = 100000
+NUM_SIMULATIONS = 10000
 TRANSACTION_COST_PER_CONTRACT = 2.0 # in USD
 
 MAX_WORKERS = int(os.getenv('MAX_WORKERS') if os.getenv('MAX_WORKERS') else 1)  # Max number of parallel workers for data collection
