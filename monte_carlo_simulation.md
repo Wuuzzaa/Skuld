@@ -44,7 +44,23 @@ Trotz der soliden Basis gibt es Bereiche, die optimiert werden können, um Perfo
 
 ---
 
-## 3. Nächste Schritte
+## 4. Performance-Ziele & Optimierung
+
+Durch die Umstellung auf eine Pfad-Simulation und die Berechnung der Greeks steigt die Rechenlast erheblich (Faktor 200x bis 500x). Um die "Realtime"-Usability der Streamlit-Anwendung zu erhalten, werden folgende Optimierungen implementiert:
+
+### A. Massive Vektorisierung
+- Nutzung von 3D-NumPy-Arrays `(Simulationen, Tage, Legs)`.
+- Black-Scholes-Berechnungen werden als Matrix-Operationen ausgeführt, um tausende Optionen gleichzeitig auf CPU-Vektorebene zu bewerten.
+
+### B. Effiziente Greeks-Berechnung
+- Verwendung von **Common Random Numbers (CRN)**: Dieselbe Zufallsmatrix wird für die Basis-Simulation und die verschobenen Läufe (Delta/Vega-Shifts) genutzt. Dies reduziert das statistische Rauschen und erlaubt eine hohe Präzision bei geringerer Simulationsanzahl.
+
+### C. Zielwert
+- Trotz des Mehraufwands soll die Berechnung einer komplexen Strategie (z. B. Iron Condor mit SL/TP und Greeks) unter **0,5 Sekunden** bleiben.
+
+---
+
+## 5. Nächste Schritte
 Sobald dieses Konzept bestätigt ist, werden folgende Änderungen im Code vorgenommen:
 1.  **Erweiterung der `OptionLeg` Struktur** (Dataclass) um SL/TP, Custom DTE und Schließtag.
 2.  **Anpassung von `simulate_stock_prices`** für Pfad-Generierung.
