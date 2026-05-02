@@ -406,6 +406,10 @@ class UniversalOptionsMonteCarloSimulator:
         closed_at_step = np.zeros((self.num_simulations, num_legs), dtype=int)
         exit_prices = np.zeros((self.num_simulations, num_legs))
         
+        # Track WHY it was closed (for each leg)
+        # 0: Expiration, 1: TP, 2: SL, 3: DTE Close, 4: Planned DTE
+        exit_reasons = np.zeros((self.num_simulations, num_legs), dtype=int)
+        
         # Days remaining for each step
         days_remaining = np.arange(self.dte, -1, -1)
         t_years = days_remaining / 365.0
@@ -467,41 +471,57 @@ class UniversalOptionsMonteCarloSimulator:
             
             # TP trigger
             if np.any(has_tp):
-                tp_triggered = np.zeros((self.num_simulations, num_legs), dtype=bool)
                 long_tp = (leg_prices >= tp_thresholds) & is_longs & has_tp
                 short_tp = (leg_prices <= tp_thresholds) & (~is_longs) & has_tp
-                tp_triggered = long_tp | short_tp
-                triggered |= tp_triggered
+                tp_triggered = (long_tp | short_tp) & active_mask
+                
+                closed_at_step[tp_triggered] = step
+                exit_prices[tp_triggered] = leg_prices[tp_triggered]
+                exit_reasons[tp_triggered] = 1
+                active_mask = (closed_at_step == 0)
                 
             # SL trigger
             if np.any(has_sl):
-                sl_triggered = np.zeros((self.num_simulations, num_legs), dtype=bool)
                 long_sl = (leg_prices <= sl_thresholds) & is_longs & has_sl
                 short_sl = (leg_prices >= sl_thresholds) & (~is_longs) & has_sl
-                sl_triggered = long_sl | short_sl
-                triggered |= sl_triggered
+                sl_triggered = (long_sl | short_sl) & active_mask
+                
+                closed_at_step[sl_triggered] = step
+                exit_prices[sl_triggered] = leg_prices[sl_triggered]
+                exit_reasons[sl_triggered] = 2
+                active_mask = (closed_at_step == 0)
                 
             # DTE Close trigger
             if np.any(has_dc):
-                dc_triggered = (current_dte <= dte_closes) & has_dc
-                triggered |= dc_triggered
+                dc_triggered = (current_dte <= dte_closes) & has_dc & active_mask
+                
+                closed_at_step[dc_triggered] = step
+                exit_prices[dc_triggered] = leg_prices[dc_triggered]
+                exit_reasons[dc_triggered] = 3
+                active_mask = (closed_at_step == 0)
             
             # Planned DTE trigger
-            pdte_triggered = (step >= (self.dte - planned_dtes))
-            triggered |= pdte_triggered
+            pdte_triggered = (step >= (self.dte - planned_dtes)) & active_mask
+            
+            closed_at_step[pdte_triggered] = step
+            exit_prices[pdte_triggered] = leg_prices[pdte_triggered]
+            exit_reasons[pdte_triggered] = 4
+            active_mask = (closed_at_step == 0)
             
             # Expiration
             if step == num_steps - 1:
-                triggered |= True
-            
-            # Apply triggers to active ones
-            to_close = triggered & active_mask
-            closed_at_step[to_close] = step
-            exit_prices[to_close] = leg_prices[to_close]
+                exp_triggered = active_mask
+                closed_at_step[exp_triggered] = step
+                exit_prices[exp_triggered] = leg_prices[exp_triggered]
+                exit_reasons[exp_triggered] = 0
+                active_mask = (closed_at_step == 0)
 
         # 5. Calculate payoffs
         initial_cashflow = np.sum(np.where(is_longs, -premiums, premiums)) * 100
         
+        # Store exit statistics in the object for later retrieval if needed
+        self._last_exit_reasons = exit_reasons
+
         # Leg profits: (Exit - Entry) for Long, (Entry - Exit) for Short
         # exit_prices shape (sims, legs)
         # premiums shape (legs,)
@@ -871,11 +891,28 @@ class UniversalOptionsMonteCarloSimulator:
         # Find breakeven points using simulation data
         breakeven_points = self.find_breakeven_from_simulations(simulated_prices, total_payoffs)
 
+        # Management stats (if applicable)
+        management_stats = None
+        if has_management and hasattr(self, '_last_exit_reasons'):
+            # Aggregate exit reasons across all legs for each simulation
+            # Since legs close together in this model, we can just look at the first leg that isn't Long if available
+            # Or better, just count how many sims had ANY leg close via TP, SL, etc.
+            management_stats = {
+                'tp_count': int(np.any(self._last_exit_reasons == 1, axis=1).sum()),
+                'sl_count': int(np.any(self._last_exit_reasons == 2, axis=1).sum()),
+                'dc_count': int(np.any(self._last_exit_reasons == 3, axis=1).sum()),
+                'pdte_count': int(np.any(self._last_exit_reasons == 4, axis=1).sum()),
+                'exp_count': int(np.all(self._last_exit_reasons == 0, axis=1).sum()),
+                'total_sims': self.num_simulations
+            }
+
         return {
             # Main results
             'expected_value': expected_value,
             'expected_value_raw': expected_value_raw,
             'discount_factor': discount_factor,
+            
+            'management_stats': management_stats,
 
             # IV Correction info
             'raw_volatility': self.raw_volatility,

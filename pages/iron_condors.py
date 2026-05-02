@@ -360,7 +360,13 @@ if not ic_df.empty:
             'Claude': row.get('Claude')
         }
         
-        display_strategy_details(row['symbol'], row.get('Company', 'N/A'), legs, metrics, extra_info)
+        display_strategy_details(row['symbol'], row.get('Company', 'N/A'), legs, metrics, extra_info,
+                                 context={'underlying_price': row.get('close', 100.0), 
+                                          'volatility': row.get('sell_iv', 0.3), 
+                                          'dte': int((pd.to_datetime(row['expiration_date_put']) - today).days), # Use put exp as proxy
+                                          'take_profit': st.session_state.ic_take_profit,
+                                          'stop_loss': st.session_state.ic_stop_loss,
+                                          'dte_close': st.session_state.ic_dte_close})
 
     else:
         st.caption("💡 Klicke auf eine Zeile in der Tabelle, um die Details der einzelnen Legs zu sehen.")

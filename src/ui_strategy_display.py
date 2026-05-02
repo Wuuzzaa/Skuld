@@ -12,13 +12,34 @@ def display_strategy_details(
     company_name: str,
     legs: List[OptionLeg],
     metrics: StrategyMetrics,
-    extra_info: Optional[dict] = None
+    extra_info: Optional[dict] = None,
+    context: Optional[dict] = None
 ):
     """
     Displays the details of an options strategy in a standardized way.
     """
     st.markdown(f"### Details für {symbol}")
-    
+
+    def transfer_to_mc_debug():
+        if context:
+            st.session_state['mc_transfer_data'] = {
+                'underlying_price': context.get('underlying_price', 100.0),
+                'volatility': context.get('volatility', 0.3),
+                'dte': context.get('dte', 45),
+                'take_profit': context.get('take_profit', 0),
+                'stop_loss': context.get('stop_loss', 0),
+                'dte_close': context.get('dte_close', 0),
+                'legs': [
+                    {
+                        'type': 'Call' if leg.is_call else 'Put',
+                        'action': 'Long' if leg.is_long else 'Short',
+                        'strike': leg.strike,
+                        'premium': leg.premium
+                    } for leg in legs
+                ]
+            }
+            st.switch_page("pages/mc_debug.py")
+
     # 1. Legs Table
     legs_data = []
     for i, leg in enumerate(legs):
@@ -101,3 +122,5 @@ def display_strategy_details(
             st.link_button("Claude AI Analysis", extra_info['Claude'], use_container_width=True)
     with link_col4:
         st.link_button("Yahoo Finance", f"https://finance.yahoo.com/quote/{symbol}", use_container_width=True)
+        if context:
+            st.button("🔬 Analyze in MC Debug", on_click=transfer_to_mc_debug, use_container_width=True, type="primary")
