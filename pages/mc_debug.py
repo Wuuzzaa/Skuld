@@ -47,8 +47,7 @@ with st.sidebar:
     with col2:
         dte = st.number_input("Days to Expiration (DTE)", value=int(st.session_state.get('mc_dte', 45)), step=1, help="Anzahl der Tage bis zum Verfall der Optionen.", key="mc_dte_input")
         risk_free_rate = st.number_input("Risk Free Rate", value=RISK_FREE_RATE, step=0.001, format="%.3f", help="Der risikofreie Zinssatz (Marktzins).")
-
-dividend_yield = st.number_input("Dividend Yield", value=0.0, step=0.01, format="%.2f", help="Erwartete Dividendenrendite des Basiswerts.")
+        dividend_yield = st.number_input("Dividend Yield", value=0.0, step=0.01, format="%.2f", help="Erwartete Dividendenrendite des Basiswerts.")
     
 st.divider()
 st.subheader("Simulation Settings")
@@ -113,6 +112,8 @@ st.button("Add Leg", on_click=add_leg)
 # --- Calculation ---
 if st.button("🚀 Run Simulation", use_container_width=True):
     options = []
+    # If strategy level management is set, we ensure it applies correctly
+    # Note: Simulator handles multiple legs, but we want a unified exit.
     for leg in st.session_state.legs:
         options.append({
             'strike': leg['strike'],
@@ -121,7 +122,8 @@ if st.button("🚀 Run Simulation", use_container_width=True):
             'is_long': leg['action'] == "Long",
             'stop_loss_pct': strat_sl if strat_sl > 0 else None,
             'take_profit_pct': strat_tp if strat_tp > 0 else None,
-            'dte_close': strat_dc if strat_dc > 0 else None
+            'dte_close': strat_dc if strat_dc > 0 else None,
+            'planned_dte': dte # default to expiration
         })
     
     with st.spinner("Running Monte Carlo Simulation..."):
@@ -172,7 +174,8 @@ if st.button("🚀 Run Simulation", use_container_width=True):
                 with s_col4:
                     st.metric("Expiration", f"{stats['exp_count']}", f"{(stats['exp_count']/stats['total_sims'])*100:.1f}%")
                 with s_col5:
-                    st.metric("Other/Planned", f"{stats['pdte_count']}", f"{(stats['pdte_count']/stats['total_sims'])*100:.1f}%")
+                    # In this model, 'Planned' usually refers to 'Planned DTE' which is an early exit
+                    st.metric("Planned Exit", f"{stats['pdte_count']}", f"{(stats['pdte_count']/stats['total_sims'])*100:.1f}%")
 
             # Greeks
             st.subheader("Simulation Greeks")

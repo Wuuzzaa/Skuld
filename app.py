@@ -55,6 +55,11 @@ page = st.navigation(
     ]
 )
 
+# Handle page switching from session state
+if 'page_to_switch' in st.session_state:
+    target_page = st.session_state.pop('page_to_switch')
+    st.switch_page(target_page)
+
 # Run the selected page
 page.run()
 

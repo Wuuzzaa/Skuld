@@ -38,7 +38,8 @@ def display_strategy_details(
                     } for leg in legs
                 ]
             }
-            st.switch_page("pages/mc_debug.py")
+            st.session_state['page_to_switch'] = "pages/mc_debug.py"
+            st.rerun()
 
     # 1. Legs Table
     legs_data = []

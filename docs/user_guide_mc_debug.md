@@ -29,10 +29,15 @@ Hier werden die einzelnen Bestandteile (Legs) der Optionsstrategie definiert.
 *   **Premium**: Die Prämie pro Aktie (z.B. 1.50 für einen Kontraktwert von 150$).
 
 ### Strategie-Management (Zentral)
-Über der Liste der Legs können globale Regeln für die gesamte Strategie festgelegt werden:
+Über der Liste der Legs können globale Regeln für die gesamte Strategie festgelegt werden. Die Bedingungen werden in der Simulation täglich geprüft:
 *   **Strategy Take Profit %**: Schließt die gesamte Strategie, wenn der Gesamtgewinn diesen Prozentsatz der eingenommenen/gezahlten Prämie erreicht.
+    - Beispiel Credit: Bei $1.00 Credit und 50% TP wird die Position geschlossen, wenn der Rückkaufwert auf $0.50 fällt.
+    - Beispiel Debit: Bei $1.00 Debit und 50% TP wird die Position geschlossen, wenn der Marktwert auf $1.50 steigt.
 *   **Strategy Stop Loss %**: Schließt die gesamte Strategie bei entsprechendem Verlust.
-*   **Strategy DTE Close**: Schließt alle Positionen automatisch, wenn die angegebene Anzahl an Resttagen erreicht ist (z.B. Exit bei 21 DTE).
+    - **Besonderheit Credit-Spreads**: Ein Stop Loss von 200% bedeutet, dass die Position geschlossen wird, wenn der *Verlust* das Doppelte der eingenommenen Prämie beträgt. 
+    - Beispiel Credit: Bei $1.00 Credit und 200% SL wird die Position geschlossen, wenn der Rückkaufwert $3.00 erreicht (Kauf für 3.00 - Erhalt von 1.00 = 2.00 Netto-Verlust).
+    - Beispiel Debit: Bei $1.00 Debit und 50% SL wird die Position geschlossen, wenn der Marktwert auf $0.50 fällt (Verlust = $0.50 = 50% von $1.00).
+*   **Strategy DTE Close**: Schließt alle Positionen automatisch, wenn die angegebene Anzahl an Resttagen erreicht ist (z.B. Exit bei 21 DTE). Diese Regel hat am entsprechenden Tag Priorität vor TP/SL.
 
 ## 3. Analyse-Ergebnisse
 
@@ -50,6 +55,7 @@ Wenn Management-Regeln aktiv sind, zeigt dieser Bereich, wie oft welche Bedingun
 *   **Stop Loss**: Anzahl/Prozent der Simulationen, die im Stop-Loss gelandet sind.
 *   **DTE Close**: Ausstiege aufgrund der Restlaufzeit.
 *   **Expiration**: Trades, die bis zum Ende (0 DTE) gehalten wurden.
+*   **Planned Exit**: Ausstiege, die zum geplanten Zeitpunkt erfolgten (falls keine anderen Trigger griffen).
 
 ### Simulation Greeks
 Diese Werte zeigen die Sensitivität der *gesamten Strategie* (inkl. Management):

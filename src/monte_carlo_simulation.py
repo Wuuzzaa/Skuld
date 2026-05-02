@@ -406,9 +406,10 @@ class UniversalOptionsMonteCarloSimulator:
         closed_at_step = np.zeros((self.num_simulations, num_legs), dtype=int)
         exit_prices = np.zeros((self.num_simulations, num_legs))
         
-        # Track WHY it was closed (for each leg)
+        # Track WHY it was closed (for each simulation)
         # 0: Expiration, 1: TP, 2: SL, 3: DTE Close, 4: Planned DTE
-        exit_reasons = np.zeros((self.num_simulations, num_legs), dtype=int)
+        sim_exit_reasons = np.zeros(self.num_simulations, dtype=int)
+        sim_closed_step = np.zeros(self.num_simulations, dtype=int)
         
         # Days remaining for each step
         days_remaining = np.arange(self.dte, -1, -1)
@@ -416,47 +417,69 @@ class UniversalOptionsMonteCarloSimulator:
         
         # Step size optimization
         step_size = 1
-        if self.dte > 30:
-            step_size = max(1, self.dte // 30)
+        # if self.dte > 30:
+        #    step_size = max(1, self.dte // 30)
 
         # Prepare masks for legs with specific management
-        has_tp = ~np.isnan(tp_pcts)
-        has_sl = ~np.isnan(sl_pcts)
-        has_dc = dte_closes != -1
+        # We assume strategy-level management if any leg has it
+        has_tp_any = any(opt.get('take_profit_pct') is not None for opt in options)
+        has_sl_any = any(opt.get('stop_loss_pct') is not None for opt in options)
         
-        # Pre-calculate trigger thresholds
-        tp_thresholds = np.zeros(num_legs)
-        sl_thresholds = np.zeros(num_legs)
+        # Determine thresholds for the WHOLE strategy
+        # Strategy Premium is the sum of (premium * 100) with correct signs
+        strat_premium = np.sum(np.where(is_longs, -premiums, premiums)) * 100
+        is_credit = strat_premium > 0
         
-        for l in range(num_legs):
-            if has_tp[l]:
-                tp_decimal = tp_pcts[l] / 100.0
-                tp_thresholds[l] = premiums[l] * (1 + tp_decimal) if is_longs[l] else premiums[l] * (1 - tp_decimal)
-            if has_sl[l]:
-                sl_decimal = sl_pcts[l] / 100.0
-                sl_thresholds[l] = premiums[l] * (1 - sl_decimal) if is_longs[l] else premiums[l] * (1 + sl_decimal)
+        # Calculate BS price at entry (t=0) to ensure consistency in P&L tracking
+        entry_bs_prices = self._black_scholes_vectorized(
+            np.array([[self.current_price]]), 
+            strikes.reshape(1, -1), 
+            t_years[0], 
+            self.risk_free_rate, 
+            self.volatility, 
+            is_calls.reshape(1, -1)
+        )
+        entry_bs_strat_value = np.sum(np.where(is_longs, entry_bs_prices, -entry_bs_prices)) * 100
+        
+        tp_threshold = np.nan
+        sl_threshold = np.nan
+        
+        if has_tp_any:
+            # TP for credit (e.g. 50% profit): strat_premium=100 -> Value=50. Profit = Start - End.
+            # TP for debit (e.g. 50% profit): strat_premium=-100 -> Value=-50. Profit = End - Start.
+            tp_pct = next(opt.get('take_profit_pct') for opt in options if opt.get('take_profit_pct') is not None)
+            if is_credit:
+                # Value goes from entry_bs towards 0. 50% profit = 0.5 * entry_bs
+                tp_threshold = entry_bs_strat_value * (1 - tp_pct / 100.0)
+            else:
+                # entry_bs is negative. 50% profit means current value is less negative.
+                tp_threshold = entry_bs_strat_value + (abs(entry_bs_strat_value) * tp_pct / 100.0)
+
+        if has_sl_any:
+            sl_pct = next(opt.get('stop_loss_pct') for opt in options if opt.get('stop_loss_pct') is not None)
+            if is_credit:
+                # 200% SL on entry_bs credit means loss is 2 * entry_bs.
+                sl_threshold = entry_bs_strat_value + (entry_bs_strat_value * sl_pct / 100.0)
+            else:
+                # Debit: entry_bs = -100. 50% SL means loss is 50.
+                sl_threshold = entry_bs_strat_value - (abs(entry_bs_strat_value) * sl_pct / 100.0)
+
+        # Strategy-wide DTE close and Planned DTE
+        strat_dte_close = next((opt.get('dte_close') for opt in options if opt.get('dte_close') is not None), -1)
+        strat_planned_dte = next((opt.get('planned_dte') for opt in options if opt.get('planned_dte') is not None), -1)
 
         # 4. Iterate through days
-        for step in range(step_size, num_steps, step_size):
-            if step + step_size >= num_steps:
-                step = num_steps - 1
-            
+        for step in range(1, num_steps):
             current_dte = days_remaining[step]
             
-            # Check which legs are still active in which simulations
-            active_mask = (closed_at_step == 0)
-            if not np.any(active_mask):
+            # Check which simulations are still active
+            active_sims = (sim_exit_reasons == 0)
+            if not np.any(active_sims):
                 break
                 
-            s_current = price_paths[:, step].reshape(-1, 1) # (sims, 1)
+            s_current = price_paths[active_sims, step].reshape(-1, 1) # (active_sims, 1)
             
-            # Only calculate BS for legs that are active in at least one simulation
-            active_legs = np.any(active_mask, axis=0)
-            if not np.any(active_legs):
-                break
-
-            # Calculate prices for ALL legs (vectorized over simulations)
-            # Optimization: could sub-select active_legs here to reduce BS calls if many legs
+            # Calculate BS prices for all legs
             leg_prices = self._black_scholes_vectorized(
                 s_current, 
                 strikes.reshape(1, -1), 
@@ -464,63 +487,86 @@ class UniversalOptionsMonteCarloSimulator:
                 self.risk_free_rate, 
                 self.volatility, 
                 is_calls.reshape(1, -1)
-            )
+            ) # (active_sims, num_legs)
             
-            # Vectorized trigger evaluation
-            triggered = np.zeros((self.num_simulations, num_legs), dtype=bool)
+            # Strategy value (per contract)
+            # Long: +Value, Short: -Value
+            # Correction: We must use the same IV correction for BS as we did for price path generation
+            # or ensure they are consistent.
+            # ALSO: BS price at entry (t=T) might differ from user premium.
+            # We track profit/loss RELATIVE to entry BS price to avoid immediate triggers.
+            strat_values = np.sum(np.where(is_longs, leg_prices, -leg_prices), axis=1) * 100
             
-            # TP trigger
-            if np.any(has_tp):
-                long_tp = (leg_prices >= tp_thresholds) & is_longs & has_tp
-                short_tp = (leg_prices <= tp_thresholds) & (~is_longs) & has_tp
-                tp_triggered = (long_tp | short_tp) & active_mask
-                
-                closed_at_step[tp_triggered] = step
-                exit_prices[tp_triggered] = leg_prices[tp_triggered]
-                exit_reasons[tp_triggered] = 1
-                active_mask = (closed_at_step == 0)
-                
-            # SL trigger
-            if np.any(has_sl):
-                long_sl = (leg_prices <= sl_thresholds) & is_longs & has_sl
-                short_sl = (leg_prices >= sl_thresholds) & (~is_longs) & has_sl
-                sl_triggered = (long_sl | short_sl) & active_mask
-                
-                closed_at_step[sl_triggered] = step
-                exit_prices[sl_triggered] = leg_prices[sl_triggered]
-                exit_reasons[sl_triggered] = 2
-                active_mask = (closed_at_step == 0)
-                
-            # DTE Close trigger
-            if np.any(has_dc):
-                dc_triggered = (current_dte <= dte_closes) & has_dc & active_mask
-                
-                closed_at_step[dc_triggered] = step
-                exit_prices[dc_triggered] = leg_prices[dc_triggered]
-                exit_reasons[dc_triggered] = 3
-                active_mask = (closed_at_step == 0)
+            # Use current_dte to check for triggers (days remaining)
+            # DTE Close (Priority 1) - checked before SL/TP if it's the exact day
+            # Wait, usually SL/TP are checked intraday, DTE close is at the end of the day.
+            # But in this daily sim, we check DTE close first if current_dte <= strat_dte_close.
             
-            # Planned DTE trigger
-            pdte_triggered = (step >= (self.dte - planned_dtes)) & active_mask
-            
-            closed_at_step[pdte_triggered] = step
-            exit_prices[pdte_triggered] = leg_prices[pdte_triggered]
-            exit_reasons[pdte_triggered] = 4
-            active_mask = (closed_at_step == 0)
-            
-            # Expiration
-            if step == num_steps - 1:
-                exp_triggered = active_mask
-                closed_at_step[exp_triggered] = step
-                exit_prices[exp_triggered] = leg_prices[exp_triggered]
-                exit_reasons[exp_triggered] = 0
-                active_mask = (closed_at_step == 0)
+            # Combined Trigger Check to avoid indexing issues
+            trigger_reasons = np.zeros(len(strat_values), dtype=int)
 
-        # 5. Calculate payoffs
-        initial_cashflow = np.sum(np.where(is_longs, -premiums, premiums)) * 100
+            if strat_dte_close != -1 and current_dte <= strat_dte_close:
+                trigger_reasons[:] = 3
+            else:
+                # TP Check (Priority 2)
+                if not np.isnan(tp_threshold):
+                    if is_credit:
+                        # Credit: Start=100, End=50 (TP). Trigger if Value <= 50.
+                        tp_mask = (strat_values <= tp_threshold)
+                    else:
+                        # Debit: Start=-100, End=-50 (TP). Trigger if Value >= -50.
+                        tp_mask = (strat_values >= tp_threshold)
+                    trigger_reasons[tp_mask] = 1
+                    
+                # SL Check (Priority 3)
+                if not np.isnan(sl_threshold):
+                    if is_credit:
+                        # Credit: Start=100, End=300 (SL). Trigger if Value >= 300.
+                        sl_mask = (strat_values >= sl_threshold) & (trigger_reasons == 0)
+                    else:
+                        # Debit: Start=-100, End=-150 (SL). Trigger if Value <= -150.
+                        sl_mask = (strat_values <= sl_threshold) & (trigger_reasons == 0)
+                    trigger_reasons[sl_mask] = 2
+            
+            # Planned DTE (Priority 4)
+            if strat_planned_dte != -1 and current_dte <= strat_planned_dte:
+                pdte_mask = (trigger_reasons == 0)
+                trigger_reasons[pdte_mask] = 4
+                
+            # Apply all triggers
+            if np.any(trigger_reasons > 0):
+                # Map back to global indices
+                global_active_indices = np.where(active_sims)[0]
+                triggered_mask = (trigger_reasons > 0)
+                global_triggered_indices = global_active_indices[triggered_mask]
+                
+                sim_exit_reasons[global_triggered_indices] = trigger_reasons[triggered_mask]
+                sim_closed_step[global_triggered_indices] = step
+                exit_prices[global_triggered_indices, :] = leg_prices[triggered_mask, :]
+
+        # 5. Handle remaining active simulations at expiration
+        active_sims = (sim_exit_reasons == 0)
+        if np.any(active_sims):
+            step = num_steps - 1
+            s_final = price_paths[active_sims, step].reshape(-1, 1)
+            final_prices = self._black_scholes_vectorized(
+                s_final, 
+                strikes.reshape(1, -1), 
+                0.0, # T=0 at expiration
+                self.risk_free_rate, 
+                self.volatility, 
+                is_calls.reshape(1, -1)
+            )
+            triggered_sims_indices = np.where(active_sims)[0]
+            sim_exit_reasons[triggered_sims_indices] = 0 # Explicitly set to Expiration
+            sim_closed_step[triggered_sims_indices] = step
+            exit_prices[triggered_sims_indices, :] = final_prices
+
+        # 6. Calculate payoffs
+        initial_cashflow = strat_premium
         
-        # Store exit statistics in the object for later retrieval if needed
-        self._last_exit_reasons = exit_reasons
+        # Store exit statistics in the object for later retrieval
+        self._last_exit_reasons_v2 = sim_exit_reasons # Sim-based reasons
 
         # Leg profits: (Exit - Entry) for Long, (Entry - Exit) for Short
         # exit_prices shape (sims, legs)
@@ -893,18 +939,17 @@ class UniversalOptionsMonteCarloSimulator:
 
         # Management stats (if applicable)
         management_stats = None
-        if has_management and hasattr(self, '_last_exit_reasons'):
-            # Aggregate exit reasons across all legs for each simulation
-            # Since legs close together in this model, we can just look at the first leg that isn't Long if available
-            # Or better, just count how many sims had ANY leg close via TP, SL, etc.
-            management_stats = {
-                'tp_count': int(np.any(self._last_exit_reasons == 1, axis=1).sum()),
-                'sl_count': int(np.any(self._last_exit_reasons == 2, axis=1).sum()),
-                'dc_count': int(np.any(self._last_exit_reasons == 3, axis=1).sum()),
-                'pdte_count': int(np.any(self._last_exit_reasons == 4, axis=1).sum()),
-                'exp_count': int(np.all(self._last_exit_reasons == 0, axis=1).sum()),
-                'total_sims': self.num_simulations
-            }
+        if has_management:
+            sim_reasons = getattr(self, '_last_exit_reasons_v2', None)
+            if sim_reasons is not None:
+                management_stats = {
+                    'tp_count': int((sim_reasons == 1).sum()),
+                    'sl_count': int((sim_reasons == 2).sum()),
+                    'dc_count': int((sim_reasons == 3).sum()),
+                    'pdte_count': int((sim_reasons == 4).sum()),
+                    'exp_count': int((sim_reasons == 0).sum()),
+                    'total_sims': self.num_simulations
+                }
 
         return {
             # Main results
