@@ -396,9 +396,9 @@ class UniversalOptionsMonteCarloSimulator:
         is_calls = np.array([opt.get('is_call', True) for opt in options])
         is_longs = np.array([opt.get('is_long', True) for opt in options])
         
-        tp_pcts = np.array([opt.get('take_profit_pct') for opt in options])
-        sl_pcts = np.array([opt.get('stop_loss_pct') for opt in options])
-        dte_closes = np.array([opt.get('dte_close') for opt in options])
+        tp_pcts = np.array([opt.get('take_profit_pct') if opt.get('take_profit_pct') is not None else np.nan for opt in options])
+        sl_pcts = np.array([opt.get('stop_loss_pct') if opt.get('stop_loss_pct') is not None else np.nan for opt in options])
+        dte_closes = np.array([opt.get('dte_close') if opt.get('dte_close') is not None else -1 for opt in options])
         planned_dtes = np.array([opt.get('planned_dte') if opt.get('planned_dte') is not None else self.dte for opt in options])
         
         # 3. Initialize exit tracking
@@ -416,9 +416,9 @@ class UniversalOptionsMonteCarloSimulator:
             step_size = max(1, self.dte // 30)
 
         # Prepare masks for legs with specific management
-        has_tp = np.array([tp is not None for tp in tp_pcts])
-        has_sl = np.array([sl is not None for sl in sl_pcts])
-        has_dc = np.array([dc is not None for dc in dte_closes])
+        has_tp = ~np.isnan(tp_pcts)
+        has_sl = ~np.isnan(sl_pcts)
+        has_dc = dte_closes != -1
         
         # Pre-calculate trigger thresholds
         tp_thresholds = np.zeros(num_legs)
@@ -918,7 +918,11 @@ class UniversalOptionsMonteCarloSimulator:
 
             # Leg details
             'leg_analysis': leg_analysis,
-            'num_legs': len(options)
+            'num_legs': len(options),
+            
+            # Full data for analysis
+            'simulated_prices': simulated_prices,
+            'total_payoffs': total_payoffs
         }
 
 

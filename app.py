@@ -33,6 +33,7 @@ position_insurance = st.Page("pages/position_insurance_tool.py", title="Position
 multifactor_swingtrading = st.Page('pages/multifactor_swingtrading.py', title="Multifactor Swingtrading")
 sector_rotation = st.Page('pages/sector_rotation.py', title="Sector Rotation")
 expected_value = st.Page('pages/expected_value.py', title="Expected Value")
+mc_debug = st.Page("pages/mc_debug.py", title="MC Debug")
 data_logs = st.Page("pages/data_change_logs.py", title="Data Logs")
 iron_condors = st.Page("pages/iron_condors.py", title="Iron Condors")
 symbolpage = st.Page("pages/symbolpage.py", title="Symbol Page")
@@ -48,6 +49,7 @@ page = st.navigation(
         multifactor_swingtrading,
         sector_rotation,
         expected_value,
+        mc_debug,
         data_logs,
         symbolpage
     ]
