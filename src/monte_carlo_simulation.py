@@ -445,29 +445,51 @@ class UniversalOptionsMonteCarloSimulator:
         sl_threshold = np.nan
         
         if has_tp_any:
-            # TP for credit (e.g. 50% profit): strat_premium=100 -> Value=50. Profit = Start - End.
-            # TP for debit (e.g. 50% profit): strat_premium=-100 -> Value=-50. Profit = End - Start.
             tp_pct = next(opt.get('take_profit_pct') for opt in options if opt.get('take_profit_pct') is not None)
             if is_credit:
-                # Value goes from entry_bs towards 0. 50% profit = 0.5 * entry_bs
-                tp_threshold = entry_bs_strat_value * (1 - tp_pct / 100.0)
+                # Goal: value drops. TP at 50% profit means closing at 0.5 * market_premium
+                tp_threshold = strat_premium * (1 - tp_pct / 100.0)
             else:
-                # entry_bs is negative. 50% profit means current value is less negative.
-                tp_threshold = entry_bs_strat_value + (abs(entry_bs_strat_value) * tp_pct / 100.0)
+                # Debit: value rises. TP at 50% profit means closing at market_premium + 50% risk
+                tp_threshold = strat_premium + (abs(strat_premium) * tp_pct / 100.0)
+            
+            # Sanity Check for immediate TP
+            # We now use strat_premium as the starting value for strat_values,
+            # so immediate trigger should only happen if strat_premium itself meets the threshold
+            # (which is unlikely unless TP is 0% or negative)
+            if is_credit and strat_premium <= tp_threshold:
+                print(f"DEBUG WARNING: Immediate TP trigger! Market Premium: {strat_premium}, TP Threshold: {tp_threshold}")
+            elif not is_credit and strat_premium >= tp_threshold:
+                print(f"DEBUG WARNING: Immediate TP trigger! Market Premium: {strat_premium}, TP Threshold: {tp_threshold}")
 
         if has_sl_any:
             sl_pct = next(opt.get('stop_loss_pct') for opt in options if opt.get('stop_loss_pct') is not None)
             if is_credit:
-                # 200% SL on entry_bs credit means loss is 2 * entry_bs.
-                sl_threshold = entry_bs_strat_value + (entry_bs_strat_value * sl_pct / 100.0)
+                # Goal: value rises. SL at 200% means value is 3x entry (loss of 2x)
+                sl_threshold = strat_premium + (strat_premium * sl_pct / 100.0)
             else:
-                # Debit: entry_bs = -100. 50% SL means loss is 50.
-                sl_threshold = entry_bs_strat_value - (abs(entry_bs_strat_value) * sl_pct / 100.0)
+                # Debit: value drops. SL at 50% means loss of 50% of premium
+                sl_threshold = strat_premium - (abs(strat_premium) * sl_pct / 100.0)
 
         # Strategy-wide DTE close and Planned DTE
         strat_dte_close = next((opt.get('dte_close') for opt in options if opt.get('dte_close') is not None), -1)
         strat_planned_dte = next((opt.get('planned_dte') for opt in options if opt.get('planned_dte') is not None), -1)
 
+        # Calculate Spread Offset (Market Premium vs theoretical BS at entry)
+        # This offset is added to theoretical values to simulate real market pricing
+        # market_strat_value = strat_premium (user entered)
+        # entry_bs_strat_value = BS at t=0
+        spread_offset = strat_premium - entry_bs_strat_value
+        
+        # Recalculate thresholds based on MARKET premium
+        if has_tp_any:
+            # We already calculated thresholds above based on strat_premium
+            pass
+
+        if has_sl_any:
+            # We already calculated thresholds above based on strat_premium
+            pass
+                
         # 4. Iterate through days
         for step in range(1, num_steps):
             current_dte = days_remaining[step]
@@ -490,21 +512,17 @@ class UniversalOptionsMonteCarloSimulator:
             ) # (active_sims, num_legs)
             
             # Strategy value (per contract)
-            # Long: +Value, Short: -Value
-            # Correction: We must use the same IV correction for BS as we did for price path generation
-            # or ensure they are consistent.
-            # ALSO: BS price at entry (t=T) might differ from user premium.
-            # We track profit/loss RELATIVE to entry BS price to avoid immediate triggers.
-            strat_values = np.sum(np.where(is_longs, leg_prices, -leg_prices), axis=1) * 100
+            # We add the spread_offset to the theoretical BS value to mimic market price
+            strat_values_theoretical = np.sum(np.where(is_longs, leg_prices, -leg_prices), axis=1) * 100
+            strat_values = strat_values_theoretical + spread_offset
             
-            # Use current_dte to check for triggers (days remaining)
-            # DTE Close (Priority 1) - checked before SL/TP if it's the exact day
-            # Wait, usually SL/TP are checked intraday, DTE close is at the end of the day.
-            # But in this daily sim, we check DTE close first if current_dte <= strat_dte_close.
-            
-            # Combined Trigger Check to avoid indexing issues
+            # Combined Trigger Check
             trigger_reasons = np.zeros(len(strat_values), dtype=int)
 
+            # Use current_dte to check for triggers (days remaining)
+            # DTE Close (Priority 1)
+            # current_dte is the REMAINING days to expiration.
+            # If current_dte <= strat_dte_close, we exit (e.g. exit when only 21 days are left).
             if strat_dte_close != -1 and current_dte <= strat_dte_close:
                 trigger_reasons[:] = 3
             else:
@@ -879,13 +897,46 @@ class UniversalOptionsMonteCarloSimulator:
 
         if has_management:
             simulated_prices, total_payoffs, initial_cashflow = self._calculate_managed_strategy_payoffs(options)
+            
+            # Recalculate leg_analysis for UI consistency and sum up transaction costs
+            for i, option in enumerate(options):
+                premium_per_contract = option['premium'] * 100
+                transaction_cost_per_contract = self.transaction_cost_per_contract
+                total_transaction_costs += transaction_cost_per_contract
+                
+                leg_analysis.append({
+                    'leg_number': i + 1,
+                    'type': 'Call' if option['is_call'] else 'Put',
+                    'position': 'Long' if option['is_long'] else 'Short',
+                    'strike': option['strike'],
+                    'premium_per_share': option['premium'],
+                    'premium_per_contract': premium_per_contract,
+                    'transaction_cost': transaction_cost_per_contract,
+                    'avg_payoff': 0.0, # Average payoff per leg is not tracked in managed mode
+                    'cashflow': (-premium_per_contract - transaction_cost_per_contract if option['is_long'] else premium_per_contract - transaction_cost_per_contract)
+                })
+            
             # Use final simulated prices for breakeven detection, not the prices at exit
-            # because exit prices are triggered at different times/prices.
-            # However, for managed strategies, breakeven is complex.
-            # We use simulated_prices from simulate_stock_prices() which is final price.
             final_prices = self.simulate_stock_prices()
             breakeven_points = self.find_breakeven_from_simulations(final_prices, total_payoffs)
+            
+            # Store entry_bs_strat_value for reporting
+            # We need to recalculate it here because it's local in _calculate_managed_strategy_payoffs
+            t_years_entry = self.dte / 365.0
+            strikes_vec = np.array([opt.get('strike') for opt in options])
+            is_calls_vec = np.array([opt.get('is_call', True) for opt in options])
+            is_longs_vec = np.array([opt.get('is_long', True) for opt in options])
+            entry_bs_prices = self._black_scholes_vectorized(
+                np.array([[self.current_price]]), 
+                strikes_vec.reshape(1, -1), 
+                t_years_entry, 
+                self.risk_free_rate, 
+                self.volatility, 
+                is_calls_vec.reshape(1, -1)
+            )
+            entry_bs_strat_val = np.sum(np.where(is_longs_vec, entry_bs_prices, -entry_bs_prices)) * 100
         else:
+            entry_bs_strat_val = 0.0 # Placeholder
             simulated_prices, total_payoffs, initial_cashflow = self._calculate_strategy_payoffs(options)
             breakeven_points = self.find_breakeven_from_simulations(simulated_prices, total_payoffs)
 
@@ -916,7 +967,7 @@ class UniversalOptionsMonteCarloSimulator:
         # Management stats (if applicable)
         management_stats = None
         if has_management:
-            sim_reasons = getattr(self, '_last_exit_reasons_v2', None)
+            sim_reasons = getattr(self, 'last_exit_reasons', None)
             if sim_reasons is not None:
                 management_stats = {
                     'tp_count': int((sim_reasons == 1).sum()),
@@ -932,6 +983,7 @@ class UniversalOptionsMonteCarloSimulator:
             'expected_value': expected_value,
             'expected_value_raw': expected_value_raw,
             'discount_factor': discount_factor,
+            'spread_offset': initial_cashflow - (np.mean(np.sum(np.where(is_longs, self._black_scholes_vectorized(np.array([[self.current_price]]), strikes.reshape(1, -1), self.time_to_expiration, self.risk_free_rate, self.volatility, is_calls.reshape(1, -1)), -self._black_scholes_vectorized(np.array([[self.current_price]]), strikes.reshape(1, -1), self.time_to_expiration, self.risk_free_rate, self.volatility, is_calls.reshape(1, -1))), axis=1)) * 100) if not has_management else (initial_cashflow - entry_bs_strat_val),
             
             'management_stats': management_stats,
 
@@ -1070,11 +1122,20 @@ def print_strategy_analysis(simulator: UniversalOptionsMonteCarloSimulator,
         reward_risk = abs(results['max_profit'] / results['max_loss'])
         print(f"   Reward/Risk Ratio:        {reward_risk:>8.2f}")
 
+    # Management stats (if applicable)
+    if results.get('management_stats'):
+        ms = results['management_stats']
+        print(f"\n🛡️  MANAGEMENT STATISTICS:")
+        print(f"   Take Profit Hits:         {ms['tp_count']} ({ms['tp_count']/ms['total_sims']*100:.1f}%)")
+        print(f"   Stop Loss Hits:           {ms['sl_count']} ({ms['sl_count']/ms['total_sims']*100:.1f}%)")
+        print(f"   DTE Close Hits:           {ms['dc_count']} ({ms['dc_count']/ms['total_sims']*100:.1f}%)")
+        print(f"   Expiration Hits:          {ms['exp_count']} ({ms['exp_count']/ms['total_sims']*100:.1f}%)")
+
     # Breakeven points from simulation data
     if results['breakeven_points']:
         print(f"\n⚡ BREAKEVEN POINTS (from simulations):")
         for i, bp in enumerate(results['breakeven_points'], 1):
-            print(f"   Breakeven {i}:            ${bp:>8.2f}")
+            print(f"   Breakeven {i}:            ${float(bp):>8.2f}")
     else:
         print(f"\n⚡ BREAKEVEN POINTS: None found in simulation range")
 
@@ -1082,6 +1143,7 @@ def print_strategy_analysis(simulator: UniversalOptionsMonteCarloSimulator,
     print(f"\n🎲 SIMULATION DETAILS:")
     print(f"   Avg Simulated Price:      ${results['avg_simulated_price']:>8.2f}")
     print(f"   Price Std Dev (Expected Move): ${results['simulated_price_std']:>8.2f}")
+    print(f"   Spread Offset (Markt/Theorie): ${results.get('spread_offset', 0.0):>8.2f}")
 
     print("=" * 90)
 
@@ -1109,22 +1171,26 @@ if __name__ == "__main__":
 
     # Beispiel: Iron Condor
     # Ein Iron Condor besteht aus einem Bull Put Spread und einem Bear Call Spread.
-    # Wir fügen Management-Parameter hinzu (TP 50%, SL 200%, DTE Close 21).
+    # Wir machen den SL enger (100% statt 200%) und den DTE Close weiter weg (0), 
+    # um zu sehen, ob SLs triggern.
     options = [
         # Short Put
-        {'strike': 160, 'premium': 3.50, 'is_call': False, 'is_long': False, 'take_profit_pct': 50, 'stop_loss_pct': 200, 'dte_close': 21},
+        {'strike': 165, 'premium': 3.50, 'is_call': False, 'is_long': False, 'take_profit_pct': 50, 'stop_loss_pct': 100, 'dte_close': 0},
         # Long Put (Wing)
-        {'strike': 155, 'premium': 2.00, 'is_call': False, 'is_long': True},
+        {'strike': 160, 'premium': 2.00, 'is_call': False, 'is_long': True},
         # Short Call
-        {'strike': 185, 'premium': 3.20, 'is_call': True, 'is_long': False, 'take_profit_pct': 50, 'stop_loss_pct': 200, 'dte_close': 21},
+        {'strike': 180, 'premium': 3.20, 'is_call': True, 'is_long': False, 'take_profit_pct': 50, 'stop_loss_pct': 100, 'dte_close': 0},
         # Long Call (Wing)
-        {'strike': 190, 'premium': 1.80, 'is_call': True, 'is_long': True}
+        {'strike': 185, 'premium': 1.80, 'is_call': True, 'is_long': True}
     ]
 
     print(f"--- Starte Strategie-Analyse (Iron Condor) ---")
     results = monte_carlo_simulator.analyze_strategy(options)
     
     print_strategy_analysis(monte_carlo_simulator, options, "Iron Condor Debug")
+    
+    # Debugging: Initialwerte prüfen
+    print(f"DEBUG: Startpreis: {current_price}, Volatilität: {volatility}, DTE: {dte}")
     
     # Beispiel für den Zugriff auf Exit-Gründe (für Debugger nützlich)
     # exit_reasons: 0: Expiration, 1: TP, 2: SL, 3: DTE Close, 4: Planned DTE
@@ -1133,9 +1199,21 @@ if __name__ == "__main__":
         reason_map = {0: "Expiration", 1: "TP", 2: "SL", 3: "DTE Close", 4: "Planned DTE"}
         print("\nExit Statistik:")
         for r, c in zip(reasons, counts):
-            print(f"  {reason_map.get(r, 'Unknown')}: {c}")
+            print(f"  {reason_map.get(r, 'Unknown')} ({r}): {c}")
+            
+    if hasattr(monte_carlo_simulator, 'last_closed_steps'):
+        steps, counts = np.unique(monte_carlo_simulator.last_closed_steps, return_counts=True)
+        print("\nExit Steps Statistik (Top 5):")
+        sorted_indices = np.argsort(counts)[::-1]
+        for i in sorted_indices[:5]:
+            step_day = steps[i]
+            # Berechne Restlaufzeit für diesen Step
+            remaining = dte - step_day
+            print(f"  Tag {step_day} (Restlaufzeit: {remaining} DTE): {counts[i]} Simulationen")
 
     # Zusätzliche Prüfung der Breakevens im Debugger
     if results['breakeven_points']:
         print(f"\nGefundene Breakevens: {results['breakeven_points']}")
+
+    pass
 
