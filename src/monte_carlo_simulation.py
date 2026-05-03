@@ -567,6 +567,8 @@ class UniversalOptionsMonteCarloSimulator:
         
         # Store exit statistics in the object for later retrieval
         self._last_exit_reasons_v2 = sim_exit_reasons # Sim-based reasons
+        self.last_exit_reasons = sim_exit_reasons
+        self.last_closed_steps = sim_closed_step
 
         # Leg profits: (Exit - Entry) for Long, (Entry - Exit) for Short
         # exit_prices shape (sims, legs)
@@ -755,9 +757,17 @@ class UniversalOptionsMonteCarloSimulator:
         # Find sign changes in payoffs (breakeven crossings)
         breakeven_points = []
 
-        for i in range(len(payoffs) - 1):
-            # Check if there's a sign change between consecutive points
-            if payoffs[i] * payoffs[i + 1] < 0:  # Different signs (crossing zero)
+        # Only look for breakevens if we have a significant number of samples
+        if len(payoffs) < 100:
+            return []
+
+        # Use a rolling average or smoothing to find the general trend of payoffs vs price
+        # because Monte Carlo noise can cause many tiny crossings
+        window_size = max(1, len(payoffs) // 50)
+        smoothed_payoffs = np.convolve(payoffs, np.ones(window_size)/window_size, mode='same')
+
+        for i in range(len(smoothed_payoffs) - 1):
+            if smoothed_payoffs[i] * smoothed_payoffs[i + 1] < 0:
                 # Linear interpolation to find more precise breakeven point
                 price1, payoff1 = prices[i], payoffs[i]
                 price2, payoff2 = prices[i + 1], payoffs[i + 1]
@@ -869,50 +879,15 @@ class UniversalOptionsMonteCarloSimulator:
 
         if has_management:
             simulated_prices, total_payoffs, initial_cashflow = self._calculate_managed_strategy_payoffs(options)
-            # Managed payoffs already include everything, no need to re-calculate per leg for average
-            # but we need leg_analysis for the UI.
-            for i, option in enumerate(options):
-                premium_per_contract = option['premium'] * 100
-                transaction_cost_per_contract = self.transaction_cost_per_contract
-                total_transaction_costs += transaction_cost_per_contract
-                leg_analysis.append({
-                    'leg_number': i + 1,
-                    'type': 'Call' if option['is_call'] else 'Put',
-                    'position': 'Long' if option['is_long'] else 'Short',
-                    'strike': option['strike'],
-                    'premium_per_share': option['premium'],
-                    'premium_per_contract': premium_per_contract,
-                    'transaction_cost': transaction_cost_per_contract,
-                    'avg_payoff': 0.0, # Not easily available without significant change
-                    'cashflow': (-premium_per_contract - transaction_cost_per_contract if option['is_long'] else premium_per_contract - transaction_cost_per_contract)
-                })
+            # Use final simulated prices for breakeven detection, not the prices at exit
+            # because exit prices are triggered at different times/prices.
+            # However, for managed strategies, breakeven is complex.
+            # We use simulated_prices from simulate_stock_prices() which is final price.
+            final_prices = self.simulate_stock_prices()
+            breakeven_points = self.find_breakeven_from_simulations(final_prices, total_payoffs)
         else:
             simulated_prices, total_payoffs, initial_cashflow = self._calculate_strategy_payoffs(options)
-            # For non-managed, we can efficiently get leg payoffs since we have expiration prices
-            for i, option in enumerate(options):
-                leg_payoffs = self.calculate_single_option_payoff(
-                    simulated_prices=simulated_prices,
-                    strike=option['strike'],
-                    premium=option['premium'],
-                    is_call=option['is_call'],
-                    is_long=option['is_long']
-                )
-                
-                premium_per_contract = option['premium'] * 100
-                transaction_cost_per_contract = self.transaction_cost_per_contract
-                total_transaction_costs += transaction_cost_per_contract
-
-                leg_analysis.append({
-                    'leg_number': i + 1,
-                    'type': 'Call' if option['is_call'] else 'Put',
-                    'position': 'Long' if option['is_long'] else 'Short',
-                    'strike': option['strike'],
-                    'premium_per_share': option['premium'],
-                    'premium_per_contract': premium_per_contract,
-                    'transaction_cost': transaction_cost_per_contract,
-                    'avg_payoff': np.mean(leg_payoffs),
-                    'cashflow': (-premium_per_contract - transaction_cost_per_contract if option['is_long'] else premium_per_contract - transaction_cost_per_contract)
-                })
+            breakeven_points = self.find_breakeven_from_simulations(simulated_prices, total_payoffs)
 
         # Calculate overall statistics
         expected_value_raw = np.mean(total_payoffs)
@@ -935,7 +910,8 @@ class UniversalOptionsMonteCarloSimulator:
         percentiles = np.percentile(total_payoffs, [5, 10, 25, 50, 75, 90, 95])
 
         # Find breakeven points using simulation data
-        breakeven_points = self.find_breakeven_from_simulations(simulated_prices, total_payoffs)
+        # (Already calculated above for has_management compatibility)
+        # breakeven_points = self.find_breakeven_from_simulations(simulated_prices, total_payoffs)
 
         # Management stats (if applicable)
         management_stats = None
@@ -1115,102 +1091,51 @@ def print_strategy_analysis(simulator: UniversalOptionsMonteCarloSimulator,
 if __name__ == "__main__":
     from config import *
 
-    # von spreads_calculation übernommen
+    # Initialisiere Simulator
+    current_price = 170.94
+    volatility = 0.42
+    dte = 60
+    
     monte_carlo_simulator = UniversalOptionsMonteCarloSimulator(
-        num_simulations= NUM_SIMULATIONS, #NUM_SIMULATIONS,
-        random_seed=RANDOM_SEED,
-        current_price=170.94,
-        dte=63,
-        volatility=0.42,
-        risk_free_rate=RISK_FREE_RATE,
+        num_simulations=1000, # Reduziert für schnelleres Debugging
+        random_seed=42,
+        current_price=current_price,
+        dte=dte,
+        volatility=volatility,
+        risk_free_rate=0.04,
         dividend_yield=0,
-        iv_correction='auto' # 'auto'
+        iv_correction='auto'
     )
 
+    # Beispiel: Iron Condor
+    # Ein Iron Condor besteht aus einem Bull Put Spread und einem Bear Call Spread.
+    # Wir fügen Management-Parameter hinzu (TP 50%, SL 200%, DTE Close 21).
     options = [
-        # sell option
-        {
-            'strike': 150,
-            'premium': 3.47,
-            'is_call': False,
-            'is_long': False
-        },
-
-        # buy option
-        {
-            'strike': 145,
-            'premium': 1.72,
-            'is_call': False,
-            'is_long': True
-        }
+        # Short Put
+        {'strike': 160, 'premium': 3.50, 'is_call': False, 'is_long': False, 'take_profit_pct': 50, 'stop_loss_pct': 200, 'dte_close': 21},
+        # Long Put (Wing)
+        {'strike': 155, 'premium': 2.00, 'is_call': False, 'is_long': True},
+        # Short Call
+        {'strike': 185, 'premium': 3.20, 'is_call': True, 'is_long': False, 'take_profit_pct': 50, 'stop_loss_pct': 200, 'dte_close': 21},
+        # Long Call (Wing)
+        {'strike': 190, 'premium': 1.80, 'is_call': True, 'is_long': True}
     ]
 
-    expected_value = monte_carlo_simulator.calculate_expected_value(options=options)
-    print(f"monte_carlo_simulator.volatility: {monte_carlo_simulator.volatility}")
-    print(f"expected_value: {expected_value}")
+    print(f"--- Starte Strategie-Analyse (Iron Condor) ---")
+    results = monte_carlo_simulator.analyze_strategy(options)
+    
+    print_strategy_analysis(monte_carlo_simulator, options, "Iron Condor Debug")
+    
+    # Beispiel für den Zugriff auf Exit-Gründe (für Debugger nützlich)
+    # exit_reasons: 0: Expiration, 1: TP, 2: SL, 3: DTE Close, 4: Planned DTE
+    if hasattr(monte_carlo_simulator, 'last_exit_reasons'):
+        reasons, counts = np.unique(monte_carlo_simulator.last_exit_reasons, return_counts=True)
+        reason_map = {0: "Expiration", 1: "TP", 2: "SL", 3: "DTE Close", 4: "Planned DTE"}
+        print("\nExit Statistik:")
+        for r, c in zip(reasons, counts):
+            print(f"  {reason_map.get(r, 'Unknown')}: {c}")
 
-    print(monte_carlo_simulator)
-
-
-    # import matplotlib.pyplot as plt
-    # import numpy as np
-    #
-    # # Annahme: UniversalOptionsMonteCarloSimulator ist bereits definiert
-    # # Hier wird nur der relevante Teil für die Simulationen und das Plotting ergänzt
-    #
-    # # Parameter für die Simulation
-    # current_price = 170.94
-    # dte = 63
-    # volatility = 0.42
-    # risk_free_rate = RISK_FREE_RATE  # Annahme: RISK_FREE_RATE ist definiert
-    # dividend_yield = 0
-    # random_seed = RANDOM_SEED  # Annahme: RISK_FREE_RATE und RANDOM_SEED sind definiert
-    #
-    # # Optionen
-    # options = [
-    #     # sell option
-    #     {
-    #         'strike': 150,
-    #         'premium': 3.47,
-    #         'is_call': False,
-    #         'is_long': False
-    #     },
-    #     # buy option
-    #     {
-    #         'strike': 145,
-    #         'premium': 1.72,
-    #         'is_call': False,
-    #         'is_long': True
-    #     }
-    # ]
-    #
-    # # Anzahl der Simulationen variieren
-    # num_simulations_list = np.logspace(1, 5, 50).astype(int)  # 10 bis 100.000 Simulationen, logarithmisch verteilt
-    # expected_values = []
-    #
-    # for num_simulations in num_simulations_list:
-    #     monte_carlo_simulator = UniversalOptionsMonteCarloSimulator(
-    #         num_simulations=num_simulations,
-    #         random_seed=random_seed,
-    #         current_price=current_price,
-    #         dte=dte,
-    #         volatility=volatility,
-    #         risk_free_rate=risk_free_rate,
-    #         dividend_yield=dividend_yield,
-    #         iv_correction='auto'
-    #     )
-    #
-    #     expected_value = monte_carlo_simulator.calculate_expected_value(options=options)
-    #     expected_values.append(expected_value)
-    #     print(f"Num Simulations: {num_simulations}, Expected Value: {expected_value}")
-    #
-    # # Plot der Ergebnisse
-    # plt.figure(figsize=(10, 6))
-    # plt.plot(num_simulations_list, expected_values, marker='o')
-    # plt.xscale('log')
-    # plt.xlabel('Anzahl der Simulationen (log Skala)')
-    # plt.ylabel('Erwartungswert')
-    # plt.title('Erwartungswert in Abhängigkeit der Anzahl der Simulationen')
-    # plt.grid(True, which="both", ls="--")
-    # plt.show()
+    # Zusätzliche Prüfung der Breakevens im Debugger
+    if results['breakeven_points']:
+        print(f"\nGefundene Breakevens: {results['breakeven_points']}")
 
