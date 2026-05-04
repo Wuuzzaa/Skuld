@@ -663,6 +663,7 @@ if __name__ == "__main__":
         volatility=iv,
         dte=dte,
         num_simulations=50000,
+        iv_correction=0
     )
 
     # Variant A: managed
