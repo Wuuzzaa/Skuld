@@ -40,6 +40,7 @@ from config import (
     TRANSACTION_COST_PER_CONTRACT,
 )
 from src.decorator_log_function import log_function
+from src.price_models import PriceModel
 
 logger = logging.getLogger(__name__)
 
@@ -140,6 +141,7 @@ class MonteCarloSimulator:
         random_seed: int = RANDOM_SEED,
         transaction_cost_per_contract: float = TRANSACTION_COST_PER_CONTRACT,
         iv_correction: Union[str, float] = IV_CORRECTION_MODE,
+        price_model: Optional[PriceModel] = None,
     ) -> None:
         if current_price <= 0:
             raise ValueError("current_price must be > 0")
@@ -159,6 +161,7 @@ class MonteCarloSimulator:
         self.random_seed = int(random_seed)
         self.transaction_cost_per_contract = float(transaction_cost_per_contract)
         self.iv_correction = iv_correction
+        self.price_model: Optional[PriceModel] = price_model
 
         self.time_to_expiration = self.dte / DAYS_PER_YEAR
         self.volatility, self.iv_correction_factor = self._apply_iv_correction(
@@ -171,6 +174,7 @@ class MonteCarloSimulator:
         # caches: small dicts, separate for terminal-only vs. full paths
         self._terminal_cache: Dict[tuple, np.ndarray] = {}
         self._path_cache: Dict[tuple, np.ndarray] = {}
+        self._path_sigma_cache: Dict[tuple, np.ndarray] = {}
         self._max_cache = 8
 
     def __repr__(self) -> str:
@@ -206,17 +210,27 @@ class MonteCarloSimulator:
 
     # ---------- price simulation ------------------------------------------ #
     def _cache_key(self) -> tuple:
-        return (self.current_price, self.volatility, self.dte,
-                self.risk_free_rate, self.dividend_yield,
-                self.num_simulations, self._rng_seed)
+        model_sig = self.price_model.cache_signature() if self.price_model else \
+            ("GBM", self.current_price, self.volatility,
+             self.risk_free_rate, self.dividend_yield)
+        return (model_sig, self.dte, self.num_simulations, self._rng_seed)
+
+    def _path_sigma(self) -> Optional[np.ndarray]:
+        """Per-step sigma matrix (N, dte+1) if a price model was supplied."""
+        return self._path_sigma_cache.get(self._cache_key())
 
     def simulate_terminal_prices(self) -> np.ndarray:
-        """Single-step GBM: only terminal prices ST. O(N)."""
+        """Terminal prices ST. O(N) for GBM, O(N*dte) for stochastic-vol models."""
         key = self._cache_key()
         cached = self._terminal_cache.get(key)
         if cached is not None:
             return cached
-        if self.dte == 0:
+
+        if self.price_model is not None:
+            st = self.price_model.simulate_terminal_prices(
+                self.num_simulations, self.dte, self._rng_seed
+            )
+        elif self.dte == 0:
             st = np.full(self.num_simulations, self.current_price)
         else:
             T = self.time_to_expiration
@@ -231,27 +245,34 @@ class MonteCarloSimulator:
         return st
 
     def simulate_price_paths(self) -> np.ndarray:
-        """Full daily GBM paths, shape (num_simulations, dte+1)."""
+        """Full daily price paths, shape (num_simulations, dte+1)."""
         key = self._cache_key()
         cached = self._path_cache.get(key)
         if cached is not None:
             return cached
-        N, T = self.num_simulations, self.dte
-        if T == 0:
-            paths = np.full((N, 1), self.current_price)
+
+        if self.price_model is not None:
+            paths, sigma_paths = self.price_model.simulate_price_paths(
+                self.num_simulations, self.dte, self._rng_seed
+            )
+            self._store(self._path_sigma_cache, key, sigma_paths)
         else:
-            dt = 1.0 / DAYS_PER_YEAR
-            sigma = self.volatility
-            drift = (self.risk_free_rate - self.dividend_yield
-                     - 0.5 * sigma ** 2) * dt
-            vol_step = sigma * np.sqrt(dt)
-            rng = np.random.default_rng(self._rng_seed)
-            Z = rng.standard_normal((N, T))
-            log_increments = drift + vol_step * Z
-            log_paths = np.empty((N, T + 1))
-            log_paths[:, 0] = 0.0
-            np.cumsum(log_increments, axis=1, out=log_paths[:, 1:])
-            paths = self.current_price * np.exp(log_paths)
+            N, T = self.num_simulations, self.dte
+            if T == 0:
+                paths = np.full((N, 1), self.current_price)
+            else:
+                dt = 1.0 / DAYS_PER_YEAR
+                sigma = self.volatility
+                drift = (self.risk_free_rate - self.dividend_yield
+                         - 0.5 * sigma ** 2) * dt
+                vol_step = sigma * np.sqrt(dt)
+                rng = np.random.default_rng(self._rng_seed)
+                Z = rng.standard_normal((N, T))
+                log_increments = drift + vol_step * Z
+                log_paths = np.empty((N, T + 1))
+                log_paths[:, 0] = 0.0
+                np.cumsum(log_increments, axis=1, out=log_paths[:, 1:])
+                paths = self.current_price * np.exp(log_paths)
         self._store(self._path_cache, key, paths)
         return paths
 
@@ -283,6 +304,36 @@ class MonteCarloSimulator:
         S = np.asarray(S, dtype=float)
         K = np.asarray(K, dtype=float)
         T = np.asarray(T, dtype=float)
+        is_call = np.asarray(is_call, dtype=bool)
+
+        intrinsic = np.where(
+            is_call,
+            np.maximum(S - K, 0.0),
+            np.maximum(K - S, 0.0),
+        )
+        T_safe = np.where(T > 0, T, 1.0)
+        sqrtT = np.sqrt(T_safe)
+        d1 = (np.log(S / K) + (r + 0.5 * sigma ** 2) * T_safe) / (sigma * sqrtT)
+        d2 = d1 - sigma * sqrtT
+        Nd1 = cls._fast_norm_cdf(d1)
+        Nd2 = cls._fast_norm_cdf(d2)
+        disc = np.exp(-r * T_safe)
+        call = S * Nd1 - K * disc * Nd2
+        put = K * disc * (1.0 - Nd2) - S * (1.0 - Nd1)
+        price = np.where(is_call, call, put)
+        return np.where(T > 0, price, intrinsic)
+
+    @classmethod
+    def _black_scholes_path_sigma(
+        cls,
+        S: np.ndarray, K: np.ndarray, T: np.ndarray,
+        r: float, sigma: np.ndarray, is_call: np.ndarray,
+    ) -> np.ndarray:
+        """Vectorised Black-Scholes with broadcastable per-element sigma."""
+        S = np.asarray(S, dtype=float)
+        K = np.asarray(K, dtype=float)
+        T = np.asarray(T, dtype=float)
+        sigma = np.maximum(np.asarray(sigma, dtype=float), MIN_IV)
         is_call = np.asarray(is_call, dtype=bool)
 
         intrinsic = np.where(
@@ -353,17 +404,26 @@ class MonteCarloSimulator:
             np.maximum(ST[:, None] - K, 0.0),
             np.maximum(K - ST[:, None], 0.0),
         )
-        long_pnl = (intrinsic - arr["premiums"][None, :]) * CONTRACT_MULTIPLIER
-        short_pnl = (arr["premiums"][None, :] - intrinsic) * CONTRACT_MULTIPLIER
-        leg_pnl = np.where(is_long, long_pnl, short_pnl)
-        costs = self.transaction_cost_per_contract * len(legs) * 2  # open + (implicit) close at expiry
-        # Note: at expiry only opening costs are real; closing is automatic.
-        # Keep symmetric with managed PnL by NOT charging closing costs here:
-        costs = self.transaction_cost_per_contract * len(legs)
-        total_pnl = leg_pnl.sum(axis=1) - costs
-
-        entry_value = self._entry_cashflow(arr)
-        spread_offset = entry_value - self._entry_bs_value(arr)
+        if self.price_model is not None:
+            # Use BS-consistent entry valuation; PnL = entry_bs - terminal_intrinsic
+            entry_bs = self._entry_bs_value(arr)
+            entry_value = entry_bs
+            spread_offset = 0.0
+            terminal_strat_val = (
+                np.where(is_long, intrinsic, -intrinsic).sum(axis=1)
+                * CONTRACT_MULTIPLIER
+            )
+            costs = self.transaction_cost_per_contract * len(legs)
+            total_pnl = entry_value - terminal_strat_val - costs
+        else:
+            long_pnl = (intrinsic - arr["premiums"][None, :]) * CONTRACT_MULTIPLIER
+            short_pnl = (arr["premiums"][None, :] - intrinsic) * CONTRACT_MULTIPLIER
+            leg_pnl = np.where(is_long, long_pnl, short_pnl)
+            # symmetric with managed PnL: only opening transaction costs
+            costs = self.transaction_cost_per_contract * len(legs)
+            total_pnl = leg_pnl.sum(axis=1) - costs
+            entry_value = self._entry_cashflow(arr)
+            spread_offset = entry_value - self._entry_bs_value(arr)
         return total_pnl, entry_value, spread_offset
 
     # ---------- managed PnL ----------------------------------------------- #
@@ -375,13 +435,21 @@ class MonteCarloSimulator:
         L = len(legs)
 
         paths = self.simulate_price_paths()         # (N, dte+1)
+        sigma_paths = self._path_sigma()            # (N, dte+1) or None
         num_steps = paths.shape[1]
         days_remaining = self.dte - np.arange(num_steps)
         t_years = days_remaining / DAYS_PER_YEAR
 
         entry_value = self._entry_cashflow(arr)
         entry_bs = self._entry_bs_value(arr)
-        spread_offset = entry_value - entry_bs
+        # When a stochastic vol model is active the constant Day-0 market-vs-model
+        # offset is not a meaningful "spread" any longer (sigma evolves, so the
+        # gap is part of the model, not a static fee). Use offset only for GBM.
+        if self.price_model is not None:
+            spread_offset = 0.0
+            entry_value = entry_bs   # PnL is measured purely on the BS valuation chain
+        else:
+            spread_offset = entry_value - entry_bs
         ref_magnitude = abs(entry_value)
 
         K = arr["strikes"]
@@ -414,10 +482,19 @@ class MonteCarloSimulator:
                 K_grid = np.broadcast_to(K[None, :], (S_active.size, L))
                 T_grid = np.full_like(K_grid, T_left, dtype=float)
                 isc_grid = np.broadcast_to(is_call[None, :], (S_active.size, L))
-                bs = self._black_scholes(
-                    S_grid, K_grid, T_grid,
-                    self.risk_free_rate, self.volatility, isc_grid,
-                )
+                if sigma_paths is not None:
+                    # path-/time-dependent sigma: vectorise BS over (n_active, L)
+                    sig_active = sigma_paths[active, step]            # (n_active,)
+                    bs = self._black_scholes_path_sigma(
+                        S_grid, K_grid, T_grid,
+                        self.risk_free_rate,
+                        sig_active[:, None], isc_grid,
+                    )
+                else:
+                    bs = self._black_scholes(
+                        S_grid, K_grid, T_grid,
+                        self.risk_free_rate, self.volatility, isc_grid,
+                    )
                 strat_val = ((bs * signs[None, :]).sum(axis=1)
                              * CONTRACT_MULTIPLIER + spread_offset)
 
@@ -463,8 +540,9 @@ class MonteCarloSimulator:
             exit_value[active] = strat_val_terminal
 
         total_pnl = entry_value - exit_value
-        # Closing-side transaction costs (opening costs already in entry_value)
-        total_pnl = total_pnl - self.transaction_cost_per_contract * L
+        # NOTE: closing-side transaction costs are NOT charged here, to keep symmetry
+        # with `_terminal_pnl` (which only accounts for opening costs via `entry_value`).
+        # See monte_carlo_todo.md §1 "Closing-Cost-Asymmetrie".
 
         stats = {
             "pct_tp":      float(np.mean(exit_reason == EXIT_TP)),
@@ -641,6 +719,109 @@ def _print_analysis(name: str, result: "StrategyAnalysis") -> None:
     print("=" * 78)
 
 
+def _metrics(result: "StrategyAnalysis", hold_dte: int) -> Dict[str, float]:
+    """Risk- and time-normalised metrics for a single StrategyAnalysis."""
+    pnl = result.extras["pnl"]
+    ev = float(np.mean(pnl))
+    std = float(np.std(pnl, ddof=1))
+    p5 = float(np.percentile(pnl, 5))
+    cvar5 = float(np.mean(pnl[pnl <= p5])) if np.any(pnl <= p5) else p5
+
+    if result.management_stats is not None:
+        avg_days = max(result.management_stats["avg_days_in_trade"], 1.0)
+    else:
+        avg_days = float(hold_dte)
+
+    return {
+        "EV":            ev,
+        "EV/day":        ev / avg_days,
+        "EV_annualized": ev * (365.0 / avg_days),
+        "Std":           std,
+        "Sharpe_like":   ev / std if std > 0 else float("nan"),
+        "P5":            p5,
+        "CVaR_5":        cvar5,
+        "EV/|CVaR5|":    ev / abs(cvar5) if cvar5 != 0 else float("nan"),
+        "EV/|MaxLoss|":  ev / abs(result.max_loss) if result.max_loss != 0 else float("nan"),
+        "WinProb":       result.win_probability,
+        "AvgDays":       avg_days,
+        "MaxProfit":     result.max_profit,
+        "MaxLoss":       result.max_loss,
+    }
+
+
+def compare_variants(managed: "StrategyAnalysis",
+                     hold: "StrategyAnalysis",
+                     hold_dte: int) -> None:
+    """Side-by-side comparison: managed (A) vs hold-to-expiration (B)."""
+    m = _metrics(managed, hold_dte)
+    h = _metrics(hold, hold_dte)
+
+    rows = [
+        ("EV (USD)",                "EV",            "{:+.2f}"),
+        ("EV / Tag (USD)",          "EV/day",        "{:+.3f}"),
+        ("EV annualisiert (USD)",   "EV_annualized", "{:+.2f}"),
+        ("Std(PnL) (USD)",          "Std",           "{:.2f}"),
+        ("Sharpe-like  EV/Std",     "Sharpe_like",   "{:+.4f}"),
+        ("P5  (USD)",               "P5",            "{:+.2f}"),
+        ("CVaR 5%  (USD)",          "CVaR_5",        "{:+.2f}"),
+        ("EV / |CVaR5|",            "EV/|CVaR5|",    "{:+.4f}"),
+        ("EV / |MaxLoss|",          "EV/|MaxLoss|",  "{:+.4f}"),
+        ("Win-Prob",                "WinProb",       "{:.2%}"),
+        ("Avg Tage im Trade",       "AvgDays",       "{:.1f}"),
+        ("Max Profit (USD)",        "MaxProfit",     "{:+.2f}"),
+        ("Max Loss (USD)",          "MaxLoss",       "{:+.2f}"),
+    ]
+
+    print("\n" + "=" * 82)
+    print("  Vergleich  managed (A)   vs.   hold-to-expiration (B)")
+    print("=" * 82)
+    print(f"  {'Metrik':<28} {'Managed (A)':>18} {'Hold (B)':>18}   Gewinner")
+    print("  " + "-" * 78)
+    for label, key, fmt in rows:
+        va, vb = m[key], h[key]
+        if key == "Std":
+            winner = "A" if va < vb else ("B" if vb < va else "=")
+        elif key in ("MaxLoss", "P5", "CVaR_5"):
+            winner = "A" if va > vb else ("B" if vb > va else "=")
+        else:
+            winner = "A" if va > vb else ("B" if vb > va else "=")
+        print(f"  {label:<28} {fmt.format(va):>18} {fmt.format(vb):>18}   {winner}")
+    print("=" * 82)
+
+
+def bootstrap_ci_mean(pnl: np.ndarray,
+                      n_boot: int = 2000,
+                      alpha: float = 0.05,
+                      rng: Optional[np.random.Generator] = None
+                      ) -> Tuple[float, float]:
+    """Non-parametric bootstrap CI for the mean of `pnl`."""
+    rng = rng if rng is not None else np.random.default_rng(0)
+    n = len(pnl)
+    means = rng.choice(pnl, size=(n_boot, n), replace=True).mean(axis=1)
+    lo = float(np.quantile(means, alpha / 2))
+    hi = float(np.quantile(means, 1 - alpha / 2))
+    return lo, hi
+
+
+def annualized_ev_with_redeploy(
+    simulator: "MonteCarloSimulator",
+    legs: Sequence[OptionLeg],
+    management: Optional[ManagementConfig],
+    days_per_year: int = 365,
+) -> Tuple[float, float, "StrategyAnalysis"]:
+    """
+    Approximate annualised EV under i.i.d. re-deployment after each exit.
+    Returns (annual_ev, trades_per_year, analysis).
+    """
+    res = simulator.analyze_strategy(legs, management=management)
+    if management is not None and management.is_active and res.management_stats is not None:
+        avg_days = max(res.management_stats["avg_days_in_trade"], 1.0)
+    else:
+        avg_days = float(simulator.dte)
+    trades_per_year = days_per_year / avg_days
+    return res.expected_value * trades_per_year, trades_per_year, res
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -676,3 +857,44 @@ if __name__ == "__main__":
     analysis_holdto_exp = simulator.analyze_strategy(iron_condor_legs, management=None)
     _print_analysis("Iron Condor B — hold to expiration (no management)",
                     analysis_holdto_exp)
+
+    # Side-by-side comparison
+    compare_variants(analysis_managed, analysis_holdto_exp, hold_dte=dte)
+
+    # Bootstrap 95 % CIs for the mean PnL
+    ci_a = bootstrap_ci_mean(analysis_managed.extras["pnl"])
+    ci_b = bootstrap_ci_mean(analysis_holdto_exp.extras["pnl"])
+    print(f"\n  EV 95%-CI  Managed (A) : [{ci_a[0]:+.2f}, {ci_a[1]:+.2f}]")
+    print(f"  EV 95%-CI  Hold    (B) : [{ci_b[0]:+.2f}, {ci_b[1]:+.2f}]")
+
+    # Re-deployment annualised EV (i.i.d. approximation)
+    ann_a, tpy_a, _ = annualized_ev_with_redeploy(simulator, iron_condor_legs, mgmt)
+    ann_b, tpy_b, _ = annualized_ev_with_redeploy(simulator, iron_condor_legs, None)
+    print("\n  Re-Deployment (i.i.d.) annualised:")
+    print(f"      A managed  : {tpy_a:5.2f} trades/yr -> EV/yr = {ann_a:+.2f} USD")
+    print(f"      B hold     : {tpy_b:5.2f} trades/yr -> EV/yr = {ann_b:+.2f} USD")
+
+    # ----- Demo: IV-shock model (Tasty-style vol-crush edge) -------------- #
+    from src.price_models import IVShockModel
+
+    iv_shock_model = IVShockModel(
+        s0=underlying_price,
+        iv0=iv,                # entry IV (here 0.43)
+        lr_iv=0.20,            # long-run mean IV (e.g. SPY baseline ~ 20 %)
+        half_life_days=10.0,
+    )
+    sim_shock = MonteCarloSimulator(
+        current_price=underlying_price,
+        volatility=iv,            # used for entry BS pricing & spread_offset
+        dte=dte,
+        num_simulations=50000,
+        iv_correction=0,
+        price_model=iv_shock_model,
+    )
+    a_shock = sim_shock.analyze_strategy(iron_condor_legs, management=mgmt,
+                                         with_greeks=False)
+    b_shock = sim_shock.analyze_strategy(iron_condor_legs, management=None,
+                                         with_greeks=False)
+    _print_analysis("Iron Condor A — managed (IV-Shock model, vol-crush)", a_shock)
+    _print_analysis("Iron Condor B — hold     (IV-Shock model, vol-crush)", b_shock)
+    compare_variants(a_shock, b_shock, hold_dte=dte)
