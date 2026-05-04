@@ -978,12 +978,17 @@ class UniversalOptionsMonteCarloSimulator:
                     'total_sims': self.num_simulations
                 }
 
+        # Pre-calculate arrays for vectorized BS calls if not already done
+        strikes_all = np.array([opt.get('strike') for opt in options])
+        is_calls_all = np.array([opt.get('is_call', True) for opt in options])
+        is_longs_all = np.array([opt.get('is_long', True) for opt in options])
+
         return {
             # Main results
             'expected_value': expected_value,
             'expected_value_raw': expected_value_raw,
             'discount_factor': discount_factor,
-            'spread_offset': initial_cashflow - (np.mean(np.sum(np.where(is_longs, self._black_scholes_vectorized(np.array([[self.current_price]]), strikes.reshape(1, -1), self.time_to_expiration, self.risk_free_rate, self.volatility, is_calls.reshape(1, -1)), -self._black_scholes_vectorized(np.array([[self.current_price]]), strikes.reshape(1, -1), self.time_to_expiration, self.risk_free_rate, self.volatility, is_calls.reshape(1, -1))), axis=1)) * 100) if not has_management else (initial_cashflow - entry_bs_strat_val),
+            'spread_offset': initial_cashflow - (np.mean(np.sum(np.where(is_longs_all, self._black_scholes_vectorized(np.array([[self.current_price]]), strikes_all.reshape(1, -1), self.time_to_expiration, self.risk_free_rate, self.volatility, is_calls_all.reshape(1, -1)), -self._black_scholes_vectorized(np.array([[self.current_price]]), strikes_all.reshape(1, -1), self.time_to_expiration, self.risk_free_rate, self.volatility, is_calls_all.reshape(1, -1))), axis=1)) * 100) if not has_management else (initial_cashflow - entry_bs_strat_val),
             
             'management_stats': management_stats,
 
@@ -1169,11 +1174,8 @@ if __name__ == "__main__":
         iv_correction='auto'
     )
 
-    # Beispiel: Iron Condor
-    # Ein Iron Condor besteht aus einem Bull Put Spread und einem Bear Call Spread.
-    # Wir machen den SL enger (100% statt 200%) und den DTE Close weiter weg (0), 
-    # um zu sehen, ob SLs triggern.
-    options = [
+    # Beispiel 1: Verwalteter Iron Condor (mit TP/SL/DTE Close)
+    options_managed = [
         # Short Put
         {'strike': 165, 'premium': 3.50, 'is_call': False, 'is_long': False, 'take_profit_pct': 50, 'stop_loss_pct': 100, 'dte_close': 0},
         # Long Put (Wing)
@@ -1184,10 +1186,25 @@ if __name__ == "__main__":
         {'strike': 185, 'premium': 1.80, 'is_call': True, 'is_long': True}
     ]
 
-    print(f"--- Starte Strategie-Analyse (Iron Condor) ---")
-    results = monte_carlo_simulator.analyze_strategy(options)
+    # Beispiel 2: Klassischer Iron Condor (Hold to Expiration)
+    options_classic = [
+        {'strike': 165, 'premium': 3.50, 'is_call': False, 'is_long': False},
+        {'strike': 160, 'premium': 2.00, 'is_call': False, 'is_long': True},
+        {'strike': 180, 'premium': 3.20, 'is_call': True, 'is_long': False},
+        {'strike': 185, 'premium': 1.80, 'is_call': True, 'is_long': True}
+    ]
+
+    print(f"\n" + "="*90)
+    print(f"RUNNING ANALYSIS 1: MANAGED STRATEGY")
+    print("="*90)
+    results_m = monte_carlo_simulator.analyze_strategy(options_managed)
+    print_strategy_analysis(monte_carlo_simulator, options_managed, "Iron Condor (Managed)")
     
-    print_strategy_analysis(monte_carlo_simulator, options, "Iron Condor Debug")
+    print(f"\n" + "="*90)
+    print(f"RUNNING ANALYSIS 2: CLASSIC STRATEGY (Hold to Expiration)")
+    print("="*90)
+    results_c = monte_carlo_simulator.analyze_strategy(options_classic)
+    print_strategy_analysis(monte_carlo_simulator, options_classic, "Iron Condor (Classic)")
     
     # Debugging: Initialwerte prüfen
     print(f"DEBUG: Startpreis: {current_price}, Volatilität: {volatility}, DTE: {dte}")
@@ -1211,9 +1228,10 @@ if __name__ == "__main__":
             remaining = dte - step_day
             print(f"  Tag {step_day} (Restlaufzeit: {remaining} DTE): {counts[i]} Simulationen")
 
-    # Zusätzliche Prüfung der Breakevens im Debugger
-    if results['breakeven_points']:
-        print(f"\nGefundene Breakevens: {results['breakeven_points']}")
+    if results_m.get('breakeven_points'):
+        print(f"\nGefundene Breakevens (Managed): {results_m['breakeven_points']}")
+    if results_c.get('breakeven_points'):
+        print(f"Gefundene Breakevens (Classic): {results_c['breakeven_points']}")
 
     pass
 
