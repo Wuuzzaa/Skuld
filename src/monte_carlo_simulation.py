@@ -642,34 +642,27 @@ def _print_analysis(name: str, result: "StrategyAnalysis") -> None:
 
 
 if __name__ == "__main__":
-    # ------------------------------------------------------------------ #
-    # Debug / demo: two identical Iron Condors on a $100 underlying.     #
-    #   - short 95 put / long 90 put / short 105 call / long 110 call    #
-    #   - 45 DTE, sigma 30 %                                             #
-    # Variant A : managed (TP 50 % / SL 200 % / DTE close 21)            #
-    # Variant B : hold-to-expiration (no management)                     #
-    # ------------------------------------------------------------------ #
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 
-    underlying_price = 100.0
-    iv = 0.30
+    underlying_price = 395.09
+    iv = 0.43
     dte = 45
 
     iron_condor_legs = [
         # short put spread (lower wing)
-        OptionLeg(strike=90.0,  premium=0.40, is_call=False, is_long=True),   # long  90 put
-        OptionLeg(strike=95.0,  premium=1.20, is_call=False, is_long=False),  # short 95 put
+        OptionLeg(strike=335.0,  premium=4.65, is_call=False, is_long=True),   # long   put
+        OptionLeg(strike=340.0,  premium=5.51, is_call=False, is_long=False),  # short  put
         # short call spread (upper wing)
-        OptionLeg(strike=105.0, premium=1.20, is_call=True,  is_long=False),  # short 105 call
-        OptionLeg(strike=110.0, premium=0.40, is_call=True,  is_long=True),   # long  110 call
+        OptionLeg(strike=465.0, premium=4.85, is_call=True,  is_long=False),  # short  call
+        OptionLeg(strike=470.0, premium=4.20, is_call=True,  is_long=True),   # long   call
     ]
 
     simulator = MonteCarloSimulator(
         current_price=underlying_price,
         volatility=iv,
         dte=dte,
-        num_simulations=10_000,
+        num_simulations=50000,
     )
 
     # Variant A: managed
