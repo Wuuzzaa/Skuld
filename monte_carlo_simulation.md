@@ -1,88 +1,70 @@
-# Analyse: Universal Monte Carlo Simulation in Skuld
+# Monte Carlo Simulation für Optionsstrategien
 
-## 1. Verständnis der Datei `monte_carlo_simulation.py`
-
-Die Datei implementiert den `UniversalOptionsMonteCarloSimulator`, ein zentrales Werkzeug im Skuld-Projekt zur Bewertung von Optionsstrategien. Anders als klassische Black-Scholes-Modelle, die oft auf einzelne Optionen oder einfache Spreads beschränkt sind, ermöglicht dieser Simulator die Analyse beliebiger Multi-Leg-Strategien durch numerische Simulation.
-
-### Kernfunktionalität
-- **Geometrische Brownsche Bewegung (GBM):** Der Simulator modelliert den Aktienpreis am Verfallstag basierend auf der aktuellen Volatilität, der Laufzeit (DTE) und dem risikofreien Zinssatz.
-- **Risikoneutrale Bewertung:** Die Simulation nutzt den risikofreien Zinssatz (abzüglich Dividendenrendite) als Drift, was die Grundlage für die Optionspreisbewertung nach der modernen Finanztheorie ist.
-- **IV-Korrektur (Auto-Modus):** Ein besonderes Merkmal ist die systematische Korrektur der impliziten Volatilität (IV). Basierend auf Forschungsergebnissen zur Volatilitätsrisikoprämie (VRP) und dem "Contango"-Effekt der VIX-Terminstruktur wird die Markt-IV reduziert, um realistischere Erwartungswerte zu erhalten.
-- **Transaktionskosten:** Diese werden pro Kontrakt (100 Aktien) berücksichtigt, was für eine realistische Netto-Profit-Berechnung unerlässlich ist.
-- **Vielseitigkeit:** Jede Strategie wird als Liste von "Legs" (Optionen) definiert, wodurch komplexe Gebilde wie Iron Condors, Butterflies oder benutzerdefinierte Spreads einheitlich bewertet werden können.
-
-### Rolle im Skuld-Ökosystem
-- **`options_utils.py`:** Fungiert als Brücke. Hier wird der Simulator instanziiert, um den `expected_value` und andere Metriken für die UI zu berechnen.
-- **`spreads_calculation.py` & `spreads.py`:** Diese nutzen die berechneten Werte, um dem Nutzer profitable Trades (z. B. mit positivem Erwartungswert) anzuzeigen und zu filtern.
+Dieses Dokument beschreibt die Implementierung, die theoretischen Hintergründe und die Management-Strategien des `MonteCarloSimulator` in Skuld.
 
 ---
 
-## 2. Mögliche Verbesserungen & Refactoring
+## 1. Überblick & Architektur
 
-Trotz der soliden Basis gibt es Bereiche, die optimiert werden können, um Performance, Genauigkeit und Wartbarkeit zu steigern.
+Das Modul `src/monte_carlo_simulation.py` stellt den `MonteCarloSimulator` zur Verfügung. Er bewertet beliebige Multi-Leg-Optionsstrategien (z.B. Iron Condor, Spreads, Straddles) durch numerische Simulation.
 
-### A. Performance & Vektorisierung
-- **Vektorisierung der Payoff-Berechnung:** In `_calculate_strategy_payoffs` wird über die Legs iteriert und für jedes Leg `calculate_single_option_payoff` aufgerufen. Während die Simulation selbst vektorisiert ist, könnte die gesamte Strategie-Matrix (Simulations x Legs) noch effizienter in einem einzigen NumPy-Block verarbeitet werden.
-- **NumPy Random Generator:** Die Verwendung von `np.random.seed` und `np.random.standard_normal` ist zwar funktional, aber veraltet. Der neuere `np.random.default_rng()` ist schneller und bietet eine bessere statistische Qualität.
-
-### B. Mathematische & Fachliche Erweiterungen
-- **Pfadabhängige Simulation:** Um Stop-Loss (SL) und Take-Profit (TP) während der Laufzeit zu bewerten, wird von einer reinen Endpreis-Simulation auf eine Pfad-Simulation (z.B. tägliche Schritte) umgestellt.
-- **Stop-Loss & Take-Profit:** Implementierung einer Logik, die Optionen schließt, sobald die Prämie einen Schwellenwert erreicht (z.B. TP bei 50% der Prämie, SL bei 200%).
-- **Leg-spezifische Parameter:** Unterstützung für unterschiedliche DTEs pro Leg und die Möglichkeit, für jedes Leg einen geplanten Schließtag ("planned close day") festzulegen.
-- **Fester DTE Close:** Globale oder Leg-spezifische Einstellung, um Positionen bei Erreichen eines bestimmten DTE-Werts (z.B. 21 DTE) glattzustellen.
-- **Griechische Variablen (Greeks):** Monte-Carlo-basierte Schätzung von Delta, Gamma und Vega durch kleine Preis- und Volatilitäts-Shifts in der Simulation.
-- **Realtime-Performance:** Sicherstellung, dass die Pfad-Simulation durch effiziente NumPy-Vektorisierung flüssig bleibt.
-
-### C. Technische Details der Umsetzung
-- **Pfad-Simulation:** Nutzung von geometrischer Brownscher Bewegung (GBM) über mehrere Zeitschritte. Bei langen Laufzeiten (hohe DTE) werden die Schritte optimiert (bis zu 30 Schritte), um die Performance stabil zu halten.
-- **Zwischenbewertung:** Da SL/TP auf dem aktuellen Optionspreis basieren, wird während der Pfad-Simulation der Black-Scholes-Preis für jedes Leg vektorisiert berechnet.
-- **Management-Triggers:**
-  - **Take Profit (TP):** Schließt die Position, wenn der Gewinn den definierten Prozentsatz der Prämie erreicht.
-  - **Stop Loss (SL):** Schließt die Position, wenn der Verlust den definierten Prozentsatz erreicht.
-  - **DTE Close:** Schließt die Position automatisch bei Erreichen einer bestimmten Restlaufzeit (z.B. 21 DTE).
-- **Greeks-Berechnung (Finite Differenzen):**
-  - **Delta:** `(EV(S+ds) - EV(S-ds)) / (2*ds)`
-  - **Vega:** `(EV(vol+dv) - EV(vol-dv)) / (2*dv)`
-  - **Gamma:** Zweite Ableitung `(EV(S+ds) - 2*EV(S) + EV(S-ds)) / ds^2`
-  Dies nutzt **Common Random Numbers (CRN)**, um Rauschen zu minimieren und präzise Ergebnisse bei 10.000 Simulationen zu liefern.
-
-## 4. UI-Integration & Anzeige
-
-Die Ergebnisse der Simulation werden in den Detailansichten der Strategien (`spreads.py`, `iron_condors.py`) angezeigt.
-
-### A. Erwartungswerte (EV)
-- **Expected Value (Static):** Der Erwartungswert, wenn die Position bis zum Verfall gehalten wird.
-- **EV (Managed):** Der Erwartungswert unter Berücksichtigung der aktiven Management-Strategie (SL, TP, DTE Close). Dieser wird nur angezeigt, wenn Management-Parameter gesetzt sind und sich vom statischen EV unterscheiden.
-
-### B. Simulation Greeks
-Diese Werte geben an, wie empfindlich der *gesamte Erwartungswert* der Strategie auf Marktveränderungen reagiert:
-- **Delta:** Änderung des EV bei einer Preisänderung des Basiswerts um $1.
-- **Gamma:** Änderung des Delta bei einer Preisänderung des Basiswerts um $1.
-- **Vega:** Änderung des EV bei einer Änderung der impliziten Volatilität um 1% (0.01).
+### Kernfunktionalitäten
+- **Preis-Modelle**: 
+    - **GBM (Geometrische Brownsche Bewegung)**: Standardmodell mit konstanter Volatilität für risikoneutrale Bewertung.
+    - **IV-Shock / Heston**: Unterstützung für stochastische Volatilität und Mean-Reversion (Vola-Crush), um reale Markteffekte abzubilden.
+- **Risikoneutrale Bewertung**: Nutzung des risikofreien Zinssatzes als Drift.
+- **IV-Korrektur**: Systematische Reduktion der Markt-IV basierend auf der Volatilitätsrisikoprämie (VRP).
+- **Vektorisierung**: Massive Nutzung von NumPy zur parallelen Berechnung von tausenden Pfaden und Black-Scholes-Preisen.
+- **Greeks**: Berechnung von Delta, Gamma und Vega mittels finiter Differenzen unter Verwendung von *Common Random Numbers (CRN)* zur Rauschreduzierung.
 
 ---
 
-## 5. Performance-Optimierung
+## 2. Tastytrade-Style Management (50/200/21)
 
-Durch die Umstellung auf eine Pfad-Simulation und die Berechnung der Greeks steigt die Rechenlast erheblich (Faktor 200x bis 500x). Um die "Realtime"-Usability der Streamlit-Anwendung zu erhalten, werden folgende Optimierungen implementiert:
+Der Simulator unterstützt aktives Trade-Management nach den Prinzipien von Tastytrade. Ziel ist es, das Gamma-Risiko am Ende der Laufzeit zu reduzieren und die Kapitalumschlagsgeschwindigkeit zu erhöhen.
 
-### A. Massive Vektorisierung
-- Nutzung von 3D-NumPy-Arrays `(Simulationen, Tage, Legs)`.
-- Black-Scholes-Berechnungen werden als Matrix-Operationen ausgeführt, um tausende Optionen gleichzeitig auf CPU-Vektorebene zu bewerten.
+### Komponenten des Managements
+- **Take Profit (TP) - Ziel 50%**: 
+    - **Beschreibung**: Schließt die Position, sobald 50% des maximal möglichen Gewinns (bei Credit-Spreads das eingenommene Premium) erreicht sind.
+    - **Ziel**: Gewinne sichern, bevor Preisschwankungen sie zunichtemachen.
+- **Stop Loss (SL) - Ziel 200%**:
+    - **Beschreibung**: Schließt die Position, wenn der Verlust das Zweifache des eingenommenen Premiums erreicht (3x das ursprüngliche Risiko bei manchen Definitionen, hier meist 200% des Premiums als Verlust-Trigger).
+    - **Ziel**: Vermeidung von "Tail-Risk" und extremen Ausreißern.
+- **DTE Close - Ziel 21 Tage**:
+    - **Beschreibung**: Schließt den Trade spätestens 21 Tage vor dem Verfall (bei einer ursprünglichen Laufzeit von ca. 45 DTE).
+    - **Ziel**: Eliminierung des Gamma-Risikos. In den letzten 21 Tagen reagiert der Optionspreis extrem empfindlich auf kleine Preisbewegungen des Basiswerts.
 
-### B. Effiziente Greeks-Berechnung
-- Verwendung von **Common Random Numbers (CRN)**: Dieselbe Zufallsmatrix wird für die Basis-Simulation und die verschobenen Läufe (Delta/Vega-Shifts) genutzt. Dies reduziert das statistische Rauschen und erlaubt eine hohe Präzision bei geringerer Simulationsanzahl.
-
-### C. Zielwert
-- Trotz des Mehraufwands soll die Berechnung einer komplexen Strategie (z. B. Iron Condor mit SL/TP und Greeks) unter **0,5 Sekunden** bleiben.
+### Der "Edge" (Vorteil)
+1. **Volatilitäts-Mean-Reversion (Vola-Crush)**: In der Realität ist IV oft "mean-reverting". Nach einem Anstieg (IV-Spike) fällt sie meist schnell zurück. Das TP-Ziel wird dadurch oft viel früher erreicht, als es der reine Zeitwertverfall (Theta) vermuten lässt.
+2. **Höherer annualisierter EV**: Durch das frühe Schließen wird Kapital frei, das sofort in neue Trades mit hoher Wahrscheinlichkeit reinvestiert werden kann. 
+3. **Verbesserte Sharpe-Ratio**: Die Varianz der PnL wird reduziert, da die "hässlichen" Verluste am Ende der Laufzeit (Gamma-Explosion) vermieden werden.
 
 ---
 
-## 6. Nächste Schritte
-Sobald dieses Konzept bestätigt ist, werden folgende Änderungen im Code vorgenommen:
-1.  **Erweiterung der `OptionLeg` Struktur** (Dataclass) um SL/TP, Custom DTE und Schließtag.
-2.  **Anpassung von `spreads.py` und `iron_condors.py` UI:** Integration der SL/TP-Eingabefelder im Konfigurations-Expander.
-3.  **Anpassung von `simulate_stock_prices`** für Pfad-Generierung.
-4.  **Implementierung der SL/TP/Close-Logik** in der Payoff-Berechnung unter Verwendung von Black-Scholes für Zwischenpreise.
-5.  **Hinzufügen einer Greeks-Berechnungsmethode** in den Simulator.
-6.  **Erweiterung der UI-Anzeige:** Vergleich von Baseline-EV und Managed-EV in den Ergebnislisten.
+## 3. Analyse & Metriken
+
+Der Simulator liefert nicht nur den Erwartungswert (EV), sondern eine umfassende Risikoanalyse:
+
+- **EV (Static)**: Erwartungswert beim Halten bis zum Verfall.
+- **EV (Managed)**: Erwartungswert unter Anwendung der TP/SL/DTE-Regeln.
+- **EV/Tag & EV annualisiert**: Entscheidende Metriken für den Vergleich von Strategien mit unterschiedlichen Haltedauern.
+- **CVaR (Conditional Value at Risk)**: Der durchschnittliche Verlust in den schlimmsten 5% der Fälle (Tail-Risk).
+- **Win-Probability**: Wahrscheinlichkeit für einen positiven Ausgang.
+
+---
+
+## 4. Technische Implementierung & Refactoring-Notizen
+
+### Aktueller Stand (Refactoring 2024)
+- **RNG**: Umstellung auf `np.random.default_rng()` für bessere Performance und Thread-Sicherheit.
+- **Pfad-Cache**: Optimierte Speicherung von Preispfaden, um redundante Simulationen bei der Greeks-Berechnung zu vermeiden.
+- **Black-Scholes**: Vektorisierte Implementierung mit schneller `norm.cdf` Approximation (Abramowitz & Stegun).
+- **Breakevens**: Numerische Suche nach Nullstellen in der geglätteten Payoff-Funktion.
+
+### Bekannte Einschränkungen im GBM-Modell
+In einem rein theoretischen GBM-Modell mit konstantem Sigma hat "Hold-to-Expiration" mathematisch immer einen höheren oder gleichen EV wie ein gemanagter Trade (Optional Stopping Theorem). Der reale Vorteil des Tastytrade-Styles wird erst durch **stochastische Volatilität** (Heston-Modell) oder **IV-Shocks** im Simulator sichtbar.
+
+---
+
+## 5. Anwendung in Skuld
+Die Simulationsergebnisse fließen direkt in die UI (`spreads.py`, `iron_condors.py`) ein, um dem Nutzer einen objektiven Vergleich zwischen passiven und aktiven Strategien zu ermöglichen.
