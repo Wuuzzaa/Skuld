@@ -100,6 +100,11 @@ if st.button("Start Simulation"):
                     premium=option["premium"],
                     is_call=is_call,
                     is_long=is_long,
+                    delta=0.0,
+                    gamma=0.0,
+                    vega=0.0,
+                    theta=0.0,
+                    iv=volatility
                 ))
 
             metrics = calculate_strategy_metrics(

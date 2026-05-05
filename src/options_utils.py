@@ -22,10 +22,12 @@ class OptionLeg:
     premium: float
     is_call: bool
     is_long: bool
+    delta: float
+    gamma: float
+    vega: float
+    theta: float
+    iv: float
     symbol: Optional[str] = None
-    delta: Optional[float] = None
-    iv: Optional[float] = None
-    theta: Optional[float] = None
     oi: Optional[int] = None
     volume: Optional[int] = None
     expected_move: Optional[float] = None
@@ -136,9 +138,9 @@ def calculate_strategy_metrics(
             'stop_loss_pct': leg.stop_loss_pct,
             'dte_close': leg.dte_close,
             'planned_dte': leg.planned_dte,
-            'delta': leg.delta,
-            'gamma': None, # not yet in OptionLeg dataclass in options_utils
-            'vega': None,
+            'delta': leg.delta if leg.is_call or leg.delta <= 0 else -leg.delta,
+            'gamma': leg.gamma,
+            'vega': leg.vega,
             'theta': leg.theta,
             'iv': leg.iv
         }

@@ -308,25 +308,29 @@ if not ic_df.empty:
         legs = [
             OptionLeg(
                 strike=row['sell_strike_put'], premium=row['sell_last_option_price_put'], is_call=False, is_long=False,
-                delta=row.get('sell_delta_put'), iv=row.get('sell_iv_put'), theta=row.get('sell_theta_put'),
+                delta=float(row.get('sell_delta_put', 0.0)), gamma=0.0, vega=0.0, theta=float(row.get('sell_theta_put', 0.0)),
+                iv=float(row.get('sell_iv_put', 0.0)),
                 oi=row.get('sell_open_interest_put'), volume=row.get('sell_day_volume_put'),
                 expected_move=row.get('sell_expected_move_put')
             ),
             OptionLeg(
                 strike=row['buy_strike_put'], premium=row['buy_last_option_price_put'], is_call=False, is_long=True,
-                delta=row.get('buy_delta_put'), iv=row.get('buy_iv_put'), theta=row.get('buy_theta_put'),
+                delta=float(row.get('buy_delta_put', 0.0)), gamma=0.0, vega=0.0, theta=float(row.get('buy_theta_put', 0.0)),
+                iv=float(row.get('buy_iv_put', 0.0)),
                 oi=row.get('buy_open_interest_put'), volume=row.get('buy_day_volume_put'),
                 expected_move=row.get('buy_expected_move_put')
             ),
             OptionLeg(
                 strike=row['sell_strike_call'], premium=row['sell_last_option_price_call'], is_call=True, is_long=False,
-                delta=row.get('sell_delta_call'), iv=row.get('sell_iv_call'), theta=row.get('sell_theta_call'),
+                delta=float(row.get('sell_delta_call', 0.0)), gamma=0.0, vega=0.0, theta=float(row.get('sell_theta_call', 0.0)),
+                iv=float(row.get('sell_iv_call', 0.0)),
                 oi=row.get('sell_open_interest_call'), volume=row.get('sell_day_volume_call'),
                 expected_move=row.get('sell_expected_move_call')
             ),
             OptionLeg(
                 strike=row['buy_strike_call'], premium=row['buy_last_option_price_call'], is_call=True, is_long=True,
-                delta=row.get('buy_delta_call'), iv=row.get('buy_iv_call'), theta=row.get('buy_theta_call'),
+                delta=float(row.get('buy_delta_call', 0.0)), gamma=0.0, vega=0.0, theta=float(row.get('buy_theta_call', 0.0)),
+                iv=float(row.get('buy_iv_call', 0.0)),
                 oi=row.get('buy_open_interest_call'), volume=row.get('buy_day_volume_call'),
                 expected_move=row.get('buy_expected_move_call')
             )

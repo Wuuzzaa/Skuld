@@ -67,11 +67,11 @@ class OptionLeg:
     premium: float           # mid premium per share in USD (>= 0)
     is_call: bool
     is_long: bool
-    delta: Optional[float] = None
-    gamma: Optional[float] = None
-    vega: Optional[float] = None
-    theta: Optional[float] = None
-    iv: Optional[float] = None
+    delta: float
+    gamma: float
+    vega: float
+    theta: float
+    iv: float
 
     def __post_init__(self) -> None:
         if self.strike <= 0:
@@ -734,16 +734,22 @@ class UniversalOptionsMonteCarloSimulator(MonteCarloSimulator):
     def _legacy_options_to_legs(self, options: List[Dict[str, Any]]) -> List[OptionLeg]:
         legs = []
         for opt in options:
+            is_call = bool(opt['is_call'])
+            delta = float(opt.get('delta', 0.0))
+            # Fix sign if delta comes in positive from DB
+            if not is_call and delta > 0:
+                delta = -delta
+            
             legs.append(OptionLeg(
                 strike=float(opt['strike']),
                 premium=float(opt['premium']),
-                is_call=bool(opt['is_call']),
+                is_call=is_call,
                 is_long=bool(opt['is_long']),
-                delta=opt.get('delta'),
-                gamma=opt.get('gamma'),
-                vega=opt.get('vega'),
-                theta=opt.get('theta'),
-                iv=opt.get('iv')
+                delta=delta,
+                gamma=float(opt.get('gamma', 0.0)),
+                vega=float(opt.get('vega', 0.0)),
+                theta=float(opt.get('theta', 0.0)),
+                iv=float(opt.get('iv', self.volatility))
             ))
         return legs
 
@@ -890,75 +896,88 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 
+    # ----- 1. Setup & Strategie-Definition ----- #
+    # Beispiel: Iron Condor auf SPY (ca. 45 DTE)
     underlying_price = 395.09
     iv = 0.43
-    dte = 45
+    dte = 44
 
+    # Wir definieren die Legs mit Greeks und Leg-IV für realistisches Pricing (Skew/Smile)
+    # Greeks und IVs sind hier beispielhaft gewählt
+    # Hinweis: Wir nutzen Credit-Preise (negativ für Short, positiv für Long beim Kauf),
+    # aber im Simulator werden Premiums meist als positive Werte für Einnahmen erwartet.
     iron_condor_legs = [
-        # short put spread (lower wing)
-        OptionLeg(strike=335.0,  premium=4.65, is_call=False, is_long=True),   # long   put
-        OptionLeg(strike=340.0,  premium=5.51, is_call=False, is_long=False),  # short  put
-        # short call spread (upper wing)
-        OptionLeg(strike=465.0, premium=4.85, is_call=True,  is_long=False),  # short  call
-        OptionLeg(strike=470.0, premium=4.20, is_call=True,  is_long=True),   # long   call
+        # Short Put Spread (Wachstum durch Theta, Risiko bei Drop)
+        OptionLeg(strike=335.0, premium=4.65, is_call=False, is_long=True,  iv=0.43, delta=0.13, gamma=0.01, vega=0.3, theta=0.05),
+        OptionLeg(strike=340.0, premium=5.51, is_call=False, is_long=False, iv=0.43, delta=0.15, gamma=0.012, vega=0.3, theta=0.06),
+        # Short Call Spread (Wachstum durch Theta, Risiko bei Rallye)
+        OptionLeg(strike=465.0, premium=4.85, is_call=True,  is_long=False, iv=0.43, delta=0.15, gamma=0.011, vega=0.3, theta=0.055),
+        OptionLeg(strike=470.0, premium=4.2, is_call=True,  is_long=True,  iv=0.43, delta=0.14, gamma=0.009, vega=0.3, theta=0.045),
     ]
 
-    simulator = MonteCarloSimulator(
+    # Wir berechnen das Net-Premium für die Anzeige
+    # net_premium = (1.20 - 0.80) + (1.10 - 0.70) = 0.40 + 0.40 = 0.80
+    # Entry Cashflow im Simulator: -0.80 + 1.20 + 1.10 - 0.70 = 0.80 (Credit)
+
+    # Tastytrade Management Konfiguration
+    mgmt = ManagementConfig(tp_pct=50.0, sl_pct=200.0, dte_close=21)
+
+    # ----- 2. Szenario A: Baseline (GBM / Hold-to-Expiration) ----- #
+    # In einem GBM Modell mit konstanter Vola ist Management oft statistisch "teurer",
+    # da kein Vola-Crush stattfindet.
+    print("\n" + "="*82)
+    print(" SZENARIO 1: HOLD-TO-EXPIRATION (PASSIV) - GBM Modell")
+    print("="*82)
+    
+    sim_gbm = MonteCarloSimulator(
         current_price=underlying_price,
         volatility=iv,
         dte=dte,
-        num_simulations=50000,
-        iv_correction=0
+        num_simulations=20000,
+        iv_correction='auto'
     )
+    
+    analysis_hold = sim_gbm.analyze_strategy(iron_condor_legs, management=None)
+    _print_analysis("Iron Condor - Hold-to-Expiration (GBM)", analysis_hold)
 
-    # Variant A: managed
-    mgmt = ManagementConfig(tp_pct=50.0, sl_pct=200.0, dte_close=21)
-    analysis_managed = simulator.analyze_strategy(iron_condor_legs, management=mgmt)
-    _print_analysis("Iron Condor A — managed (TP 50 % / SL 200 % / DTE close 21)",
-                    analysis_managed)
-
-    # Variant B: hold to expiration (no management)
-    analysis_holdto_exp = simulator.analyze_strategy(iron_condor_legs, management=None)
-    _print_analysis("Iron Condor B — hold to expiration (no management)",
-                    analysis_holdto_exp)
-
-    # Side-by-side comparison
-    compare_variants(analysis_managed, analysis_holdto_exp, hold_dte=dte)
-
-    # Bootstrap 95 % CIs for the mean PnL
-    ci_a = bootstrap_ci_mean(analysis_managed.extras["pnl"])
-    ci_b = bootstrap_ci_mean(analysis_holdto_exp.extras["pnl"])
-    print(f"\n  EV 95%-CI  Managed (A) : [{ci_a[0]:+.2f}, {ci_a[1]:+.2f}]")
-    print(f"  EV 95%-CI  Hold    (B) : [{ci_b[0]:+.2f}, {ci_b[1]:+.2f}]")
-
-    # Re-deployment annualised EV (i.i.d. approximation)
-    ann_a, tpy_a, _ = annualized_ev_with_redeploy(simulator, iron_condor_legs, mgmt)
-    ann_b, tpy_b, _ = annualized_ev_with_redeploy(simulator, iron_condor_legs, None)
-    print("\n  Re-Deployment (i.i.d.) annualised:")
-    print(f"      A managed  : {tpy_a:5.2f} trades/yr -> EV/yr = {ann_a:+.2f} USD")
-    print(f"      B hold     : {tpy_b:5.2f} trades/yr -> EV/yr = {ann_b:+.2f} USD")
-
-    # ----- Demo: IV-shock model (Tasty-style vol-crush edge) -------------- #
+    # ----- 3. Szenario B: Tastytrade-Style (Aktiv) - IV Shock / Vola-Crush ----- #
+    # Hier simulieren wir den "Edge": IV ist beim Einstieg hoch und fällt (Mean-Reversion).
+    print("\n" + "="*82)
+    print(" SZENARIO 2: TASTYTRADE-STYLE (AKTIV) - IV-SHOCK / VOLA-CRUSH")
+    print("="*82)
+    
     from src.price_models import IVShockModel
-
+    
+    # Simulation eines hohen IV-Umfelds (IVR > 50)
+    # IV0 (Einstieg) = 20%, Long-Run Mean = 12% (Vola-Crush von 8% geplant)
     iv_shock_model = IVShockModel(
         s0=underlying_price,
-        iv0=iv,                # entry IV (here 0.43)
-        lr_iv=0.20,            # long-run mean IV (e.g. SPY baseline ~ 20 %)
-        half_life_days=10.0,
+        iv0=iv,
+        lr_iv=0.12, 
+        half_life_days=10.0 # Vola normalisiert sich schneller
     )
-    sim_shock = MonteCarloSimulator(
+    
+    sim_tasty = MonteCarloSimulator(
         current_price=underlying_price,
-        volatility=iv,            # used for entry BS pricing & spread_offset
+        volatility=iv,
         dte=dte,
-        num_simulations=50000,
-        iv_correction=0,
-        price_model=iv_shock_model,
+        num_simulations=20000,
+        price_model=iv_shock_model
     )
-    a_shock = sim_shock.analyze_strategy(iron_condor_legs, management=mgmt,
-                                         with_greeks=False)
-    b_shock = sim_shock.analyze_strategy(iron_condor_legs, management=None,
-                                         with_greeks=False)
-    _print_analysis("Iron Condor A — managed (IV-Shock model, vol-crush)", a_shock)
-    _print_analysis("Iron Condor B — hold     (IV-Shock model, vol-crush)", b_shock)
-    compare_variants(a_shock, b_shock, hold_dte=dte)
+    
+    analysis_tasty = sim_tasty.analyze_strategy(iron_condor_legs, management=mgmt)
+    _print_analysis("Iron Condor - Tastytrade Managed (IV-Shock)", analysis_tasty)
+
+    # ----- 4. Direkter Vergleich ----- #
+    print("\n" + "="*82)
+    print(" DIREKTER VERGLEICH: HOLD (GBM) VS. TASTYTRADE (IV-SHOCK)")
+    print("="*82)
+    compare_variants(analysis_tasty, analysis_hold, hold_dte=dte)
+
+    # Bootstrap & Annualisierung
+    ci_tasty = bootstrap_ci_mean(analysis_tasty.extras["pnl"])
+    ann_tasty, tpy_tasty, _ = annualized_ev_with_redeploy(sim_tasty, iron_condor_legs, mgmt)
+    
+    print(f"\n  Tastytrade (Managed) 95%-CI: [{ci_tasty[0]:+.2f}, {ci_tasty[1]:+.2f}]")
+    print(f"  Erwarteter Jahresertrag (Re-Deployment): {ann_tasty:+.2f} USD ({tpy_tasty:.1f} Trades/Jahr)")
+    print("="*82 + "\n")

@@ -14,10 +14,10 @@ from src.price_models import IVShockModel
 @pytest.fixture(scope="module")
 def iron_condor():
     return [
-        OptionLeg(strike=335.0, premium=4.65, is_call=False, is_long=True),
-        OptionLeg(strike=340.0, premium=5.51, is_call=False, is_long=False),
-        OptionLeg(strike=465.0, premium=4.85, is_call=True,  is_long=False),
-        OptionLeg(strike=470.0, premium=4.20, is_call=True,  is_long=True),
+        OptionLeg(strike=335.0, premium=4.65, is_call=False, is_long=True,  iv=0.45, delta=-0.15, gamma=0.01, vega=0.5, theta=0.1),
+        OptionLeg(strike=340.0, premium=5.51, is_call=False, is_long=False, iv=0.44, delta=-0.20, gamma=0.012, vega=0.55, theta=0.12),
+        OptionLeg(strike=465.0, premium=4.85, is_call=True,  is_long=False, iv=0.35, delta=0.18, gamma=0.011, vega=0.52, theta=0.11),
+        OptionLeg(strike=470.0, premium=4.20, is_call=True,  is_long=True,  iv=0.34, delta=0.14, gamma=0.009, vega=0.48, theta=0.09),
     ]
 
 
