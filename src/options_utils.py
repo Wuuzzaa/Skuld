@@ -119,7 +119,9 @@ def calculate_strategy_metrics(
     dividend_yield: float = DIVIDEND_YIELD,
     num_simulations: int = 5000,
     random_seed: int = RANDOM_SEED,
-    iv_correction: str = IV_CORRECTION_MODE
+    iv_correction: str = IV_CORRECTION_MODE,
+    iv_rank: Optional[float] = None,
+    iv_percentile: Optional[float] = None
 ) -> StrategyMetrics:
     """Calculates all metrics for a given strategy with arbitrary legs."""
     
@@ -133,7 +135,12 @@ def calculate_strategy_metrics(
             'take_profit_pct': leg.take_profit_pct,
             'stop_loss_pct': leg.stop_loss_pct,
             'dte_close': leg.dte_close,
-            'planned_dte': leg.planned_dte
+            'planned_dte': leg.planned_dte,
+            'delta': leg.delta,
+            'gamma': None, # not yet in OptionLeg dataclass in options_utils
+            'vega': None,
+            'theta': leg.theta,
+            'iv': leg.iv
         }
         for leg in legs
     ]
@@ -147,6 +154,25 @@ def calculate_strategy_metrics(
         for opt in options_sim
     )
     
+    # 1. Initialize Price Model if needed
+    from src.price_models import IVShockModel
+    price_model = None
+    
+    # If IV Rank is high, use IVShockModel to simulate Vola-Crush
+    # Tastytrade edge: high IV tends to contract (mean-revert)
+    if iv_rank is not None and iv_rank > 50:
+        # Simple heuristic: long-run IV is roughly 20% lower than current high IV
+        # or use a fixed baseline like 20% or 30% depending on the symbol
+        lr_iv = volatility * 0.8 
+        price_model = IVShockModel(
+            s0=current_price,
+            iv0=volatility,
+            lr_iv=lr_iv,
+            half_life_days=15.0, # Vola usually contracts over a few weeks
+            risk_free_rate=risk_free_rate,
+            dividend_yield=dividend_yield
+        )
+    
     # 1. Initialize Simulator and Calculate Expected Value & IV Correction
     simulator = UniversalOptionsMonteCarloSimulator(
         num_simulations=num_simulations,
@@ -156,7 +182,8 @@ def calculate_strategy_metrics(
         risk_free_rate=risk_free_rate,
         dividend_yield=dividend_yield,
         random_seed=random_seed,
-        iv_correction=iv_correction
+        iv_correction=iv_correction,
+        price_model=price_model
     )
 
     ev_managed = simulator.calculate_expected_value(options=options_sim)

@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -67,12 +67,18 @@ class OptionLeg:
     premium: float           # mid premium per share in USD (>= 0)
     is_call: bool
     is_long: bool
+    delta: Optional[float] = None
+    gamma: Optional[float] = None
+    vega: Optional[float] = None
+    theta: Optional[float] = None
+    iv: Optional[float] = None
 
     def __post_init__(self) -> None:
         if self.strike <= 0:
             raise ValueError(f"strike must be > 0, got {self.strike}")
         if self.premium < 0:
             raise ValueError(f"premium must be >= 0, got {self.premium}")
+
 
 
 @dataclass(frozen=True)
@@ -363,6 +369,7 @@ class MonteCarloSimulator:
             "premiums": np.array([l.premium for l in legs], dtype=float),
             "is_call":  np.array([l.is_call for l in legs], dtype=bool),
             "is_long":  np.array([l.is_long for l in legs], dtype=bool),
+            "ivs":      np.array([l.iv if l.iv is not None else np.nan for l in legs], dtype=float),
         }
 
     def _entry_cashflow(self, arr: Dict[str, np.ndarray]) -> float:
@@ -378,11 +385,12 @@ class MonteCarloSimulator:
 
     def _entry_bs_value(self, arr: Dict[str, np.ndarray]) -> float:
         """Strategy value-to-close at t=0 from BS, USD (no spread offset)."""
-        bs0 = self._black_scholes(
+        ivs = np.where(np.isnan(arr["ivs"]), self.volatility, arr["ivs"])
+        bs0 = self._black_scholes_path_sigma(
             S=np.array([self.current_price]),
             K=arr["strikes"],
             T=np.array([self.time_to_expiration]),
-            r=self.risk_free_rate, sigma=self.volatility,
+            r=self.risk_free_rate, sigma=ivs,
             is_call=arr["is_call"],
         ).ravel()
         # Value to CLOSE: short legs cost money to buy back (-), long legs return money (+)
@@ -485,15 +493,22 @@ class MonteCarloSimulator:
                 if sigma_paths is not None:
                     # path-/time-dependent sigma: vectorise BS over (n_active, L)
                     sig_active = sigma_paths[active, step]            # (n_active,)
+                    # Scale path sigma by the ratio of leg_iv to entry_volatility
+                    # to maintain the skew/smile relative to the moving spot sigma.
+                    leg_ivs = np.where(np.isnan(arr["ivs"]), self.volatility, arr["ivs"])
+                    skew_ratio = leg_ivs / self.volatility
+                    sig_grid = sig_active[:, None] * skew_ratio[None, :]
                     bs = self._black_scholes_path_sigma(
                         S_grid, K_grid, T_grid,
                         self.risk_free_rate,
-                        sig_active[:, None], isc_grid,
+                        sig_grid, isc_grid,
                     )
                 else:
-                    bs = self._black_scholes(
+                    # Constant GBM: use per-leg IV if available
+                    leg_ivs = np.where(np.isnan(arr["ivs"]), self.volatility, arr["ivs"])
+                    bs = self._black_scholes_path_sigma(
                         S_grid, K_grid, T_grid,
-                        self.risk_free_rate, self.volatility, isc_grid,
+                        self.risk_free_rate, leg_ivs[None, :], isc_grid,
                     )
                 strat_val = ((bs * signs[None, :]).sum(axis=1)
                              * CONTRACT_MULTIPLIER + spread_offset)
@@ -566,6 +581,21 @@ class MonteCarloSimulator:
             pnl, _, _ = self._terminal_pnl(legs)
         disc = np.exp(-self.risk_free_rate * self.time_to_expiration)
         return float(np.mean(pnl) * disc)
+
+    def calculate_expected_value_batch(
+        self, strategies: List[Union[Sequence[OptionLeg], List[Dict[str, Any]]]],
+        management: Optional[ManagementConfig] = None,
+    ) -> List[float]:
+        """Calculates expected value for multiple strategies efficiently."""
+        results = []
+        for s in strategies:
+            if isinstance(s[0], dict):
+                # Backwards compatibility for list of dicts
+                legs = self._legacy_options_to_legs(s) # type: ignore
+                results.append(self.calculate_expected_value(legs, management))
+            else:
+                results.append(self.calculate_expected_value(s, management)) # type: ignore
+        return results
 
     @log_function
     def calculate_greeks(
@@ -682,6 +712,40 @@ class MonteCarloSimulator:
             if not clustered or abs(x - clustered[-1]) > tol:
                 clustered.append(x)
         return clustered
+
+
+
+# --------------------------------------------------------------------------- #
+#  Backwards compatibility                                                    #
+# --------------------------------------------------------------------------- #
+class UniversalOptionsMonteCarloSimulator(MonteCarloSimulator):
+    """Backwards compatibility alias for MonteCarloSimulator."""
+
+    def calculate_expected_value(self, options: List[Dict[str, Any]], **kwargs) -> float:
+        """Legacy API for calculate_expected_value."""
+        legs = self._legacy_options_to_legs(options)
+        return super().calculate_expected_value(legs)
+
+    def calculate_greeks(self, options: List[Dict[str, Any]], **kwargs) -> Dict[str, float]:
+        """Legacy API for calculate_greeks."""
+        legs = self._legacy_options_to_legs(options)
+        return super().calculate_greeks(legs)
+
+    def _legacy_options_to_legs(self, options: List[Dict[str, Any]]) -> List[OptionLeg]:
+        legs = []
+        for opt in options:
+            legs.append(OptionLeg(
+                strike=float(opt['strike']),
+                premium=float(opt['premium']),
+                is_call=bool(opt['is_call']),
+                is_long=bool(opt['is_long']),
+                delta=opt.get('delta'),
+                gamma=opt.get('gamma'),
+                vega=opt.get('vega'),
+                theta=opt.get('theta'),
+                iv=opt.get('iv')
+            ))
+        return legs
 
 
 # --------------------------------------------------------------------------- #

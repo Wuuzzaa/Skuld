@@ -61,7 +61,9 @@ def _calculate_metrics_for_row(row: pd.Series, strategy_type: str = 'credit', iv
         dte=row['days_to_expiration'],
         volatility=row['sell_iv'],
         legs=legs,
-        iv_correction=iv_correction
+        iv_correction=iv_correction,
+        iv_rank=row.get('ivr'),
+        iv_percentile=row.get('ivp')
     )
     
     return pd.Series({
@@ -96,7 +98,7 @@ def _calculate_spread_metrics(df: pd.DataFrame, strategy_type: str = 'credit', i
     # Grouping by ticker (and other simulation parameters) to use batch simulation
     # Parameters for simulation: current_price (close), volatility (sell_iv), dte (days_to_expiration)
     # We round these slightly to increase grouping potential (e.g. if close varies by 0.01)
-    df['_sim_group'] = df.apply(lambda r: f"{r['symbol']}_{round(r['close'], 2)}_{round(r['sell_iv'], 3)}_{r['days_to_expiration']}", axis=1)
+    df['_sim_group'] = df.apply(lambda r: f"{r['symbol']}_{round(r['close'], 2)}_{round(r['sell_iv'], 3)}_{r['days_to_expiration']}_{round(r.get('ivr', 0), 1)}", axis=1)
     
     all_results = []
     
@@ -109,12 +111,26 @@ def _calculate_spread_metrics(df: pd.DataFrame, strategy_type: str = 'credit', i
         # If it's a large screening, we might want to reduce simulations
         n_sim = 5000 if len(group_df) < 20 else 2500
         
+        # IV Shock Model if IV Rank is high
+        from src.price_models import IVShockModel
+        price_model = None
+        iv_rank = first_row.get('ivr')
+        if iv_rank is not None and iv_rank > 50:
+            lr_iv = first_row['sell_iv'] * 0.8
+            price_model = IVShockModel(
+                s0=first_row['close'],
+                iv0=first_row['sell_iv'],
+                lr_iv=lr_iv,
+                half_life_days=15.0
+            )
+
         simulator = UniversalOptionsMonteCarloSimulator(
             current_price=first_row['close'],
             volatility=first_row['sell_iv'],
             dte=int(first_row['days_to_expiration']),
             num_simulations=n_sim,
-            iv_correction=iv_correction
+            iv_correction=iv_correction,
+            price_model=price_model
         )
         
         # Prepare strategies for batch
@@ -130,7 +146,10 @@ def _calculate_spread_metrics(df: pd.DataFrame, strategy_type: str = 'credit', i
                     'is_long': not is_credit,
                     'take_profit_pct': take_profit,
                     'stop_loss_pct': stop_loss,
-                    'dte_close': dte_close
+                    'dte_close': dte_close,
+                    'delta': row.get('sell_delta'),
+                    'iv': row.get('sell_iv'),
+                    'theta': row.get('sell_theta')
                 },
                 {
                     'strike': row['buy_strike'],
@@ -139,7 +158,10 @@ def _calculate_spread_metrics(df: pd.DataFrame, strategy_type: str = 'credit', i
                     'is_long': is_credit,
                     'take_profit_pct': take_profit,
                     'stop_loss_pct': stop_loss,
-                    'dte_close': dte_close
+                    'dte_close': dte_close,
+                    'delta': row.get('buy_delta'),
+                    'iv': row.get('buy_iv'),
+                    'theta': row.get('buy_theta')
                 }
             ]
             strategies.append(legs)
