@@ -113,3 +113,9 @@ export async function getMultifactorSwingtrading(params: Record<string, any>) {
   const { data } = await api.get('/multifactor-swingtrading/', { params });
   return data;
 }
+
+// RSL Momentum Rotation
+export async function getRslMomentum(params: Record<string, any>) {
+  const { data } = await api.get('/rsl-momentum/', { params });
+  return data;
+}

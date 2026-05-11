@@ -33,6 +33,7 @@ const navItems = [
   { href: '/sector-rotation', label: 'Sector Rotation', icon: PieChart, color: 'text-pink-400' },
   { href: '/expected-value', label: 'Expected Value', icon: Calculator, color: 'text-yellow-400' },
   { href: '/multifactor-swingtrading', label: 'Multifactor', icon: Zap, color: 'text-amber-400' },
+  { href: '/rsl-momentum', label: 'RSL Momentum', icon: BarChart3, color: 'text-green-400' },
   { href: '/symbols', label: 'Symbols', icon: Search, color: 'text-indigo-400' },
   { href: '/data-logs', label: 'Data Logs', icon: Database, color: 'text-gray-400' },
 ];
