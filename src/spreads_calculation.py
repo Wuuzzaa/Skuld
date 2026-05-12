@@ -9,39 +9,55 @@ from src.options_utils import (
     create_earnings_warning,
     format_strike,
     format_expiration_date,
-    calculate_expected_value
+    calculate_expected_value,
+    OptionLeg,
+    calculate_strategy_metrics
 )
 
 # Setup logging
 logger = logging.getLogger(os.path.basename(__file__))
 
-def _calculate_expected_value_for_symbol(row: pd.Series, strategy_type: str = 'credit', iv_correction: str = 'auto') -> Dict[str, Any]:
-    """Calculates the Expected Value and IV details for a single spread using Monte Carlo simulation."""
+def _calculate_metrics_for_row(row: pd.Series, strategy_type: str = 'credit', iv_correction: str = 'auto') -> pd.Series:
+    """Calculates all metrics for a single spread using the generic calculator."""
     is_credit = strategy_type == 'credit'
     
-    options = [
-        {
-            'strike': row['sell_strike'],
-            'premium': row['sell_last_option_price'],
-            'is_call': row['option_type'] == 'call',
-            'is_long': not is_credit  # In Debit Spread, the "sell" side from SQL is actually the bought one if we follow the naming
-        },
-        {
-            'strike': row['buy_strike'],
-            'premium': row['buy_last_option_price'],
-            'is_call': row['option_type'] == 'call',
-            'is_long': is_credit
-        }
+    legs = [
+        OptionLeg(
+            strike=row['sell_strike'],
+            premium=row['sell_last_option_price'],
+            is_call=row['option_type'] == 'call',
+            is_long=not is_credit,
+            theta=row.get('sell_theta')
+        ),
+        OptionLeg(
+            strike=row['buy_strike'],
+            premium=row['buy_last_option_price'],
+            is_call=row['option_type'] == 'call',
+            is_long=is_credit,
+            theta=row.get('buy_theta')
+        )
     ]
 
-    return calculate_expected_value(
+    metrics = calculate_strategy_metrics(
         current_price=row['close'],
         dte=row['days_to_expiration'],
         volatility=row['sell_iv'],
-        options=options,
-        iv_correction=iv_correction,
-        return_details=True
+        legs=legs,
+        iv_correction=iv_correction
     )
+    
+    return pd.Series({
+        "max_profit": metrics.max_profit,
+        "max_loss": metrics.max_loss,
+        "bpr": metrics.bpr,
+        "expected_value": metrics.expected_value,
+        "spread_theta": metrics.total_theta,
+        "profit_to_bpr": metrics.profit_to_bpr,
+        "APDI": metrics.apdi,
+        "APDI_EV": metrics.apdi_ev,
+        "iv_correction_factor": metrics.iv_correction_factor,
+        "corrected_volatility": metrics.corrected_volatility
+    })
 
 def _calculate_spread_metrics(df: pd.DataFrame, strategy_type: str = 'credit', iv_correction: str = 'auto') -> pd.DataFrame:
     """Calculates all relevant metrics for the spreads."""
@@ -51,59 +67,16 @@ def _calculate_spread_metrics(df: pd.DataFrame, strategy_type: str = 'credit', i
     # Spread Width
     df["spread_width"] = (df['sell_strike'] - df['buy_strike']).abs()
 
-    # Max Profit & Max Loss (BPR usually represents max loss for credit, but we clarify)
-    if strategy_type == 'credit':
-        # Credit Spread: Premium received
-        df["max_profit"] = MULTIPLIER * (df["sell_last_option_price"] - df["buy_last_option_price"])
-        # Buying Power Reduction (BPR) / Max Risk
-        df["bpr"] = df["spread_width"] * MULTIPLIER - df["max_profit"]
-    else:
-        # Debit Spread: Premium paid
-        # In Debit spreads, sell_strike is long and buy_strike is short
-        # Net Debit = Long Price - Short Price
-        df["max_loss"] = MULTIPLIER * (df["sell_last_option_price"] - df["buy_last_option_price"])
-        df["max_profit"] = (df["spread_width"] * MULTIPLIER) - df["max_loss"]
-        df["bpr"] = df["max_loss"]
-    
-    # Filter out negative profit spreads
-    df = df[df['max_profit'] > 0].copy()
-    if df.empty:
-        return df
-
-    # Filter out negative BPR spreads
-    df = df[df['bpr'] > 0].copy()
-    if df.empty:
-        return df
-
-    # Profit to BPR ratio
-    df["profit_to_bpr"] = df["max_profit"] / df["bpr"]
-
-    # Spread Theta
-    if strategy_type == 'credit':
-        df["spread_theta"] = df["sell_theta"].fillna(0) - df["buy_theta"].fillna(0)
-    else:
-        # In Debit spreads, sell_strike is the LONG leg (closer to money), buy_strike is SHORT leg (further)
-        # Total Theta = Theta(Long) + Theta(Short)
-        # Long Theta is negative (time decay hurts), Short Theta is positive (time decay helps)
-        # In our SQL: sell_theta is from the long leg, buy_theta is from the short leg.
-        # So it should be: sell_theta (negative) + (-buy_theta) ? 
-        # Actually, option greeks in data are usually signed (negative for puts/calls theta).
-        # Short position flips the sign of the greek.
-        # Long Theta = sell_theta
-        # Short Theta = -buy_theta
-        df["spread_theta"] = df["sell_theta"].fillna(0) - df["buy_theta"].fillna(0)
-
     # % Out-of-the-Money (OTM)
     df["%_otm"] = (df["sell_strike"] - df["close"]).abs() / df["close"] * 100
 
-    # Expected Value and IV Details
-    ev_results = df.apply(lambda r: _calculate_expected_value_for_symbol(r, strategy_type, iv_correction=iv_correction), axis=1)
-    df["expected_value"] = ev_results.apply(lambda x: x["expected_value"])
-    df["iv_correction_factor"] = ev_results.apply(lambda x: x["iv_correction_factor"])
+    # Calculate all generic metrics
+    metrics_df = df.apply(lambda r: _calculate_metrics_for_row(r, strategy_type, iv_correction=iv_correction), axis=1)
+    df = pd.concat([df, metrics_df], axis=1)
 
-    # APDI
-    df["APDI"] = df.apply(lambda r: calculate_apdi(r["max_profit"], r["days_to_expiration"], r["bpr"]), axis=1)
-    df["APDI_EV"] = df.apply(lambda r: calculate_apdi(r["expected_value"], r["days_to_expiration"], r["bpr"]), axis=1)
+    # Filter out invalid spreads
+    df = df[df['max_profit'] > 0].copy()
+    df = df[df['bpr'] > 0].copy()
 
     # Ensure Company name is handled correctly
     if 'Company' in df.columns:

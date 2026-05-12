@@ -53,7 +53,7 @@ def test_calc_spreads_credit(sample_credit_spread_data):
     assert row['spread_width'] == 5.0
     assert row['max_profit'] == 100.0 # (2.0 - 1.0) * 100
     assert row['bpr'] == 400.0 # 5.0 * 100 - 100
-    assert row['spread_theta'] == pytest.approx(-0.03) # sell_theta - buy_theta = -0.05 - (-0.02)
+    assert row['spread_theta'] == pytest.approx(0.03) # sell_theta (short) * -1 + buy_theta (long) * 1 = -(-0.05) + (-0.02) = 0.03
 
 def test_calc_spreads_debit(sample_debit_spread_data):
     result = calc_spreads(sample_debit_spread_data, strategy_type='debit')
@@ -64,9 +64,10 @@ def test_calc_spreads_debit(sample_debit_spread_data):
     assert row['max_loss'] == 300.0 # (5.0 - 2.0) * 100
     assert row['max_profit'] == 200.0 # 5.0 * 100 - 300
     assert row['bpr'] == 300.0
-    # Debit Theta: sell_theta (long) - buy_theta (short)
-    # sell_theta (at 150) is -0.08, buy_theta (at 155) is -0.05
-    # Spread Theta = -0.08 - (-0.05) = -0.03
+    # Debit Theta: 
+    # Long Leg (sell_strike 150): theta -0.08
+    # Short Leg (buy_strike 155): theta -0.05
+    # Strategy Theta = (1 * -0.08) + (-1 * -0.05) = -0.08 + 0.05 = -0.03
     assert row['spread_theta'] == pytest.approx(-0.03)
     
     # Expected Value check (rough logic check)
