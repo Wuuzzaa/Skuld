@@ -343,6 +343,32 @@ filtered_df['earnings_date'] = pd.to_datetime(filtered_df['earnings_date']).dt.s
 
 st.markdown(f"### {len(filtered_df)} Results")
 
+# Export All button - downloads all filtered spreads with full details as CSV
+if not filtered_df.empty:
+    export_columns = [
+        'symbol', 'Company', 'close', 'option_type',
+        'sell_strike', 'sell_last_option_price', 'sell_delta', 'sell_iv', 'sell_theta',
+        'sell_open_interest', 'sell_day_volume', 'sell_expected_move',
+        'buy_strike', 'buy_last_option_price', 'buy_delta', 'buy_iv', 'buy_theta',
+        'buy_open_interest', 'buy_day_volume', 'buy_expected_move',
+        'spread_width', 'max_profit', 'bpr', 'profit_to_bpr',
+        'expected_value', 'APDI', 'APDI_EV',
+        'iv_rank', 'iv_percentile', 'iv_correction_factor',
+        'spread_theta', '%_otm', 'days_to_expiration',
+        'earnings_date', 'earnings_warning',
+        'company_sector', 'company_industry', 'analyst_mean_target',
+    ]
+    # Only include columns that actually exist in the dataframe
+    available_cols = [c for c in export_columns if c in filtered_df.columns]
+    export_df = filtered_df[available_cols]
+    csv_data = export_df.to_csv(index=False)
+    st.download_button(
+        label=f"⬇️ Export All ({len(filtered_df)} trades) as CSV",
+        data=csv_data,
+        file_name=f"spreads_{option_type}_{spread_width}w_{expiration_date}.csv",
+        mime="text/csv",
+    )
+
 # Optionstrat URL configuration
 column_config = {
     "optionstrat_url": st.column_config.LinkColumn(
