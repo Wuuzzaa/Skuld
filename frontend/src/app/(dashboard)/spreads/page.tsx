@@ -8,10 +8,10 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DataTable, Column } from '@/components/ui/data-table';
 import { LoadingState } from '@/components/ui/spinner';
-import { formatCurrency, formatPercent, formatNumber } from '@/lib/utils';
+import { formatCurrency, formatPercent, formatNumber, exportToCSV } from '@/lib/utils';
 import {
   TrendingUp, TrendingDown, Filter, ExternalLink,
-  ChevronDown, X, BarChart3, Activity
+  ChevronDown, X, BarChart3, Activity, Download
 } from 'lucide-react';
 
 // Badge component for filter pills
@@ -214,6 +214,56 @@ export default function SpreadsPage() {
             className={showFilters ? 'text-primary' : 'text-muted-foreground'}
           >
             <Filter className="w-4 h-4 mr-1" /> Filters
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={!filteredSpreads.length}
+            onClick={() => {
+              const csvColumns = [
+                { key: 'symbol', label: 'symbol' },
+                { key: 'Company', label: 'Company' },
+                { key: 'close', label: 'close' },
+                { key: 'option_type', label: 'option_type' },
+                { key: 'sell_strike', label: 'sell_strike' },
+                { key: 'sell_last_option_price', label: 'sell_premium' },
+                { key: 'sell_delta', label: 'sell_delta' },
+                { key: 'sell_iv', label: 'sell_iv' },
+                { key: 'sell_theta', label: 'sell_theta' },
+                { key: 'sell_open_interest', label: 'sell_oi' },
+                { key: 'sell_day_volume', label: 'sell_volume' },
+                { key: 'buy_strike', label: 'buy_strike' },
+                { key: 'buy_last_option_price', label: 'buy_premium' },
+                { key: 'buy_delta', label: 'buy_delta' },
+                { key: 'buy_iv', label: 'buy_iv' },
+                { key: 'buy_theta', label: 'buy_theta' },
+                { key: 'buy_open_interest', label: 'buy_oi' },
+                { key: 'buy_day_volume', label: 'buy_volume' },
+                { key: 'spread_width', label: 'spread_width' },
+                { key: 'max_profit', label: 'max_profit' },
+                { key: 'bpr', label: 'bpr' },
+                { key: 'profit_to_bpr', label: 'profit_to_bpr' },
+                { key: 'expected_value', label: 'expected_value' },
+                { key: 'APDI', label: 'APDI' },
+                { key: 'APDI_EV', label: 'APDI_EV' },
+                { key: 'iv_rank', label: 'iv_rank' },
+                { key: 'iv_percentile', label: 'iv_percentile' },
+                { key: 'iv_correction_factor', label: 'iv_correction_factor' },
+                { key: 'spread_theta', label: 'spread_theta' },
+                { key: '%_otm', label: 'pct_otm' },
+                { key: 'days_to_expiration', label: 'days_to_expiration' },
+                { key: 'earnings_date', label: 'earnings_date' },
+                { key: 'earnings_warning', label: 'earnings_warning' },
+                { key: 'company_sector', label: 'sector' },
+                { key: 'company_industry', label: 'industry' },
+                { key: 'analyst_mean_target', label: 'analyst_target' },
+              ];
+              const date = new Date().toISOString().slice(0, 10);
+              exportToCSV(filteredSpreads, `spreads_${params.option_type}_${params.spread_width}w_${date}.csv`, csvColumns);
+            }}
+            className="text-muted-foreground"
+          >
+            <Download className="w-4 h-4 mr-1" /> Export
           </Button>
         </div>
       </div>
