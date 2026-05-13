@@ -8,10 +8,18 @@ from src.database import select_into_dataframe_pg
 WATCHLIST_FILE = "data/watchlist.xlsx"
 PERSONS = ["JL", "DD", "JP", "JI", "KK", "MO"]
 COLUMNS = [
-    "Symbol", "Unternehmen", "timestamp", "Person", "Bemerkung",
-    "Level Kaufkurs 1", "Level Kaufkurs 2", "Level Kaufkurs 3",
-    "Level Verkaufkurs 1", "Level Verkaufkurs 2", "Level Verkaufkurs 3",
-    "Aktueller Kurs"
+    "Symbol",
+    "Unternehmen",
+    "Aktueller Kurs",
+    "Person",
+    "Bemerkung",
+    "Level Kaufkurs 1",
+    "Level Kaufkurs 2",
+    "Level Kaufkurs 3",
+    "Level Verkaufkurs 1",
+    "Level Verkaufkurs 2",
+    "Level Verkaufkurs 3",
+    "timestamp",
 ]
 
 def load_watchlist():
@@ -40,12 +48,12 @@ def save_watchlist(df):
 def get_valid_symbols():
     try:
         # Versuche Symbole aus der Datenbank zu laden
-        df_symbols = select_into_dataframe_pg('select distinct symbol from "OptionDataMerged" ORDER BY symbol ASC')
+        df_symbols = select_into_dataframe_pg('select distinct symbol, live_stock_price, company_name from "OptionDataMerged" ORDER BY symbol ASC')
         if df_symbols is not None and not df_symbols.empty:
-            return df_symbols['symbol'].tolist()
+            return df_symbols
     except Exception as e:
         st.warning(f"Konnte Symbole nicht aus DB laden: {e}")
-    return []
+    return pd.DataFrame(columns=['symbol', 'live_stock_price', 'company_name'])
 
 def main():
     st.title("Watchlist")
@@ -54,20 +62,22 @@ def main():
     if 'watchlist_df' not in st.session_state:
         st.session_state.watchlist_df = load_watchlist()
     
-    valid_symbols = get_valid_symbols()
+    df_symbols = get_valid_symbols()
+    valid_symbols = df_symbols['symbol'].tolist() if not df_symbols.empty else []
 
     # Editor Setup
     column_config = {
         "Symbol": st.column_config.SelectboxColumn("Symbol", help="Aktien Ticker", required=True, options=valid_symbols),
+        "Unternehmen": st.column_config.TextColumn("Unternehmen", disabled=True),
         "Person": st.column_config.SelectboxColumn("Person", options=PERSONS),
         "timestamp": st.column_config.DatetimeColumn("Zeitstempel", disabled=True),
-        "Aktueller Kurs": st.column_config.NumberColumn("Aktueller Kurs", disabled=True),
-        "Level Kaufkurs 1": st.column_config.NumberColumn("Kauf 1", format="%.2f"),
-        "Level Kaufkurs 2": st.column_config.NumberColumn("Kauf 2", format="%.2f"),
-        "Level Kaufkurs 3": st.column_config.NumberColumn("Kauf 3", format="%.2f"),
-        "Level Verkaufkurs 1": st.column_config.NumberColumn("Verkauf 1", format="%.2f"),
-        "Level Verkaufkurs 2": st.column_config.NumberColumn("Verkauf 2", format="%.2f"),
-        "Level Verkaufkurs 3": st.column_config.NumberColumn("Verkauf 3", format="%.2f"),
+        "Aktueller Kurs": st.column_config.NumberColumn("Aktueller Kurs", format="%.2f $", disabled=True),
+        "Level Kaufkurs 1": st.column_config.NumberColumn("Kauf 1", format="%.2f $", min_value=0.0),
+        "Level Kaufkurs 2": st.column_config.NumberColumn("Kauf 2", format="%.2f $", min_value=0.0),
+        "Level Kaufkurs 3": st.column_config.NumberColumn("Kauf 3", format="%.2f $", min_value=0.0),
+        "Level Verkaufkurs 1": st.column_config.NumberColumn("Verkauf 1", format="%.2f $", min_value=0.0),
+        "Level Verkaufkurs 2": st.column_config.NumberColumn("Verkauf 2", format="%.2f $", min_value=0.0),
+        "Level Verkaufkurs 3": st.column_config.NumberColumn("Verkauf 3", format="%.2f $", min_value=0.0),
     }
 
     # Data Editor
@@ -84,10 +94,6 @@ def main():
                 for i in range(1, 4):
                     col_name = f'Level Kaufkurs {i}'
                     if not pd.isna(row[col_name]) and current_price <= row[col_name]:
-                        # Wir markieren das Symbol oder den aktuellen Kurs? 
-                        # Vorgabe: "die anzeige soll abhänig von der realtion... unterschiedlich formatiert werden"
-                        # Wir färben die ganze Zeile oder spezifische Zellen.
-                        # Hier färben wir die Hintergrundfarbe der Zeile.
                         return ['background-color: #d4edda'] * len(row) # Hellgrün
 
                 # Verkaufslevel (Rot wenn Kurs >= Level)
@@ -99,12 +105,74 @@ def main():
                 pass
             return styles
 
-        return df.style.apply(color_levels, axis=1)
+        # Währungsspalten definieren
+        currency_cols = ["Aktueller Kurs", "Level Kaufkurs 1", "Level Kaufkurs 2", "Level Kaufkurs 3", 
+                         "Level Verkaufkurs 1", "Level Verkaufkurs 2", "Level Verkaufkurs 3"]
+        
+        return df.style.apply(color_levels, axis=1).format({col: "{:.2f} $" for col in currency_cols}, na_rep="-")
 
     st.subheader("Aktuelle Watchlist")
     st.dataframe(style_watchlist(st.session_state.watchlist_df), width="stretch")
 
     st.subheader("Bearbeitungsmodus")
+    
+    # Automatischer Abgleich bei Symbolwahl (vor dem Rendern des Editors)
+    if "watchlist_editor" in st.session_state and not df_symbols.empty:
+        changes = st.session_state.watchlist_editor
+        symbol_map = df_symbols.set_index('symbol')
+        any_auto_update = False
+        
+        # Geänderte Zeilen prüfen
+        for row_idx_str, edited_cols in changes.get('edited_rows', {}).items():
+            if 'Symbol' in edited_cols:
+                new_symbol = edited_cols['Symbol']
+                if new_symbol in symbol_map.index:
+                    row_idx = int(row_idx_str)
+                    # Wir holen die Zeile aus dem aktuellen DF
+                    db_row = symbol_map.loc[new_symbol]
+                    
+                    # Wenn es sich um eine neu hinzugefügte Zeile handelt, die bereits im DF ist
+                    if row_idx < len(st.session_state.watchlist_df):
+                        st.session_state.watchlist_df.at[row_idx, 'Symbol'] = new_symbol
+                        st.session_state.watchlist_df.at[row_idx, 'Unternehmen'] = db_row['company_name']
+                        st.session_state.watchlist_df.at[row_idx, 'Aktueller Kurs'] = db_row['live_stock_price']
+                        # Den Editor State bereinigen für diese Spalte, damit kein Loop entsteht
+                        # aber wir machen eh ein rerun.
+                        any_auto_update = True
+        
+        # Neue Zeilen prüfen (added_rows)
+        # added_rows sind noch nicht im watchlist_df. 
+        # Wenn wir sie hier direkt ins watchlist_df einfügen, wird st.data_editor sie als existierende Zeilen anzeigen.
+        if changes.get('added_rows'):
+            new_rows = []
+            for row in changes['added_rows']:
+                if 'Symbol' in row:
+                    new_symbol = row['Symbol']
+                    if new_symbol in symbol_map.index:
+                        db_row = symbol_map.loc[new_symbol]
+                        new_entry = {col: None for col in COLUMNS}
+                        new_entry.update(row)
+                        new_entry['Unternehmen'] = db_row['company_name']
+                        new_entry['Aktueller Kurs'] = db_row['live_stock_price']
+                        new_entry['timestamp'] = datetime.datetime.now().replace(microsecond=0)
+                        new_rows.append(new_entry)
+                        any_auto_update = True
+            
+            if new_rows:
+                st.session_state.watchlist_df = pd.concat([
+                    st.session_state.watchlist_df, 
+                    pd.DataFrame(new_rows)
+                ], ignore_index=True)
+            
+            # Wichtig: Wenn wir added_rows manuell übernommen haben, müssen wir den editor state leeren
+            # oder zumindest wissen, dass wir sie verarbeitet haben.
+            if any_auto_update:
+                # Wir löschen die verarbeiteten added_rows aus dem Editor state
+                st.session_state.watchlist_editor['added_rows'] = []
+
+        if any_auto_update:
+            st.rerun()
+
     edited_df = st.data_editor(
         st.session_state.watchlist_df,
         column_config=column_config,
@@ -115,6 +183,31 @@ def main():
 
     # Logik für Änderungen (Timestamp & Validierung)
     if st.button("Änderungen speichern"):
+        # Validierung der Preis-Level
+        for idx, row in edited_df.iterrows():
+            k1 = row['Level Kaufkurs 1']
+            k2 = row['Level Kaufkurs 2']
+            k3 = row['Level Kaufkurs 3']
+            v1 = row['Level Verkaufkurs 1']
+            v2 = row['Level Verkaufkurs 2']
+            v3 = row['Level Verkaufkurs 3']
+
+            # Kauf 1 > Kauf 2 > Kauf 3
+            if pd.notna(k1) and pd.notna(k2) and not (k1 > k2):
+                st.error(f"Fehler in Zeile {idx + 1} ({row['Symbol']}): Kauf 1 ({k1}) muss größer als Kauf 2 ({k2}) sein.")
+                return
+            if pd.notna(k2) and pd.notna(k3) and not (k2 > k3):
+                st.error(f"Fehler in Zeile {idx + 1} ({row['Symbol']}): Kauf 2 ({k2}) muss größer als Kauf 3 ({k3}) sein.")
+                return
+
+            # Verkauf 1 < Verkauf 2 < Verkauf 3
+            if pd.notna(v1) and pd.notna(v2) and not (v1 < v2):
+                st.error(f"Fehler in Zeile {idx + 1} ({row['Symbol']}): Verkauf 1 ({v1}) muss kleiner als Verkauf 2 ({v2}) sein.")
+                return
+            if pd.notna(v2) and pd.notna(v3) and not (v2 < v3):
+                st.error(f"Fehler in Zeile {idx + 1} ({row['Symbol']}): Verkauf 2 ({v2}) muss kleiner als Verkauf 3 ({v3}) sein.")
+                return
+
         # Vergleiche edited_df mit st.session_state.watchlist_df
         # Um den Timestamp zu setzen, prüfen wir auf Änderungen
         
@@ -130,38 +223,8 @@ def main():
                 st.warning(f"Folgende Symbole sind nicht in der Datenbank: {', '.join(invalid)}")
 
         # Timestamp für geänderte/neue Zeilen setzen
-        # Da st.data_editor direkt das ganze DF zurückgibt, setzen wir den Timestamp für alles was sich "potenziell" geändert hat
-        # Einfachheitshalber setzen wir ihn jetzt für alle Zeilen, die im Editor vorhanden sind, 
-        # oder wir vergleichen zeilenweise.
-        
         now = datetime.datetime.now().replace(microsecond=0)
         
-        # Um nur geänderte Zeilen zu markieren, müssten wir den State tracken.
-        # Streamlit's data_editor gibt uns im State 'watchlist_editor' die 'edited_rows', 'added_rows', 'deleted_rows'.
-        
-        changes = st.session_state.watchlist_editor
-        has_changes = False
-        
-        if changes['edited_rows'] or changes['added_rows'] or changes['deleted_rows']:
-            has_changes = True
-            
-            # Neue Zeilen bekommen Timestamp
-            for row_idx in changes['edited_rows']:
-                edited_df.iloc[row_idx, edited_df.columns.get_loc('timestamp')] = now
-            
-            # Bei added_rows müssen wir aufpassen, da sie oft am Ende stehen
-            # Aber edited_df enthält sie bereits. Wir müssen herausfinden welche das sind.
-            # Ein einfacherer Weg: Wenn die Zeile in 'added_rows' ist.
-            # Da added_rows eine Liste von dicts ist, ist es schwerer die Indexe in edited_df zu finden.
-            
-            # Pragmatischer Ansatz: Wenn sich was geändert hat, speichern wir.
-            # Wir setzen den Timestamp für alle geänderten/neuen Zeilen.
-            for row in changes['added_rows']:
-                # Finde die neue Zeile im edited_df (meistens die letzten)
-                # Da st.data_editor die neuen Zeilen ans Ende hängt:
-                pass # Siehe unten
-
-        # Robusterer Ansatz für Timestamps in st.data_editor:
         # Wir vergleichen das ursprüngliche DF mit dem neuen.
         for idx in edited_df.index:
             if idx >= len(st.session_state.watchlist_df):
@@ -169,13 +232,28 @@ def main():
                 edited_df.loc[idx, 'timestamp'] = now
             else:
                 # Bestehende Zeile - vergleiche Inhalt (ohne timestamp)
-                original_row = st.session_state.watchlist_df.iloc[idx].drop('timestamp')
-                new_row = edited_df.loc[idx].drop('timestamp')
+                # Wir konvertieren zu Strings für den Vergleich, um Typ-Probleme zu vermeiden
+                original_row = st.session_state.watchlist_df.iloc[idx].drop('timestamp').fillna('').astype(str)
+                new_row = edited_df.loc[idx].drop('timestamp').fillna('').astype(str)
                 if not original_row.equals(new_row):
                     edited_df.loc[idx, 'timestamp'] = now
 
+        # Automatische Befüllung von Unternehmen und Kurs für neue/geänderte Symbole
+        if not df_symbols.empty:
+            symbol_map = df_symbols.set_index('symbol')
+            for idx, row in edited_df.iterrows():
+                symbol = row['Symbol']
+                if pd.notna(symbol) and symbol in symbol_map.index:
+                    db_row = symbol_map.loc[symbol]
+                    # Update falls leer oder abweichend
+                    if pd.isna(edited_df.at[idx, 'Unternehmen']) or edited_df.at[idx, 'Unternehmen'] == '':
+                        edited_df.at[idx, 'Unternehmen'] = db_row['company_name']
+                    if pd.isna(edited_df.at[idx, 'Aktueller Kurs']) or edited_df.at[idx, 'Aktueller Kurs'] == 0:
+                        edited_df.at[idx, 'Aktueller Kurs'] = db_row['live_stock_price']
+        
         st.session_state.watchlist_df = edited_df
         save_watchlist(edited_df)
+        st.rerun()
 
 if __name__ == "__main__":
     main()
