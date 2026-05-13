@@ -120,12 +120,11 @@ def main():
                     return styles
                 
                 # Farben für Kauflevel (Grün-Töne)
-                # Je niedriger der Kauf-Level (K1 > K2 > K3), desto "wichtiger" ist er bei fallendem Kurs.
-                # Aber eigentlich ist K3 der niedrigste Preis, also der "beste" Kaufkurs.
+                # Kontrast optimiert für Darkmode: Dunklere Hintergründe mit weißer Schrift
                 buy_colors = {
-                    'Level Kaufkurs 1': 'background-color: #d4edda', # Hellgrün
-                    'Level Kaufkurs 2': 'background-color: #c3e6cb', # Etwas dunkler
-                    'Level Kaufkurs 3': 'background-color: #28a745; color: white'  # Kräftiges Grün
+                    'Level Kaufkurs 1': 'background-color: #1e4620; color: white', # Dunkelgrün
+                    'Level Kaufkurs 2': 'background-color: #155724; color: white', # Mittleres Grün
+                    'Level Kaufkurs 3': 'background-color: #0b3d16; color: white'  # Sehr dunkles Grün
                 }
                 
                 # Prüfe Kauflevel (von 3 nach 1, um das "beste" Level zuerst zu finden)
@@ -140,11 +139,11 @@ def main():
                             continue
 
                 # Farben für Verkaufslevel (Rot-Töne)
-                # Je höher der Verkauf-Level (V1 < V2 < V3), desto "besser" der Verkaufspreis.
+                # Kontrast optimiert für Darkmode: Dunklere Hintergründe mit weißer Schrift
                 sell_colors = {
-                    'Level Verkaufkurs 1': 'background-color: #f8d7da', # Hellrot
-                    'Level Verkaufkurs 2': 'background-color: #f5c6cb', # Etwas dunkler
-                    'Level Verkaufkurs 3': 'background-color: #dc3545; color: white'  # Kräftiges Rot
+                    'Level Verkaufkurs 1': 'background-color: #5c1a1a; color: white', # Dunkelrot
+                    'Level Verkaufkurs 2': 'background-color: #721c24; color: white', # Mittleres Rot
+                    'Level Verkaufkurs 3': 'background-color: #4d0b0b; color: white'  # Sehr dunkles Rot
                 }
 
                 # Prüfe Verkaufslevel (von 3 nach 1)
