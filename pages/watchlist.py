@@ -44,6 +44,28 @@ def save_watchlist(df):
     except Exception as e:
         st.error(f"Fehler beim Speichern der Watchlist: {e}")
 
+def update_watchlist_prices(df_watchlist, df_market_data):
+    """Aktualisiert die Kurse und Unternehmensnamen in der Watchlist basierend auf den Marktdaten."""
+    if df_watchlist.empty or df_market_data.empty:
+        return df_watchlist, False
+    
+    # Erstelle Mapping für schnellen Zugriff
+    market_map = df_market_data.set_index('symbol')[['live_stock_price', 'company_name']].to_dict('index')
+    
+    updated = False
+    for idx, row in df_watchlist.iterrows():
+        symbol = row['Symbol']
+        if symbol in market_map:
+            new_price = market_map[symbol]['live_stock_price']
+            new_company = market_map[symbol]['company_name']
+            
+            if row['Aktueller Kurs'] != new_price or row['Unternehmen'] != new_company:
+                df_watchlist.at[idx, 'Aktueller Kurs'] = new_price
+                df_watchlist.at[idx, 'Unternehmen'] = new_company
+                updated = True
+                
+    return df_watchlist, updated
+
 @st.cache_data
 def get_valid_symbols():
     try:
@@ -64,6 +86,13 @@ def main():
     
     df_symbols = get_valid_symbols()
     valid_symbols = df_symbols['symbol'].tolist() if not df_symbols.empty else []
+
+    # Marktpreise beim Laden der Seite aktualisieren
+    if 'prices_updated' not in st.session_state:
+        updated_df, was_updated = update_watchlist_prices(st.session_state.watchlist_df, df_symbols)
+        if was_updated:
+            st.session_state.watchlist_df = updated_df
+        st.session_state.prices_updated = True
 
     # Editor Setup
     column_config = {
@@ -283,6 +312,39 @@ def main():
         st.session_state.watchlist_df = edited_df
         save_watchlist(edited_df)
         st.rerun()
+
+    # --- How-to-use Sektion ---
+    with st.expander("ℹ️ How to use - Anleitung"):
+        st.markdown("""
+        ### Bedienungsanleitung für die Watchlist
+
+        Diese Seite dient der Verwaltung und Überwachung deiner Aktientitel. Die Daten werden automatisch mit den aktuellen Marktpreisen aus der Datenbank abgeglichen.
+
+        #### 1. Symbole hinzufügen & bearbeiten
+        - Klicke im Editor unten auf die letzte Zeile, um ein **neues Symbol** hinzuzufügen.
+        - Das Feld **Symbol** bietet eine Suche für alle in der Datenbank verfügbaren Titel.
+        - Sobald ein Symbol ausgewählt wird, werden **Unternehmen** und **Aktueller Kurs** automatisch ergänzt.
+        - Die Spalte **Person** bietet ein Dropdown mit den Kürzeln (JL, DD, JP, JI, KK, MO).
+
+        #### 2. Preis-Levels setzen
+        Du kannst bis zu drei Kauf- und Verkaufslevels definieren:
+        - **Kauf-Levels:** Erwartung sinkender Kurse. Bedingung: `Kauf 1 > Kauf 2 > Kauf 3`.
+        - **Verkauf-Levels:** Erwartung steigender Kurse. Bedingung: `Verkauf 1 < Verkauf 2 < Verkauf 3`.
+        - Alle Werte müssen positive Zahlen sein.
+
+        #### 3. Automatische Formatierung (Farben)
+        Die obere Tabelle zeigt die Watchlist mit farblichen Hervorhebungen basierend auf dem aktuellen Marktkurs:
+        - 🟢 **Grün:** Der aktuelle Kurs hat ein **Kauf-Level** erreicht oder unterschritten (`Kurs <= Level`).
+        - 🔴 **Rot:** Der aktuelle Kurs hat ein **Verkauf-Level** erreicht oder überschritten (`Kurs >= Level`).
+        - Je höher die Level-Stufe (z.B. Kauf 3), desto intensiver die Farbe.
+
+        #### 4. Speichern
+        - Änderungen im Editor werden erst dauerhaft in der `watchlist.xlsx` gespeichert, wenn du auf den Button **'Änderungen speichern'** klickst.
+        - Dabei werden die Preis-Levels validiert und der **Zeitstempel** für geänderte Zeilen automatisch aktualisiert.
+
+        #### 5. Aktualisierung
+        - Beim Laden der Seite werden die Marktpreise automatisch aus der Datenbank aktualisiert.
+        """)
 
 if __name__ == "__main__":
     main()
