@@ -102,6 +102,12 @@ export async function getSymbolDetails(symbol: string) {
   return data;
 }
 
+// Universe
+export async function getUniverse() {
+  const { data } = await api.get('/universe/');
+  return data;
+}
+
 // Data Logs
 export async function getDataLogs() {
   const { data } = await api.get('/data-logs/');

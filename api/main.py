@@ -20,6 +20,7 @@ from api.routers import (
     data_logs,
     multifactor_swingtrading,
     rsl_momentum,
+    universe,
 )
 
 
@@ -59,6 +60,7 @@ app.include_router(symbols.router, prefix="/api/symbols", tags=["Symbols"])
 app.include_router(data_logs.router, prefix="/api/data-logs", tags=["Data Logs"])
 app.include_router(multifactor_swingtrading.router, prefix="/api/multifactor-swingtrading", tags=["Multifactor Swingtrading"])
 app.include_router(rsl_momentum.router, prefix="/api/rsl-momentum", tags=["RSL Momentum"])
+app.include_router(universe.router, prefix="/api/universe", tags=["Universe"])
 
 
 @app.get("/api/health")

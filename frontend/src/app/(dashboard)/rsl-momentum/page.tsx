@@ -8,7 +8,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { DataTable, Column } from '@/components/ui/data-table';
 import { LoadingState } from '@/components/ui/spinner';
 import { formatCurrency, formatNumber } from '@/lib/utils';
-import { X, ExternalLink } from 'lucide-react';
+import { X, ExternalLink, HelpCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export default function RslMomentumPage() {
@@ -19,6 +19,8 @@ export default function RslMomentumPage() {
   });
   const [selectedRow, setSelectedRow] = useState<any>(null);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [showGuide, setShowGuide] = useState(false);
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ['rsl-momentum', params],
@@ -93,6 +95,15 @@ export default function RslMomentumPage() {
           <h1 className="text-2xl font-bold">RSL Momentum Rotation</h1>
           {isFetching && <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />}
         </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setShowGuide(!showGuide)}
+          className={showGuide ? 'text-primary' : 'text-muted-foreground'}
+        >
+          <HelpCircle className="w-4 h-4 mr-1" />
+          Strategy Guide
+        </Button>
       </div>
 
       {/* Controls */}
@@ -175,6 +186,63 @@ export default function RslMomentumPage() {
         </div>
       )}
 
+      {/* Strategy Guide / FAQ */}
+      {showGuide && (
+        <Card className="border-primary/20 bg-card/80">
+          <CardContent className="pt-4 space-y-3">
+            <h3 className="text-sm font-semibold text-primary mb-2">Strategy Guide</h3>
+            {[
+              {
+                q: 'Was ist der RSL-Wert?',
+                a: 'RSL (Relative Strength Line) = Aktueller Kurs / 200-Tage-Durchschnitt (SMA200). Ein RSL von 1.5 bedeutet, die Aktie notiert 50% über ihrem 200-Tage-Durchschnitt. RSL > 1.0 = Aufwärtstrend, RSL < 1.0 = Abwärtstrend. Je höher der RSL, desto stärker das Momentum.',
+              },
+              {
+                q: 'Wie funktioniert die Rotation?',
+                a: 'Du hältst immer die Top-N Aktien mit dem höchsten RSL (aktuell Top 5). Wöchentlich prüfst du das Ranking. Fällt eine Position unter den Exit-Threshold (aktuell Top 50%), wird sie verkauft und durch den nächsten qualifizierenden Nachrücker ersetzt.',
+              },
+              {
+                q: 'Was bedeuten die Parameter?',
+                a: 'Top N = Anzahl Positionen im Portfolio (Standard: 5). Max/Sector = maximale Aktien aus demselben Sektor, verhindert Klumpenrisiko (Standard: 2). Exit below Top % = Ab welcher Percentile-Schwelle verkauft wird (Standard: 50% = untere Hälfte).',
+              },
+              {
+                q: 'Wann kaufen und verkaufen?',
+                a: 'HOLD = Position bleibt im Portfolio, sie ist noch im oberen Bereich des Rankings. EXIT = Position ist unter die Schwelle gefallen und muss verkauft werden. Neue Aktien werden nur gekauft, wenn ein Platz frei wird (durch EXIT) und der Nachrücker die Sektor-Regeln erfüllt.',
+              },
+              {
+                q: 'Wie oft rebalancen?',
+                a: 'Einmal pro Woche reicht (z.B. Freitag Abend oder Montag Morgen). Tägliches Checken erzeugt nur unnötige Trades. Die Strategie ist mechanisch — Signale werden ohne Diskussion umgesetzt, kein "Market Timing".',
+              },
+              {
+                q: 'Sektor-Diversifikation erklärt',
+                a: 'Die Max/Sector-Regel verhindert, dass alle Top-Picks aus einem einzigen Sektor kommen (z.B. nur Halbleiter). Der Algorithmus geht das Ranking von oben nach unten durch und überspringt Aktien, wenn ihr Sektor bereits das Maximum erreicht hat. So entsteht automatisch ein diversifiziertes Portfolio.',
+              },
+              {
+                q: 'Positionsgröße & Einstieg',
+                a: 'Gleichgewichtet: Jede Position bekommt den gleichen Anteil (bei Top 5 = je 20%). Beim Ersteinstieg alle Top-Picks gleichzeitig kaufen. Bei einem Broker mit niedrigen Gebühren (z.B. IBKR) sind die wöchentlichen Rotationen kostengünstig.',
+              },
+            ].map((item, i) => (
+              <div key={i} className="border border-border/30 rounded-lg overflow-hidden">
+                <button
+                  className="w-full flex items-center justify-between p-3 text-left hover:bg-muted/30 transition-colors"
+                  onClick={() => setOpenFaq(openFaq === i ? null : i)}
+                >
+                  <span className="text-sm font-medium">{item.q}</span>
+                  {openFaq === i
+                    ? <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
+                    : <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                  }
+                </button>
+                {openFaq === i && (
+                  <div className="px-3 pb-3 text-sm text-muted-foreground leading-relaxed">
+                    {item.a}
+                  </div>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Full Ranking Table */}
       {isLoading ? (
         <LoadingState message="Calculating RSL rankings..." />
@@ -213,27 +281,66 @@ export default function RslMomentumPage() {
               <div className="p-2 rounded bg-muted/30">
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Rank</p>
                 <p className="text-base font-bold">#{selectedRow.rank}</p>
+                <p className="text-[10px] text-muted-foreground italic mt-1">
+                  Position von {summary?.total_stocks || '~500'} S&P 500 Aktien
+                </p>
               </div>
               <div className="p-2 rounded bg-muted/30">
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground">RSL</p>
                 <p className={`text-base font-bold ${selectedRow.rsl >= 1.0 ? 'text-emerald-400' : 'text-red-400'}`}>
                   {formatNumber(selectedRow.rsl, 4)}
                 </p>
+                <p className="text-[10px] text-muted-foreground italic mt-1">
+                  Kurs / SMA200 —{' '}
+                  {selectedRow.rsl >= 1.5
+                    ? <span className="text-emerald-400 not-italic font-medium">Sehr starker Trend</span>
+                    : selectedRow.rsl >= 1.2
+                    ? <span className="text-emerald-400/80 not-italic font-medium">Starker Trend</span>
+                    : selectedRow.rsl >= 1.0
+                    ? <span className="text-foreground not-italic font-medium">Aufwärtstrend</span>
+                    : selectedRow.rsl >= 0.9
+                    ? <span className="text-amber-400 not-italic font-medium">Neutral/Schwach</span>
+                    : <span className="text-red-400 not-italic font-medium">Abwärtstrend</span>
+                  }
+                </p>
               </div>
               <div className="p-2 rounded bg-muted/30">
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Price</p>
                 <p className="text-base font-bold">{formatCurrency(selectedRow.price)}</p>
+                <p className="text-[10px] text-muted-foreground italic mt-1">
+                  Aktueller Kurs
+                </p>
               </div>
               <div className="p-2 rounded bg-muted/30">
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Percentile</p>
                 <p className="text-base font-bold">{formatNumber(selectedRow.percentile, 1)}%</p>
+                <p className="text-[10px] text-muted-foreground italic mt-1">
+                  {formatNumber(selectedRow.percentile, 0)}% aller Aktien sind schwächer
+                </p>
               </div>
               <div className="p-2 rounded bg-muted/30">
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Signal</p>
                 <p className={`text-base font-bold ${selectedRow.above_threshold ? 'text-emerald-400' : 'text-red-400'}`}>
                   {selectedRow.above_threshold ? 'HOLD' : 'EXIT'}
                 </p>
+                <p className="text-[10px] text-muted-foreground italic mt-1">
+                  {selectedRow.above_threshold
+                    ? `Über Schwelle (Top ${params.exit_percentile}%)`
+                    : `Unter Schwelle — verkaufen`
+                  }
+                </p>
               </div>
+            </div>
+            {/* Sector & Interpretation */}
+            <div className="flex items-center gap-4 px-1">
+              <span className="text-xs text-muted-foreground">
+                Sektor: <span className="text-foreground font-medium">{selectedRow.sector}</span>
+              </span>
+              {selectedRow.industry && (
+                <span className="text-xs text-muted-foreground">
+                  Industrie: <span className="text-foreground font-medium">{selectedRow.industry}</span>
+                </span>
+              )}
             </div>
             <div className="flex flex-wrap gap-2">
               {[
