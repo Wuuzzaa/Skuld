@@ -33,7 +33,7 @@ async def get_rsl_momentum(
     from src.sp500_constituents import SP500_SYMBOLS
     from src.rsl_momentum_strategy import calculate_rsl_momentum_ranking
 
-    df = query_sql_file("rsl_momentum.sql", params={"symbols": tuple(SP500_SYMBOLS)})
+    df = query_sql_file("rsl_momentum.sql", params={"symbols": list(SP500_SYMBOLS)})
 
     if df.empty:
         return {"ranking": [], "top_picks": [], "summary": {}}

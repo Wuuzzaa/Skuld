@@ -8,7 +8,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { DataTable, Column } from '@/components/ui/data-table';
 import { LoadingState } from '@/components/ui/spinner';
 import { formatCurrency, formatNumber } from '@/lib/utils';
-import { X, ExternalLink, HelpCircle, ChevronDown, ChevronRight } from 'lucide-react';
+import { X, ExternalLink, HelpCircle, ChevronDown, ChevronRight, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export default function RslMomentumPage() {
@@ -21,6 +21,7 @@ export default function RslMomentumPage() {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [showGuide, setShowGuide] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [showExplain, setShowExplain] = useState(false);
 
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ['rsl-momentum', params],
@@ -273,7 +274,7 @@ export default function RslMomentumPage() {
                   <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-400 font-medium">TOP PICK</span>
                 )}
               </div>
-              <Button variant="ghost" size="sm" onClick={() => { setSelectedRow(null); setSelectedIndex(null); }}>
+              <Button variant="ghost" size="sm" onClick={() => { setSelectedRow(null); setSelectedIndex(null); setShowExplain(false); }}>
                 <X className="w-4 h-4" />
               </Button>
             </div>
@@ -332,16 +333,88 @@ export default function RslMomentumPage() {
               </div>
             </div>
             {/* Sector & Interpretation */}
-            <div className="flex items-center gap-4 px-1">
-              <span className="text-xs text-muted-foreground">
-                Sektor: <span className="text-foreground font-medium">{selectedRow.sector}</span>
-              </span>
-              {selectedRow.industry && (
+            <div className="flex items-center justify-between px-1">
+              <div className="flex items-center gap-4">
                 <span className="text-xs text-muted-foreground">
-                  Industrie: <span className="text-foreground font-medium">{selectedRow.industry}</span>
+                  Sektor: <span className="text-foreground font-medium">{selectedRow.sector}</span>
                 </span>
-              )}
+                {selectedRow.industry && (
+                  <span className="text-xs text-muted-foreground">
+                    Industrie: <span className="text-foreground font-medium">{selectedRow.industry}</span>
+                  </span>
+                )}
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowExplain(!showExplain)}
+                className={showExplain ? 'text-primary' : 'text-muted-foreground'}
+              >
+                <Info className="w-3.5 h-3.5 mr-1" />
+                <span className="text-xs">Explain</span>
+              </Button>
             </div>
+            {/* Explain Section */}
+            {showExplain && (
+              <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 space-y-3 text-sm">
+                <h4 className="font-semibold text-primary text-xs uppercase tracking-wider">Berechnung & Datengrundlage</h4>
+                <div className="space-y-2 text-muted-foreground leading-relaxed">
+                  <div>
+                    <span className="text-foreground font-medium">RSL = {formatNumber(selectedRow.rsl, 4)}</span>
+                    <p className="text-xs mt-0.5">
+                      Berechnet als: Aktueller Kurs ({formatCurrency(selectedRow.price)}) / 200-Tage-Durchschnitt (SMA200).{' '}
+                      Der SMA200 liegt damit bei ca. {formatCurrency(selectedRow.price / selectedRow.rsl)}.{' '}
+                      {selectedRow.rsl >= 1.0
+                        ? `Die Aktie notiert ${formatNumber((selectedRow.rsl - 1) * 100, 1)}% über ihrem SMA200.`
+                        : `Die Aktie notiert ${formatNumber((1 - selectedRow.rsl) * 100, 1)}% unter ihrem SMA200.`
+                      }
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-foreground font-medium">Rank #{selectedRow.rank} von {summary?.total_stocks || '~500'}</span>
+                    <p className="text-xs mt-0.5">
+                      Alle S&P 500 Aktien werden nach RSL absteigend sortiert. Rang 1 = höchster RSL = stärkstes Momentum.
+                      {selectedRow.rank <= 10 && ' Diese Aktie gehört zu den Top 10 — extrem starkes relatives Momentum.'}
+                      {selectedRow.rank > 10 && selectedRow.rank <= 50 && ' Solide im oberen Zehntel des Rankings.'}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-foreground font-medium">Percentile = {formatNumber(selectedRow.percentile, 1)}%</span>
+                    <p className="text-xs mt-0.5">
+                      Formel: (Gesamtanzahl - Rang + 1) / Gesamtanzahl × 100.{' '}
+                      Bedeutet: {formatNumber(selectedRow.percentile, 0)}% aller S&P 500 Aktien haben einen niedrigeren RSL.
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-foreground font-medium">Signal: {selectedRow.above_threshold ? 'HOLD' : 'EXIT'}</span>
+                    <p className="text-xs mt-0.5">
+                      Exit-Schwelle ist auf Top {params.exit_percentile}% gesetzt (= Percentile muss {'>='} {100 - params.exit_percentile}% sein).{' '}
+                      Aktuelles Percentile: {formatNumber(selectedRow.percentile, 1)}% — {' '}
+                      {selectedRow.above_threshold
+                        ? 'liegt über der Schwelle, Position bleibt im Portfolio.'
+                        : 'liegt unter der Schwelle, Position sollte verkauft und durch Nachrücker ersetzt werden.'
+                      }
+                    </p>
+                  </div>
+                  {selectedRow.is_top_pick && (
+                    <div>
+                      <span className="text-emerald-400 font-medium">Top Pick</span>
+                      <p className="text-xs mt-0.5">
+                        Diese Aktie ist einer der Top {params.top_n} Picks unter Berücksichtigung der Sektor-Diversifikation
+                        (max {params.max_per_sector} pro Sektor). Der Algorithmus geht das Ranking von oben nach unten durch
+                        und wählt Aktien aus, deren Sektor das Limit noch nicht erreicht hat.
+                      </p>
+                    </div>
+                  )}
+                  <div className="pt-2 border-t border-border/30">
+                    <p className="text-[10px] text-muted-foreground">
+                      <span className="font-medium">Datenquelle:</span> Live-Kurse aus OptionDataMerged (Polygon.io), SMA200 aus TechnicalIndicatorsMasterData.
+                      Ranking wird alle 5 Minuten neu berechnet. Universum: S&P 500 Konstituenten ({summary?.total_stocks || '~500'} Aktien mit verfügbarem RSL).
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="flex flex-wrap gap-2">
               {[
                 { name: 'TradingView', url: `https://www.tradingview.com/chart/?symbol=${selectedRow.symbol}` },
