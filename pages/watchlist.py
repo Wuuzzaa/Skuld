@@ -71,13 +71,13 @@ def main():
         "Unternehmen": st.column_config.TextColumn("Unternehmen", disabled=True),
         "Person": st.column_config.SelectboxColumn("Person", options=PERSONS),
         "timestamp": st.column_config.DatetimeColumn("Zeitstempel", disabled=True),
-        "Aktueller Kurs": st.column_config.NumberColumn("Aktueller Kurs", format="%.2f $", disabled=True),
-        "Level Kaufkurs 1": st.column_config.NumberColumn("Kauf 1", format="%.2f $", min_value=0.0),
-        "Level Kaufkurs 2": st.column_config.NumberColumn("Kauf 2", format="%.2f $", min_value=0.0),
-        "Level Kaufkurs 3": st.column_config.NumberColumn("Kauf 3", format="%.2f $", min_value=0.0),
-        "Level Verkaufkurs 1": st.column_config.NumberColumn("Verkauf 1", format="%.2f $", min_value=0.0),
-        "Level Verkaufkurs 2": st.column_config.NumberColumn("Verkauf 2", format="%.2f $", min_value=0.0),
-        "Level Verkaufkurs 3": st.column_config.NumberColumn("Verkauf 3", format="%.2f $", min_value=0.0),
+        "Aktueller Kurs": st.column_config.NumberColumn("Aktueller Kurs", format="%.2f €", disabled=True),
+        "Level Kaufkurs 1": st.column_config.NumberColumn("Kauf 1", format="%.2f €", min_value=0.0),
+        "Level Kaufkurs 2": st.column_config.NumberColumn("Kauf 2", format="%.2f €", min_value=0.0),
+        "Level Kaufkurs 3": st.column_config.NumberColumn("Kauf 3", format="%.2f €", min_value=0.0),
+        "Level Verkaufkurs 1": st.column_config.NumberColumn("Verkauf 1", format="%.2f €", min_value=0.0),
+        "Level Verkaufkurs 2": st.column_config.NumberColumn("Verkauf 2", format="%.2f €", min_value=0.0),
+        "Level Verkaufkurs 3": st.column_config.NumberColumn("Verkauf 3", format="%.2f €", min_value=0.0),
     }
 
     # Data Editor
@@ -90,18 +90,47 @@ def main():
                 if pd.isna(current_price):
                     return styles
                 
-                # Kauflevel (Grün wenn Kurs <= Level)
-                for i in range(1, 4):
+                # Farben für Kauflevel (Grün-Töne)
+                # Je niedriger der Kauf-Level (K1 > K2 > K3), desto "wichtiger" ist er bei fallendem Kurs.
+                # Aber eigentlich ist K3 der niedrigste Preis, also der "beste" Kaufkurs.
+                buy_colors = {
+                    'Level Kaufkurs 1': 'background-color: #d4edda', # Hellgrün
+                    'Level Kaufkurs 2': 'background-color: #c3e6cb', # Etwas dunkler
+                    'Level Kaufkurs 3': 'background-color: #28a745; color: white'  # Kräftiges Grün
+                }
+                
+                # Prüfe Kauflevel (von 3 nach 1, um das "beste" Level zuerst zu finden)
+                for i in [3, 2, 1]:
                     col_name = f'Level Kaufkurs {i}'
-                    if not pd.isna(row[col_name]) and current_price <= row[col_name]:
-                        return ['background-color: #d4edda'] * len(row) # Hellgrün
+                    val = row[col_name]
+                    if not pd.isna(val):
+                        try:
+                            if float(current_price) <= float(val):
+                                return [buy_colors[col_name]] * len(row)
+                        except (ValueError, TypeError):
+                            continue
 
-                # Verkaufslevel (Rot wenn Kurs >= Level)
-                for i in range(1, 4):
+                # Farben für Verkaufslevel (Rot-Töne)
+                # Je höher der Verkauf-Level (V1 < V2 < V3), desto "besser" der Verkaufspreis.
+                sell_colors = {
+                    'Level Verkaufkurs 1': 'background-color: #f8d7da', # Hellrot
+                    'Level Verkaufkurs 2': 'background-color: #f5c6cb', # Etwas dunkler
+                    'Level Verkaufkurs 3': 'background-color: #dc3545; color: white'  # Kräftiges Rot
+                }
+
+                # Prüfe Verkaufslevel (von 3 nach 1)
+                for i in [3, 2, 1]:
                     col_name = f'Level Verkaufkurs {i}'
-                    if not pd.isna(row[col_name]) and current_price >= row[col_name]:
-                        return ['background-color: #f8d7da'] * len(row) # Hellrot
-            except:
+                    val = row[col_name]
+                    if not pd.isna(val):
+                        try:
+                            if float(current_price) >= float(val):
+                                return [sell_colors[col_name]] * len(row)
+                        except (ValueError, TypeError):
+                            continue
+            except Exception as e:
+                # Debug Info falls nötig
+                # print(f"Error in color_levels: {e}")
                 pass
             return styles
 
@@ -109,7 +138,7 @@ def main():
         currency_cols = ["Aktueller Kurs", "Level Kaufkurs 1", "Level Kaufkurs 2", "Level Kaufkurs 3", 
                          "Level Verkaufkurs 1", "Level Verkaufkurs 2", "Level Verkaufkurs 3"]
         
-        return df.style.apply(color_levels, axis=1).format({col: "{:.2f} $" for col in currency_cols}, na_rep="-")
+        return df.style.apply(color_levels, axis=1).format({col: "{:.2f} €" for col in currency_cols}, na_rep="-")
 
     st.subheader("Aktuelle Watchlist")
     st.dataframe(style_watchlist(st.session_state.watchlist_df), width="stretch")
