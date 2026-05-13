@@ -94,9 +94,9 @@ with st.expander("Configuration and Filters", expanded=True):
     # Action buttons
     btn_col1, btn_col2 = st.columns(2)
     with btn_col1:
-        st.button("Reset to Defaults", on_click=reset_to_defaults, use_container_width=True)
+        st.button("Reset to Defaults", on_click=reset_to_defaults, width="stretch")
     with btn_col2:
-        st.button("Clear All Filters (Show All)", on_click=clear_all_filters, use_container_width=True)
+        st.button("Clear All Filters (Show All)", on_click=clear_all_filters, width="stretch")
 
     # First row
     col1, col2, col3, col4 = st.columns(4)

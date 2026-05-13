@@ -158,7 +158,7 @@ if 'married_put_df' in st.session_state and not st.session_state['married_put_df
     # show final dataframe with row selection for documentation
     event = st.dataframe(
         display_df[available_columns],
-        use_container_width=True,
+        width="stretch",
         height=min(800, 40 + 35 * len(display_df)),
         selection_mode="single-row",
         on_select="rerun",

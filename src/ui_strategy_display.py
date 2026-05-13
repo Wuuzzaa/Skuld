@@ -75,15 +75,15 @@ def display_strategy_details(
     st.markdown("#### Links")
     link_col1, link_col2, link_col3, link_col4 = st.columns(4)
     with link_col1:
-        st.link_button("TradingView", f"https://www.tradingview.com/symbols/{symbol}/", use_container_width=True)
-        st.link_button("Chart", f"https://www.tradingview.com/chart/?symbol={symbol}", use_container_width=True)
+        st.link_button("TradingView", f"https://www.tradingview.com/symbols/{symbol}/", width="stretch")
+        st.link_button("Chart", f"https://www.tradingview.com/chart/?symbol={symbol}", width="stretch")
     with link_col2:
-        st.link_button("Finviz", f"https://finviz.com/quote.ashx?t={symbol}", use_container_width=True)
+        st.link_button("Finviz", f"https://finviz.com/quote.ashx?t={symbol}", width="stretch")
         if extra_info and 'optionstrat_url' in extra_info and extra_info['optionstrat_url']:
-            st.link_button("OptionStrat", extra_info['optionstrat_url'], use_container_width=True)
+            st.link_button("OptionStrat", extra_info['optionstrat_url'], width="stretch")
     with link_col3:
-        st.link_button("Seeking Alpha", f"https://seekingalpha.com/symbol/{symbol}", use_container_width=True)
+        st.link_button("Seeking Alpha", f"https://seekingalpha.com/symbol/{symbol}", width="stretch")
         if extra_info and 'Claude' in extra_info and extra_info['Claude']:
-            st.link_button("Claude AI Analysis", extra_info['Claude'], use_container_width=True)
+            st.link_button("Claude AI Analysis", extra_info['Claude'], width="stretch")
     with link_col4:
-        st.link_button("Yahoo Finance", f"https://finance.yahoo.com/quote/{symbol}", use_container_width=True)
+        st.link_button("Yahoo Finance", f"https://finance.yahoo.com/quote/{symbol}", width="stretch")

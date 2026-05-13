@@ -331,7 +331,7 @@ st.caption(
 )
 
 figure = build_rotation_figure(rotation_data, parameters)
-st.plotly_chart(figure, use_container_width=True)
+st.plotly_chart(figure, width="stretch")
 
 with st.expander("Audit-Trail: alle verwendeten Daten herunterladen", expanded=True):
     st.markdown(
@@ -393,10 +393,10 @@ with st.expander("Audit-Trail: alle verwendeten Daten herunterladen", expanded=T
     )
 
     with st.expander("Geladene Rohkurse", expanded=False):
-        st.dataframe(raw_input_data, use_container_width=True, hide_index=True)
+        st.dataframe(raw_input_data, width="stretch", hide_index=True)
 
     with st.expander("Historienabdeckung je Ticker", expanded=False):
-        st.dataframe(history_coverage_data, use_container_width=True, hide_index=True)
+        st.dataframe(history_coverage_data, width="stretch", hide_index=True)
 
     with st.expander("Verwendete SQL-Abfrage", expanded=False):
         st.code(sql_query, language="sql")
@@ -449,7 +449,7 @@ with st.expander("RS-Zeitreihen exportieren (zur Validierung)", expanded=False):
         - **rs_momentum < 100**: RS-Ratio faellt (relative Staerke nimmt ab) → untere Haelfte.
         """
     )
-    st.dataframe(export_data, use_container_width=True, hide_index=True)
+    st.dataframe(export_data, width="stretch", hide_index=True)
     st.download_button(
         label="CSV herunterladen",
         data=rotation_timeseries_csv,
@@ -483,7 +483,7 @@ display_snapshot["JdK RS-Ratio"] = display_snapshot["JdK RS-Ratio"].round(2)
 display_snapshot["JdK RS-Momentum"] = display_snapshot["JdK RS-Momentum"].round(2)
 display_snapshot["Historische Volatilitaet"] = (display_snapshot["Historische Volatilitaet"] * 100).round(2)
 
-st.dataframe(display_snapshot, use_container_width=True, hide_index=True)
+st.dataframe(display_snapshot, width="stretch", hide_index=True)
 
 st.markdown(
     """
