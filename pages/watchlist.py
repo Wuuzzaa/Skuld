@@ -3,12 +3,14 @@ import os
 import shutil
 import glob
 import streamlit as st
+import streamlit.components.v1 as components
 import datetime
 from src.database import select_into_dataframe_pg
 
 # Konfiguration
 WATCHLIST_FILE = "data/watchlist.xlsx"
 BACKUP_DIR = "data/backups"
+ANALYSES_DIR = "data/analyses"
 PERSONS = ["JL", "DD", "JP", "JI", "KK", "MO"]
 COLUMNS = [
     "Symbol",
@@ -48,6 +50,40 @@ def restore_backup(backup_path):
     """Stellt ein Backup wieder her. Erstellt vorher ein Sicherheits-Backup."""
     create_watchlist_backup()
     shutil.copy2(backup_path, WATCHLIST_FILE)
+
+
+def get_analysis_path(symbol):
+    """Gibt den Pfad zur Analyse-HTML-Datei für ein Symbol zurück."""
+    return os.path.join(ANALYSES_DIR, f"{symbol}.html")
+
+
+def has_analysis(symbol):
+    """Prüft ob eine Analyse für das Symbol vorhanden ist."""
+    return os.path.exists(get_analysis_path(symbol))
+
+
+def save_analysis(symbol, html_content):
+    """Speichert eine HTML-Analyse für ein Symbol."""
+    os.makedirs(ANALYSES_DIR, exist_ok=True)
+    path = get_analysis_path(symbol)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(html_content)
+
+
+def delete_analysis(symbol):
+    """Löscht die Analyse für ein Symbol."""
+    path = get_analysis_path(symbol)
+    if os.path.exists(path):
+        os.remove(path)
+
+
+def load_analysis(symbol):
+    """Lädt den HTML-Inhalt einer Analyse."""
+    path = get_analysis_path(symbol)
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read()
+    return None
 
 
 def load_watchlist():
@@ -375,6 +411,64 @@ def main():
                 st.rerun()
         else:
             st.info("Keine Backups vorhanden. Backups werden automatisch bei jedem Speichern erstellt.")
+
+    # --- Analysen Sektion ---
+    with st.expander("Analysen (HTML Upload & Anzeige)"):
+        # Symbole aus der aktuellen Watchlist
+        watchlist_symbols = st.session_state.watchlist_df["Symbol"].dropna().tolist()
+
+        if not watchlist_symbols:
+            st.info("Keine Symbole in der Watchlist. Füge zuerst Symbole hinzu.")
+        else:
+            # Upload
+            st.markdown("**Analyse hochladen**")
+            upload_col1, upload_col2 = st.columns([1, 2])
+            with upload_col1:
+                upload_symbol = st.selectbox("Symbol", watchlist_symbols, key="analysis_upload_symbol")
+            with upload_col2:
+                uploaded_file = st.file_uploader(
+                    "HTML-Datei auswählen",
+                    type=["html", "htm"],
+                    key="analysis_uploader",
+                )
+
+            if uploaded_file is not None and upload_symbol:
+                if st.button("Analyse speichern", key="save_analysis_btn"):
+                    html_content = uploaded_file.read().decode("utf-8")
+                    save_analysis(upload_symbol, html_content)
+                    st.success(f"Analyse für {upload_symbol} gespeichert!")
+                    st.rerun()
+
+            # Vorhandene Analysen anzeigen
+            st.divider()
+            st.markdown("**Vorhandene Analysen**")
+            symbols_with_analysis = [s for s in watchlist_symbols if has_analysis(s)]
+
+            if not symbols_with_analysis:
+                st.info("Noch keine Analysen hochgeladen.")
+            else:
+                for symbol in symbols_with_analysis:
+                    col_sym, col_view, col_del = st.columns([2, 1, 1])
+                    with col_sym:
+                        st.markdown(f"**{symbol}**")
+                    with col_view:
+                        if st.button("Anzeigen", key=f"view_{symbol}"):
+                            st.session_state[f"show_analysis_{symbol}"] = True
+                    with col_del:
+                        if st.button("Löschen", key=f"del_{symbol}"):
+                            delete_analysis(symbol)
+                            st.session_state.pop(f"show_analysis_{symbol}", None)
+                            st.success(f"Analyse für {symbol} gelöscht.")
+                            st.rerun()
+
+                    # Inline iframe Anzeige
+                    if st.session_state.get(f"show_analysis_{symbol}", False):
+                        html_content = load_analysis(symbol)
+                        if html_content:
+                            components.html(html_content, height=800, scrolling=True)
+                            if st.button("Schließen", key=f"close_{symbol}"):
+                                st.session_state[f"show_analysis_{symbol}"] = False
+                                st.rerun()
 
     # --- How-to-use Sektion ---
     with st.expander("ℹ️ How to use - Anleitung"):

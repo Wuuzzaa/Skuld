@@ -64,6 +64,7 @@ services:
       - SKULD_BRANCH=${SKULD_BRANCH:-}
     volumes:
       - ./logs:/app/Skuld/logs
+      - ./data:/app/Skuld/data
     restart: unless-stopped
     networks:
       - web
@@ -118,6 +119,7 @@ services:
       - SKULD_VERSION=${SKULD_VERSION:-}
     volumes:
       - ./logs:/app/Skuld/logs
+      - ./data:/app/Skuld/data
     restart: unless-stopped
     networks:
       - web
