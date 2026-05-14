@@ -301,8 +301,6 @@ def main():
         num_rows="dynamic",
         width="stretch",
         key="watchlist_editor",
-        selection_mode="single-row",
-        on_select="rerun",
     )
 
     # Logik für Änderungen (Timestamp & Validierung)
@@ -414,87 +412,63 @@ def main():
         else:
             st.info("Keine Backups vorhanden. Backups werden automatisch bei jedem Speichern erstellt.")
 
-    # --- Determine selected symbol from editor ---
+    # --- Determine selected symbol for analysis ---
+    watchlist_symbols = st.session_state.watchlist_df["Symbol"].dropna().tolist()
     selected_symbol = None
-    selection = edited_df.selection
-    if selection and selection.rows:
-        selected_row_idx = selection.rows[0]
-        if selected_row_idx < len(st.session_state.watchlist_df):
-            selected_symbol = st.session_state.watchlist_df.iloc[selected_row_idx]["Symbol"]
+    if watchlist_symbols:
+        selected_symbol = st.selectbox(
+            "Symbol für Analyse auswählen",
+            watchlist_symbols,
+            key="analysis_symbol_select",
+            help="Wähle ein Symbol um die Analyse unten anzuzeigen/hochzuladen",
+        )
 
     # --- Analysen Sektion ---
-    with st.expander("Analysen (HTML Upload & Anzeige)", expanded=selected_symbol is not None):
-        # Symbole aus der aktuellen Watchlist
-        watchlist_symbols = st.session_state.watchlist_df["Symbol"].dropna().tolist()
+    with st.expander("Analysen (HTML Upload & Anzeige)", expanded=selected_symbol is not None and has_analysis(selected_symbol)):
 
         if not watchlist_symbols:
             st.info("Keine Symbole in der Watchlist. Füge zuerst Symbole hinzu.")
         else:
-            # Determine default index for selectbox based on editor selection
-            default_idx = 0
-            if selected_symbol and selected_symbol in watchlist_symbols:
-                default_idx = watchlist_symbols.index(selected_symbol)
+            # Show analysis for selected symbol directly if available
+            if selected_symbol and has_analysis(selected_symbol):
+                st.markdown(f"**Analyse: {selected_symbol}**")
+                html_content = load_analysis(selected_symbol)
+                if html_content:
+                    components.html(html_content, height=800, scrolling=True)
+                st.divider()
 
             # Upload
             st.markdown("**Analyse hochladen**")
-            upload_col1, upload_col2 = st.columns([1, 2])
-            with upload_col1:
-                upload_symbol = st.selectbox(
-                    "Symbol", watchlist_symbols, index=default_idx, key="analysis_upload_symbol"
-                )
-            with upload_col2:
-                uploaded_file = st.file_uploader(
-                    "HTML-Datei auswählen",
-                    type=["html", "htm"],
-                    key="analysis_uploader",
-                )
+            uploaded_file = st.file_uploader(
+                f"HTML-Datei für **{selected_symbol}** auswählen",
+                type=["html", "htm"],
+                key="analysis_uploader",
+            )
 
-            if uploaded_file is not None and upload_symbol:
+            if uploaded_file is not None and selected_symbol:
                 if st.button("Analyse speichern", key="save_analysis_btn"):
                     html_content = uploaded_file.read().decode("utf-8")
-                    save_analysis(upload_symbol, html_content)
-                    st.success(f"Analyse für {upload_symbol} gespeichert!")
+                    save_analysis(selected_symbol, html_content)
+                    st.success(f"Analyse für {selected_symbol} gespeichert!")
                     st.rerun()
 
-            # Show analysis for selected symbol directly
-            active_symbol = selected_symbol if selected_symbol else upload_symbol
-            if active_symbol and has_analysis(active_symbol):
+            # Delete button
+            if selected_symbol and has_analysis(selected_symbol):
                 st.divider()
-                st.markdown(f"**Analyse: {active_symbol}**")
-                html_content = load_analysis(active_symbol)
-                if html_content:
-                    components.html(html_content, height=800, scrolling=True)
+                if st.button(f"Analyse für {selected_symbol} löschen", key="del_analysis_btn"):
+                    delete_analysis(selected_symbol)
+                    st.success(f"Analyse für {selected_symbol} gelöscht.")
+                    st.rerun()
 
-            # Vorhandene Analysen anzeigen
+            # List all symbols with analyses
             st.divider()
-            st.markdown("**Vorhandene Analysen**")
+            st.markdown("**Alle vorhandenen Analysen**")
             symbols_with_analysis = [s for s in watchlist_symbols if has_analysis(s)]
 
             if not symbols_with_analysis:
                 st.info("Noch keine Analysen hochgeladen.")
             else:
-                for symbol in symbols_with_analysis:
-                    col_sym, col_view, col_del = st.columns([2, 1, 1])
-                    with col_sym:
-                        st.markdown(f"**{symbol}**")
-                    with col_view:
-                        if st.button("Anzeigen", key=f"view_{symbol}"):
-                            st.session_state[f"show_analysis_{symbol}"] = True
-                    with col_del:
-                        if st.button("Löschen", key=f"del_{symbol}"):
-                            delete_analysis(symbol)
-                            st.session_state.pop(f"show_analysis_{symbol}", None)
-                            st.success(f"Analyse für {symbol} gelöscht.")
-                            st.rerun()
-
-                    # Inline iframe Anzeige
-                    if st.session_state.get(f"show_analysis_{symbol}", False):
-                        html_content = load_analysis(symbol)
-                        if html_content:
-                            components.html(html_content, height=800, scrolling=True)
-                            if st.button("Schließen", key=f"close_{symbol}"):
-                                st.session_state[f"show_analysis_{symbol}"] = False
-                                st.rerun()
+                st.markdown(", ".join([f"**{s}**" for s in symbols_with_analysis]))
 
     # --- How-to-use Sektion ---
     with st.expander("ℹ️ How to use - Anleitung"):
