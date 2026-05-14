@@ -300,7 +300,9 @@ def main():
         column_config=column_config,
         num_rows="dynamic",
         width="stretch",
-        key="watchlist_editor"
+        key="watchlist_editor",
+        selection_mode="single-row",
+        on_select="rerun",
     )
 
     # Logik für Änderungen (Timestamp & Validierung)
@@ -412,19 +414,34 @@ def main():
         else:
             st.info("Keine Backups vorhanden. Backups werden automatisch bei jedem Speichern erstellt.")
 
+    # --- Determine selected symbol from editor ---
+    selected_symbol = None
+    selection = edited_df.selection
+    if selection and selection.rows:
+        selected_row_idx = selection.rows[0]
+        if selected_row_idx < len(st.session_state.watchlist_df):
+            selected_symbol = st.session_state.watchlist_df.iloc[selected_row_idx]["Symbol"]
+
     # --- Analysen Sektion ---
-    with st.expander("Analysen (HTML Upload & Anzeige)"):
+    with st.expander("Analysen (HTML Upload & Anzeige)", expanded=selected_symbol is not None):
         # Symbole aus der aktuellen Watchlist
         watchlist_symbols = st.session_state.watchlist_df["Symbol"].dropna().tolist()
 
         if not watchlist_symbols:
             st.info("Keine Symbole in der Watchlist. Füge zuerst Symbole hinzu.")
         else:
+            # Determine default index for selectbox based on editor selection
+            default_idx = 0
+            if selected_symbol and selected_symbol in watchlist_symbols:
+                default_idx = watchlist_symbols.index(selected_symbol)
+
             # Upload
             st.markdown("**Analyse hochladen**")
             upload_col1, upload_col2 = st.columns([1, 2])
             with upload_col1:
-                upload_symbol = st.selectbox("Symbol", watchlist_symbols, key="analysis_upload_symbol")
+                upload_symbol = st.selectbox(
+                    "Symbol", watchlist_symbols, index=default_idx, key="analysis_upload_symbol"
+                )
             with upload_col2:
                 uploaded_file = st.file_uploader(
                     "HTML-Datei auswählen",
@@ -438,6 +455,15 @@ def main():
                     save_analysis(upload_symbol, html_content)
                     st.success(f"Analyse für {upload_symbol} gespeichert!")
                     st.rerun()
+
+            # Show analysis for selected symbol directly
+            active_symbol = selected_symbol if selected_symbol else upload_symbol
+            if active_symbol and has_analysis(active_symbol):
+                st.divider()
+                st.markdown(f"**Analyse: {active_symbol}**")
+                html_content = load_analysis(active_symbol)
+                if html_content:
+                    components.html(html_content, height=800, scrolling=True)
 
             # Vorhandene Analysen anzeigen
             st.divider()
