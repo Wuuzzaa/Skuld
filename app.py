@@ -33,6 +33,7 @@ marrieds = st.Page("pages/married_put_analysis.py", title="Married Puts")
 position_insurance = st.Page("pages/position_insurance_tool.py", title="Position Insurance Tool")
 multifactor_swingtrading = st.Page('pages/multifactor_swingtrading.py', title="Multifactor Swingtrading")
 sector_rotation = st.Page('pages/sector_rotation.py', title="Sector Rotation")
+rsl_momentum = st.Page('pages/rsl_momentum.py', title="RSL Momentum")
 expected_value = st.Page('pages/expected_value.py', title="Expected Value")
 data_logs = st.Page("pages/data_change_logs.py", title="Data Logs")
 iron_condors = st.Page("pages/iron_condors.py", title="Iron Condors")
@@ -49,6 +50,7 @@ page = st.navigation(
         position_insurance,
         multifactor_swingtrading,
         sector_rotation,
+        rsl_momentum,
         expected_value,
         data_logs,
         symbolpage
