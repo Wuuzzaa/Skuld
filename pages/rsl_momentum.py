@@ -5,14 +5,27 @@ from src.database import select_into_dataframe_pg
 from src.sp500_constituents import SP500_SYMBOLS
 from src.rsl_momentum_strategy import calculate_rsl_momentum_ranking
 
-SQL_FILE = "db/SQL/query/rsl_momentum.sql"
+RSL_QUERY = """
+SELECT DISTINCT
+    symbol,
+    company_name,
+    company_sector AS sector,
+    company_industry AS industry,
+    ROUND("RSL"::numeric, 4) AS rsl,
+    live_stock_price AS price
+FROM
+    "OptionDataMerged"
+WHERE
+    symbol = ANY(:symbols)
+    AND "RSL" IS NOT NULL
+"""
 
 
 @st.cache_data(ttl=300)
 def load_rsl_data():
     """Load RSL data for S&P 500 symbols from database."""
     df = select_into_dataframe_pg(
-        sql_file_path=SQL_FILE,
+        query=RSL_QUERY,
         params={"symbols": list(SP500_SYMBOLS)},
     )
     return df
