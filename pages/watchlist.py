@@ -1,11 +1,14 @@
 import pandas as pd
 import os
+import shutil
+import glob
 import streamlit as st
 import datetime
 from src.database import select_into_dataframe_pg
 
 # Konfiguration
 WATCHLIST_FILE = "data/watchlist.xlsx"
+BACKUP_DIR = "data/backups"
 PERSONS = ["JL", "DD", "JP", "JI", "KK", "MO"]
 COLUMNS = [
     "Symbol",
@@ -21,6 +24,31 @@ COLUMNS = [
     "Level Verkaufkurs 3",
     "timestamp",
 ]
+
+def create_watchlist_backup():
+    """Erstellt ein Backup der aktuellen Watchlist vor dem Speichern."""
+    if not os.path.exists(WATCHLIST_FILE):
+        return
+    os.makedirs(BACKUP_DIR, exist_ok=True)
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_path = os.path.join(BACKUP_DIR, f"watchlist_{timestamp}.xlsx")
+    shutil.copy2(WATCHLIST_FILE, backup_path)
+
+
+def list_backups():
+    """Gibt eine Liste aller Backups zurück, sortiert nach Datum (neueste zuerst)."""
+    if not os.path.exists(BACKUP_DIR):
+        return []
+    files = glob.glob(os.path.join(BACKUP_DIR, "watchlist_*.xlsx"))
+    files.sort(key=os.path.getmtime, reverse=True)
+    return files
+
+
+def restore_backup(backup_path):
+    """Stellt ein Backup wieder her. Erstellt vorher ein Sicherheits-Backup."""
+    create_watchlist_backup()
+    shutil.copy2(backup_path, WATCHLIST_FILE)
+
 
 def load_watchlist():
     if os.path.exists(WATCHLIST_FILE):
@@ -39,6 +67,7 @@ def load_watchlist():
 
 def save_watchlist(df):
     try:
+        create_watchlist_backup()
         df.to_excel(WATCHLIST_FILE, index=False)
         st.success("Watchlist erfolgreich gespeichert!")
     except Exception as e:
@@ -311,6 +340,41 @@ def main():
         st.session_state.watchlist_df = edited_df
         save_watchlist(edited_df)
         st.rerun()
+
+    # --- Backup & Restore Sektion ---
+    with st.expander("Backup & Restore"):
+        backups = list_backups()
+        if backups:
+            # Formatiere Backup-Namen für Anzeige
+            backup_labels = []
+            for b in backups:
+                filename = os.path.basename(b)
+                # watchlist_20260514_123456.xlsx -> 2026-05-14 12:34:56
+                ts_str = filename.replace("watchlist_", "").replace(".xlsx", "")
+                try:
+                    ts = datetime.datetime.strptime(ts_str, "%Y%m%d_%H%M%S")
+                    backup_labels.append(ts.strftime("%Y-%m-%d %H:%M:%S"))
+                except ValueError:
+                    backup_labels.append(filename)
+
+            selected_idx = st.selectbox(
+                "Verfügbare Backups (max. 3 Tage)",
+                range(len(backups)),
+                format_func=lambda i: backup_labels[i],
+                key="backup_select"
+            )
+
+            st.warning("Achtung: Die aktuelle Watchlist wird überschrieben! "
+                       "Ein Sicherheits-Backup wird automatisch erstellt.")
+
+            if st.button("Backup wiederherstellen"):
+                restore_backup(backups[selected_idx])
+                st.session_state.watchlist_df = load_watchlist()
+                st.session_state.pop('prices_updated', None)
+                st.success(f"Backup von {backup_labels[selected_idx]} wiederhergestellt!")
+                st.rerun()
+        else:
+            st.info("Keine Backups vorhanden. Backups werden automatisch bei jedem Speichern erstellt.")
 
     # --- How-to-use Sektion ---
     with st.expander("ℹ️ How to use - Anleitung"):
