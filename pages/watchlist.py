@@ -59,7 +59,7 @@ def _get_sector_prompt(sector, symbol):
 def _create_claude_prompt(row):
     symbol = row['Symbol']
     # Sektor wird später beim Laden der Daten hinzugefügt
-    sector = row.get('sector')
+    sector = row.get('Sektor')
     
     # Versuche sektorspezifischen Prompt
     sector_prompt = _get_sector_prompt(sector, symbol)
@@ -184,12 +184,12 @@ def update_watchlist_prices(df_watchlist, df_market_data):
 def get_valid_symbols():
     try:
         # Versuche Symbole und Sektor aus der Datenbank zu laden
-        df_symbols = select_into_dataframe_pg('select distinct symbol, live_stock_price, company_name, company_sector as sector from "OptionDataMerged" ORDER BY symbol ASC')
+        df_symbols = select_into_dataframe_pg('select distinct symbol, live_stock_price, company_name, company_sector as "Sektor" from "OptionDataMerged" ORDER BY symbol ASC')
         if df_symbols is not None and not df_symbols.empty:
             return df_symbols
     except Exception as e:
         st.warning(f"Konnte Symbole nicht aus DB laden: {e}")
-    return pd.DataFrame(columns=['symbol', 'live_stock_price', 'company_name', 'sector'])
+    return pd.DataFrame(columns=['symbol', 'live_stock_price', 'company_name', 'Sektor'])
 
 def main():
     st.title("Watchlist")
@@ -210,13 +210,22 @@ def main():
 
     # Sektor-Informationen zum Watchlist-DF hinzufügen für die Prompt-Generierung
     if not df_symbols.empty:
-        sector_map = df_symbols.set_index('symbol')['sector'].to_dict()
-        st.session_state.watchlist_df['sector'] = st.session_state.watchlist_df['Symbol'].map(sector_map)
+        sector_map = df_symbols.set_index('symbol')['Sektor'].to_dict()
+        st.session_state.watchlist_df['Sektor'] = st.session_state.watchlist_df['Symbol'].map(sector_map)
+        
+        # Spaltenreihenfolge anpassen: Sektor nach Unternehmen
+        cols = list(st.session_state.watchlist_df.columns)
+        if 'Sektor' in cols and 'Unternehmen' in cols:
+            cols.remove('Sektor')
+            idx = cols.index('Unternehmen') + 1
+            cols.insert(idx, 'Sektor')
+            st.session_state.watchlist_df = st.session_state.watchlist_df[cols]
 
     # Editor Setup
     column_config = {
         "Symbol": st.column_config.SelectboxColumn("Symbol", help="Aktien Ticker", required=True, options=valid_symbols),
         "Unternehmen": st.column_config.TextColumn("Unternehmen", disabled=True),
+        "Sektor": st.column_config.TextColumn("Sektor", disabled=True),
         "Person": st.column_config.SelectboxColumn("Person", options=PERSONS),
         "timestamp": st.column_config.DatetimeColumn("Zeitstempel", disabled=True),
         "Aktueller Kurs": st.column_config.NumberColumn("Aktueller Kurs", format="%.2f €", disabled=True),
@@ -290,9 +299,8 @@ def main():
     st.subheader("Aktuelle Watchlist")
     display_df = st.session_state.watchlist_df.copy()
     
-    # Spalten für die Anzeige filtern (Sektor nicht anzeigen)
-    display_cols = [c for c in display_df.columns if c != 'sector']
-    st.dataframe(style_watchlist(display_df[display_cols]), width="stretch")
+    # Spalten für die Anzeige (Sektor anzeigen)
+    st.dataframe(style_watchlist(display_df), width="stretch")
 
     # Claude KI Analyse Bereich
     if not st.session_state.watchlist_df.empty:
@@ -351,7 +359,7 @@ def main():
     st.subheader("Bearbeitungsmodus")
 
     edited_df = st.data_editor(
-        st.session_state.watchlist_df[[c for c in st.session_state.watchlist_df.columns if c != 'sector']],
+        st.session_state.watchlist_df,
         column_config=column_config,
         num_rows="dynamic",
         width="stretch",
@@ -408,7 +416,7 @@ def main():
         
         # Wir vergleichen das ursprüngliche DF mit dem neuen.
         # Sektor aus ursprünglichem DF entfernen für Vergleich
-        original_df_cmp = st.session_state.watchlist_df[[c for c in st.session_state.watchlist_df.columns if c != 'sector']]
+        original_df_cmp = st.session_state.watchlist_df[[c for c in st.session_state.watchlist_df.columns if c != 'Sektor']]
         for idx in edited_df.index:
             if idx >= len(original_df_cmp):
                 # Neue Zeile
@@ -436,11 +444,11 @@ def main():
         
         st.session_state.watchlist_df = edited_df
         # Falls Sektor-Spalte fehlte (z.B. nach Save), wieder hinzufügen
-        if 'sector' not in st.session_state.watchlist_df.columns and not df_symbols.empty:
-            sector_map = df_symbols.set_index('symbol')['sector'].to_dict()
-            st.session_state.watchlist_df['sector'] = st.session_state.watchlist_df['Symbol'].map(sector_map)
+        if 'Sektor' not in st.session_state.watchlist_df.columns and not df_symbols.empty:
+            sector_map = df_symbols.set_index('symbol')['Sektor'].to_dict()
+            st.session_state.watchlist_df['Sektor'] = st.session_state.watchlist_df['Symbol'].map(sector_map)
 
-        if save_watchlist(edited_df[[c for c in edited_df.columns if c != 'sector']]):
+        if save_watchlist(edited_df[[c for c in edited_df.columns if c != 'Sektor']]):
             st.session_state.pop('prices_updated', None)  # Force price refresh on next load
             st.rerun()
         else:
