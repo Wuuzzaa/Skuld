@@ -5,6 +5,7 @@ import glob
 import streamlit as st
 import streamlit.components.v1 as components
 import datetime
+import urllib.parse
 from src.database import select_into_dataframe_pg
 
 # Konfiguration
@@ -40,6 +41,33 @@ SECTOR_TO_PROMPT_DICT = {
     "Technology": "src/prompts/prompt_information_technology.txt",
     "Utilities": "src/prompts/prompt_utilities.txt",
 }
+
+def _get_sector_prompt(sector, symbol):
+    """Lädt den sektorspezifischen Prompt und ersetzt [ZZZ] durch das Symbol."""
+    if not sector or sector not in SECTOR_TO_PROMPT_DICT:
+        return None
+    filepath = SECTOR_TO_PROMPT_DICT[sector]
+    try:
+        if os.path.exists(filepath):
+            with open(filepath, "r", encoding="utf-8") as f:
+                prompt = f.read()
+            return prompt.replace("[ZZZ]", symbol)
+    except Exception:
+        pass
+    return None
+
+def _create_claude_prompt(row):
+    symbol = row['Symbol']
+    # Sektor wird später beim Laden der Daten hinzugefügt
+    sector = row.get('sector')
+    
+    # Versuche sektorspezifischen Prompt
+    sector_prompt = _get_sector_prompt(sector, symbol)
+    if sector_prompt:
+        encoded_prompt = urllib.parse.quote(sector_prompt.strip())
+        return f'https://claude.ai/new?q={encoded_prompt}'
+
+    return f"Fehler: Sektor '{sector}' nicht unterstützt"
 
 def create_watchlist_backup():
     """Erstellt ein Backup der aktuellen Watchlist vor dem Speichern."""
@@ -155,13 +183,13 @@ def update_watchlist_prices(df_watchlist, df_market_data):
 @st.cache_data
 def get_valid_symbols():
     try:
-        # Versuche Symbole aus der Datenbank zu laden
-        df_symbols = select_into_dataframe_pg('select distinct symbol, live_stock_price, company_name from "OptionDataMerged" ORDER BY symbol ASC')
+        # Versuche Symbole und Sektor aus der Datenbank zu laden
+        df_symbols = select_into_dataframe_pg('select distinct symbol, live_stock_price, company_name, company_sector as sector from "OptionDataMerged" ORDER BY symbol ASC')
         if df_symbols is not None and not df_symbols.empty:
             return df_symbols
     except Exception as e:
         st.warning(f"Konnte Symbole nicht aus DB laden: {e}")
-    return pd.DataFrame(columns=['symbol', 'live_stock_price', 'company_name'])
+    return pd.DataFrame(columns=['symbol', 'live_stock_price', 'company_name', 'sector'])
 
 def main():
     st.title("Watchlist")
@@ -179,6 +207,11 @@ def main():
         if was_updated:
             st.session_state.watchlist_df = updated_df
         st.session_state.prices_updated = True
+
+    # Sektor-Informationen zum Watchlist-DF hinzufügen für die Prompt-Generierung
+    if not df_symbols.empty:
+        sector_map = df_symbols.set_index('symbol')['sector'].to_dict()
+        st.session_state.watchlist_df['sector'] = st.session_state.watchlist_df['Symbol'].map(sector_map)
 
     # Editor Setup
     column_config = {
@@ -255,12 +288,70 @@ def main():
         return df.style.apply(color_levels, axis=1).format({col: "{:.2f} €" for col in currency_cols}, na_rep="-")
 
     st.subheader("Aktuelle Watchlist")
-    st.dataframe(style_watchlist(st.session_state.watchlist_df), width="stretch")
+    display_df = st.session_state.watchlist_df.copy()
+    
+    # Spalten für die Anzeige filtern (Sektor nicht anzeigen)
+    display_cols = [c for c in display_df.columns if c != 'sector']
+    st.dataframe(style_watchlist(display_df[display_cols]), width="stretch")
+
+    # Claude KI Analyse Bereich
+    if not st.session_state.watchlist_df.empty:
+        watchlist_symbols = st.session_state.watchlist_df['Symbol'].dropna().unique().tolist()
+        if watchlist_symbols:
+            st.subheader("Claude KI Analyse & Berichte")
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                selected_symbol = st.selectbox("Symbol für Analyse auswählen", options=watchlist_symbols, key="analysis_symbol_select")
+            
+            if selected_symbol:
+                # Hole die Zeile für das ausgewählte Symbol
+                symbol_row = st.session_state.watchlist_df[st.session_state.watchlist_df['Symbol'] == selected_symbol].iloc[0]
+                claude_url = _create_claude_prompt(symbol_row)
+                
+                with col2:
+                    st.write("") # Padding
+                    st.write("") # Padding
+                    if "Fehler" in claude_url:
+                        st.error(claude_url)
+                    else:
+                        st.link_button("Analyse in Claude öffnen", claude_url, use_container_width=True)
+                
+                # Integration der vorhandenen Analysen (HTML)
+                if has_analysis(selected_symbol):
+                    with st.expander(f"Vorhandenen Bericht für {selected_symbol} anzeigen", expanded=True):
+                        html_content = load_analysis(selected_symbol)
+                        if html_content:
+                            components.html(html_content, height=800, scrolling=True)
+                        
+                        if st.button(f"Bericht für {selected_symbol} löschen", key="del_analysis_btn"):
+                            delete_analysis(selected_symbol)
+                            st.success(f"Bericht für {selected_symbol} gelöscht.")
+                            st.rerun()
+                
+                # Upload Bereich innerhalb des Symbols
+                with st.expander("Neuen Bericht (HTML) hochladen"):
+                    uploaded_file = st.file_uploader(
+                        f"HTML-Datei für **{selected_symbol}** auswählen",
+                        type=["html", "htm"],
+                        key="analysis_uploader",
+                    )
+                    if uploaded_file is not None:
+                        if st.button("Bericht speichern", key="save_analysis_btn"):
+                            html_content = uploaded_file.read().decode("utf-8")
+                            save_analysis(selected_symbol, html_content)
+                            st.success(f"Bericht für {selected_symbol} gespeichert!")
+                            st.rerun()
+        else:
+            st.subheader("Claude KI Analyse")
+            st.info("Keine Symbole in der Watchlist für Analyse verfügbar.")
+    else:
+        st.subheader("Claude KI Analyse")
+        st.info("Watchlist ist leer.")
 
     st.subheader("Bearbeitungsmodus")
 
     edited_df = st.data_editor(
-        st.session_state.watchlist_df,
+        st.session_state.watchlist_df[[c for c in st.session_state.watchlist_df.columns if c != 'sector']],
         column_config=column_config,
         num_rows="dynamic",
         width="stretch",
@@ -316,15 +407,17 @@ def main():
         now = datetime.datetime.now().replace(microsecond=0)
         
         # Wir vergleichen das ursprüngliche DF mit dem neuen.
+        # Sektor aus ursprünglichem DF entfernen für Vergleich
+        original_df_cmp = st.session_state.watchlist_df[[c for c in st.session_state.watchlist_df.columns if c != 'sector']]
         for idx in edited_df.index:
-            if idx >= len(st.session_state.watchlist_df):
+            if idx >= len(original_df_cmp):
                 # Neue Zeile
                 edited_df.loc[idx, 'timestamp'] = now
             else:
                 # Bestehende Zeile - vergleiche Inhalt (ohne timestamp)
                 # Wir konvertieren zu Strings für den Vergleich, um Typ-Probleme zu vermeiden
-                original_row = st.session_state.watchlist_df.iloc[idx].drop('timestamp').fillna('').astype(str)
-                new_row = edited_df.loc[idx].drop('timestamp').fillna('').astype(str)
+                original_row = original_df_cmp.iloc[idx].drop('timestamp', errors='ignore').fillna('').astype(str)
+                new_row = edited_df.loc[idx].drop('timestamp', errors='ignore').fillna('').astype(str)
                 if not original_row.equals(new_row):
                     edited_df.loc[idx, 'timestamp'] = now
 
@@ -342,7 +435,12 @@ def main():
                         edited_df.at[idx, 'Aktueller Kurs'] = db_row['live_stock_price']
         
         st.session_state.watchlist_df = edited_df
-        if save_watchlist(edited_df):
+        # Falls Sektor-Spalte fehlte (z.B. nach Save), wieder hinzufügen
+        if 'sector' not in st.session_state.watchlist_df.columns and not df_symbols.empty:
+            sector_map = df_symbols.set_index('symbol')['sector'].to_dict()
+            st.session_state.watchlist_df['sector'] = st.session_state.watchlist_df['Symbol'].map(sector_map)
+
+        if save_watchlist(edited_df[[c for c in edited_df.columns if c != 'sector']]):
             st.session_state.pop('prices_updated', None)  # Force price refresh on next load
             st.rerun()
         else:
@@ -432,63 +530,6 @@ def main():
         else:
             st.info("Keine Backups vorhanden. Backups werden automatisch bei jedem Speichern erstellt.")
 
-    # --- Determine selected symbol for analysis ---
-    watchlist_symbols = st.session_state.watchlist_df["Symbol"].dropna().tolist()
-    selected_symbol = None
-    if watchlist_symbols:
-        selected_symbol = st.selectbox(
-            "Symbol für Analyse auswählen",
-            watchlist_symbols,
-            key="analysis_symbol_select",
-            help="Wähle ein Symbol um die Analyse unten anzuzeigen/hochzuladen",
-        )
-
-    # --- Analysen Sektion ---
-    with st.expander("Analysen (HTML Upload & Anzeige)", expanded=selected_symbol is not None and has_analysis(selected_symbol)):
-
-        if not watchlist_symbols:
-            st.info("Keine Symbole in der Watchlist. Füge zuerst Symbole hinzu.")
-        else:
-            # Show analysis for selected symbol directly if available
-            if selected_symbol and has_analysis(selected_symbol):
-                st.markdown(f"**Analyse: {selected_symbol}**")
-                html_content = load_analysis(selected_symbol)
-                if html_content:
-                    components.html(html_content, height=800, scrolling=True)
-                st.divider()
-
-            # Upload
-            st.markdown("**Analyse hochladen**")
-            uploaded_file = st.file_uploader(
-                f"HTML-Datei für **{selected_symbol}** auswählen",
-                type=["html", "htm"],
-                key="analysis_uploader",
-            )
-
-            if uploaded_file is not None and selected_symbol:
-                if st.button("Analyse speichern", key="save_analysis_btn"):
-                    html_content = uploaded_file.read().decode("utf-8")
-                    save_analysis(selected_symbol, html_content)
-                    st.success(f"Analyse für {selected_symbol} gespeichert!")
-                    st.rerun()
-
-            # Delete button
-            if selected_symbol and has_analysis(selected_symbol):
-                st.divider()
-                if st.button(f"Analyse für {selected_symbol} löschen", key="del_analysis_btn"):
-                    delete_analysis(selected_symbol)
-                    st.success(f"Analyse für {selected_symbol} gelöscht.")
-                    st.rerun()
-
-            # List all symbols with analyses
-            st.divider()
-            st.markdown("**Alle vorhandenen Analysen**")
-            symbols_with_analysis = [s for s in watchlist_symbols if has_analysis(s)]
-
-            if not symbols_with_analysis:
-                st.info("Noch keine Analysen hochgeladen.")
-            else:
-                st.markdown(", ".join([f"**{s}**" for s in symbols_with_analysis]))
 
     # --- How-to-use Sektion ---
     with st.expander("ℹ️ How to use - Anleitung"):
