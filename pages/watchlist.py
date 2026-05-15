@@ -102,12 +102,18 @@ def load_watchlist():
         return pd.DataFrame(columns=COLUMNS)
 
 def save_watchlist(df):
+    """Speichert die Watchlist. Gibt True bei Erfolg zurück, False bei Fehler."""
     try:
         create_watchlist_backup()
         df.to_excel(WATCHLIST_FILE, index=False)
-        st.success("Watchlist erfolgreich gespeichert!")
+        # Verify file was actually written
+        if not os.path.exists(WATCHLIST_FILE) or os.path.getsize(WATCHLIST_FILE) == 0:
+            st.error("Fehler: Watchlist-Datei wurde nicht korrekt geschrieben!")
+            return False
+        return True
     except Exception as e:
         st.error(f"Fehler beim Speichern der Watchlist: {e}")
+        return False
 
 def update_watchlist_prices(df_watchlist, df_market_data):
     """Aktualisiert die Kurse und Unternehmensnamen in der Watchlist basierend auf den Marktdaten."""
@@ -237,63 +243,6 @@ def main():
     st.dataframe(style_watchlist(st.session_state.watchlist_df), width="stretch")
 
     st.subheader("Bearbeitungsmodus")
-    
-    # Automatischer Abgleich bei Symbolwahl (vor dem Rendern des Editors)
-    if "watchlist_editor" in st.session_state and not df_symbols.empty:
-        changes = st.session_state.watchlist_editor
-        symbol_map = df_symbols.set_index('symbol')
-        any_auto_update = False
-        
-        # Geänderte Zeilen prüfen
-        for row_idx_str, edited_cols in changes.get('edited_rows', {}).items():
-            if 'Symbol' in edited_cols:
-                new_symbol = edited_cols['Symbol']
-                if new_symbol in symbol_map.index:
-                    row_idx = int(row_idx_str)
-                    # Wir holen die Zeile aus dem aktuellen DF
-                    db_row = symbol_map.loc[new_symbol]
-                    
-                    # Wenn es sich um eine neu hinzugefügte Zeile handelt, die bereits im DF ist
-                    if row_idx < len(st.session_state.watchlist_df):
-                        st.session_state.watchlist_df.at[row_idx, 'Symbol'] = new_symbol
-                        st.session_state.watchlist_df.at[row_idx, 'Unternehmen'] = db_row['company_name']
-                        st.session_state.watchlist_df.at[row_idx, 'Aktueller Kurs'] = db_row['live_stock_price']
-                        # Den Editor State bereinigen für diese Spalte, damit kein Loop entsteht
-                        # aber wir machen eh ein rerun.
-                        any_auto_update = True
-        
-        # Neue Zeilen prüfen (added_rows)
-        # added_rows sind noch nicht im watchlist_df. 
-        # Wenn wir sie hier direkt ins watchlist_df einfügen, wird st.data_editor sie als existierende Zeilen anzeigen.
-        if changes.get('added_rows'):
-            new_rows = []
-            for row in changes['added_rows']:
-                if 'Symbol' in row:
-                    new_symbol = row['Symbol']
-                    if new_symbol in symbol_map.index:
-                        db_row = symbol_map.loc[new_symbol]
-                        new_entry = {col: None for col in COLUMNS}
-                        new_entry.update(row)
-                        new_entry['Unternehmen'] = db_row['company_name']
-                        new_entry['Aktueller Kurs'] = db_row['live_stock_price']
-                        new_entry['timestamp'] = datetime.datetime.now().replace(microsecond=0)
-                        new_rows.append(new_entry)
-                        any_auto_update = True
-            
-            if new_rows:
-                st.session_state.watchlist_df = pd.concat([
-                    st.session_state.watchlist_df, 
-                    pd.DataFrame(new_rows)
-                ], ignore_index=True)
-            
-            # Wichtig: Wenn wir added_rows manuell übernommen haben, müssen wir den editor state leeren
-            # oder zumindest wissen, dass wir sie verarbeitet haben.
-            if any_auto_update:
-                # Wir löschen die verarbeiteten added_rows aus dem Editor state
-                st.session_state.watchlist_editor['added_rows'] = []
-
-        if any_auto_update:
-            st.rerun()
 
     edited_df = st.data_editor(
         st.session_state.watchlist_df,
@@ -305,6 +254,9 @@ def main():
 
     # Logik für Änderungen (Timestamp & Validierung)
     if st.button("Änderungen speichern"):
+        # Leere Zeilen entfernen (ohne Symbol)
+        edited_df = edited_df.dropna(subset=['Symbol']).reset_index(drop=True)
+
         # Validierung der Preis-Level
         for idx, row in edited_df.iterrows():
             k1 = row['Level Kaufkurs 1']
@@ -333,8 +285,9 @@ def main():
         # Vergleiche edited_df mit st.session_state.watchlist_df
         # Um den Timestamp zu setzen, prüfen wir auf Änderungen
         
-        # Duplikate checken
-        if edited_df['Symbol'].duplicated().any():
+        # Duplikate checken (nur nicht-leere Symbole)
+        non_empty_symbols = edited_df['Symbol'].dropna()
+        if non_empty_symbols[non_empty_symbols != ''].duplicated().any():
             st.error("Duplikate in den Symbolen gefunden! Jedes Symbol darf nur einmal vorkommen.")
             return
 
@@ -374,8 +327,60 @@ def main():
                         edited_df.at[idx, 'Aktueller Kurs'] = db_row['live_stock_price']
         
         st.session_state.watchlist_df = edited_df
-        save_watchlist(edited_df)
-        st.rerun()
+        if save_watchlist(edited_df):
+            st.session_state.pop('prices_updated', None)  # Force price refresh on next load
+            st.rerun()
+        else:
+            st.error("Speichern fehlgeschlagen! Daten wurden nicht persistiert.")
+
+    # Automatischer Abgleich bei Symbolwahl (nach dem Save-Button damit kein rerun den Save blockiert)
+    if "watchlist_editor" in st.session_state and not df_symbols.empty:
+        changes = st.session_state.watchlist_editor
+        symbol_map = df_symbols.set_index('symbol')
+        any_auto_update = False
+
+        # Geänderte Zeilen prüfen - nur NEUE Symbol-Änderungen triggern Auto-Fill
+        for row_idx_str, edited_cols in changes.get('edited_rows', {}).items():
+            if 'Symbol' in edited_cols:
+                new_symbol = edited_cols['Symbol']
+                if new_symbol in symbol_map.index:
+                    row_idx = int(row_idx_str)
+                    db_row = symbol_map.loc[new_symbol]
+                    if row_idx < len(st.session_state.watchlist_df):
+                        # Nur updaten wenn das Symbol sich wirklich geändert hat
+                        current_symbol = st.session_state.watchlist_df.at[row_idx, 'Symbol']
+                        if current_symbol != new_symbol:
+                            st.session_state.watchlist_df.at[row_idx, 'Symbol'] = new_symbol
+                            st.session_state.watchlist_df.at[row_idx, 'Unternehmen'] = db_row['company_name']
+                            st.session_state.watchlist_df.at[row_idx, 'Aktueller Kurs'] = db_row['live_stock_price']
+                            any_auto_update = True
+
+        # Neue Zeilen prüfen (added_rows)
+        if changes.get('added_rows'):
+            new_rows = []
+            for row in changes['added_rows']:
+                if 'Symbol' in row:
+                    new_symbol = row['Symbol']
+                    if new_symbol in symbol_map.index:
+                        db_row = symbol_map.loc[new_symbol]
+                        new_entry = {col: None for col in COLUMNS}
+                        new_entry.update(row)
+                        new_entry['Unternehmen'] = db_row['company_name']
+                        new_entry['Aktueller Kurs'] = db_row['live_stock_price']
+                        new_entry['timestamp'] = datetime.datetime.now().replace(microsecond=0)
+                        new_rows.append(new_entry)
+                        any_auto_update = True
+
+            if new_rows:
+                st.session_state.watchlist_df = pd.concat([
+                    st.session_state.watchlist_df,
+                    pd.DataFrame(new_rows)
+                ], ignore_index=True)
+
+        if any_auto_update:
+            # Editor-Key löschen um Endlosschleife zu verhindern
+            del st.session_state["watchlist_editor"]
+            st.rerun()
 
     # --- Backup & Restore Sektion ---
     with st.expander("Backup & Restore"):
