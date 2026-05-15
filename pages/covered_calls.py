@@ -399,14 +399,19 @@ Expiration: {exp_str} ({row['DTE']:.0f} DTE) &nbsp;|&nbsp; Max Profit: {row.get(
 </div>
         """, unsafe_allow_html=True)
 
-        # Key metrics
+        # Key metrics (use _raw_ columns for numeric formatting)
+        stock_raw = row.get('_raw_Stock', 0)
+        strike_raw = row.get('_raw_Strike', 0)
+        premium_raw = row.get('_raw_Premium', 0)
+        net_debit_raw = row.get('_raw_Net Debit', 0)
+
         col_m1, col_m2, col_m3, col_m4 = st.columns(4)
         with col_m1:
-            st.metric("Stock Price", f"${row['Stock']:.2f}")
-            st.metric("Strike", f"${row['Strike']:.2f}")
+            st.metric("Stock Price", f"${stock_raw:.2f}")
+            st.metric("Strike", f"${strike_raw:.2f}")
         with col_m2:
-            st.metric("Premium", f"${row['Premium']:.2f}")
-            st.metric("Net Debit", f"${row['Net Debit']:.2f}")
+            st.metric("Premium", f"${premium_raw:.2f}")
+            st.metric("Net Debit", f"${net_debit_raw:.2f}")
         with col_m3:
             st.metric("Assigned Return", f"{row['Assigned %']:.1f}%")
             st.metric("Annualized Return", f"{row['Annual %']:.1f}%")
@@ -415,26 +420,31 @@ Expiration: {exp_str} ({row['DTE']:.0f} DTE) &nbsp;|&nbsp; Max Profit: {row.get(
             st.metric("ITM Depth", f"{row['ITM %']:.1f}%")
 
         # Investment per contract (100 shares)
+        inv_raw = row.get('_raw_Investment', 0)
+        prem_inc_raw = row.get('_raw_Prem Income', 0)
+        net_cost_raw = row.get('_raw_Net Cost', 0)
+        max_profit_raw = row.get('_raw_Max Profit', 0)
+
         st.markdown("#### Per Contract (100 Shares)")
         col_inv1, col_inv2, col_inv3, col_inv4 = st.columns(4)
         with col_inv1:
-            st.metric("Investment (100 x Stock)", f"${row.get('Investment', 0):,.0f}")
+            st.metric("Investment (100 x Stock)", f"${inv_raw:,.0f}")
         with col_inv2:
-            st.metric("Premium Income", f"${row.get('Prem Income', 0):,.0f}")
+            st.metric("Premium Income", f"${prem_inc_raw:,.0f}")
         with col_inv3:
-            st.metric("Net Cost (after Premium)", f"${row.get('Net Cost', 0):,.0f}")
+            st.metric("Net Cost (after Premium)", f"${net_cost_raw:,.0f}")
         with col_inv4:
-            st.metric("Max Profit (if assigned)", f"${row.get('Max Profit', 0):,.0f}")
+            st.metric("Max Profit (if assigned)", f"${max_profit_raw:,.0f}")
 
         # Explain Button - shows concrete calculation
         if st.button("Explain Calculation", key="cc_explain_btn"):
             st.session_state['cc_show_explain'] = not st.session_state.get('cc_show_explain', False)
 
         if st.session_state.get('cc_show_explain', False):
-            stock = row['Stock']
-            strike = row['Strike']
-            premium = row['Premium']
-            net_debit = row['Net Debit']
+            stock = row.get('_raw_Stock', 0)
+            strike = row.get('_raw_Strike', 0)
+            premium = row.get('_raw_Premium', 0)
+            net_debit = row.get('_raw_Net Debit', 0)
             assigned_pct = row['Assigned %']
             annual_pct = row['Annual %']
             protection_pct = row['Protection %']

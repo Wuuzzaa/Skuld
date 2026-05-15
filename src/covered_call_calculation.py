@@ -313,14 +313,16 @@ def get_page_covered_calls(
     }
     result.rename(columns=rename_map, inplace=True)
 
-    # Format dollar columns for table readability
+    # Preserve raw numeric values for detail panel calculations
     for col in ['Stock', 'Strike', 'Premium', 'Net Debit']:
         if col in result.columns:
+            result[f'_raw_{col}'] = result[col]
             result[col] = result[col].apply(
                 lambda x: f"${x:.2f}" if pd.notnull(x) else ""
             )
     for col in ['Investment', 'Prem Income', 'Net Cost', 'Max Profit']:
         if col in result.columns:
+            result[f'_raw_{col}'] = result[col]
             result[col] = result[col].apply(
                 lambda x: f"${x:,.0f}" if pd.notnull(x) else ""
             )
