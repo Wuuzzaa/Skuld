@@ -1,7 +1,11 @@
-import streamlit as st
 import pandas as pd
 import urllib.parse
 import os
+
+try:
+    import streamlit as st
+except ImportError:
+    st = None  # API context - streamlit not available
 
 # Mapping: Yahoo Finance sector names → prompt file names
 SECTOR_PROMPT_MAP = {
