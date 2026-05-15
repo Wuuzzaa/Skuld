@@ -37,6 +37,7 @@ rsl_momentum = st.Page('pages/rsl_momentum.py', title="RSL Momentum")
 expected_value = st.Page('pages/expected_value.py', title="Expected Value")
 data_logs = st.Page("pages/data_change_logs.py", title="Data Logs")
 iron_condors = st.Page("pages/iron_condors.py", title="Iron Condors")
+covered_calls = st.Page("pages/covered_calls.py", title="Covered Calls")
 symbolpage = st.Page("pages/symbolpage.py", title="Symbol Page")
 
 # Set up navigation
@@ -46,6 +47,7 @@ page = st.navigation(
         watchlist,
         spreads,
         iron_condors,
+        covered_calls,
         marrieds,
         position_insurance,
         multifactor_swingtrading,
