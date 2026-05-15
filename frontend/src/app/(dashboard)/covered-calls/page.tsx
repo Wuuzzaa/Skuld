@@ -360,6 +360,23 @@ export default function CoveredCallsPage() {
             <button onClick={() => setSelectedRow(null)} className="text-muted-foreground hover:text-foreground text-sm">Close</button>
           </div>
 
+          {/* === TRADE ACTION SUMMARY === */}
+          <div className="p-4 rounded-lg border border-emerald-500/30" style={{ background: 'linear-gradient(135deg, #1a3a2a 0%, #0d1f17 100%)' }}>
+            <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">Trade Action</p>
+            <p className="text-xl font-bold text-emerald-400">
+              BUY 100x {selectedRow.symbol} @ {formatCurrency(selectedRow.stock_price)}
+              <span className="mx-2 text-muted-foreground">|</span>
+              SELL 1x {selectedRow.symbol} {formatCurrency(selectedRow.strike_price)} Call @ {formatCurrency(selectedRow.premium)}
+            </p>
+            <p className="text-sm text-gray-300 mt-1">
+              Expiration: {selectedRow.expiration_date?.split('T')[0] || selectedExpiration} ({selectedRow.DTE} DTE)
+              <span className="mx-2">|</span>
+              Max Profit: {formatCurrency(selectedRow.max_profit)}
+              <span className="mx-2">|</span>
+              Protection: {formatPercent(selectedRow.downside_protection)}
+            </p>
+          </div>
+
           {/* Core Metrics */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
             <div><span className="text-muted-foreground">Stock:</span> <span className="font-medium">{formatCurrency(selectedRow.stock_price)}</span></div>
