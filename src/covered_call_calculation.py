@@ -312,4 +312,25 @@ def get_page_covered_calls(
     }
     result.rename(columns=rename_map, inplace=True)
 
+    # Format large numbers for table readability (string columns)
+    # These are display-only — detail panel should use raw values before rename
+    if 'Mkt Cap' in result.columns:
+        result['Mkt Cap'] = result['Mkt Cap'].apply(
+            lambda x: f"${x/1e9:.1f}B" if pd.notnull(x) and x >= 1e9
+            else (f"${x/1e6:.0f}M" if pd.notnull(x) and x > 0 else "")
+        )
+    if 'Avg Vol' in result.columns:
+        result['Avg Vol'] = result['Avg Vol'].apply(
+            lambda x: f"{x/1e6:.1f}M" if pd.notnull(x) and x >= 1e6
+            else (f"{x/1e3:.0f}K" if pd.notnull(x) and x > 0 else "")
+        )
+    if 'OI' in result.columns:
+        result['OI'] = result['OI'].apply(
+            lambda x: f"{int(x):,}" if pd.notnull(x) else ""
+        )
+    if 'Vol' in result.columns:
+        result['Vol'] = result['Vol'].apply(
+            lambda x: f"{int(x):,}" if pd.notnull(x) else ""
+        )
+
     return result
