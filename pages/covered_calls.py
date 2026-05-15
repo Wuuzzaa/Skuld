@@ -281,6 +281,16 @@ if not filtered_df.empty:
             st.metric("Downside Protection", f"{row['Protection %']:.1f}%")
             st.metric("ITM Depth", f"{row['ITM %']:.1f}%")
 
+        # Investment per contract (100 shares)
+        st.markdown("#### 💰 Per Contract (100 Shares)")
+        col_inv1, col_inv2, col_inv3 = st.columns(3)
+        with col_inv1:
+            st.metric("Investment", f"${row.get('Investment', 0):,.0f}")
+        with col_inv2:
+            st.metric("Max Profit (if assigned)", f"${row.get('Max Profit', 0):,.0f}")
+        with col_inv3:
+            st.metric("Premium Income", f"${row.get('Prem Income', 0):,.0f}")
+
         # Additional info
         col_i1, col_i2, col_i3 = st.columns(3)
         with col_i1:
