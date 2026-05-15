@@ -57,9 +57,10 @@ def calc_covered_calls(df: pd.DataFrame) -> pd.DataFrame:
     )
 
     # Investment & profit per contract (100 shares)
-    df['investment'] = df['net_debit'] * 100
-    df['max_profit'] = (df['strike_price'] + df['premium'] - df['stock_price']) * 100
+    df['investment'] = df['stock_price'] * 100
     df['premium_income'] = df['premium'] * 100
+    df['net_cost'] = df['net_debit'] * 100
+    df['max_profit'] = (df['strike_price'] - df['stock_price'] + df['premium']) * 100
 
     # Filter out invalid rows
     df = df[df['net_debit'] > 0].copy()
@@ -137,7 +138,7 @@ def get_page_covered_calls(
     # Select and rename columns for display
     display_cols = [
         'symbol', 'company_name', 'stock_price', 'strike_price', 'premium',
-        'net_debit', 'investment', 'max_profit', 'premium_income',
+        'net_debit', 'investment', 'premium_income', 'net_cost', 'max_profit',
         'assigned_return_pct', 'annualized_return_pct',
         'downside_protection_pct', 'moneyness_pct', 'DTE', 'delta', 'iv',
         'open_interest', 'volume', 'iv_rank', 'iv_percentile',
@@ -157,8 +158,9 @@ def get_page_covered_calls(
         'premium': 'Premium',
         'net_debit': 'Net Debit',
         'investment': 'Investment',
-        'max_profit': 'Max Profit',
         'premium_income': 'Prem Income',
+        'net_cost': 'Net Cost',
+        'max_profit': 'Max Profit',
         'assigned_return_pct': 'Assigned %',
         'annualized_return_pct': 'Annual %',
         'downside_protection_pct': 'Protection %',

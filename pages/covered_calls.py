@@ -283,13 +283,15 @@ if not filtered_df.empty:
 
         # Investment per contract (100 shares)
         st.markdown("#### 💰 Per Contract (100 Shares)")
-        col_inv1, col_inv2, col_inv3 = st.columns(3)
+        col_inv1, col_inv2, col_inv3, col_inv4 = st.columns(4)
         with col_inv1:
-            st.metric("Investment", f"${row.get('Investment', 0):,.0f}")
+            st.metric("Investment (100 × Stock)", f"${row.get('Investment', 0):,.0f}")
         with col_inv2:
-            st.metric("Max Profit (if assigned)", f"${row.get('Max Profit', 0):,.0f}")
-        with col_inv3:
             st.metric("Premium Income", f"${row.get('Prem Income', 0):,.0f}")
+        with col_inv3:
+            st.metric("Net Cost (after Premium)", f"${row.get('Net Cost', 0):,.0f}")
+        with col_inv4:
+            st.metric("Max Profit (if assigned)", f"${row.get('Max Profit', 0):,.0f}")
 
         # Additional info
         col_i1, col_i2, col_i3 = st.columns(3)
