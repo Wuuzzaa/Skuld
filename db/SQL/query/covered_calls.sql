@@ -6,7 +6,7 @@ WITH FilteredCalls AS (
         live_stock_price AS stock_price,
         strike_price,
         day_close AS premium,
-        days_to_expiration AS DTE,
+        days_to_expiration AS "DTE",
         expiration_date,
         abs(greeks_delta) AS delta,
         implied_volatility AS iv,
