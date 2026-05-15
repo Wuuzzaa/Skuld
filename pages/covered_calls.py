@@ -407,6 +407,54 @@ if not filtered_df.empty:
         with col_inv4:
             st.metric("Max Profit (if assigned)", f"${row.get('Max Profit', 0):,.0f}")
 
+        # Explain Button - shows concrete calculation
+        if st.button("Explain Calculation", key="cc_explain_btn"):
+            st.session_state['cc_show_explain'] = not st.session_state.get('cc_show_explain', False)
+
+        if st.session_state.get('cc_show_explain', False):
+            stock = row['Stock']
+            strike = row['Strike']
+            premium = row['Premium']
+            net_debit = row['Net Debit']
+            assigned_pct = row['Assigned %']
+            annual_pct = row['Annual %']
+            protection_pct = row['Protection %']
+            itm_pct = row['ITM %']
+            dte = row['DTE']
+
+            st.markdown("---")
+            st.markdown("#### Berechnungsdetails")
+            st.markdown(f"""
+**Net Debit** (effektiver Einstiegspreis pro Aktie):
+> Stock Price - Premium = ${stock:.2f} - ${premium:.2f} = **${net_debit:.2f}**
+
+**Assigned Return** (Rendite wenn Call ausgeuebt wird):
+> (Strike + Premium - Stock Price) / Net Debit
+> (${strike:.2f} + ${premium:.2f} - ${stock:.2f}) / ${net_debit:.2f}
+> = ${strike + premium - stock:.2f} / ${net_debit:.2f} = **{assigned_pct:.1f}%**
+
+**Annualized Return** (auf 365 Tage hochgerechnet):
+> Assigned Return x (365 / DTE)
+> {assigned_pct:.1f}% x (365 / {dte:.0f})
+> = {assigned_pct:.1f}% x {365/dte:.2f} = **{annual_pct:.1f}%**
+
+**Downside Protection** (Praemie als Puffer):
+> Premium / Stock Price
+> ${premium:.2f} / ${stock:.2f} = **{protection_pct:.1f}%**
+
+**ITM Depth** (wie tief im Geld):
+> (Stock Price - Strike) / Stock Price
+> (${stock:.2f} - ${strike:.2f}) / ${stock:.2f}
+> = ${stock - strike:.2f} / ${stock:.2f} = **{itm_pct:.1f}%**
+
+**Per Contract (100 Shares):**
+> Investment = 100 x ${stock:.2f} = **${stock * 100:,.0f}**
+> Premium Income = 100 x ${premium:.2f} = **${premium * 100:,.0f}**
+> Net Cost = 100 x ${net_debit:.2f} = **${net_debit * 100:,.0f}**
+> Max Profit = 100 x (Strike - Stock + Premium) = 100 x (${strike:.2f} - ${stock:.2f} + ${premium:.2f}) = **${(strike - stock + premium) * 100:,.0f}**
+            """)
+            st.markdown("---")
+
         # PowerOptions indicators
         st.markdown("#### Technical & Fundamental")
         col_t1, col_t2, col_t3, col_t4 = st.columns(4)
