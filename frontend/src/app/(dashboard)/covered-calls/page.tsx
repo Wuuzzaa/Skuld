@@ -49,6 +49,7 @@ export default function CoveredCallsPage() {
   const [selectedRow, setSelectedRow] = useState<any>(null);
   const [expTypeFilter, setExpTypeFilter] = useState<'all' | 'Monthly' | 'Weekly' | 'Daily'>('all');
   const [showProFilters, setShowProFilters] = useState(false);
+  const [showExplain, setShowExplain] = useState(false);
 
   const { data: expirations, isLoading: loadingExp } = useQuery({
     queryKey: ['expirations'],
@@ -394,6 +395,14 @@ export default function CoveredCallsPage() {
           </div>
 
           <div className="flex gap-3 pt-2">
+            <button
+              onClick={() => setShowExplain(!showExplain)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md transition-colors ${
+                showExplain ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-secondary hover:bg-secondary/80'
+              }`}
+            >
+              Explain Calculation
+            </button>
             <a href={getClaudeAnalysisUrl(selectedRow.symbol, selectedRow.company_name, selectedRow.company_sector)}
               target="_blank" rel="noopener"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-primary/10 text-primary hover:bg-primary/20 transition-colors">
@@ -405,6 +414,73 @@ export default function CoveredCallsPage() {
               <TrendingUp className="w-3 h-3" /> TradingView
             </a>
           </div>
+
+          {/* Explain Calculation */}
+          {showExplain && (() => {
+            const s = selectedRow;
+            const stock = s.stock_price;
+            const strike = s.strike_price;
+            const premium = s.premium;
+            const netDebit = s.net_debit;
+            const dte = s.DTE;
+            const assignedReturn = s.assigned_return;
+            const annualizedReturn = s.annualized_return;
+            const downsideProtection = s.downside_protection;
+            const moneyness = s.moneyness;
+            return (
+              <div className="p-4 bg-amber-500/5 rounded-lg border border-amber-500/20 text-sm font-mono space-y-3">
+                <h4 className="font-bold text-amber-400 text-base font-sans">Berechnungsdetails: {s.symbol}</h4>
+
+                <div>
+                  <span className="text-muted-foreground">Net Debit</span> (effektiver Einstiegspreis pro Aktie):
+                  <div className="ml-4 mt-1">
+                    Stock - Premium = ${stock?.toFixed(2)} - ${premium?.toFixed(2)} = <span className="font-bold text-foreground">${netDebit?.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <span className="text-muted-foreground">Assigned Return</span> (Rendite wenn Call ausgeuebt wird):
+                  <div className="ml-4 mt-1">
+                    (Strike + Premium - Stock) / Net Debit<br/>
+                    (${strike?.toFixed(2)} + ${premium?.toFixed(2)} - ${stock?.toFixed(2)}) / ${netDebit?.toFixed(2)}<br/>
+                    = ${(strike + premium - stock)?.toFixed(2)} / ${netDebit?.toFixed(2)} = <span className="font-bold text-emerald-400">{assignedReturn?.toFixed(1)}%</span>
+                  </div>
+                </div>
+
+                <div>
+                  <span className="text-muted-foreground">Annualized Return</span> (auf 365 Tage hochgerechnet):
+                  <div className="ml-4 mt-1">
+                    Assigned Return x (365 / DTE)<br/>
+                    {assignedReturn?.toFixed(1)}% x (365 / {dte}) = {assignedReturn?.toFixed(1)}% x {(365 / dte)?.toFixed(2)} = <span className="font-bold text-emerald-400">{annualizedReturn?.toFixed(1)}%</span>
+                  </div>
+                </div>
+
+                <div>
+                  <span className="text-muted-foreground">Downside Protection</span> (Praemie als Puffer):
+                  <div className="ml-4 mt-1">
+                    Premium / Stock = ${premium?.toFixed(2)} / ${stock?.toFixed(2)} = <span className="font-bold text-foreground">{downsideProtection?.toFixed(1)}%</span>
+                  </div>
+                </div>
+
+                <div>
+                  <span className="text-muted-foreground">ITM Depth</span> (wie tief im Geld):
+                  <div className="ml-4 mt-1">
+                    (Stock - Strike) / Stock = (${stock?.toFixed(2)} - ${strike?.toFixed(2)}) / ${stock?.toFixed(2)} = <span className="font-bold text-foreground">{moneyness?.toFixed(1)}%</span>
+                  </div>
+                </div>
+
+                <div className="border-t border-amber-500/20 pt-3">
+                  <span className="text-muted-foreground font-sans font-semibold">Per Contract (100 Shares):</span>
+                  <div className="ml-4 mt-1 space-y-0.5">
+                    <div>Investment = 100 x ${stock?.toFixed(2)} = <span className="font-bold">${(stock * 100)?.toLocaleString(undefined, {maximumFractionDigits: 0})}</span></div>
+                    <div>Premium Income = 100 x ${premium?.toFixed(2)} = <span className="font-bold">${(premium * 100)?.toLocaleString(undefined, {maximumFractionDigits: 0})}</span></div>
+                    <div>Net Cost = 100 x ${netDebit?.toFixed(2)} = <span className="font-bold">${(netDebit * 100)?.toLocaleString(undefined, {maximumFractionDigits: 0})}</span></div>
+                    <div>Max Profit = 100 x (Strike - Stock + Premium) = 100 x ${(strike - stock + premium)?.toFixed(2)} = <span className="font-bold text-emerald-400">${((strike - stock + premium) * 100)?.toLocaleString(undefined, {maximumFractionDigits: 0})}</span></div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>
