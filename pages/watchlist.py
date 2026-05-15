@@ -104,6 +104,7 @@ def load_watchlist():
 def save_watchlist(df):
     """Speichert die Watchlist. Gibt True bei Erfolg zurück, False bei Fehler."""
     try:
+        os.makedirs(os.path.dirname(WATCHLIST_FILE), exist_ok=True)
         create_watchlist_backup()
         df.to_excel(WATCHLIST_FILE, index=False)
         # Verify file was actually written
