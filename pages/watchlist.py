@@ -27,6 +27,20 @@ COLUMNS = [
     "timestamp",
 ]
 
+SECTOR_TO_PROMPT_DICT = {
+    "Basic Materials": "src/prompts/prompt_materials.txt",
+    "Communication Services": "src/prompts/prompt_communication_services.txt",
+    "Consumer Cyclical": "src/prompts/prompt_consumer_discretionary.txt",
+    "Consumer Defensive": "src/prompts/prompt_consumer_staples.txt",
+    "Energy": "src/prompts/prompt_energy.txt",
+    "Financial Services": "src/prompts/prompt_financials.txt",
+    "Healthcare": "src/prompts/prompt_health_care.txt",
+    "Industrials": "src/prompts/prompt_industrials.txt",
+    "Real Estate": "src/prompts/prompt_real_estate.txt",
+    "Technology": "src/prompts/prompt_information_technology.txt",
+    "Utilities": "src/prompts/prompt_utilities.txt",
+}
+
 def create_watchlist_backup():
     """Erstellt ein Backup der aktuellen Watchlist vor dem Speichern."""
     if not os.path.exists(WATCHLIST_FILE):
