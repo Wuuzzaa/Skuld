@@ -1,6 +1,38 @@
 import streamlit as st
 import pandas as pd
 import urllib.parse
+import os
+
+# Mapping: Yahoo Finance sector names → prompt file names
+SECTOR_PROMPT_MAP = {
+    "Communication Services": "prompt_communication_services.txt",
+    "Consumer Cyclical": "prompt_consumer_discretionary.txt",
+    "Consumer Defensive": "prompt_consumer_staples.txt",
+    "Energy": "prompt_energy.txt",
+    "Financial Services": "prompt_financials.txt",
+    "Healthcare": "prompt_health_care.txt",
+    "Industrials": "prompt_industrials.txt",
+    "Technology": "prompt_information_technology.txt",
+    "Basic Materials": "prompt_materials.txt",
+    "Real Estate": "prompt_real_estate.txt",
+    "Utilities": "prompt_utilities.txt",
+}
+
+_PROMPTS_DIR = os.path.join(os.path.dirname(__file__), "prompts")
+
+
+def _get_sector_prompt(sector, symbol):
+    """Loads sector-specific prompt and replaces [ZZZ] with the actual symbol.
+    Returns None if sector is unknown or file not found."""
+    if not sector or sector not in SECTOR_PROMPT_MAP:
+        return None
+    filepath = os.path.join(_PROMPTS_DIR, SECTOR_PROMPT_MAP[sector])
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            prompt = f.read()
+        return prompt.replace("[ZZZ]", symbol)
+    except (FileNotFoundError, IOError):
+        return None
 
 
 def _add_tradingview_link(df:pd.DataFrame, symbol_column='symbol') -> pd.DataFrame:
@@ -56,20 +88,56 @@ Rolle: Aktien und Finanzexperte.
 """
 
 def _create_claude_prompt_page_spreads(row):
-    prompt = _get_claude_prompt_header(row['symbol'], row.get('Company'))
+    symbol = row['symbol']
+    sector = row.get('company_sector')
+
+    strategy_details = f"""
+Beurteile zusätzlich folgende Options-Strategie für {symbol}:
+Verkaufe einen {row['option_type']} Strike {row['sell_strike']} für eine Prämie von {row['sell_last_option_price']} bei einem Delta
+von {row['sell_delta']}. Kaufe einen {row['option_type']} mit Strike {row['buy_strike']}
+für eine Prämie von {row['buy_last_option_price']}. Expirationdate ist jeweils {row['expiration_date']}
+Gehe besonders auf die Gewinnwahrscheinlichkeit ein und gib eine klare Empfehlung: Strategie umsetzen oder nicht.
+"""
+
+    # Try sector-specific prompt + strategy details
+    sector_prompt = _get_sector_prompt(sector, symbol)
+    if sector_prompt:
+        prompt = sector_prompt.strip() + "\n" + strategy_details
+        encoded_prompt = urllib.parse.quote(prompt.strip())
+        return f'https://claude.ai/new?q={encoded_prompt}'
+
+    # Fallback: generic prompt
+    prompt = _get_claude_prompt_header(symbol, row.get('Company'))
     prompt += f"""
-Verkaufe einen {row['option_type']} Strike {row['sell_strike']} für eine Prämie von {row['sell_last_option_price']} bei einem Delta 
+Verkaufe einen {row['option_type']} Strike {row['sell_strike']} für eine Prämie von {row['sell_last_option_price']} bei einem Delta
 von {row['sell_delta']}. Kaufe einen {row['option_type']} mit Strike {row['buy_strike']}
 für eine Prämie von {row['buy_last_option_price']}. Expirationdate ist jeweils {row['expiration_date']}
 """
     prompt += _get_claude_prompt_footer()
 
-    # URL-encode the prompt
     encoded_prompt = urllib.parse.quote(prompt.strip())
     return f'https://claude.ai/new?q={encoded_prompt}'
 
 def _create_claude_prompt_page_iron_condors(row):
-    prompt = _get_claude_prompt_header(row['symbol'], row.get('Company'))
+    symbol = row['symbol']
+    sector = row.get('company_sector')
+
+    strategy_details = f"""
+Beurteile zusätzlich folgende Iron Condor Strategie für {symbol}:
+Put-Seite: Verkauf Strike {row['sell_strike_put']} (Delta {row['sell_delta_put']}), Kauf Strike {row['buy_strike_put']}. Expiration: {row['expiration_date_put']}
+Call-Seite: Verkauf Strike {row['sell_strike_call']} (Delta {row['sell_delta_call']}), Kauf Strike {row['buy_strike_call']}. Expiration: {row['expiration_date_call']}
+Gehe besonders auf die Gewinnwahrscheinlichkeit ein und gib eine klare Empfehlung: Strategie umsetzen oder nicht.
+"""
+
+    # Try sector-specific prompt + strategy details
+    sector_prompt = _get_sector_prompt(sector, symbol)
+    if sector_prompt:
+        prompt = sector_prompt.strip() + "\n" + strategy_details
+        encoded_prompt = urllib.parse.quote(prompt.strip())
+        return f'https://claude.ai/new?q={encoded_prompt}'
+
+    # Fallback: generic prompt
+    prompt = _get_claude_prompt_header(symbol, row.get('Company'))
     prompt += f"""
 Iron Condor Strategie:
 Put-Seite: Verkauf Strike {row['sell_strike_put']} (Delta {row['sell_delta_put']}), Kauf Strike {row['buy_strike_put']}. Expiration: {row['expiration_date_put']}
@@ -77,12 +145,20 @@ Call-Seite: Verkauf Strike {row['sell_strike_call']} (Delta {row['sell_delta_cal
 """
     prompt += _get_claude_prompt_footer()
 
-    # URL-encode the prompt
     encoded_prompt = urllib.parse.quote(prompt.strip())
     return f'https://claude.ai/new?q={encoded_prompt}'
 
 def _create_claude_prompt_default(row):
     symbol = row['symbol']
+    sector = row.get('company_sector')
+
+    # Try sector-specific prompt
+    sector_prompt = _get_sector_prompt(sector, symbol)
+    if sector_prompt:
+        encoded_prompt = urllib.parse.quote(sector_prompt.strip())
+        return f'https://claude.ai/new?q={encoded_prompt}'
+
+    # Fallback: generic prompt
     company = row.get('Company')
     company_info = f" ({company})" if company else ""
 
@@ -101,7 +177,6 @@ Wichtigste Chance und größtes Risiko
 Format: Prägnant, faktenbasiert, keine Füllwörter, max. eine Seite.
     """
 
-    # URL-encode the prompt
     encoded_prompt = urllib.parse.quote(prompt)
     return f'https://claude.ai/new?q={encoded_prompt}'
 
