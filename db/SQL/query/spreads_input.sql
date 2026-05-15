@@ -8,7 +8,7 @@ WITH FilteredOptions AS (
         abs(greeks_delta) AS delta,
         implied_volatility AS iv,
         greeks_theta AS theta,
-        LIVE_STOCK_PRICE AS close,
+        live_stock_price AS close,
         earnings_date,
         days_to_expiration,
         days_to_earnings,
@@ -27,8 +27,8 @@ WITH FilteredOptions AS (
     WHERE
         open_interest >= :min_open_interest
         AND day_volume >= :min_day_volume
-        AND iv_rank >= :min_iv_rank
-        AND iv_percentile >= :min_iv_percentile
+        AND (iv_rank >= :min_iv_rank OR iv_rank IS NULL)
+        AND (iv_percentile >= :min_iv_percentile OR iv_percentile IS NULL)
 ),
 
 TargetOptions AS (

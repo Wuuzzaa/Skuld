@@ -72,15 +72,22 @@ async def get_spreads(
 
     # Import calculation from existing src
     import sys
+    import logging
     from pathlib import Path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
     from src.spreads_calculation import get_page_spreads
 
     spreads_df = get_page_spreads(df, strategy_type=strategy_type, iv_correction="auto")
 
-    # Add Claude AI analysis links
-    from src.page_display_dataframe import _add_claude_analysis_link
-    spreads_df = _add_claude_analysis_link(spreads_df, page='spreads')
+    if spreads_df.empty:
+        return []
+
+    # Add Claude AI analysis links (graceful — don't fail if it errors)
+    try:
+        from src.page_display_dataframe import _add_claude_analysis_link
+        spreads_df = _add_claude_analysis_link(spreads_df, page='spreads')
+    except Exception as e:
+        logging.getLogger(__name__).warning(f"Claude link generation failed: {e}")
 
     result = df_to_json_safe(spreads_df)
     cache.set("spreads", params, result, ttl=300)  # 5 min cache

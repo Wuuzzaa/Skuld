@@ -3,6 +3,7 @@ WITH FilteredCalls AS (
         symbol,
         company_name,
         company_sector,
+        company_industry,
         live_stock_price AS stock_price,
         strike_price,
         day_close AS premium,
@@ -19,6 +20,17 @@ WITH FilteredCalls AS (
         "SMA_200",
         iv_rank,
         iv_percentile,
+        -- PowerOptions filters
+        "MACD_12_26_9" AS macd,
+        "MACDs_12_26_9" AS macd_signal,
+        "MACDh_12_26_9" AS macd_histogram,
+        "RSI_14" AS rsi_14,
+        "Forward_EPS_Growth_Percent" AS eps_growth,
+        "Summary_trailingPE" AS pe_ratio,
+        "FinData_recommendationMean" AS analyst_recommendation,
+        "Summary_averageVolume" AS avg_volume,
+        "MarketCap" AS market_cap,
+        historical_volatility_30d AS hv_30d,
         ROW_NUMBER() OVER (
             PARTITION BY symbol
             ORDER BY ABS(abs(greeks_delta) - :delta_target) ASC

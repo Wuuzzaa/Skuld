@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { DataTable, Column } from '@/components/ui/data-table';
 import { LoadingState } from '@/components/ui/spinner';
 import { formatCurrency, formatPercent, formatNumber, exportToCSV, getClaudeAnalysisUrl } from '@/lib/utils';
-import { TrendingUp, ExternalLink, Download, Shield } from 'lucide-react';
+import { TrendingUp, ExternalLink, Download, Shield, Filter } from 'lucide-react';
 
 function StatCard({ label, value, trend }: { label: string; value: string; trend?: 'up' | 'down' | 'neutral' }) {
   return (
@@ -33,10 +33,22 @@ export default function CoveredCallsPage() {
     earnings_filter: false,
     above_ma20: false,
     above_ma50: false,
+    // PowerOptions Pro
+    macd_positive: true,
+    rsi_below_70: true,
+    min_eps_growth: 5,
+    max_pe_ratio: 50,
+    max_recommendation: 2.6,
+    min_avg_volume: 500000,
+    min_market_cap: 2500,
+    exclude_biotech: true,
+    exclude_leveraged: true,
+    max_iv_hv_ratio: 0,
   });
   const [selectedExpiration, setSelectedExpiration] = useState('');
   const [selectedRow, setSelectedRow] = useState<any>(null);
   const [expTypeFilter, setExpTypeFilter] = useState<'all' | 'Monthly' | 'Weekly' | 'Daily'>('all');
+  const [showProFilters, setShowProFilters] = useState(false);
 
   const { data: expirations, isLoading: loadingExp } = useQuery({
     queryKey: ['expirations'],
@@ -84,7 +96,8 @@ export default function CoveredCallsPage() {
     { key: 'moneyness', label: 'ITM %', sortable: true, align: 'right', format: (v: number) => formatPercent(v) },
     { key: 'DTE', label: 'DTE', sortable: true, align: 'right' },
     { key: 'delta', label: 'Delta', sortable: true, align: 'right', format: (v: number) => formatNumber(v) },
-    { key: 'iv', label: 'IV', sortable: true, align: 'right', format: (v: number) => formatPercent(v ? v * 100 : null) },
+    { key: 'iv', label: 'IV', sortable: true, align: 'right', format: (v: number) => v ? `${(v * 100).toFixed(1)}%` : '-' },
+    { key: 'rsi_14', label: 'RSI', sortable: true, align: 'right', format: (v: number) => v ? v.toFixed(1) : '-' },
     { key: 'open_interest', label: 'OI', sortable: true, align: 'right' },
     { key: 'volume', label: 'Vol', sortable: true, align: 'right' },
     {
@@ -112,14 +125,24 @@ export default function CoveredCallsPage() {
           <h1 className="text-2xl font-bold">Covered Calls</h1>
           {isFetching && <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />}
         </div>
-        {coveredCalls?.length > 0 && (
+        <div className="flex items-center gap-2">
           <button
-            onClick={() => exportToCSV(coveredCalls, `covered-calls-${selectedExpiration}.csv`)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-secondary hover:bg-secondary/80 transition-colors"
+            onClick={() => setShowProFilters(!showProFilters)}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md transition-colors ${
+              showProFilters ? 'bg-primary/20 text-primary border border-primary/30' : 'bg-secondary hover:bg-secondary/80'
+            }`}
           >
-            <Download className="w-3 h-3" /> Export
+            <Filter className="w-3 h-3" /> Pro Filters
           </button>
-        )}
+          {coveredCalls?.length > 0 && (
+            <button
+              onClick={() => exportToCSV(coveredCalls, `covered-calls-${selectedExpiration}.csv`)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-secondary hover:bg-secondary/80 transition-colors"
+            >
+              <Download className="w-3 h-3" /> Export
+            </button>
+          )}
+        </div>
       </div>
 
       <p className="text-sm text-muted-foreground">PowerOptions-Style ITM Covered Call Screener</p>
@@ -176,7 +199,7 @@ export default function CoveredCallsPage() {
         </div>
       </div>
 
-      {/* Filters Row */}
+      {/* Basic Filters Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
         <div className="flex flex-col gap-1.5">
           <label className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Min OI</label>
@@ -228,6 +251,80 @@ export default function CoveredCallsPage() {
         </div>
       </div>
 
+      {/* PowerOptions Pro Filters (collapsible) */}
+      {showProFilters && (
+        <div className="p-4 bg-card/50 rounded-lg border border-border/40 space-y-3">
+          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+            <Filter className="w-4 h-4 text-primary" /> PowerOptions Pro Filters
+          </h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
+            {/* Toggles */}
+            <div className="space-y-2">
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input type="checkbox" checked={params.macd_positive}
+                  onChange={(e) => setParams({ ...params, macd_positive: e.target.checked })}
+                  className="rounded border-border" />
+                <span className="text-xs text-muted-foreground">MACD Positive</span>
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input type="checkbox" checked={params.rsi_below_70}
+                  onChange={(e) => setParams({ ...params, rsi_below_70: e.target.checked })}
+                  className="rounded border-border" />
+                <span className="text-xs text-muted-foreground">RSI &lt; 70</span>
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input type="checkbox" checked={params.exclude_biotech}
+                  onChange={(e) => setParams({ ...params, exclude_biotech: e.target.checked })}
+                  className="rounded border-border" />
+                <span className="text-xs text-muted-foreground">No Biotech</span>
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input type="checkbox" checked={params.exclude_leveraged}
+                  onChange={(e) => setParams({ ...params, exclude_leveraged: e.target.checked })}
+                  className="rounded border-border" />
+                <span className="text-xs text-muted-foreground">No Leveraged ETF</span>
+              </label>
+            </div>
+            {/* EPS Growth */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Min EPS Growth %</label>
+              <Input type="number" step="1" value={params.min_eps_growth}
+                onChange={(e) => setParams({ ...params, min_eps_growth: parseFloat(e.target.value) || 0 })}
+                className="h-8 text-xs" />
+            </div>
+            {/* P/E Ratio */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Max P/E Ratio</label>
+              <Input type="number" step="5" value={params.max_pe_ratio}
+                onChange={(e) => setParams({ ...params, max_pe_ratio: parseFloat(e.target.value) || 0 })}
+                className="h-8 text-xs" />
+            </div>
+            {/* Analyst Rec */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Max Analyst Rec (1-5)</label>
+              <Input type="number" step="0.1" min="0" max="5" value={params.max_recommendation}
+                onChange={(e) => setParams({ ...params, max_recommendation: parseFloat(e.target.value) || 0 })}
+                className="h-8 text-xs" />
+            </div>
+            {/* Avg Volume + Market Cap */}
+            <div className="space-y-2">
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Min Avg Vol</label>
+                <Input type="number" step="100000" value={params.min_avg_volume}
+                  onChange={(e) => setParams({ ...params, min_avg_volume: parseInt(e.target.value) || 0 })}
+                  className="h-8 text-xs" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Min Mkt Cap ($M)</label>
+                <Input type="number" step="500" value={params.min_market_cap}
+                  onChange={(e) => setParams({ ...params, min_market_cap: parseFloat(e.target.value) || 0 })}
+                  className="h-8 text-xs" />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Stats */}
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
@@ -259,6 +356,8 @@ export default function CoveredCallsPage() {
             <h3 className="font-bold text-lg">{selectedRow.symbol} - {selectedRow.company_name}</h3>
             <button onClick={() => setSelectedRow(null)} className="text-muted-foreground hover:text-foreground text-sm">Close</button>
           </div>
+
+          {/* Core Metrics */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
             <div><span className="text-muted-foreground">Stock:</span> <span className="font-medium">{formatCurrency(selectedRow.stock_price)}</span></div>
             <div><span className="text-muted-foreground">Strike:</span> <span className="font-medium">{formatCurrency(selectedRow.strike_price)}</span></div>
@@ -268,11 +367,32 @@ export default function CoveredCallsPage() {
             <div><span className="text-muted-foreground">Assigned:</span> <span className="font-medium text-emerald-400">{formatPercent(selectedRow.assigned_return)}</span></div>
             <div><span className="text-muted-foreground">Protection:</span> <span className="font-medium">{formatPercent(selectedRow.downside_protection)}</span></div>
             <div><span className="text-muted-foreground">Delta:</span> <span className="font-medium">{formatNumber(selectedRow.delta)}</span></div>
+          </div>
+
+          {/* Per Contract */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm border-t border-border/40 pt-3">
+            <div><span className="text-muted-foreground">Investment (100 shares):</span> <span className="font-medium">{formatCurrency(selectedRow.investment)}</span></div>
+            <div><span className="text-muted-foreground">Premium Income:</span> <span className="font-medium">{formatCurrency(selectedRow.premium_income)}</span></div>
+            <div><span className="text-muted-foreground">Net Cost:</span> <span className="font-medium">{formatCurrency(selectedRow.net_cost)}</span></div>
+            <div><span className="text-muted-foreground">Max Profit:</span> <span className="font-medium text-emerald-400">{formatCurrency(selectedRow.max_profit)}</span></div>
+          </div>
+
+          {/* PowerOptions Indicators */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm border-t border-border/40 pt-3">
+            <div><span className="text-muted-foreground">MACD:</span> <span className="font-medium">{selectedRow.macd?.toFixed(3) ?? 'N/A'}</span></div>
+            <div><span className="text-muted-foreground">MACD Signal:</span> <span className="font-medium">{selectedRow.macd_signal?.toFixed(3) ?? 'N/A'}</span></div>
+            <div><span className="text-muted-foreground">RSI(14):</span> <span className="font-medium">{selectedRow.rsi_14?.toFixed(1) ?? 'N/A'}</span></div>
+            <div><span className="text-muted-foreground">IV/HV:</span> <span className="font-medium">{selectedRow.iv_hv_ratio?.toFixed(2) ?? 'N/A'}</span></div>
+            <div><span className="text-muted-foreground">EPS Growth:</span> <span className="font-medium">{selectedRow.eps_growth != null ? `${selectedRow.eps_growth.toFixed(1)}%` : 'N/A'}</span></div>
+            <div><span className="text-muted-foreground">P/E:</span> <span className="font-medium">{selectedRow.pe_ratio?.toFixed(1) ?? 'N/A'}</span></div>
+            <div><span className="text-muted-foreground">Analyst Rec:</span> <span className="font-medium">{selectedRow.analyst_recommendation?.toFixed(2) ?? 'N/A'}</span></div>
+            <div><span className="text-muted-foreground">Avg Volume:</span> <span className="font-medium">{selectedRow.avg_volume ? `${(selectedRow.avg_volume / 1e6).toFixed(1)}M` : 'N/A'}</span></div>
+            <div><span className="text-muted-foreground">Market Cap:</span> <span className="font-medium">{selectedRow.market_cap ? `$${(selectedRow.market_cap / 1e9).toFixed(1)}B` : 'N/A'}</span></div>
             <div><span className="text-muted-foreground">IV Rank:</span> <span className="font-medium">{selectedRow.iv_rank ?? 'N/A'}</span></div>
             <div><span className="text-muted-foreground">Earnings:</span> <span className="font-medium">{selectedRow.earnings_date_next || 'N/A'}</span></div>
-            <div><span className="text-muted-foreground">Days to Earnings:</span> <span className="font-medium">{selectedRow.days_to_earnings ?? 'N/A'}</span></div>
             <div><span className="text-muted-foreground">Sector:</span> <span className="font-medium">{selectedRow.company_sector || 'N/A'}</span></div>
           </div>
+
           <div className="flex gap-3 pt-2">
             <a href={getClaudeAnalysisUrl(selectedRow.symbol, selectedRow.company_name, selectedRow.company_sector)}
               target="_blank" rel="noopener"

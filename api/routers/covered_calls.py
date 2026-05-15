@@ -22,6 +22,17 @@ async def get_covered_calls(
     earnings_filter: bool = False,
     above_ma20: bool = False,
     above_ma50: bool = False,
+    # PowerOptions filters
+    macd_positive: bool = False,
+    rsi_below_70: bool = False,
+    min_eps_growth: float = 0.0,
+    max_pe_ratio: float = 0.0,
+    max_recommendation: float = 0.0,
+    min_avg_volume: int = 0,
+    min_market_cap: float = 0.0,
+    exclude_biotech: bool = False,
+    exclude_leveraged: bool = False,
+    max_iv_hv_ratio: float = 0.0,
     current_user: dict = Depends(get_current_user),
 ):
     """Calculate covered calls for given parameters."""
@@ -36,6 +47,16 @@ async def get_covered_calls(
         "earnings_filter": earnings_filter,
         "above_ma20": above_ma20,
         "above_ma50": above_ma50,
+        "macd_positive": macd_positive,
+        "rsi_below_70": rsi_below_70,
+        "min_eps_growth": min_eps_growth,
+        "max_pe_ratio": max_pe_ratio,
+        "max_recommendation": max_recommendation,
+        "min_avg_volume": min_avg_volume,
+        "min_market_cap": min_market_cap,
+        "exclude_biotech": exclude_biotech,
+        "exclude_leveraged": exclude_leveraged,
+        "max_iv_hv_ratio": max_iv_hv_ratio,
     }
 
     cached = cache.get("covered_calls", params)
@@ -66,24 +87,30 @@ async def get_covered_calls(
     if cc_df.empty:
         return []
 
-    # Apply filters
+    # Apply filters (convert percentage inputs from frontend)
     cc_df = get_page_covered_calls(
         cc_df,
-        min_annualized=min_annualized / 100,  # Convert from percentage
-        min_downside=min_downside / 100,
+        min_annualized=min_annualized / 100 if min_annualized > 0 else 0,
+        min_downside=min_downside / 100 if min_downside > 0 else 0,
         earnings_buffer_days=5 if earnings_filter else -9999,
         above_ma20=above_ma20,
         above_ma50=above_ma50,
         min_volume=min_volume,
+        # PowerOptions
+        macd_positive=macd_positive,
+        rsi_below_70=rsi_below_70,
+        min_eps_growth=min_eps_growth if min_eps_growth > 0 else None,
+        max_pe_ratio=max_pe_ratio if max_pe_ratio > 0 else None,
+        max_recommendation=max_recommendation if max_recommendation > 0 else None,
+        min_avg_volume=int(min_avg_volume) if min_avg_volume > 0 else None,
+        min_market_cap=min_market_cap if min_market_cap > 0 else None,
+        exclude_biotech=exclude_biotech,
+        exclude_leveraged=exclude_leveraged,
+        max_iv_hv_ratio=max_iv_hv_ratio if max_iv_hv_ratio > 0 else None,
     )
 
     if cc_df.empty:
         return []
-
-    # Convert percentages for frontend display
-    for col in ['assigned_return', 'annualized_return', 'downside_protection', 'moneyness']:
-        if col in cc_df.columns:
-            cc_df[col] = cc_df[col] * 100
 
     result = df_to_json_safe(cc_df)
     cache.set("covered_calls", params, result, ttl=300)
