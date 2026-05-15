@@ -267,6 +267,7 @@ def get_page_covered_calls(
     # Select and rename columns for display
     display_cols = [
         'symbol', 'company_name', 'company_sector', 'company_industry',
+        'expiration_date',
         'stock_price', 'strike_price', 'premium',
         'net_debit', 'investment', 'premium_income', 'net_cost', 'max_profit',
         'assigned_return_pct', 'annualized_return_pct',
@@ -311,6 +312,18 @@ def get_page_covered_calls(
         'iv_hv_ratio': 'IV/HV',
     }
     result.rename(columns=rename_map, inplace=True)
+
+    # Format dollar columns for table readability
+    for col in ['Stock', 'Strike', 'Premium', 'Net Debit']:
+        if col in result.columns:
+            result[col] = result[col].apply(
+                lambda x: f"${x:.2f}" if pd.notnull(x) else ""
+            )
+    for col in ['Investment', 'Prem Income', 'Net Cost', 'Max Profit']:
+        if col in result.columns:
+            result[col] = result[col].apply(
+                lambda x: f"${x:,.0f}" if pd.notnull(x) else ""
+            )
 
     # Format large numbers for table readability (string columns)
     # These are display-only — detail panel should use raw values before rename

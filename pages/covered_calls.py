@@ -380,6 +380,25 @@ if not filtered_df.empty:
         st.divider()
         st.markdown(f"### {row['symbol']} - {row.get('Company', 'N/A')}")
 
+        # === TRADE ACTION SUMMARY ===
+        exp_date = row.get('expiration_date', 'N/A')
+        if pd.notnull(exp_date):
+            exp_str = pd.Timestamp(exp_date).strftime('%Y-%m-%d') if not isinstance(exp_date, str) else str(exp_date)[:10]
+        else:
+            exp_str = 'N/A'
+
+        st.markdown(f"""
+<div style="background: linear-gradient(135deg, #1a3a2a 0%, #0d1f17 100%); border: 1px solid #22c55e40; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
+<p style="color: #9ca3af; margin: 0 0 4px 0; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Trade Action</p>
+<p style="color: #22c55e; margin: 0; font-size: 20px; font-weight: bold;">
+BUY 100x {row['symbol']} @ {row['Stock']} &nbsp;|&nbsp; SELL 1x {row['symbol']} {row['Strike']} Call @ {row['Premium']}
+</p>
+<p style="color: #d1d5db; margin: 4px 0 0 0; font-size: 14px;">
+Expiration: {exp_str} ({row['DTE']:.0f} DTE) &nbsp;|&nbsp; Max Profit: {row.get('Max Profit', 'N/A')} &nbsp;|&nbsp; Protection: {row['Protection %']:.1f}%
+</p>
+</div>
+        """, unsafe_allow_html=True)
+
         # Key metrics
         col_m1, col_m2, col_m3, col_m4 = st.columns(4)
         with col_m1:
