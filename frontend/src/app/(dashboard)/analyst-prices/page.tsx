@@ -45,11 +45,11 @@ export default function AnalystPricesPage() {
       ),
     },
     {
-      key: 'symbol',
+      key: '_ai',
       label: 'AI',
       sortable: false,
-      format: (v: string) => (
-        <a href={getClaudeAnalysisUrl(v)} target="_blank" rel="noopener"
+      format: (_v: any, row: any) => (
+        <a href={getClaudeAnalysisUrl(row.symbol)} target="_blank" rel="noopener"
           className="inline-flex items-center gap-0.5 text-muted-foreground hover:text-primary transition-colors"
           title="Claude AI Analysis">
           <ExternalLink className="w-3 h-3" /> AI
