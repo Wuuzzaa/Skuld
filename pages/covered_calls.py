@@ -2,6 +2,7 @@
 
 ITM Covered Calls mit Berechnung von Assigned Return, Annualized Return,
 Downside Protection und Net Debit. Filtert nach Liquidität, Earnings und Technik.
+Includes all PowerOptions filtering criteria from their YouTube methodology.
 """
 
 import logging
@@ -38,6 +39,17 @@ DEFAULT_MIN_DOWNSIDE = 0.02
 DEFAULT_EARNINGS_FILTER = True
 DEFAULT_ABOVE_MA20 = False
 DEFAULT_ABOVE_MA50 = False
+# PowerOptions defaults
+DEFAULT_MACD_POSITIVE = True
+DEFAULT_RSI_BELOW_70 = True
+DEFAULT_MIN_EPS_GROWTH = 5.0
+DEFAULT_MAX_PE_RATIO = 50.0
+DEFAULT_MAX_RECOMMENDATION = 2.6
+DEFAULT_MIN_AVG_VOLUME = 500000
+DEFAULT_MIN_MARKET_CAP = 2500.0
+DEFAULT_EXCLUDE_BIOTECH = True
+DEFAULT_EXCLUDE_LEVERAGED = True
+DEFAULT_MAX_IV_HV_RATIO = 0.0  # 0 = disabled
 
 # Page header
 st.title("Covered Calls")
@@ -57,6 +69,17 @@ DEFAULTS = {
     'cc_earnings_filter': DEFAULT_EARNINGS_FILTER,
     'cc_above_ma20': DEFAULT_ABOVE_MA20,
     'cc_above_ma50': DEFAULT_ABOVE_MA50,
+    # PowerOptions
+    'cc_macd_positive': DEFAULT_MACD_POSITIVE,
+    'cc_rsi_below_70': DEFAULT_RSI_BELOW_70,
+    'cc_min_eps_growth': DEFAULT_MIN_EPS_GROWTH,
+    'cc_max_pe_ratio': DEFAULT_MAX_PE_RATIO,
+    'cc_max_recommendation': DEFAULT_MAX_RECOMMENDATION,
+    'cc_min_avg_volume': DEFAULT_MIN_AVG_VOLUME,
+    'cc_min_market_cap': DEFAULT_MIN_MARKET_CAP,
+    'cc_exclude_biotech': DEFAULT_EXCLUDE_BIOTECH,
+    'cc_exclude_leveraged': DEFAULT_EXCLUDE_LEVERAGED,
+    'cc_max_iv_hv_ratio': DEFAULT_MAX_IV_HV_RATIO,
 }
 
 init_session_state(DEFAULTS)
@@ -70,7 +93,7 @@ def reset_to_defaults():
 with st.expander("Configuration and Filters", expanded=True):
     st.button("Reset to Defaults", on_click=reset_to_defaults)
 
-    # First row: Expiration + Delta Target + Max per Symbol
+    # First row: Expiration + Delta Target + Max per Symbol + Min OI
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
@@ -170,13 +193,14 @@ with st.expander("Configuration and Filters", expanded=True):
     with col8:
         st.checkbox("Show Monthly", key="cc_show_monthly")
         st.checkbox("Show Weekly", key="cc_show_weekly")
+        st.checkbox("Show Daily", key="cc_show_daily")
 
-    # Third row: Toggles
+    # Third row: Technical Toggles
     col9, col10, col11, col12 = st.columns(4)
 
     with col9:
         earnings_filter = st.checkbox(
-            "Exclude Earnings before Expiration",
+            "Exclude Earnings before Exp",
             key="cc_earnings_filter",
             help="Remove stocks with earnings date before option expiration."
         )
@@ -196,7 +220,86 @@ with st.expander("Configuration and Filters", expanded=True):
         )
 
     with col12:
-        st.checkbox("Show Daily", key="cc_show_daily")
+        macd_positive = st.checkbox(
+            "MACD Positive Crossover",
+            key="cc_macd_positive",
+            help="MACD above signal line, both positive (bullish momentum)."
+        )
+
+# PowerOptions Pro Filters
+with st.expander("PowerOptions Pro Filters", expanded=False):
+    st.caption("Professional filtering criteria from PowerOptions methodology")
+
+    po_col1, po_col2, po_col3, po_col4 = st.columns(4)
+
+    with po_col1:
+        rsi_below_70 = st.checkbox(
+            "RSI < 70 (not overbought)",
+            key="cc_rsi_below_70",
+            help="Exclude overbought stocks (RSI above 70)."
+        )
+        exclude_biotech = st.checkbox(
+            "Exclude Biotech",
+            key="cc_exclude_biotech",
+            help="Biotech stocks are too volatile for covered calls."
+        )
+        exclude_leveraged = st.checkbox(
+            "Exclude Leveraged ETFs",
+            key="cc_exclude_leveraged",
+            help="Leveraged/inverse ETFs have decay risk."
+        )
+
+    with po_col2:
+        min_eps_growth = st.number_input(
+            "Min EPS Growth %",
+            min_value=0.0,
+            max_value=100.0,
+            step=1.0,
+            key="cc_min_eps_growth",
+            help="Minimum Forward EPS Growth (0 = disabled). PowerOptions uses > 5%."
+        )
+        max_pe_ratio = st.number_input(
+            "Max P/E Ratio",
+            min_value=0.0,
+            max_value=200.0,
+            step=5.0,
+            key="cc_max_pe_ratio",
+            help="Maximum trailing P/E ratio (0 = disabled). PowerOptions uses 50."
+        )
+
+    with po_col3:
+        max_recommendation = st.number_input(
+            "Max Analyst Rec (1-5)",
+            min_value=0.0,
+            max_value=5.0,
+            step=0.1,
+            key="cc_max_recommendation",
+            help="Max analyst recommendation (1=Strong Buy, 5=Sell). PowerOptions uses 2.6."
+        )
+        min_avg_volume = st.number_input(
+            "Min Avg Daily Volume",
+            min_value=0,
+            step=100000,
+            key="cc_min_avg_volume",
+            help="Minimum average daily volume (0 = disabled). PowerOptions uses 500k."
+        )
+
+    with po_col4:
+        min_market_cap = st.number_input(
+            "Min Market Cap ($M)",
+            min_value=0.0,
+            step=500.0,
+            key="cc_min_market_cap",
+            help="Minimum market cap in millions (0 = disabled). PowerOptions uses 2500M."
+        )
+        max_iv_hv_ratio = st.number_input(
+            "Max IV/HV Ratio",
+            min_value=0.0,
+            max_value=5.0,
+            step=0.1,
+            key="cc_max_iv_hv_ratio",
+            help="Max implied/historical volatility ratio (0 = disabled). High ratio = overpriced risk."
+        )
 
 
 @st.cache_data
@@ -230,7 +333,7 @@ with st.spinner("Searching for covered call opportunities..."):
     cc_df = _cached_calc(df)
     logger.debug(f"After calculation: {len(cc_df)} rows")
 
-# Apply display filters
+# Apply display filters (including PowerOptions)
 filtered_df = get_page_covered_calls(
     cc_df,
     min_annualized=min_annualized,
@@ -239,12 +342,23 @@ filtered_df = get_page_covered_calls(
     above_ma20=above_ma20,
     above_ma50=above_ma50,
     min_volume=min_volume,
+    # PowerOptions
+    macd_positive=macd_positive,
+    rsi_below_70=rsi_below_70,
+    min_eps_growth=min_eps_growth if min_eps_growth > 0 else None,
+    max_pe_ratio=max_pe_ratio if max_pe_ratio > 0 else None,
+    max_recommendation=max_recommendation if max_recommendation > 0 else None,
+    min_avg_volume=int(min_avg_volume) if min_avg_volume > 0 else None,
+    min_market_cap=min_market_cap if min_market_cap > 0 else None,
+    exclude_biotech=exclude_biotech,
+    exclude_leveraged=exclude_leveraged,
+    max_iv_hv_ratio=max_iv_hv_ratio if max_iv_hv_ratio > 0 else None,
 )
 
 st.markdown(f"### {len(filtered_df)} Results")
 
 if filtered_df.empty:
-    st.info("No results match the current filters. Try reducing Min Annualized Return or Min Downside Protection.")
+    st.info("No results match the current filters. Try reducing Min Annualized Return or disabling some PowerOptions filters.")
     st.stop()
 
 # Display table
@@ -282,10 +396,10 @@ if not filtered_df.empty:
             st.metric("ITM Depth", f"{row['ITM %']:.1f}%")
 
         # Investment per contract (100 shares)
-        st.markdown("#### 💰 Per Contract (100 Shares)")
+        st.markdown("#### Per Contract (100 Shares)")
         col_inv1, col_inv2, col_inv3, col_inv4 = st.columns(4)
         with col_inv1:
-            st.metric("Investment (100 × Stock)", f"${row.get('Investment', 0):,.0f}")
+            st.metric("Investment (100 x Stock)", f"${row.get('Investment', 0):,.0f}")
         with col_inv2:
             st.metric("Premium Income", f"${row.get('Prem Income', 0):,.0f}")
         with col_inv3:
@@ -293,22 +407,51 @@ if not filtered_df.empty:
         with col_inv4:
             st.metric("Max Profit (if assigned)", f"${row.get('Max Profit', 0):,.0f}")
 
+        # PowerOptions indicators
+        st.markdown("#### Technical & Fundamental")
+        col_t1, col_t2, col_t3, col_t4 = st.columns(4)
+        with col_t1:
+            st.write(f"**Delta:** {row['delta']:.3f}")
+            st.write(f"**IV:** {row['iv']:.1%}" if pd.notnull(row.get('iv')) else "**IV:** N/A")
+            iv_hv = row.get('IV/HV')
+            st.write(f"**IV/HV Ratio:** {iv_hv:.2f}" if pd.notnull(iv_hv) else "**IV/HV Ratio:** N/A")
+        with col_t2:
+            st.write(f"**Open Interest:** {int(row['OI']):,}")
+            st.write(f"**Volume:** {int(row['Vol']):,}")
+            avg_vol = row.get('Avg Vol')
+            st.write(f"**Avg Volume:** {int(avg_vol):,}" if pd.notnull(avg_vol) else "**Avg Volume:** N/A")
+        with col_t3:
+            macd_val = row.get('MACD')
+            macd_sig = row.get('MACD Signal')
+            rsi_val = row.get('RSI')
+            st.write(f"**MACD:** {macd_val:.3f}" if pd.notnull(macd_val) else "**MACD:** N/A")
+            st.write(f"**MACD Signal:** {macd_sig:.3f}" if pd.notnull(macd_sig) else "**MACD Signal:** N/A")
+            st.write(f"**RSI(14):** {rsi_val:.1f}" if pd.notnull(rsi_val) else "**RSI(14):** N/A")
+        with col_t4:
+            eps = row.get('EPS Growth %')
+            pe = row.get('P/E')
+            rec = row.get('Rec')
+            mkt_cap = row.get('Mkt Cap')
+            st.write(f"**EPS Growth:** {eps:.1f}%" if pd.notnull(eps) else "**EPS Growth:** N/A")
+            st.write(f"**P/E Ratio:** {pe:.1f}" if pd.notnull(pe) else "**P/E Ratio:** N/A")
+            st.write(f"**Analyst Rec:** {rec:.2f}" if pd.notnull(rec) else "**Analyst Rec:** N/A")
+            st.write(f"**Market Cap:** ${mkt_cap/1e9:.1f}B" if pd.notnull(mkt_cap) and mkt_cap > 0 else "**Market Cap:** N/A")
+
         # Additional info
         col_i1, col_i2, col_i3 = st.columns(3)
         with col_i1:
-            st.write(f"**Delta:** {row['delta']:.3f}")
-            st.write(f"**IV:** {row['iv']:.1%}" if pd.notnull(row.get('iv')) else "**IV:** N/A")
-        with col_i2:
-            st.write(f"**Open Interest:** {int(row['OI']):,}")
-            st.write(f"**Volume:** {int(row['Vol']):,}")
-        with col_i3:
             sector = row.get('company_sector', 'N/A')
+            industry = row.get('company_industry', 'N/A')
             st.write(f"**Sector:** {sector}")
+            st.write(f"**Industry:** {industry}")
+        with col_i2:
             earnings = row.get('earnings_date_next')
             if pd.notnull(earnings):
                 st.write(f"**Next Earnings:** {earnings}")
             else:
                 st.write("**Next Earnings:** N/A")
+        with col_i3:
+            pass
 
         # Links
         st.markdown("#### Links")
@@ -324,28 +467,33 @@ if not filtered_df.empty:
                 st.link_button("Claude AI", row['Claude'], use_container_width=True)
 
     else:
-        st.caption("💡 Klicke auf eine Zeile, um Details zu sehen.")
+        st.caption("Klicke auf eine Zeile, um Details zu sehen.")
 
 # Footer info
 st.divider()
-with st.expander("📖 PowerOptions Methodik", expanded=False):
+with st.expander("PowerOptions Methodik", expanded=False):
     st.markdown("""
 **Covered Call (Buy-Write):** Aktie kaufen + ITM Call verkaufen.
 
 **Kennzahlen:**
-- **Net Debit** = Aktienkurs − Premium (effektiver Einstiegspreis)
-- **Assigned Return** = (Strike + Premium − Aktienkurs) / Net Debit (Rendite bei Ausübung)
-- **Annualized Return** = Assigned Return × (365 / DTE) (auf ein Jahr hochgerechnet)
+- **Net Debit** = Aktienkurs - Premium (effektiver Einstiegspreis)
+- **Assigned Return** = (Strike + Premium - Aktienkurs) / Net Debit (Rendite bei Ausuebung)
+- **Annualized Return** = Assigned Return x (365 / DTE) (auf ein Jahr hochgerechnet)
 - **Downside Protection** = Premium / Aktienkurs (Puffer nach unten in %)
-- **ITM Depth** = (Aktienkurs − Strike) / Aktienkurs (wie tief im Geld)
+- **ITM Depth** = (Aktienkurs - Strike) / Aktienkurs (wie tief im Geld)
 
-**Filter-Empfehlung (PowerOptions-Style):**
-- Annualized Return ≥ 10-15%
-- Downside Protection ≥ 2-5%
-- Open Interest ≥ 100
-- Keine Earnings vor Expiration
-- Aktie über 20/50-Day MA (Aufwärtstrend)
+**PowerOptions Pro-Filter:**
+- MACD ueber Signal-Linie, beide positiv (Momentum-Bestaetigung)
+- RSI < 70 (nicht ueberkauft)
+- EPS Growth > 5% (Fundamental-Qualitaet)
+- P/E Ratio 0-50 (Bewertungs-Check)
+- Analyst Recommendation < 2.6 (1=Strong Buy, 5=Sell)
+- Avg Volume > 500k (institutionelle Liquiditaet)
+- Market Cap > 2500M (keine Micro-Caps)
+- Kein Biotech (zu volatil fuer Covered Calls)
+- Keine Leveraged/Inverse ETFs (Decay-Risiko)
+- IV/HV Ratio Check (faire Praemie vs. Risiko)
 
-**Vorteil ITM Calls:** Höhere Downside Protection als OTM, weniger Richtungsrisiko.
+**Vorteil ITM Calls:** Hoehere Downside Protection als OTM, weniger Richtungsrisiko.
 Nachteil: Geringerer maximaler Gewinn (auf Strike gekappt).
     """)
