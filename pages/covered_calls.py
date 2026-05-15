@@ -227,7 +227,7 @@ with st.expander("Configuration and Filters", expanded=True):
         )
 
 # PowerOptions Pro Filters
-with st.expander("PowerOptions Pro Filters", expanded=False):
+with st.expander("PowerOptions Pro Filters", expanded=True):
     st.caption("Professional filtering criteria from PowerOptions methodology")
 
     po_col1, po_col2, po_col3, po_col4 = st.columns(4)
