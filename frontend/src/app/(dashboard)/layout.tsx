@@ -29,6 +29,7 @@ import { useState } from 'react';
 const navItems = [
   { href: '/spreads', label: 'Spreads', icon: TrendingUp, color: 'text-emerald-400' },
   { href: '/iron-condors', label: 'Iron Condors', icon: Layers, color: 'text-blue-400' },
+  { href: '/covered-calls', label: 'Covered Calls', icon: Shield, color: 'text-lime-400' },
   { href: '/married-puts', label: 'Married Puts', icon: Shield, color: 'text-purple-400' },
   { href: '/position-insurance', label: 'Insurance', icon: Shield, color: 'text-orange-400' },
   { href: '/analyst-prices', label: 'Analyst Prices', icon: Target, color: 'text-cyan-400' },

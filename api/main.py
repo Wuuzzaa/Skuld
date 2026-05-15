@@ -22,6 +22,7 @@ from api.routers import (
     rsl_momentum,
     universe,
     watchlist,
+    covered_calls,
 )
 
 
@@ -63,6 +64,7 @@ app.include_router(multifactor_swingtrading.router, prefix="/api/multifactor-swi
 app.include_router(rsl_momentum.router, prefix="/api/rsl-momentum", tags=["RSL Momentum"])
 app.include_router(universe.router, prefix="/api/universe", tags=["Universe"])
 app.include_router(watchlist.router, prefix="/api/watchlist", tags=["Watchlist"])
+app.include_router(covered_calls.router, prefix="/api/covered-calls", tags=["Covered Calls"])
 
 
 @app.get("/api/health")

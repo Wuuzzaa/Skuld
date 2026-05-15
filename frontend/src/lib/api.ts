@@ -155,3 +155,12 @@ export async function refreshWatchlistPrices() {
   const { data } = await api.post('/watchlist/refresh-prices');
   return data;
 }
+
+// Covered Calls
+export async function getCoveredCalls(params: Record<string, any>) {
+  const cleanParams = Object.fromEntries(
+    Object.entries(params).filter(([_, v]) => v != null)
+  );
+  const { data } = await api.get('/covered-calls/', { params: cleanParams });
+  return data;
+}
