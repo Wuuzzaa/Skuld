@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { DataTable, Column } from '@/components/ui/data-table';
 import { LoadingState } from '@/components/ui/spinner';
-import { formatCurrency, formatPercent } from '@/lib/utils';
+import { formatCurrency, formatPercent, getClaudeAnalysisUrl } from '@/lib/utils';
 import { Shield, ExternalLink, Filter } from 'lucide-react';
 
 export default function MarriedPutsPage() {
@@ -186,6 +186,14 @@ export default function MarriedPutsPage() {
                 className="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded-md bg-secondary/80 hover:bg-primary/20 hover:text-primary transition-all border border-border/30"
               >
                 <ExternalLink className="w-3 h-3" /> Yahoo Finance
+              </a>
+              <a
+                href={getClaudeAnalysisUrl(selectedRow.symbol, selectedRow.Company)}
+                target="_blank"
+                rel="noopener"
+                className="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded-md bg-secondary/80 hover:bg-primary/20 hover:text-primary transition-all border border-border/30"
+              >
+                <ExternalLink className="w-3 h-3" /> Claude AI
               </a>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

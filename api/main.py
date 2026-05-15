@@ -21,6 +21,7 @@ from api.routers import (
     multifactor_swingtrading,
     rsl_momentum,
     universe,
+    watchlist,
 )
 
 
@@ -61,6 +62,7 @@ app.include_router(data_logs.router, prefix="/api/data-logs", tags=["Data Logs"]
 app.include_router(multifactor_swingtrading.router, prefix="/api/multifactor-swingtrading", tags=["Multifactor Swingtrading"])
 app.include_router(rsl_momentum.router, prefix="/api/rsl-momentum", tags=["RSL Momentum"])
 app.include_router(universe.router, prefix="/api/universe", tags=["Universe"])
+app.include_router(watchlist.router, prefix="/api/watchlist", tags=["Watchlist"])
 
 
 @app.get("/api/health")

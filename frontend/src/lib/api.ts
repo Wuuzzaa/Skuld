@@ -122,6 +122,36 @@ export async function getMultifactorSwingtrading(params: Record<string, any>) {
 
 // RSL Momentum Rotation
 export async function getRslMomentum(params: Record<string, any>) {
-  const { data } = await api.get('/rsl-momentum/', { params });
+  // Filter out null/undefined values so they don't get sent as "null" strings
+  const cleanParams = Object.fromEntries(
+    Object.entries(params).filter(([_, v]) => v != null)
+  );
+  const { data } = await api.get('/rsl-momentum/', { params: cleanParams });
+  return data;
+}
+
+// Watchlist
+export async function getWatchlist() {
+  const { data } = await api.get('/watchlist/');
+  return data;
+}
+
+export async function addWatchlistItem(item: { symbol: string; person?: string; price_level_1?: number; price_level_2?: number; price_level_3?: number; notes?: string }) {
+  const { data } = await api.post('/watchlist/', item);
+  return data;
+}
+
+export async function updateWatchlistItem(id: number, item: Record<string, any>) {
+  const { data } = await api.put(`/watchlist/${id}`, item);
+  return data;
+}
+
+export async function deleteWatchlistItem(id: number) {
+  const { data } = await api.delete(`/watchlist/${id}`);
+  return data;
+}
+
+export async function refreshWatchlistPrices() {
+  const { data } = await api.post('/watchlist/refresh-prices');
   return data;
 }

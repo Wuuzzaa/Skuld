@@ -558,6 +558,7 @@ export default function SpreadsPage() {
                 { name: 'Seeking Alpha', url: `https://seekingalpha.com/symbol/${selectedRow.symbol}` },
                 { name: 'Yahoo Finance', url: `https://finance.yahoo.com/quote/${selectedRow.symbol}` },
                 ...(selectedRow.optionstrat_url ? [{ name: 'OptionStrat', url: selectedRow.optionstrat_url }] : []),
+                ...(selectedRow.Claude ? [{ name: 'Claude AI', url: selectedRow.Claude }] : []),
               ].map((link) => (
                 <a
                   key={link.name}

@@ -77,6 +77,10 @@ async def get_iron_condors(
     ic_df = calc_iron_condors(put_df, call_df, iv_correction="auto")
     ic_df = get_page_iron_condors(ic_df)
 
+    # Add Claude AI analysis links
+    from src.page_display_dataframe import _add_claude_analysis_link
+    ic_df = _add_claude_analysis_link(ic_df, page='iron_condors')
+
     result = df_to_json_safe(ic_df)
     cache.set("iron_condors", all_params, result, ttl=300)
     return result

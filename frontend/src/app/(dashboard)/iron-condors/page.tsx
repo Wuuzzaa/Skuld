@@ -289,6 +289,8 @@ export default function IronCondorsPage() {
                 { name: 'TradingView', url: `https://www.tradingview.com/chart/?symbol=${selectedRow.symbol}` },
                 { name: 'Finviz', url: `https://finviz.com/quote.ashx?t=${selectedRow.symbol}` },
                 { name: 'Yahoo Finance', url: `https://finance.yahoo.com/quote/${selectedRow.symbol}` },
+                ...(selectedRow.optionstrat_url ? [{ name: 'OptionStrat', url: selectedRow.optionstrat_url }] : []),
+                ...(selectedRow.Claude ? [{ name: 'Claude AI', url: selectedRow.Claude }] : []),
               ].map((link) => (
                 <a key={link.name} href={link.url} target="_blank" rel="noopener"
                   className="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded-md bg-secondary/80 hover:bg-primary/20 hover:text-primary transition-all border border-border/30">

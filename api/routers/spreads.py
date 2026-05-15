@@ -78,6 +78,10 @@ async def get_spreads(
 
     spreads_df = get_page_spreads(df, strategy_type=strategy_type, iv_correction="auto")
 
+    # Add Claude AI analysis links
+    from src.page_display_dataframe import _add_claude_analysis_link
+    spreads_df = _add_claude_analysis_link(spreads_df, page='spreads')
+
     result = df_to_json_safe(spreads_df)
     cache.set("spreads", params, result, ttl=300)  # 5 min cache
     return result
