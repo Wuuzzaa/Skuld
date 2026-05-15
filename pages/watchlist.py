@@ -562,6 +562,13 @@ def main():
 
         #### 5. Aktualisierung
         - Beim Laden der Seite werden die Marktpreise automatisch aus der Datenbank aktualisiert.
+
+        #### 6. Claude KI Analyse & Berichte
+        - Wähle ein Symbol aus der Watchlist im Bereich **'Claude KI Analyse & Berichte'** aus.
+        - **KI-Analyse:** Klicke auf **'Analyse in Claude öffnen'**, um einen Deep-Link zu Claude.ai mit einem sektorspezifischen Prompt zu generieren. Dieser Prompt enthält Experten-Anweisungen passend zum Sektor der Aktie.
+        - **Berichte ansehen:** Falls bereits ein HTML-Bericht für das Symbol hochgeladen wurde, wird dieser automatisch unter dem Auswahlfeld angezeigt.
+        - **Upload:** Du kannst eigene HTML-Berichte (z.B. Exporte von KI-Analysen) hochladen, um sie dauerhaft dem Symbol in der Watchlist zuzuordnen.
+        - **Löschen:** Vorhandene Berichte können über den Button 'Bericht löschen' entfernt werden.
         """)
 
 if __name__ == "__main__":
