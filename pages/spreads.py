@@ -6,7 +6,7 @@ from config import PATH_DATABASE_QUERY_FOLDER, IV_CORRECTION_MODE
 from pages.documentation_text.spreads_page_doc import get_spreads_documentation
 from src.database import select_into_dataframe
 from src.logger_config import setup_logging
-from src.page_display_dataframe import page_display_dataframe
+from src.page_display_dataframe import page_display_dataframe, _create_claude_prompt_page_spreads
 from src.spreads_calculation import get_page_spreads
 from src.utils.option_utils import get_expiration_type
 from src.ui_utils import init_session_state, reset_to_defaults as ui_reset, filter_by_expiration_type
@@ -435,7 +435,7 @@ if not filtered_df.empty:
             'analyst_mean_target': row.get('analyst_mean_target'),
             'close': row.get('close'),
             'optionstrat_url': row.get('optionstrat_url'),
-            'Claude': row.get('Claude')
+            'Claude': _create_claude_prompt_page_spreads(row)
         }
 
         display_strategy_details(row['symbol'], row.get('Company', 'N/A'), legs, metrics, extra_info)
