@@ -12,8 +12,6 @@ WITH FilteredCalls AS (
         implied_volatility AS iv,
         open_interest,
         day_volume AS volume,
-        bid,
-        ask,
         earnings_date AS earnings_date_next,
         days_to_earnings,
         "20_day_MA",
