@@ -107,16 +107,16 @@ def get_page_covered_calls(
         ]
 
     # Technical filters
-    if above_ma20 and '20_day_MA' in filtered.columns:
+    if above_ma20 and 'SMA_20' in filtered.columns:
         filtered = filtered[
-            (filtered['20_day_MA'].isna()) |
-            (filtered['stock_price'] >= filtered['20_day_MA'])
+            (filtered['SMA_20'].isna()) |
+            (filtered['stock_price'] >= filtered['SMA_20'])
         ]
 
-    if above_ma50 and '50_day_MA' in filtered.columns:
+    if above_ma50 and 'SMA_50' in filtered.columns:
         filtered = filtered[
-            (filtered['50_day_MA'].isna()) |
-            (filtered['stock_price'] >= filtered['50_day_MA'])
+            (filtered['SMA_50'].isna()) |
+            (filtered['stock_price'] >= filtered['SMA_50'])
         ]
 
     # Sort by annualized return descending
@@ -136,7 +136,7 @@ def get_page_covered_calls(
         'downside_protection_pct', 'moneyness_pct', 'DTE', 'delta', 'iv',
         'open_interest', 'volume', 'iv_rank', 'iv_percentile',
         'earnings_date_next', 'days_to_earnings',
-        'company_sector', '20_day_MA', '50_day_MA',
+        'company_sector', 'SMA_20', 'SMA_50',
     ]
 
     # Only include columns that exist

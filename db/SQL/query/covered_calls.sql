@@ -3,7 +3,7 @@ WITH FilteredCalls AS (
         symbol,
         company_name,
         company_sector,
-        LIVE_STOCK_PRICE AS stock_price,
+        live_stock_price AS stock_price,
         strike_price,
         day_close AS premium,
         days_to_expiration AS DTE,
@@ -14,9 +14,9 @@ WITH FilteredCalls AS (
         day_volume AS volume,
         earnings_date AS earnings_date_next,
         days_to_earnings,
-        "20_day_MA",
-        "50_day_MA",
-        "200_day_MA",
+        "SMA_20",
+        "SMA_50",
+        "SMA_200",
         iv_rank,
         iv_percentile,
         ROW_NUMBER() OVER (
@@ -28,10 +28,10 @@ WITH FilteredCalls AS (
     WHERE
         contract_type = 'call'
         AND expiration_date = :expiration_date
-        AND strike_price <= LIVE_STOCK_PRICE
+        AND strike_price <= live_stock_price
         AND open_interest >= :min_open_interest
         AND day_close > 0
-        AND LIVE_STOCK_PRICE > 0
+        AND live_stock_price > 0
 )
 SELECT * FROM FilteredCalls
 WHERE delta_rank <= :max_per_symbol
