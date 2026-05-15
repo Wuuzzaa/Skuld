@@ -46,19 +46,21 @@ export function exportToCSV(data: Record<string, any>[], filename: string, colum
   URL.revokeObjectURL(url);
 }
 
-export function getClaudeAnalysisUrl(symbol: string, company?: string): string {
+export function getClaudeAnalysisUrl(symbol: string, company?: string, sector?: string): string {
   const companyInfo = company ? ` (${company})` : '';
   const prompt = `Erstelle eine kompakte Aktienanalyse für ${symbol}${companyInfo}:
-Unternehmen: Geschäftsmodell und Branche in 1-2 Sätzen
-Aktuelle News: Wichtigste Entwicklungen der letzten 4 Wochen
-Anstehende Events: Earnings, Produktlaunches oder relevante Termine
-Einschätzung:
+Unternehmen: Geschäftsmodell und Branche (1-2 Sätze):
 
+Aktuelle News: Wichtigste Entwicklungen der letzten 4 Wochen
+Anstehende Events: Earnings, Produktlaunches oder relevante Termine (in 3-7 Sätzen).
+
+Einschätzung (maximal 8 Sätze):
 Kauf/Halten/Verkaufen mit Begründung
 Aktuelles Kursziel (Analystenkonsens)
-Eigenes Kursziel durch Fundamentaldaten, News, Technische Analyse State of the Art
-Wichtigste Chance und größtes Risiko
+Eigenes Kursziel durch Fundamentaldaten, News, Technische Analyse State of the Art.
+Wichtigste Chance und größtes Risiko.
 
-Format: Prägnant, faktenbasiert, keine Füllwörter, max. eine Seite.`;
+Format: Prägnant, faktenbasiert, keine Füllwörter, max. eine Seite.
+Rolle: Aktien und Finanzexperte.`;
   return `https://claude.ai/new?q=${encodeURIComponent(prompt)}`;
 }

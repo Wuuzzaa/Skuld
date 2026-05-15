@@ -5,8 +5,8 @@ import { useQuery } from '@tanstack/react-query';
 import { getAnalystPrices } from '@/lib/api';
 import { DataTable, Column } from '@/components/ui/data-table';
 import { LoadingState } from '@/components/ui/spinner';
-import { formatCurrency, formatPercent } from '@/lib/utils';
-import { TrendingUp, TrendingDown } from 'lucide-react';
+import { formatCurrency, formatPercent, getClaudeAnalysisUrl } from '@/lib/utils';
+import { TrendingUp, TrendingDown, ExternalLink } from 'lucide-react';
 
 export default function AnalystPricesPage() {
   const { data, isLoading, isFetching } = useQuery({
@@ -42,6 +42,18 @@ export default function AnalystPricesPage() {
           {v > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
           {formatPercent(v)}
         </span>
+      ),
+    },
+    {
+      key: 'symbol',
+      label: 'AI',
+      sortable: false,
+      format: (v: string) => (
+        <a href={getClaudeAnalysisUrl(v)} target="_blank" rel="noopener"
+          className="inline-flex items-center gap-0.5 text-muted-foreground hover:text-primary transition-colors"
+          title="Claude AI Analysis">
+          <ExternalLink className="w-3 h-3" /> AI
+        </a>
       ),
     },
   ];
