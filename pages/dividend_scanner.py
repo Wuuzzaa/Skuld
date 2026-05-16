@@ -44,12 +44,18 @@ def load_data():
         f."FinData_returnOnEquity" as roe,
         f."FinData_returnOnAssets" as roa,
         f."FinData_profitMargins" as profit_margin,
+        f."FinData_earningsGrowth" as earnings_growth,
+        f."FinData_revenueGrowth" as revenue_growth,
         p.close as current_price,
         t."RSI_14" as rsi,
         t."SMA_200" as sma_200,
         t."SMA_50" as sma_50,
         t."STOCHk_14_3_1" as stoch_k,
         t."STOCHd_14_3_1" as stoch_d,
+        t."MACD_12_26_9" as macd,
+        t."MACDs_12_26_9" as macd_signal,
+        t."BBL_20_2.0_2.0" as bb_lower,
+        t."BBU_20_2.0_2.0" as bb_upper,
         iv.current_iv,
         ivr.iv_min_52w,
         ivr.iv_max_52w,
@@ -66,60 +72,76 @@ def load_data():
     return query_dataframe(sql)
 
 def calculate_scores(df):
-    """Berechnet die Composite Value Scores."""
+    """Berechnet die Composite Value Scores gemäß Strategie-Dokument."""
     if df.empty:
         return df
         
-    # Perzentile berechnen (0 bis 1)
-    # Fundamental Value: Niedriger ist besser für PE, PB, PS, EV/EBITDA
-    # Wir verwenden dropna() für das Ranking oder füllen mit Median
-    for col in ['trailing_pe', 'price_to_book', 'price_to_sales', 'ev_ebitda', 'dividend_yield', 'payout_ratio', 'avg_yield_5y', 'roe', 'roa', 'profit_margin', 'rsi', 'current_iv']:
-        if col not in df.columns: continue
-        df[col] = pd.to_numeric(df[col], errors='coerce')
+    # Numerische Konvertierung
+    cols_to_fix = [
+        'trailing_pe', 'price_to_book', 'price_to_sales', 'ev_ebitda', 
+        'dividend_yield', 'payout_ratio', 'avg_yield_5y', 
+        'roe', 'roa', 'profit_margin', 'earnings_growth', 'revenue_growth',
+        'rsi', 'current_iv', 'current_price', 'sma_200', 'sma_50', 
+        'stoch_k', 'bb_lower', 'bb_upper', 'macd', 'macd_signal'
+    ]
+    for col in cols_to_fix:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
 
+    # 1. Fundamental Value Score (FVS) - Inverses Perzentil (niedrig = gut)
     df['pe_rank'] = df['trailing_pe'].rank(pct=True, ascending=False).fillna(0)
     df['pb_rank'] = df['price_to_book'].rank(pct=True, ascending=False).fillna(0)
     df['ps_rank'] = df['price_to_sales'].rank(pct=True, ascending=False).fillna(0)
     df['ev_ebitda_rank'] = df['ev_ebitda'].rank(pct=True, ascending=False).fillna(0)
     
-    # Dividend: Höher ist besser für Yield, niedriger besser für Payout
-    df['yield_rank'] = df['dividend_yield'].rank(pct=True, ascending=True).fillna(0)
-    df['payout_rank'] = df['payout_ratio'].rank(pct=True, ascending=False).fillna(0)
-    # 5Y Avg Yield Vergleich: Aktuell > 5Y Avg ist gut
-    df['yield_vs_avg'] = (df['dividend_yield'] / df['avg_yield_5y']).replace([np.inf, -np.inf], np.nan)
-    df['yield_vs_avg_rank'] = df['yield_vs_avg'].rank(pct=True, ascending=True).fillna(0)
-    
-    # Quality: Höher ist besser für ROE, ROA, Margin
-    df['roe_rank'] = df['roe'].rank(pct=True, ascending=True).fillna(0)
-    df['roa_rank'] = df['roa'].rank(pct=True, ascending=True).fillna(0)
-    df['margin_rank'] = df['profit_margin'].rank(pct=True, ascending=True).fillna(0)
-    
-    # Technical: Niedriger RSI ist besser (Oversold)
-    df['rsi_rank'] = df['rsi'].rank(pct=True, ascending=False).fillna(0)
-    # Distance to SMA200 (Pullback is good)
-    df['dist_sma200'] = (df['current_price'] / df['sma_200']).replace([np.inf, -np.inf], np.nan)
-    df['sma200_rank'] = df['dist_sma200'].rank(pct=True, ascending=False).fillna(0)
-    
-    # Volatility: IV Rank
-    df['iv_range'] = (df['iv_max_52w'] - df['iv_min_52w'])
-    df['iv_rank'] = ((df['current_iv'] - df['iv_min_52w']) / df['iv_range'].replace(0, np.nan)).fillna(0)
-    # VVS Peak bei 40-60%. Wir mappen 0.5 auf 1.0, 0 und 1 auf 0.
-    df['vvs_score'] = 1.0 - abs(df['iv_rank'] - 0.5) * 2
-    df['vvs_score'] = df['vvs_score'].clip(0, 1)
+    df['FVS'] = (df['pe_rank'] * 35 + df['pb_rank'] * 25 + df['ev_ebitda_rank'] * 25 + df['ps_rank'] * 15)
 
-    # Composite Scores (0-100)
-    df['FVS'] = df[['pe_rank', 'pb_rank', 'ps_rank', 'ev_ebitda_rank']].mean(axis=1) * 100
-    df['DVS'] = df[['yield_rank', 'payout_rank', 'yield_vs_avg_rank']].mean(axis=1) * 100
-    df['QVS'] = df[['roe_rank', 'roa_rank', 'margin_rank']].mean(axis=1) * 100
-    df['TVS'] = df[['rsi_rank', 'sma200_rank']].mean(axis=1) * 100
-    df['VVS'] = df['vvs_score'] * 100
+    # 2. Dividend Score (DVS)
+    # YieldNorm: Höher ist besser
+    df['yield_norm'] = df['dividend_yield'].rank(pct=True, ascending=True).fillna(0)
+    # Payout: Niedriger ist besser (1 - PayoutRatio)
+    df['payout_score'] = (1 - df['payout_ratio'].clip(0, 1)).fillna(0)
+    # DivGrowth: Wir nutzen Earnings/Revenue Growth als Proxy, falls DivGrowth fehlt
+    df['growth_norm'] = df['earnings_growth'].rank(pct=True, ascending=True).fillna(0.5)
     
-    # CVS: 30% FVS, 25% DVS, 20% QVS, 15% TVS, 10% VVS
-    df['CVS'] = (df['FVS'].fillna(0) * 0.30 + 
-                 df['DVS'].fillna(0) * 0.25 + 
-                 df['QVS'].fillna(0) * 0.20 + 
-                 df['TVS'].fillna(0) * 0.15 + 
-                 df['VVS'].fillna(0) * 0.10)
+    df['DVS'] = (df['yield_norm'] * 50 + df['payout_score'] * 30 + df['growth_norm'] * 20)
+    
+    # 3. Quality Score (QVS) - Min-Max Normierung (via Rank als Annäherung im Universum)
+    df['roe_n'] = df['roe'].rank(pct=True, ascending=True).fillna(0)
+    df['roa_n'] = df['roa'].rank(pct=True, ascending=True).fillna(0)
+    df['margin_n'] = df['profit_margin'].rank(pct=True, ascending=True).fillna(0)
+    df['eg_n'] = df['earnings_growth'].rank(pct=True, ascending=True).fillna(0)
+    df['rg_n'] = df['revenue_growth'].rank(pct=True, ascending=True).fillna(0)
+    
+    df['QVS'] = (df['roe_n'] * 25 + df['roa_n'] * 25 + df['margin_n'] * 25 + df['eg_n'] * 15 + df['rg_n'] * 10)
+    
+    # 4. Technical Score (TVS)
+    # RSI Score: 100 - RSI (falls RSI < 50)
+    df['rsi_s'] = df['rsi'].apply(lambda x: (100 - x) if x < 50 else 0)
+    # SMA Distance: ((SMA200 - Kurs) / SMA200) * 200, gekappt bei 50
+    df['sma_dist'] = (((df['sma_200'] - df['current_price']) / df['sma_200']) * 200).clip(0, 50).fillna(0)
+    # Bollinger Position: 1 - ((Kurs - BB_lower) / (BB_upper - BB_lower))
+    bb_range = (df['bb_upper'] - df['bb_lower']).replace(0, np.nan)
+    df['bb_s'] = ((1 - (df['current_price'] - df['bb_lower']) / bb_range) * 20).clip(0, 20).fillna(0)
+    # MACD Score: 10 wenn MACD > Signal
+    df['macd_s'] = (df['macd'] > df['macd_signal']).astype(int) * 10
+    # Stoch Score: (40 - %K) / 40 * 10 falls %K < 40
+    df['stoch_s'] = df['stoch_k'].apply(lambda x: (40 - x) / 40 * 10 if x < 40 else 0).clip(0, 10)
+    
+    df['TVS'] = (df['rsi_s'] + df['sma_dist'] + df['bb_s'] + df['macd_s'] + df['stoch_s']) / 1.40
+    
+    # 5. Volatility Score (VVS)
+    # IV Rank 40-60% ist Ideal (100 Pkt)
+    df['iv_range'] = (df['iv_max_52w'] - df['iv_min_52w'])
+    df['iv_rank_val'] = ((df['current_iv'] - df['iv_min_52w']) / df['iv_range'].replace(0, np.nan)).fillna(0)
+    df['VVS'] = (100 - abs(df['iv_rank_val'] * 100 - 50) * 2).clip(0, 100)
+
+    # Gesamt CVS
+    df['CVS'] = (df['FVS'] * 0.30 + 
+                 df['DVS'] * 0.25 + 
+                 df['QVS'] * 0.20 + 
+                 df['TVS'] * 0.15 + 
+                 df['VVS'] * 0.10)
     
     return df
 
@@ -151,23 +173,41 @@ def main():
     # --- Dokumentation ---
     with st.expander("ℹ️ Dokumentation & Strategie-Details"):
         st.markdown("""
-        ### Philosophie & Grundprinzipien
-        Die Strategie kombiniert **Value Investing** nach Graham/Buffett-Prinzipien mit dem **Verkauf von Short Puts**. 
-        Das Ziel ist es, Qualitätsaktien mit einem Abschlag zum fairen Wert zu erwerben oder attraktive Optionsprämien zu vereinnahmen.
+        ### 1 | Philosophie & Grundprinzipien
+        Die Strategie kombiniert **Value Investing** (Graham/Buffett) mit dem **Verkauf von Short Puts**.
+        *   **Ziel:** Qualitätsaktien mit Abschlag kaufen oder Prämien vereinnahmen.
+        *   **Mechanisch:** 100% regelbasiert ohne Ermessensspielraum.
+        *   **Universumsbasiert:** Vergleich über alle gescannten Aktien (kein Sektor-Bias).
 
-        ### Scoring-Modell: Composite Value Score (CVS)
-        Der CVS aggregiert verschiedene Kennzahlen zu einem Ranking-Wert von 0–100:
-        *   **Fundamental Value (FVS) [30%]:** Bewertet P/E, P/B, EV/EBITDA und P/S im Vergleich zum gesamten Universum.
-        *   **Dividend Score (DVS) [25%]:** Kombiniert Rendite, Payout-Ratio und Dividendenwachstum.
-        *   **Quality Score (QVS) [20%]:** Bewertet Rentabilität (ROE, ROA) und Margen.
-        *   **Technical Score (TVS) [15%]:** Analysiert RSI, Trend und Bollinger-Bänder für das Timing.
-        *   **Volatility Score (VVS) [10%]:** Bewertet das IV-Niveau (Idealbereich: IV-Rank 40-60%).
+        ### 2 | Screening-Pipeline
+        #### Phase 1: Fundamentalanalyse (Harte Filter)
+        Jeder Kandidat muss zwingend folgende Kriterien erfüllen:
+        *   **Dividendenrendite:** >= 2.5%
+        *   **Payout Ratio:** < 75%
+        *   **Market Cap:** > 2 Mrd. USD
+        *   **P/E:** < 40 | **P/B:** < 10
+        *   **Cashflow:** Free & Op. Cashflow müssen positiv (> 0) sein.
+        *   **Bilanz:** Debt/Equity < 200% | Current Ratio >= 1.0
 
-        ### Handelsempfehlung
-        *   **85 – 100 (Premium):** Sofort handeln — maximale Positionsgröße.
-        *   **70 – 84 (Stark):** Handeln — Standard-Positionsgröße.
-        *   **55 – 69 (Gut):** Handeln — reduzierte Positionsgröße.
-        *   **< 55 (Neutral/Schwach):** Beobachten oder kein Trade.
+        #### Phase 2: Scoring-Modell (Composite Value Score - CVS)
+        Der CVS (0-100) gewichtet fünf Dimensionen:
+        1.  **Fundamental Value (FVS) [30%]:** Inverses Perzentil-Ranking von P/E, P/B, EV/EBITDA, P/S.
+        2.  **Dividend Score (DVS) [25%]:** Yield, Payout-Nachhaltigkeit und Wachstum.
+        3.  **Quality Score (QVS) [20%]:** Rentabilität (ROE, ROA), Margen und Wachstum.
+        4.  **Technical Score (TVS) [15%]:** RSI (< 45), SMA-Abstand, Bollinger-Bänder, MACD & Stochastik.
+        5.  **Volatility Score (VVS) [10%]:** IV-Rank (Sweet Spot: 40-60%).
+
+        ### 3 | Options-Selektion (Short Put)
+        Der ideale Short Put wird nach folgenden Kriterien gewählt:
+        *   **Laufzeit (DTE):** 30 bis 60 Tage (Theta-Sweet-Spot).
+        *   **Delta:** Zielwert von **-0.30** (30-Delta).
+        *   **Liquidität:** Bid-Ask Spread < 5%, Open Interest > 200.
+
+        ### 4 | Handelsempfehlung
+        *   🟢 **85 – 100 (Premium):** Sofort handeln — maximale Positionsgröße.
+        *   🔵 **70 – 84 (Stark):** Handeln — Standard-Positionsgröße.
+        *   🟡 **55 – 69 (Gut):** Handeln — reduzierte Positionsgröße.
+        *   ⚪ **< 55 (Neutral):** Beobachten / kein Trade.
         """)
 
     # --- Filter & Einstellungen ---
@@ -206,7 +246,9 @@ def main():
         (df_scored['trailing_pe'] < max_pe) &
         (df_scored['price_to_book'] < max_pb) &
         (df_scored['free_cashflow'] > 0) &
-        (df_scored['operating_cashflow'] > 0)
+        (df_scored['operating_cashflow'] > 0) &
+        (df_scored['debt_to_equity'] < 200.0) &
+        (df_scored['current_ratio'] >= 1.0)
     ].copy()
     
     # Recalculate CVS with custom weights if changed
@@ -221,7 +263,7 @@ def main():
     
     display_cols = [
         'symbol', 'CVS', 'FVS', 'DVS', 'QVS', 'TVS', 'VVS', 
-        'current_price', 'dividend_yield', 'trailing_pe', 'rsi', 'iv_rank'
+        'current_price', 'dividend_yield', 'trailing_pe', 'rsi', 'iv_rank_val'
     ]
     
     # Formatierung
@@ -231,7 +273,7 @@ def main():
         df_display.style.background_gradient(subset=['CVS', 'FVS', 'DVS', 'QVS', 'TVS', 'VVS'], cmap='RdYlGn')
         .format({
             'CVS': '{:.1f}', 'FVS': '{:.1f}', 'DVS': '{:.1f}', 'QVS': '{:.1f}', 'TVS': '{:.1f}', 'VVS': '{:.1f}',
-            'dividend_yield': '{:.2%}', 'current_price': '{:.2f}', 'trailing_pe': '{:.1f}', 'rsi': '{:.1f}', 'iv_rank': '{:.1%}'
+            'dividend_yield': '{:.2%}', 'current_price': '{:.2f}', 'trailing_pe': '{:.1f}', 'rsi': '{:.1f}', 'iv_rank_val': '{:.1%}'
         })
     )
     
@@ -251,7 +293,27 @@ def main():
         with col3:
             st.write(f"**P/E:** {row['trailing_pe']:.1f}")
             st.write(f"**RSI:** {row['rsi']:.1f}")
-            st.write(f"**IV Rank:** {row['iv_rank']:.1%}")
+            st.write(f"**IV Rank:** {row['iv_rank_val']:.1%}")
+
+        st.divider()
+        st.subheader("💡 Strategische Analyse")
+        
+        # Automatischer Analyse-Text
+        pe_pct = row['pe_rank'] * 100
+        analysis_text = f"""
+        **{selected_symbol}** wird mit einem P/E von **{row['trailing_pe']:.1f}** bewertet (Universum-Perzentil: {pe_pct:.1f}%). 
+        Die Dividendenrendite von **{row['dividend_yield']:.2%}** ist fundamental durch einen positiven Free Cashflow 
+        (${row['free_cashflow']/1e6:.1f}M) gedeckt. 
+        """
+        
+        if row['rsi'] < 40:
+            analysis_text += f"Der RSI von **{row['rsi']:.1f}** signalisiert eine kurzfristige Überverkaufung, was den Einstieg attraktiv macht. "
+        else:
+            analysis_text += f"Technisch gesehen liegt der RSI bei **{row['rsi']:.1f}**. "
+            
+        analysis_text += f"Der IV-Rank von **{row['iv_rank_val']:.1%}** führt zu einem Volatility Score (VVS) von **{row['VVS']:.1f}**."
+        
+        st.info(analysis_text)
 
         st.divider()
         st.subheader(f"Ideale Short Puts (Delta -0.30, 30-60 DTE) für {selected_symbol}")
