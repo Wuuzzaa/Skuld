@@ -38,6 +38,7 @@ expected_value = st.Page('pages/expected_value.py', title="Expected Value")
 data_logs = st.Page("pages/data_change_logs.py", title="Data Logs")
 iron_condors = st.Page("pages/iron_condors.py", title="Iron Condors")
 covered_calls = st.Page("pages/covered_calls.py", title="Covered Calls")
+dividend_scanner = st.Page("pages/dividend_scanner.py", title="Dividend Scanner v2")
 symbolpage = st.Page("pages/symbolpage.py", title="Symbol Page")
 
 # Set up navigation
@@ -46,6 +47,7 @@ page = st.navigation(
         analyst_prices,
         watchlist,
         spreads,
+        dividend_scanner,
         iron_condors,
         covered_calls,
         marrieds,
