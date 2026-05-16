@@ -22,7 +22,7 @@ export default function UniversePage() {
   const [selectedRow, setSelectedRow] = useState<any>(null);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, isError, error } = useQuery({
     queryKey: ['universe'],
     queryFn: getUniverse,
     staleTime: 5 * 60 * 1000,
@@ -248,6 +248,13 @@ export default function UniversePage() {
       {/* Table */}
       {isLoading ? (
         <LoadingState message="Lade Universe..." />
+      ) : isError ? (
+        <Card className="border-red-500/30 bg-red-500/5">
+          <CardContent className="pt-4">
+            <p className="text-sm text-red-400">Fehler beim Laden: {(error as any)?.message || 'API nicht erreichbar'}</p>
+            <p className="text-xs text-muted-foreground mt-1">Prüfe ob die API läuft: /api/health/db</p>
+          </CardContent>
+        </Card>
       ) : (
         <DataTable
           data={filtered}

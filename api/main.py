@@ -68,8 +68,29 @@ app.include_router(covered_calls.router, prefix="/api/covered-calls", tags=["Cov
 
 
 @app.get("/api/health")
+@app.get("/health")
 async def health_check():
     return {"status": "ok", "version": settings.APP_VERSION}
+
+
+@app.get("/api/health/db")
+async def db_health_check():
+    """Check database connectivity and basic data availability."""
+    from sqlalchemy import text as sql_text
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(sql_text('SELECT count(*) FROM "StockData"'))
+            stock_count = result.scalar()
+            result = conn.execute(sql_text('SELECT count(*) FROM "OptionData" WHERE days_to_expiration > 0'))
+            option_count = result.scalar()
+        return {
+            "status": "ok",
+            "database": "connected",
+            "stock_data_count": stock_count,
+            "option_data_count": option_count,
+        }
+    except Exception as e:
+        return {"status": "error", "database": "disconnected", "error": str(e)}
 
 
 @app.post("/api/cache/clear")

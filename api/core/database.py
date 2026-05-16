@@ -18,8 +18,16 @@ engine = create_engine(
 
 def query_dataframe(sql: str, params: dict | None = None) -> pd.DataFrame:
     """Execute SQL and return a pandas DataFrame."""
-    with engine.connect() as conn:
-        return pd.read_sql(text(sql), conn, params=params)
+    import logging
+    logger = logging.getLogger(__name__)
+    try:
+        with engine.connect() as conn:
+            df = pd.read_sql(text(sql), conn, params=params)
+            logger.debug(f"Query returned {len(df)} rows")
+            return df
+    except Exception as e:
+        logger.error(f"Database query failed: {e}")
+        raise
 
 
 def query_sql_file(filename: str, params: dict | None = None) -> pd.DataFrame:

@@ -73,7 +73,7 @@ export default function SpreadsPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [expTypeFilter, setExpTypeFilter] = useState<'all' | 'Monthly' | 'Weekly' | 'Daily'>('all');
 
-  const { data: expirations, isLoading: loadingExp } = useQuery({
+  const { data: expirations, isLoading: loadingExp, isError: expError, error: expErrorMsg } = useQuery({
     queryKey: ['expirations'],
     queryFn: getExpirations,
   });
@@ -426,6 +426,13 @@ export default function SpreadsPage() {
       {/* Results Table */}
       {loadingSpreads || loadingExp ? (
         <LoadingState message="Calculating spreads..." />
+      ) : expError ? (
+        <Card className="border-red-500/30 bg-red-500/5">
+          <CardContent className="pt-4">
+            <p className="text-sm text-red-400">Fehler beim Laden der Expirations: {(expErrorMsg as any)?.message || 'API nicht erreichbar'}</p>
+            <p className="text-xs text-muted-foreground mt-1">Prüfe ob die API läuft: /api/health/db</p>
+          </CardContent>
+        </Card>
       ) : (
         <DataTable
           data={filteredSpreads}
