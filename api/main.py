@@ -23,6 +23,7 @@ from api.routers import (
     universe,
     watchlist,
     covered_calls,
+    correlation,
 )
 
 
@@ -65,6 +66,7 @@ app.include_router(rsl_momentum.router, prefix="/api/rsl-momentum", tags=["RSL M
 app.include_router(universe.router, prefix="/api/universe", tags=["Universe"])
 app.include_router(watchlist.router, prefix="/api/watchlist", tags=["Watchlist"])
 app.include_router(covered_calls.router, prefix="/api/covered-calls", tags=["Covered Calls"])
+app.include_router(correlation.router, prefix="/api/correlation", tags=["Correlation"])
 
 
 @app.get("/api/health")

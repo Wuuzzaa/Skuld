@@ -20,6 +20,7 @@ import {
   Zap,
   Globe,
   Eye,
+  Grid3X3,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { LoadingState } from '@/components/ui/spinner';
@@ -37,6 +38,7 @@ const navItems = [
   { href: '/expected-value', label: 'Expected Value', icon: Calculator, color: 'text-yellow-400' },
   { href: '/multifactor-swingtrading', label: 'Multifactor', icon: Zap, color: 'text-amber-400' },
   { href: '/rsl-momentum', label: 'RSL Momentum', icon: BarChart3, color: 'text-green-400' },
+  { href: '/correlation', label: 'Correlation', icon: Grid3X3, color: 'text-violet-400' },
   { href: '/watchlist', label: 'Watchlist', icon: Eye, color: 'text-rose-400' },
   { href: '/universe', label: 'Universe', icon: Globe, color: 'text-teal-400' },
   { href: '/symbols', label: 'Symbols', icon: Search, color: 'text-indigo-400' },
