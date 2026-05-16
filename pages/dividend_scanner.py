@@ -59,6 +59,7 @@ def load_data():
         iv.current_iv,
         ivr.iv_min_52w,
         ivr.iv_max_52w,
+        a.name,
         a.sector,
         a.industry
     FROM "FundamentalDataYahoo" f
@@ -262,38 +263,83 @@ def main():
     st.subheader(f"Gefundene Aktien: {len(df_filtered)}")
     
     display_cols = [
-        'symbol', 'CVS', 'FVS', 'DVS', 'QVS', 'TVS', 'VVS', 
+        'symbol', 'name', 'CVS', 'FVS', 'DVS', 'QVS', 'TVS', 'VVS', 
         'current_price', 'dividend_yield', 'trailing_pe', 'rsi', 'iv_rank_val'
     ]
     
     # Formatierung
     df_display = df_filtered[display_cols].sort_values('CVS', ascending=False)
+    df_display.index = range(1, len(df_display) + 1)
     
-    st.dataframe(
+    selection_event = st.dataframe(
         df_display.style.background_gradient(subset=['CVS', 'FVS', 'DVS', 'QVS', 'TVS', 'VVS'], cmap='RdYlGn')
         .format({
             'CVS': '{:.1f}', 'FVS': '{:.1f}', 'DVS': '{:.1f}', 'QVS': '{:.1f}', 'TVS': '{:.1f}', 'VVS': '{:.1f}',
             'dividend_yield': '{:.2%}', 'current_price': '{:.2f}', 'trailing_pe': '{:.1f}', 'rsi': '{:.1f}', 'iv_rank_val': '{:.1%}'
-        })
+        }),
+        use_container_width=True,
+        on_select="rerun",
+        selection_mode="single-row"
     )
     
+    selected_symbol = None
     if not df_filtered.empty:
-        selected_symbol = st.selectbox("Aktie für Details wählen", df_filtered['symbol'].tolist())
+        if selection_event and hasattr(selection_event, 'selection') and selection_event.selection.rows:
+            selected_idx = selection_event.selection.rows[0]
+            selected_symbol = df_display.iloc[selected_idx]['symbol']
+        else:
+            st.info("Klicken Sie auf eine Zeile in der Tabelle, um Details anzuzeigen.")
+            
+    if selected_symbol:
         row = df_filtered[df_filtered['symbol'] == selected_symbol].iloc[0]
         
-        col1, col2, col3 = st.columns(3)
+        st.divider()
+        st.subheader(f"📊 Details für {row['name']} ({selected_symbol})")
+        st.write(f"**Sektor:** {row['sector']} | **Industrie:** {row['industry']}")
+        
+        # Sektionen für Details
+        col1, col2, col3, col4 = st.columns(4)
+        
         with col1:
-            st.metric("CVS Score", f"{row['CVS']:.1f}")
-            st.write(f"**Sektor:** {row['sector']}")
-            st.write(f"**Industrie:** {row['industry']}")
+            st.markdown("### 🏆 Scores")
+            st.metric("Gesamt CVS", f"{row['CVS']:.1f}")
+            st.write(f"**Value (FVS):** {row['FVS']:.1f}")
+            st.write(f"**Dividend (DVS):** {row['DVS']:.1f}")
+            st.write(f"**Quality (QVS):** {row['QVS']:.1f}")
+            st.write(f"**Technical (TVS):** {row['TVS']:.1f}")
+            st.write(f"**Volatility (VVS):** {row['VVS']:.1f}")
+
         with col2:
+            st.markdown("### 💰 Fundamentaldaten")
             st.write(f"**Market Cap:** ${row['market_cap']/1e9:.1f}B")
-            st.write(f"**Yield:** {row['dividend_yield']:.2%}")
-            st.write(f"**Payout:** {row['payout_ratio']:.1%}")
+            st.write(f"**P/E Ratio:** {row['trailing_pe']:.1f}")
+            st.write(f"**P/B Ratio:** {row['price_to_book']:.1f}")
+            st.write(f"**P/S Ratio:** {row['price_to_sales']:.1f}")
+            st.write(f"**EV/EBITDA:** {row['ev_ebitda']:.1f}")
+            st.write(f"**Debt to Equity:** {row['debt_to_equity']:.1f}%")
+            st.write(f"**Current Ratio:** {row['current_ratio']:.2f}")
+
         with col3:
-            st.write(f"**P/E:** {row['trailing_pe']:.1f}")
-            st.write(f"**RSI:** {row['rsi']:.1f}")
+            st.markdown("### 🏦 Dividende & Qualität")
+            st.write(f"**Yield:** {row['dividend_yield']:.2%}")
+            st.write(f"**Avg Yield (5Y):** {row['avg_yield_5y']:.2%}")
+            st.write(f"**Payout Ratio:** {row['payout_ratio']:.1%}")
+            st.write(f"**ROE:** {row['roe']:.1%}")
+            st.write(f"**ROA:** {row['roa']:.1%}")
+            st.write(f"**Profit Margin:** {row['profit_margin']:.1%}")
+            st.write(f"**Earnings Growth:** {row['earnings_growth']:.1%}")
+            st.write(f"**Revenue Growth:** {row['revenue_growth']:.1%}")
+
+        with col4:
+            st.markdown("### 📈 Technik & Volatilität")
+            st.write(f"**Preis:** ${row['current_price']:.2f}")
+            st.write(f"**RSI (14):** {row['rsi']:.1f}")
+            st.write(f"**SMA 50 / 200:** ${row['sma_50']:.2f} / ${row['sma_200']:.2f}")
+            st.write(f"**Stoch K/D:** {row['stoch_k']:.1f} / {row['stoch_d']:.1f}")
+            st.write(f"**MACD / Signal:** {row['macd']:.2f} / {row['macd_signal']:.2f}")
             st.write(f"**IV Rank:** {row['iv_rank_val']:.1%}")
+            st.write(f"**IV Current:** {row['current_iv']:.1%}")
+            st.write(f"**IV 52W Range:** {row['iv_min_52w']:.1%} - {row['iv_max_52w']:.1%}")
 
         st.divider()
         st.subheader("💡 Strategische Analyse")
