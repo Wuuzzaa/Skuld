@@ -3,75 +3,53 @@ import pandas as pd
 import numpy as np
 from api.core.database import query_dataframe
 
+@st.cache_data(ttl=3600)
 def load_data():
-    """Lädt die Basisdaten für den Dividenden-Scanner."""
-    # Wir laden mehr Daten als nötig für die Perzentil-Berechnung
+    """Lädt die Basisdaten für den Dividenden-Scanner optimiert über OptionDataMerged."""
     sql = """
-    WITH LatestTech AS (
-        SELECT DISTINCT ON (symbol) * 
-        FROM "TechnicalIndicatorsCalculatedHistoryDaily" 
-        ORDER BY symbol, snapshot_date DESC
-    ),
-    LatestIV AS (
-        SELECT DISTINCT ON (symbol) iv as current_iv, symbol
-        FROM "StockImpliedVolatilityMassiveHistoryDaily"
-        ORDER BY symbol, snapshot_date DESC
-    ),
-    IVRange AS (
-        SELECT 
-            symbol,
-            MIN(iv) as iv_min_52w,
-            MAX(iv) as iv_max_52w
-        FROM "StockImpliedVolatilityMassiveHistoryDaily"
-        WHERE snapshot_date > (CURRENT_DATE - INTERVAL '365 days')
-        GROUP BY symbol
-    )
-    SELECT 
-        f.symbol,
-        f."Summary_dividendYield" as dividend_yield,
-        f."Summary_payoutRatio" as payout_ratio,
-        f."FreeCashFlow" as free_cashflow,
-        f."OperatingCashFlow" as operating_cashflow,
-        f."MarketCap" as market_cap,
-        f."FinData_debtToEquity" as debt_to_equity,
-        f."FinData_currentRatio" as current_ratio,
-        f."Summary_trailingPE" as trailing_pe,
-        f."KeyStats_priceToBook" as price_to_book,
-        f."Summary_beta" as beta,
-        f."Summary_priceToSalesTrailing12Months" as price_to_sales,
-        f."KeyStats_enterpriseToEbitda" as ev_ebitda,
-        f."Summary_fiveYearAvgDividendYield" as avg_yield_5y,
-        f."FinData_returnOnEquity" as roe,
-        f."FinData_returnOnAssets" as roa,
-        f."FinData_profitMargins" as profit_margin,
-        f."FinData_earningsGrowth" as earnings_growth,
-        f."FinData_revenueGrowth" as revenue_growth,
-        p.close as current_price,
-        t."RSI_14" as rsi,
-        t."SMA_200" as sma_200,
-        t."SMA_50" as sma_50,
-        t."STOCHk_14_3_1" as stoch_k,
-        t."STOCHd_14_3_1" as stoch_d,
-        t."MACD_12_26_9" as macd,
-        t."MACDs_12_26_9" as macd_signal,
-        t."BBL_20_2.0_2.0" as bb_lower,
-        t."BBU_20_2.0_2.0" as bb_upper,
-        iv.current_iv,
-        ivr.iv_min_52w,
-        ivr.iv_max_52w,
-        a.name,
-        a.sector,
-        a.industry
-    FROM "FundamentalDataYahoo" f
-    LEFT JOIN "StockPricesYahoo" p ON f.symbol = p.symbol
-    LEFT JOIN LatestTech t ON f.symbol = t.symbol
-    LEFT JOIN LatestIV iv ON f.symbol = iv.symbol
-    LEFT JOIN IVRange ivr ON f.symbol = ivr.symbol
-    LEFT JOIN "StockAssetProfilesYahoo" a ON f.symbol = a.symbol
-    WHERE f."Summary_dividendYield" IS NOT NULL
+    SELECT DISTINCT ON (symbol)
+        symbol,
+        "Summary_dividendYield" as dividend_yield,
+        "Summary_payoutRatio" as payout_ratio,
+        "FreeCashFlow" as free_cashflow,
+        "OperatingCashFlow" as operating_cashflow,
+        "MarketCap" as market_cap,
+        "FinData_debtToEquity" as debt_to_equity,
+        "FinData_currentRatio" as current_ratio,
+        "Summary_trailingPE" as trailing_pe,
+        "KeyStats_priceToBook" as price_to_book,
+        "Summary_beta" as beta,
+        "Summary_priceToSalesTrailing12Months" as price_to_sales,
+        "KeyStats_enterpriseToEbitda" as ev_ebitda,
+        "Summary_fiveYearAvgDividendYield" as avg_yield_5y,
+        "FinData_returnOnEquity" as roe,
+        "FinData_returnOnAssets" as roa,
+        "FinData_profitMargins" as profit_margin,
+        "FinData_earningsGrowth" as earnings_growth,
+        "FinData_revenueGrowth" as revenue_growth,
+        live_stock_price as current_price,
+        "RSI_14" as rsi,
+        "SMA_200" as sma_200,
+        "SMA_50" as sma_50,
+        "STOCHk_14_3_1" as stoch_k,
+        "STOCHd_14_3_1" as stoch_d,
+        "MACD_12_26_9" as macd,
+        "MACDs_12_26_9" as macd_signal,
+        "BBL_20_2.0_2.0" as bb_lower,
+        "BBU_20_2.0_2.0" as bb_upper,
+        iv as current_iv,
+        iv_low as iv_min_52w,
+        iv_high as iv_max_52w,
+        company_name as name,
+        company_sector as sector,
+        company_industry as industry
+    FROM "OptionDataMerged"
+    WHERE "Summary_dividendYield" IS NOT NULL
+    ORDER BY symbol, day_last_updated DESC
     """
     return query_dataframe(sql)
 
+@st.cache_data
 def calculate_scores(df):
     """Berechnet die Composite Value Scores gemäß Strategie-Dokument."""
     if df.empty:
@@ -146,6 +124,7 @@ def calculate_scores(df):
     
     return df
 
+@st.cache_data(ttl=3600)
 def get_options_for_symbol(symbol):
     """Sucht nach passenden Short Puts."""
     sql = f"""
@@ -157,7 +136,7 @@ def get_options_for_symbol(symbol):
         open_interest,
         day_volume,
         day_last_updated
-    FROM "OptionDataMassive"
+    FROM "OptionDataMerged"
     WHERE symbol = '{symbol}' 
       AND contract_type = 'put'
       AND expiration_date BETWEEN CURRENT_DATE + INTERVAL '30 days' AND CURRENT_DATE + INTERVAL '60 days'
