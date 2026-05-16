@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from api.core.database import query_dataframe
-from datetime import datetime, timedelta
 
 def load_data():
     """Lädt die Basisdaten für den Dividenden-Scanner."""
@@ -149,25 +148,53 @@ def main():
     st.title("🎯 Dividenden-Scanner v2.0")
     st.write("Short Put Strategie: Value Investing + Optionsprämien")
     
-    with st.sidebar:
-        st.header("Filter-Einstellungen")
-        min_yield = st.slider("Min. Dividend Yield (%)", 0.0, 10.0, 2.5) / 100.0
-        max_payout = st.slider("Max. Payout Ratio (%)", 0, 150, 75) / 100.0
-        min_mcap = st.number_input("Min. Market Cap (Mrd. $)", 0.0, 500.0, 2.0) * 1e9
-        max_pe = st.slider("Max. Trailing P/E", 0, 100, 40)
-        max_pb = st.slider("Max. Price/Book", 0.0, 20.0, 10.0)
+    # --- Dokumentation ---
+    with st.expander("ℹ️ Dokumentation & Strategie-Details"):
+        st.markdown("""
+        ### Philosophie & Grundprinzipien
+        Die Strategie kombiniert **Value Investing** nach Graham/Buffett-Prinzipien mit dem **Verkauf von Short Puts**. 
+        Das Ziel ist es, Qualitätsaktien mit einem Abschlag zum fairen Wert zu erwerben oder attraktive Optionsprämien zu vereinnahmen.
+
+        ### Scoring-Modell: Composite Value Score (CVS)
+        Der CVS aggregiert verschiedene Kennzahlen zu einem Ranking-Wert von 0–100:
+        *   **Fundamental Value (FVS) [30%]:** Bewertet P/E, P/B, EV/EBITDA und P/S im Vergleich zum gesamten Universum.
+        *   **Dividend Score (DVS) [25%]:** Kombiniert Rendite, Payout-Ratio und Dividendenwachstum.
+        *   **Quality Score (QVS) [20%]:** Bewertet Rentabilität (ROE, ROA) und Margen.
+        *   **Technical Score (TVS) [15%]:** Analysiert RSI, Trend und Bollinger-Bänder für das Timing.
+        *   **Volatility Score (VVS) [10%]:** Bewertet das IV-Niveau (Idealbereich: IV-Rank 40-60%).
+
+        ### Handelsempfehlung
+        *   **85 – 100 (Premium):** Sofort handeln — maximale Positionsgröße.
+        *   **70 – 84 (Stark):** Handeln — Standard-Positionsgröße.
+        *   **55 – 69 (Gut):** Handeln — reduzierte Positionsgröße.
+        *   **< 55 (Neutral/Schwach):** Beobachten oder kein Trade.
+        """)
+
+    # --- Filter & Einstellungen ---
+    with st.expander("🔍 Filter & CVS-Gewichtung", expanded=False):
+        col1, col2 = st.columns(2)
         
-        st.divider()
-        st.subheader("Gewichtung (CVS)")
-        w_fvs = st.slider("Fundamental Value (FVS)", 0, 100, 30)
-        w_dvs = st.slider("Dividend Score (DVS)", 0, 100, 25)
-        w_qvs = st.slider("Quality Score (QVS)", 0, 100, 20)
-        w_tvs = st.slider("Technical Score (TVS)", 0, 100, 15)
-        w_vvs = st.slider("Volatility Score (VVS)", 0, 100, 10)
-        
-        # Normierung der Gewichte
-        total_w = w_fvs + w_dvs + w_qvs + w_tvs + w_vvs
-        
+        with col1:
+            st.subheader("Harte Filter (MUSS-Kriterien)")
+            min_yield = st.slider("Min. Dividend Yield (%)", 0.0, 10.0, 2.5) / 100.0
+            max_payout = st.slider("Max. Payout Ratio (%)", 0, 150, 75) / 100.0
+            min_mcap = st.number_input("Min. Market Cap (Mrd. $)", 0.0, 500.0, 2.0) * 1e9
+            max_pe = st.slider("Max. Trailing P/E", 0, 100, 40)
+            max_pb = st.slider("Max. Price/Book", 0.0, 20.0, 10.0)
+            
+        with col2:
+            st.subheader("CVS-Gewichtung (%)")
+            w_fvs = st.slider("Fundamental Value (FVS)", 0, 100, 30)
+            w_dvs = st.slider("Dividend Score (DVS)", 0, 100, 25)
+            w_qvs = st.slider("Quality Score (QVS)", 0, 100, 20)
+            w_tvs = st.slider("Technical Score (TVS)", 0, 100, 15)
+            w_vvs = st.slider("Volatility Score (VVS)", 0, 100, 10)
+            
+            # Normierung der Gewichte
+            total_w = w_fvs + w_dvs + w_qvs + w_tvs + w_vvs
+            if total_w != 100:
+                st.warning(f"Gesamtgewichtung ist {total_w}%. Sie sollte idealerweise 100% ergeben.")
+
     df_raw = load_data()
     df_scored = calculate_scores(df_raw)
     

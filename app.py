@@ -35,6 +35,7 @@ multifactor_swingtrading = st.Page('pages/multifactor_swingtrading.py', title="M
 sector_rotation = st.Page('pages/sector_rotation.py', title="Sector Rotation")
 rsl_momentum = st.Page('pages/rsl_momentum.py', title="RSL Momentum")
 expected_value = st.Page('pages/expected_value.py', title="Expected Value")
+dividend_scanner = st.Page("pages/dividend_scanner.py", title="Dividend Scanner")
 data_logs = st.Page("pages/data_change_logs.py", title="Data Logs")
 iron_condors = st.Page("pages/iron_condors.py", title="Iron Condors")
 #covered_calls = st.Page("pages/covered_calls.py", title="Covered Calls")
@@ -54,6 +55,7 @@ page = st.navigation(
         sector_rotation,
         rsl_momentum,
         expected_value,
+        dividend_scanner,
         data_logs,
         symbolpage
     ]
