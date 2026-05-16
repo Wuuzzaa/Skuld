@@ -50,6 +50,11 @@ DEFAULT_MIN_MARKET_CAP = 2500.0
 DEFAULT_EXCLUDE_BIOTECH = True
 DEFAULT_EXCLUDE_LEVERAGED = True
 DEFAULT_MAX_IV_HV_RATIO = 0.0  # 0 = disabled
+# Monthly Picks defaults
+DEFAULT_MIN_ITM_PCT = 10.0
+DEFAULT_MIN_STOCK_PRICE = 9.0
+DEFAULT_MAX_STOCK_PRICE = 100.0
+DEFAULT_MIN_PREMIUM = 0.85
 
 # Page header
 st.title("Covered Calls")
@@ -80,6 +85,11 @@ DEFAULTS = {
     'cc_exclude_biotech': DEFAULT_EXCLUDE_BIOTECH,
     'cc_exclude_leveraged': DEFAULT_EXCLUDE_LEVERAGED,
     'cc_max_iv_hv_ratio': DEFAULT_MAX_IV_HV_RATIO,
+    # Monthly Picks
+    'cc_min_itm_pct': DEFAULT_MIN_ITM_PCT,
+    'cc_min_stock_price': DEFAULT_MIN_STOCK_PRICE,
+    'cc_max_stock_price': DEFAULT_MAX_STOCK_PRICE,
+    'cc_min_premium': DEFAULT_MIN_PREMIUM,
 }
 
 init_session_state(DEFAULTS)
@@ -230,6 +240,49 @@ with st.expander("Configuration and Filters", expanded=True):
 with st.expander("PowerOptions Pro Filters", expanded=True):
     st.caption("Professional filtering criteria from PowerOptions methodology")
 
+    # Monthly Picks filters (new)
+    po_col_mp1, po_col_mp2, po_col_mp3, po_col_mp4 = st.columns(4)
+
+    with po_col_mp1:
+        min_itm_pct = st.number_input(
+            "Min % ITM",
+            min_value=0.0,
+            max_value=50.0,
+            step=1.0,
+            key="cc_min_itm_pct",
+            help="Minimum In-The-Money percentage (0 = disabled). PowerOptions Monthly Picks uses >= 10%."
+        )
+
+    with po_col_mp2:
+        min_stock_price = st.number_input(
+            "Min Stock Price ($)",
+            min_value=0.0,
+            max_value=500.0,
+            step=1.0,
+            key="cc_min_stock_price",
+            help="Minimum stock price (0 = disabled). PowerOptions uses $9."
+        )
+
+    with po_col_mp3:
+        max_stock_price = st.number_input(
+            "Max Stock Price ($)",
+            min_value=0.0,
+            max_value=1000.0,
+            step=10.0,
+            key="cc_max_stock_price",
+            help="Maximum stock price (0 = disabled). PowerOptions uses $100."
+        )
+
+    with po_col_mp4:
+        min_premium = st.number_input(
+            "Min Premium ($)",
+            min_value=0.0,
+            max_value=20.0,
+            step=0.05,
+            key="cc_min_premium",
+            help="Minimum option premium in $ (0 = disabled). PowerOptions uses >= $0.85."
+        )
+
     po_col1, po_col2, po_col3, po_col4 = st.columns(4)
 
     with po_col1:
@@ -353,6 +406,11 @@ filtered_df = get_page_covered_calls(
     exclude_biotech=exclude_biotech,
     exclude_leveraged=exclude_leveraged,
     max_iv_hv_ratio=max_iv_hv_ratio if max_iv_hv_ratio > 0 else None,
+    # Monthly Picks
+    min_itm_pct=min_itm_pct / 100.0 if min_itm_pct > 0 else None,
+    min_stock_price=min_stock_price if min_stock_price > 0 else None,
+    max_stock_price=max_stock_price if max_stock_price > 0 else None,
+    min_premium=min_premium if min_premium > 0 else None,
 )
 
 st.markdown(f"### {len(filtered_df)} Results")
@@ -548,29 +606,112 @@ Expiration: {exp_str} ({row['DTE']:.0f} DTE) &nbsp;|&nbsp; Max Profit: {row.get(
 
 # Footer info
 st.divider()
-with st.expander("PowerOptions Methodik", expanded=False):
+with st.expander("PowerOptions ITM Covered Call Strategie - Erklaerung", expanded=False):
     st.markdown("""
-**Covered Call (Buy-Write):** Aktie kaufen + ITM Call verkaufen.
+### Die Kernidee
 
-**Kennzahlen:**
+Dies ist **KEINE Buy-and-Hold Strategie**. Die Aktie ist nur ein Vehikel fuer kurze, wiederholbare Trades:
+
+> Montag kaufen → Freitag/naechste Woche assigned werden → 1-2% kassieren → naechste Aktie suchen
+
+Du willst **assigned werden**. Das IST das Ziel. Du bist nicht in die Aktie verliebt.
+
+---
+
+### Warum ITM statt OTM?
+
+| | ITM (diese Strategie) | OTM (klassisch) |
+|--|--|--|
+| Downside Protection | 5-10% | 0.5-1.5% |
+| Return if Assigned | 1-2% pro Trade | 4-5% |
+| Wahrscheinlichkeit | **70-80%** | 25-36% |
+| Bei Korrektur | Puffer faengt ab | Sofort Verlust |
+
+**Der Edge ueber viele Trades:** Ernie Zener (PowerOptions-Gruender) hat 80+ Varianten getestet.
+Ergebnis: 77% Gewinner a 2.3% vs. 23% Verlierer a 3.2% = **~24% p.a.**
+
+OTM sieht im Bullenmarkt besser aus — aber ein einziger 10-15% Verlust frisst 5-10 Monate Gewinne auf.
+ITM ueberlebt Korrekturen, weil der Praemien-Puffer normale Schwankungen abfaengt.
+
+---
+
+### Konkretes Beispiel
+
+```
+Aktie @ $35.71 kaufen
+Sell $32.50 Call (ITM!) fuer $8.50 Premium
+
+Net Debit    = $35.71 - $8.50 = $27.21  (dein ECHTER Einstand)
+Assigned Ret = ($32.50 + $8.50 - $35.71) / $27.21 = 1.1%
+Protection   = $8.50 / $35.71 = 23.8%   (Aktie kann 24% fallen!)
+```
+
+Du "verkaufst" die Aktie unter Kaufpreis ($32.50 < $35.71) — aber die fette Praemie ($8.50)
+macht das mehr als wett. Dein echter Einstand ist nur $27.21, und bei $32.50 Assignment
+machst du $0.29/Aktie Gewinn.
+
+---
+
+### Entry-Regeln (getestet, nicht geraten)
+
+1. Strike **mindestens 1-3% ITM** (Strike unter Stock Price)
+2. Delta 0.65 - 0.80 (hohes Assignment-Wahrscheinlichkeit)
+3. MACD positiv + Stock ueber 20-Day MA (Aufwaertstrend)
+4. **Keine Earnings vor Expiration** (Pflicht!)
+5. Avg Volume > 500k (Liquiditaet)
+6. EPS Growth > 5%, P/E 0-50, Analyst Rec < 2.6
+7. Laufzeit 7-20 Tage (optimal: 2 Wochen)
+
+### Exit-Regeln
+
+- **Idealfall:** Assignment = Ziel erreicht. 1-2% kassiert, fertig. Naechste Aktie suchen.
+- **Stop-Loss:** Wenn Aktie 10% faellt → Position schliessen, Verlust begrenzen.
+- **Roll-Trigger:** Wenn Delta auf 0.55 faellt ODER Stock innerhalb 1% vom Strike.
+- **Nie festhalten:** Position mit Verlust schliessen ist besser als monatelang hoffen.
+
+**Wichtig:** Immer VOR dem Trade den Exit planen! Nicht erst reagieren wenn es zu spaet ist.
+Setze dir vorab: Bei welchem Kurs steige ich aus? Bei welchem Delta rolle ich?
+
+---
+
+### Kennzahlen-Formeln
+
 - **Net Debit** = Aktienkurs - Premium (effektiver Einstiegspreis)
-- **Assigned Return** = (Strike + Premium - Aktienkurs) / Net Debit (Rendite bei Ausuebung)
-- **Annualized Return** = Assigned Return x (365 / DTE) (auf ein Jahr hochgerechnet)
-- **Downside Protection** = Premium / Aktienkurs (Puffer nach unten in %)
-- **ITM Depth** = (Aktienkurs - Strike) / Aktienkurs (wie tief im Geld)
+- **Assigned Return** = (Strike + Premium - Aktienkurs) / Net Debit
+- **Annualized Return** = Assigned Return x (365 / DTE)
+- **Downside Protection** = Premium / Aktienkurs (Puffer-Prozent)
+- **ITM Depth** = (Aktienkurs - Strike) / Aktienkurs
 
-**PowerOptions Pro-Filter:**
-- MACD ueber Signal-Linie, beide positiv (Momentum-Bestaetigung)
-- RSI < 70 (nicht ueberkauft)
-- EPS Growth > 5% (Fundamental-Qualitaet)
-- P/E Ratio 0-50 (Bewertungs-Check)
-- Analyst Recommendation < 2.6 (1=Strong Buy, 5=Sell)
-- Avg Volume > 500k (institutionelle Liquiditaet)
-- Market Cap > 2500M (keine Micro-Caps)
-- Kein Biotech (zu volatil fuer Covered Calls)
-- Keine Leveraged/Inverse ETFs (Decay-Risiko)
-- IV/HV Ratio Check (faire Praemie vs. Risiko)
+---
 
-**Vorteil ITM Calls:** Hoehere Downside Protection als OTM, weniger Richtungsrisiko.
-Nachteil: Geringerer maximaler Gewinn (auf Strike gekappt).
+### Ehrliche Einschraenkung
+
+PowerOptions sagt selbst: Covered Calls haben einen strukturellen Fehler — du kappst Gewinner
+und laesst Verlierer laufen. Der Presenter (Mike) handelt persoenlich **keine naked Covered Calls
+mehr**, sondern nur Married Puts. Aber: Wenn man Covered Calls macht, dann **ITM — das ist die
+beste Version** dieser Strategie.
+
+### Die Filter hier replizieren PowerOptions' "Monthly Picks of the Day"
+
+Die Pro-Filter oben sind 1:1 aus deren getesteter Methodik:
+MACD+RSI (Momentum), EPS+P/E+Rec (Fundamentals), Volume+MarketCap (Liquiditaet),
+kein Biotech/Leveraged (Risiko-Ausschluss). Zusammen produzieren sie die hoechste
+Trefferquote ueber verschiedene Marktphasen hinweg.
+
+---
+
+### Die drei Marktszenarien
+
+**1. Seitwaerts (% If Unchanged):** Aktie bleibt gleich → Call verfaellt wertlos oder wird
+nicht ausgeubt → du behaeltst Premium + Aktie. Neuen Call schreiben naechsten Monat.
+
+**2. Steigend (% If Assigned):** Aktie steigt ueber Strike → Aktie wird "called away" →
+du bekommst Strike-Preis + behaeltst Premium. Dann: neue Aktie suchen.
+
+**3. Fallend (% Downside Protection):** Hier zeigt ITM seine Staerke. Die hohe Praemie
+federt den Verlust ab. Erst wenn die Aktie UNTER deinen Net Debit faellt, verlierst du Geld.
+Bei 7% Protection muss die Aktie 7% fallen bevor du im Minus bist.
+
+**Realistische Return-Erwartung:** 12-24% p.a. bzw. 1-2% pro Monat. Mit Weeklies bis 2.3%
+pro Trade moeglich (= theoretisch 40%+ p.a.), aber mit hoeherem Managementaufwand.
     """)
