@@ -120,7 +120,7 @@ def main():
                 return [""] * len(row)
             return df.style.apply(row_color, axis=1)
 
-        st.dataframe(style_ranking(display_df), use_container_width=True, hide_index=True, height=600)
+        st.dataframe(style_ranking(display_df), width="stretch", hide_index=True, height=600)
 
     # --- Detail: Click a row ---
     st.divider()

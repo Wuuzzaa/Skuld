@@ -322,7 +322,7 @@ def main():
                     if "Fehler" in claude_url:
                         st.error(claude_url)
                     else:
-                        st.link_button("Analyse in Claude öffnen", claude_url, use_container_width=True)
+                        st.link_button("Analyse in Claude öffnen", claude_url, width="stretch")
                 
                 # Integration der vorhandenen Analysen (HTML)
                 if has_analysis(selected_symbol):

@@ -256,7 +256,7 @@ def main():
             'CVS': '{:.1f}', 'FVS': '{:.1f}', 'DVS': '{:.1f}', 'QVS': '{:.1f}', 'TVS': '{:.1f}', 'VVS': '{:.1f}',
             'dividend_yield': '{:.2%}', 'current_price': '{:.2f}', 'trailing_pe': '{:.1f}', 'rsi': '{:.1f}', 'iv_rank_val': '{:.1%}'
         }),
-        use_container_width=True,
+        width="stretch",
         on_select="rerun",
         selection_mode="single-row"
     )
