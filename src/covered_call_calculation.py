@@ -120,6 +120,11 @@ def get_page_covered_calls(
     exclude_biotech: bool = False,
     exclude_leveraged: bool = False,
     max_iv_hv_ratio: float = None,
+    # PowerOptions Monthly Picks filters
+    min_itm_pct: float = None,
+    min_stock_price: float = None,
+    max_stock_price: float = None,
+    min_premium: float = None,
 ) -> pd.DataFrame:
     """Filter and format covered calls for page display.
 
@@ -156,6 +161,20 @@ def get_page_covered_calls(
     # Volume filter
     if min_volume > 0:
         filtered = filtered[filtered['volume'] >= min_volume]
+
+    # Min ITM % filter (moneyness must be at least X%)
+    if min_itm_pct is not None and 'moneyness' in filtered.columns:
+        filtered = filtered[filtered['moneyness'] >= min_itm_pct]
+
+    # Stock Price Range filter
+    if min_stock_price is not None:
+        filtered = filtered[filtered['stock_price'] >= min_stock_price]
+    if max_stock_price is not None:
+        filtered = filtered[filtered['stock_price'] <= max_stock_price]
+
+    # Min Premium filter (absolute dollar value)
+    if min_premium is not None:
+        filtered = filtered[filtered['premium'] >= min_premium]
 
     # Earnings filter: remove stocks with earnings before expiration + buffer
     if 'days_to_earnings' in filtered.columns:

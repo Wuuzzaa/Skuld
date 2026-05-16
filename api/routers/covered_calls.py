@@ -33,6 +33,11 @@ async def get_covered_calls(
     exclude_biotech: bool = False,
     exclude_leveraged: bool = False,
     max_iv_hv_ratio: float = 0.0,
+    # Monthly Picks filters
+    min_itm_pct: float = 0.0,
+    min_stock_price: float = 0.0,
+    max_stock_price: float = 0.0,
+    min_premium: float = 0.0,
     current_user: dict = Depends(get_current_user),
 ):
     """Calculate covered calls for given parameters."""
@@ -57,6 +62,10 @@ async def get_covered_calls(
         "exclude_biotech": exclude_biotech,
         "exclude_leveraged": exclude_leveraged,
         "max_iv_hv_ratio": max_iv_hv_ratio,
+        "min_itm_pct": min_itm_pct,
+        "min_stock_price": min_stock_price,
+        "max_stock_price": max_stock_price,
+        "min_premium": min_premium,
     }
 
     cached = cache.get("covered_calls", params)
@@ -107,6 +116,11 @@ async def get_covered_calls(
         exclude_biotech=exclude_biotech,
         exclude_leveraged=exclude_leveraged,
         max_iv_hv_ratio=max_iv_hv_ratio if max_iv_hv_ratio > 0 else None,
+        # Monthly Picks
+        min_itm_pct=min_itm_pct / 100.0 if min_itm_pct > 0 else None,
+        min_stock_price=min_stock_price if min_stock_price > 0 else None,
+        max_stock_price=max_stock_price if max_stock_price > 0 else None,
+        min_premium=min_premium if min_premium > 0 else None,
     )
 
     if cc_df.empty:

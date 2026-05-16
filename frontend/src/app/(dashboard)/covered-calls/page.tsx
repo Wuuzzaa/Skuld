@@ -44,6 +44,11 @@ export default function CoveredCallsPage() {
     exclude_biotech: true,
     exclude_leveraged: true,
     max_iv_hv_ratio: 0,
+    // Monthly Picks
+    min_itm_pct: 10,
+    min_stock_price: 9,
+    max_stock_price: 100,
+    min_premium: 0.85,
   });
   const [selectedExpiration, setSelectedExpiration] = useState('');
   const [selectedRow, setSelectedRow] = useState<any>(null);
@@ -260,6 +265,33 @@ export default function CoveredCallsPage() {
           <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
             <Filter className="w-4 h-4 text-primary" /> PowerOptions Pro Filters
           </h3>
+          {/* Monthly Picks Filters */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Min % ITM</label>
+              <Input type="number" step="1" min="0" max="50" value={params.min_itm_pct}
+                onChange={(e) => setParams({ ...params, min_itm_pct: parseFloat(e.target.value) || 0 })}
+                className="h-8 text-xs" />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Min Stock Price ($)</label>
+              <Input type="number" step="1" min="0" value={params.min_stock_price}
+                onChange={(e) => setParams({ ...params, min_stock_price: parseFloat(e.target.value) || 0 })}
+                className="h-8 text-xs" />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Max Stock Price ($)</label>
+              <Input type="number" step="10" min="0" value={params.max_stock_price}
+                onChange={(e) => setParams({ ...params, max_stock_price: parseFloat(e.target.value) || 0 })}
+                className="h-8 text-xs" />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Min Premium ($)</label>
+              <Input type="number" step="0.05" min="0" value={params.min_premium}
+                onChange={(e) => setParams({ ...params, min_premium: parseFloat(e.target.value) || 0 })}
+                className="h-8 text-xs" />
+            </div>
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
             {/* Toggles */}
             <div className="space-y-2">
