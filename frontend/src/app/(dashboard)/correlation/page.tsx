@@ -450,7 +450,7 @@ export default function CorrelationPage() {
                   <thead>
                     <tr>
                       <th className="p-1 text-[10px] text-muted-foreground w-16"></th>
-                      {data.symbols.map((sym) => (
+                      {data.symbols.map((sym: string) => (
                         <th key={sym} className="p-1 text-[10px] font-medium text-muted-foreground text-center" style={{ minWidth: '52px', writingMode: data.symbols.length > 12 ? 'vertical-rl' : undefined }}>
                           {sym}
                         </th>
@@ -458,10 +458,10 @@ export default function CorrelationPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.symbols.map((sym, i) => (
+                    {data.symbols.map((sym: string, i: number) => (
                       <tr key={sym}>
                         <td className="p-1 text-[10px] font-medium text-muted-foreground text-right pr-2">{sym}</td>
-                        {data.symbols.map((sym2, j) => {
+                        {data.symbols.map((sym2: string, j: number) => {
                           const val = matrixGrid[i][j];
                           const isSelected = selectedPair &&
                             ((selectedPair.a === sym && selectedPair.b === sym2) || (selectedPair.a === sym2 && selectedPair.b === sym));
