@@ -72,6 +72,12 @@ def display_strategy_details(
             st.write(f"**Analyst Kursziel:** ${extra_info['analyst_mean_target']:.2f} (Aktuell: ${extra_info.get('close', 0):.2f})")
 
     # 3. External Links
+    display_external_links(symbol, extra_info)
+
+def display_external_links(symbol: str, extra_info: Optional[dict] = None):
+    """
+    Displays external analysis links for a given symbol.
+    """
     st.markdown("#### Links")
     link_col1, link_col2, link_col3, link_col4 = st.columns(4)
     with link_col1:

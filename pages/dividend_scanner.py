@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from api.core.database import query_dataframe
+from src.ui_strategy_display import display_external_links
+from src.page_display_dataframe import _create_claude_prompt_dividend_scanner
 
 @st.cache_data(ttl=3600)
 def load_data():
@@ -404,6 +406,10 @@ def main():
         analysis_text += f"Der IV-Rank von **{row['iv_rank_val']:.1%}** führt zu einem Volatility Score (VVS) von **{row['VVS']:.1f}**."
         
         st.info(analysis_text)
+
+        # Externe Analyse-Links & KI-Prompts
+        claude_link = _create_claude_prompt_dividend_scanner(row)
+        display_external_links(selected_symbol, {"Claude": claude_link})
 
         st.divider()
         st.subheader(f"Ideale Short Puts (Delta -0.30, 30-60 DTE) für {selected_symbol}")
