@@ -30,7 +30,7 @@ async function getCorrelationSymbols() {
   return data as string[];
 }
 
-async function getCorrelationMatrix(params: { symbols: string; lookback_days: number; method: string }) {
+async function getCorrelationMatrix(params: { symbols: string; lookback_days: number; method: string }): Promise<CorrelationResult> {
   // Use POST for large symbol lists to avoid URL length limits
   const symbolList = params.symbols.split(',').map(s => s.trim()).filter(Boolean);
   if (symbolList.length > 20) {
@@ -39,7 +39,7 @@ async function getCorrelationMatrix(params: { symbols: string; lookback_days: nu
       lookback_days: params.lookback_days,
       method: params.method,
     });
-    return data;
+    return data as CorrelationResult;
   }
   const { data } = await api.get('/correlation/', { params });
   return data as CorrelationResult;
@@ -515,7 +515,7 @@ export default function CorrelationPage() {
                   <TrendingUp className="w-3.5 h-3.5 text-blue-400" /> Most Correlated
                 </h3>
                 <div className="space-y-1">
-                  {data.top_correlated.map((pair, idx) => (
+                  {data.top_correlated.map((pair: { pair: string; correlation: number }, idx: number) => (
                     <div
                       key={idx}
                       onClick={() => handlePairClick(pair.pair)}
@@ -537,7 +537,7 @@ export default function CorrelationPage() {
                   <Minus className="w-3.5 h-3.5 text-emerald-400" /> Least Correlated (Best Diversifiers)
                 </h3>
                 <div className="space-y-1">
-                  {data.least_correlated.map((pair, idx) => (
+                  {data.least_correlated.map((pair: { pair: string; correlation: number }, idx: number) => (
                     <div
                       key={idx}
                       onClick={() => handlePairClick(pair.pair)}
