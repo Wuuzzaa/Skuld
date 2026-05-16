@@ -6,7 +6,7 @@ import api from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { LoadingState } from '@/components/ui/spinner';
-import { Filter, Download, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { Filter, Download, TrendingUp, TrendingDown, Minus, Info, AlertTriangle } from 'lucide-react';
 import { formatNumber } from '@/lib/utils';
 
 // API functions
@@ -60,6 +60,7 @@ export default function CorrelationPage() {
   const [lookbackDays, setLookbackDays] = useState(252);
   const [method, setMethod] = useState<'pearson' | 'spearman' | 'kendall'>('pearson');
   const [showFilters, setShowFilters] = useState(false);
+  const [showExplain, setShowExplain] = useState(false);
 
   const symbols = useMemo(() => symbolInput.trim(), [symbolInput]);
 
@@ -108,6 +109,8 @@ export default function CorrelationPage() {
     { label: 'Sectors', symbols: 'XLK, XLF, XLE, XLV, XLI, XLP, XLU, XLRE, XLB, XLC, XLY' },
     { label: 'Asset Classes', symbols: 'SPY, QQQ, IWM, GLD, TLT, HYG, UUP, USO, VNQ' },
     { label: 'Mega Caps', symbols: 'AAPL, MSFT, GOOGL, AMZN, NVDA, META, TSLA, BRK-B, JPM, V' },
+    { label: 'S&P 500 Top 30', symbols: 'AAPL, MSFT, NVDA, AMZN, GOOGL, META, BRK-B, AVGO, JPM, LLY, TSLA, V, UNH, XOM, MA, COST, HD, PG, JNJ, NFLX, ABBV, BAC, CRM, CVX, MRK, KO, WMT, PEP, AMD, TMO' },
+    { label: 'All Available', symbols: '', isSpecial: true },
   ];
 
   return (
@@ -130,6 +133,14 @@ export default function CorrelationPage() {
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-secondary/60 text-muted-foreground border border-border/50 hover:text-foreground transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Download className="w-3 h-3" /> CSV
+          </button>
+          <button
+            onClick={() => setShowExplain(!showExplain)}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer ${
+              showExplain ? 'bg-violet-500/20 text-violet-400 border border-violet-500/30' : 'bg-secondary/60 text-muted-foreground border border-border/50 hover:text-foreground'
+            }`}
+          >
+            <Info className="w-3 h-3" /> Explain
           </button>
           <button
             onClick={() => setShowFilters(!showFilters)}
@@ -158,15 +169,112 @@ export default function CorrelationPage() {
             {presetGroups.map((group) => (
               <button
                 key={group.label}
-                onClick={() => setSymbolInput(group.symbols)}
+                onClick={() => {
+                  if ((group as any).isSpecial && availableSymbols) {
+                    setSymbolInput(availableSymbols.join(', '));
+                  } else {
+                    setSymbolInput(group.symbols);
+                  }
+                }}
                 className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-secondary/60 text-muted-foreground hover:text-foreground hover:bg-secondary transition-all cursor-pointer border border-border/30"
               >
-                {group.label}
+                {group.label}{(group as any).isSpecial && availableSymbols ? ` (${availableSymbols.length})` : ''}
               </button>
             ))}
           </div>
         </CardContent>
       </Card>
+
+      {/* Explain Panel */}
+      {showExplain && (
+        <Card className="border-violet-500/20 bg-violet-500/5">
+          <CardContent className="pt-4 space-y-4">
+            <h3 className="text-sm font-semibold flex items-center gap-1.5">
+              <Info className="w-4 h-4 text-violet-400" /> How the Correlation Matrix Works
+            </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-muted-foreground">
+              <div className="space-y-2">
+                <h4 className="font-medium text-foreground">Calculation Basis</h4>
+                <ul className="space-y-1.5 list-none">
+                  <li className="flex gap-2">
+                    <span className="text-violet-400 font-bold">1.</span>
+                    <span>Historical <span className="font-medium text-foreground">daily closing prices</span> are fetched from our Yahoo Finance database</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-violet-400 font-bold">2.</span>
+                    <span><span className="font-medium text-foreground">Daily returns</span> are calculated as percentage change: (Close[t] - Close[t-1]) / Close[t-1]</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-violet-400 font-bold">3.</span>
+                    <span>The <span className="font-medium text-foreground">correlation coefficient</span> measures how returns move together (-1 to +1)</span>
+                  </li>
+                </ul>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="font-medium text-foreground">Methods Explained</h4>
+                <ul className="space-y-1.5 list-none">
+                  <li className="flex gap-2">
+                    <span className="w-16 font-mono font-medium text-blue-400 flex-shrink-0">Pearson</span>
+                    <span>Linear relationship between returns. Most common. Sensitive to outliers.</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="w-16 font-mono font-medium text-emerald-400 flex-shrink-0">Spearman</span>
+                    <span>Rank-based. Captures monotonic (not just linear) relationships. More robust to outliers.</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="w-16 font-mono font-medium text-amber-400 flex-shrink-0">Kendall</span>
+                    <span>Concordance of pairs. Best for small samples or non-normal data. Most conservative.</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <div className="space-y-2 text-xs text-muted-foreground">
+              <h4 className="font-medium text-foreground">Interpretation</h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <div className="flex items-center gap-2 bg-background/50 rounded-md px-3 py-2">
+                  <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: getCorrelationColor(0.85) }} />
+                  <span><span className="font-medium text-foreground">+0.7 to +1.0</span> — Move together (high risk if both in portfolio)</span>
+                </div>
+                <div className="flex items-center gap-2 bg-background/50 rounded-md px-3 py-2">
+                  <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: getCorrelationColor(0.0) }} />
+                  <span><span className="font-medium text-foreground">-0.3 to +0.3</span> — Uncorrelated (good diversification)</span>
+                </div>
+                <div className="flex items-center gap-2 bg-background/50 rounded-md px-3 py-2">
+                  <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: getCorrelationColor(-0.7) }} />
+                  <span><span className="font-medium text-foreground">-0.7 to -1.0</span> — Move opposite (natural hedge)</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-2 bg-amber-500/10 border border-amber-500/20 rounded-md px-3 py-2 text-xs">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
+              <div className="text-muted-foreground">
+                <span className="font-medium text-foreground">Note:</span> Correlation is not constant — it changes over time and tends to increase during market crashes.
+                Symbols with &lt;80% data coverage in the selected period are automatically excluded.
+                Only trading days are counted (weekends/holidays excluded).
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Data Basis Info (always visible when data loaded) */}
+      {data?.stats && !isLoading && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground bg-secondary/30 rounded-lg px-3 py-2">
+          <span>Basis: <span className="font-medium text-foreground">Daily Close-to-Close Returns</span></span>
+          <span className="text-border">|</span>
+          <span>Period: <span className="font-mono text-foreground">{data.stats.date_from?.slice(0, 10)}</span> to <span className="font-mono text-foreground">{data.stats.date_to?.slice(0, 10)}</span></span>
+          <span className="text-border">|</span>
+          <span>Data Points: <span className="font-mono text-foreground">{data.stats.num_data_points}</span> trading days</span>
+          <span className="text-border">|</span>
+          <span>Method: <span className="font-medium text-foreground">{method.charAt(0).toUpperCase() + method.slice(1)}</span></span>
+          <span className="text-border">|</span>
+          <span>Source: <span className="text-foreground">Yahoo Finance (adj. close)</span></span>
+        </div>
+      )}
 
       {/* Parameters */}
       {showFilters && (
