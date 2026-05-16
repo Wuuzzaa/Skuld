@@ -124,6 +124,53 @@ def calculate_scores(df):
     
     return df
 
+def get_status_indicator(value, metric_type):
+    """Gibt ein Emoji basierend auf dem Wert und Metrik-Typ zurück."""
+    if value is None or pd.isna(value):
+        return "⚪"
+    
+    if metric_type == "score":
+        if value >= 75: return "🟢"
+        if value >= 55: return "🟡"
+        return "🔴"
+    elif metric_type == "pe":
+        if value <= 15: return "🟢"
+        if value <= 25: return "🟡"
+        return "🔴"
+    elif metric_type == "pb":
+        if value <= 2.0: return "🟢"
+        if value <= 5.0: return "🟡"
+        return "🔴"
+    elif metric_type == "yield":
+        if value >= 0.04: return "🟢"
+        if value >= 0.025: return "🟡"
+        return "🔴"
+    elif metric_type == "payout":
+        if value <= 0.5: return "🟢"
+        if value <= 0.75: return "🟡"
+        return "🔴"
+    elif metric_type == "debt":
+        if value <= 70: return "🟢"
+        if value <= 150: return "🟡"
+        return "🔴"
+    elif metric_type == "quality":
+        if value >= 0.15: return "🟢"
+        if value >= 0.08: return "🟡"
+        return "🔴"
+    elif metric_type == "growth":
+        if value >= 0.10: return "🟢"
+        if value >= 0.0: return "🟡"
+        return "🔴"
+    elif metric_type == "rsi":
+        if value <= 40: return "🟢"
+        if value <= 65: return "🟡"
+        return "🔴"
+    elif metric_type == "iv_rank":
+        if 0.35 <= value <= 0.65: return "🟢"
+        if 0.20 <= value <= 0.80: return "🟡"
+        return "🔴"
+    return "⚪"
+
 @st.cache_data(ttl=3600)
 def get_options_for_symbol(symbol):
     """Sucht nach passenden Short Puts."""
@@ -281,47 +328,65 @@ def main():
         
         with col1:
             st.markdown("### 🏆 Scores")
-            st.metric("Gesamt CVS", f"{row['CVS']:.1f}")
-            st.write(f"**Value (FVS):** {row['FVS']:.1f}")
-            st.write(f"**Dividend (DVS):** {row['DVS']:.1f}")
-            st.write(f"**Quality (QVS):** {row['QVS']:.1f}")
-            st.write(f"**Technical (TVS):** {row['TVS']:.1f}")
-            st.write(f"**Volatility (VVS):** {row['VVS']:.1f}")
+            with st.container(border=True):
+                cvs_emoji = get_status_indicator(row['CVS'], "score")
+                st.metric("Gesamt CVS", f"{cvs_emoji} {row['CVS']:.1f}")
+                st.write(f"{get_status_indicator(row['FVS'], 'score')} **Value (FVS):** {row['FVS']:.1f}")
+                st.write(f"{get_status_indicator(row['DVS'], 'score')} **Dividend (DVS):** {row['DVS']:.1f}")
+                st.write(f"{get_status_indicator(row['QVS'], 'score')} **Quality (QVS):** {row['QVS']:.1f}")
+                st.write(f"{get_status_indicator(row['TVS'], 'score')} **Technical (TVS):** {row['TVS']:.1f}")
+                st.write(f"{get_status_indicator(row['VVS'], 'score')} **Volatility (VVS):** {row['VVS']:.1f}")
 
         with col2:
-            st.markdown("### 💰 Fundamentaldaten")
-            st.write(f"**Market Cap:** ${row['market_cap']/1e9:.1f}B")
-            st.write(f"**P/E Ratio:** {row['trailing_pe']:.1f}")
-            st.write(f"**P/B Ratio:** {row['price_to_book']:.1f}")
-            st.write(f"**P/S Ratio:** {row['price_to_sales']:.1f}")
-            st.write(f"**EV/EBITDA:** {row['ev_ebitda']:.1f}")
-            st.write(f"**Debt to Equity:** {row['debt_to_equity']:.1f}%")
-            st.write(f"**Current Ratio:** {row['current_ratio']:.2f}")
+            st.markdown("### 💰 Fundamental")
+            with st.container(border=True):
+                st.write(f"⚪ **Market Cap:** ${row['market_cap']/1e9:.1f}B")
+                st.write(f"{get_status_indicator(row['trailing_pe'], 'pe')} **P/E Ratio:** {row['trailing_pe']:.1f}")
+                st.write(f"{get_status_indicator(row['price_to_book'], 'pb')} **P/B Ratio:** {row['price_to_book']:.1f}")
+                st.write(f"⚪ **P/S Ratio:** {row['price_to_sales']:.1f}")
+                st.write(f"⚪ **EV/EBITDA:** {row['ev_ebitda']:.1f}")
+                st.write(f"{get_status_indicator(row['debt_to_equity'], 'debt')} **Debt/Equity:** {row['debt_to_equity']:.1f}%")
+                st.write(f"{get_status_indicator(row['current_ratio'], 'quality')} **Current Ratio:** {row['current_ratio']:.2f}")
 
         with col3:
-            st.markdown("### 🏦 Dividende & Qualität")
-            st.write(f"**Yield:** {row['dividend_yield']:.2%}")
-            st.write(f"**Avg Yield (5Y):** {row['avg_yield_5y']:.2%}")
-            st.write(f"**Payout Ratio:** {row['payout_ratio']:.1%}")
-            st.write(f"**ROE:** {row['roe']:.1%}")
-            st.write(f"**ROA:** {row['roa']:.1%}")
-            st.write(f"**Profit Margin:** {row['profit_margin']:.1%}")
-            st.write(f"**Earnings Growth:** {row['earnings_growth']:.1%}")
-            st.write(f"**Revenue Growth:** {row['revenue_growth']:.1%}")
+            st.markdown("### 🏦 Dividende")
+            with st.container(border=True):
+                st.write(f"{get_status_indicator(row['dividend_yield'], 'yield')} **Yield:** {row['dividend_yield']:.2%}")
+                st.write(f"⚪ **Avg Yield (5Y):** {row['avg_yield_5y']:.2%}")
+                st.write(f"{get_status_indicator(row['payout_ratio'], 'payout')} **Payout:** {row['payout_ratio']:.1%}")
+                st.write(f"{get_status_indicator(row['roe'], 'quality')} **ROE:** {row['roe']:.1%}")
+                st.write(f"{get_status_indicator(row['roa'], 'quality')} **ROA:** {row['roa']:.1%}")
+                st.write(f"{get_status_indicator(row['profit_margin'], 'quality')} **Margin:** {row['profit_margin']:.1%}")
+                st.write(f"{get_status_indicator(row['earnings_growth'], 'growth')} **E-Growth:** {row['earnings_growth']:.1%}")
+                st.write(f"{get_status_indicator(row['revenue_growth'], 'growth')} **R-Growth:** {row['revenue_growth']:.1%}")
 
         with col4:
-            st.markdown("### 📈 Technik & Volatilität")
-            st.write(f"**Preis:** ${row['current_price']:.2f}")
-            st.write(f"**RSI (14):** {row['rsi']:.1f}")
-            st.write(f"**SMA 50 / 200:** ${row['sma_50']:.2f} / ${row['sma_200']:.2f}")
-            st.write(f"**Stoch K/D:** {row['stoch_k']:.1f} / {row['stoch_d']:.1f}")
-            st.write(f"**MACD / Signal:** {row['macd']:.2f} / {row['macd_signal']:.2f}")
-            st.write(f"**IV Rank:** {row['iv_rank_val']:.1%}")
-            st.write(f"**IV Current:** {row['current_iv']:.1%}")
-            st.write(f"**IV 52W Range:** {row['iv_min_52w']:.1%} - {row['iv_max_52w']:.1%}")
+            st.markdown("### 📈 Technik")
+            with st.container(border=True):
+                st.write(f"⚪ **Preis:** ${row['current_price']:.2f}")
+                st.write(f"{get_status_indicator(row['rsi'], 'rsi')} **RSI (14):** {row['rsi']:.1f}")
+                st.write(f"⚪ **SMA 50/200:** {row['sma_50']:.0f}/{row['sma_200']:.0f}")
+                st.write(f"⚪ **Stoch K/D:** {row['stoch_k']:.1f}/{row['stoch_d']:.1f}")
+                st.write(f"⚪ **MACD:** {row['macd']:.2f}")
+                st.write(f"{get_status_indicator(row['iv_rank_val'], 'iv_rank')} **IV Rank:** {row['iv_rank_val']:.1%}")
+                st.write(f"⚪ **IV Current:** {row['current_iv']:.1%}")
+                st.write(f"⚪ **IV 52W Range:** {row['iv_min_52w']:.1%}-{row['iv_max_52w']:.1%}")
 
         st.divider()
         st.subheader("💡 Strategische Analyse")
+        
+        # Empfehlung basierend auf CVS
+        cvs = row['CVS']
+        if cvs >= 85:
+            rec = "🟢 **PREMIUM:** Hervorragendes Setup für Long-Einstieg oder Short Put."
+        elif cvs >= 70:
+            rec = "🔵 **STARK:** Gutes Chance-Risiko-Verhältnis."
+        elif cvs >= 55:
+            rec = "🟡 **GUT:** Solider Kandidat, evtl. reduzierte Positionsgröße."
+        else:
+            rec = "⚪ **NEUTRAL:** Aktuell kein Handlungsbedarf."
+            
+        st.success(rec)
         
         # Automatischer Analyse-Text
         pe_pct = row['pe_rank'] * 100
