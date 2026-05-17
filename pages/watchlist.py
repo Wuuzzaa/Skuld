@@ -183,7 +183,7 @@ def update_watchlist_prices(df_watchlist, df_market_data):
                 
     return df_watchlist, updated
 
-@st.cache_data
+@st.cache_data(ttl=3600)
 def get_valid_symbols():
     try:
         # Versuche Symbole und Sektor aus der Datenbank zu laden
@@ -203,6 +203,7 @@ def main():
     
     df_symbols = get_valid_symbols()
     valid_symbols = df_symbols['symbol'].tolist() if not df_symbols.empty else []
+    valid_companies = df_symbols['company_name'].tolist() if not df_symbols.empty else []
 
     # Marktpreise beim Laden der Seite aktualisieren
     if 'prices_updated' not in st.session_state:
@@ -226,8 +227,8 @@ def main():
 
     # Editor Setup
     column_config = {
-        "Symbol": st.column_config.SelectboxColumn("Symbol", help="Aktien Ticker", required=True, options=valid_symbols),
-        "Unternehmen": st.column_config.TextColumn("Unternehmen", disabled=True),
+        "Symbol": st.column_config.SelectboxColumn("Symbol", help="Aktien Ticker", options=valid_symbols),
+        "Unternehmen": st.column_config.SelectboxColumn("Unternehmen", help="Name des Unternehmens", options=valid_companies),
         "Sektor": st.column_config.TextColumn("Sektor", disabled=True),
         "Person": st.column_config.SelectboxColumn("Person", options=PERSONS),
         "timestamp": st.column_config.DatetimeColumn("Zeitstempel", disabled=True),
@@ -457,48 +458,69 @@ def main():
         else:
             st.error("Speichern fehlgeschlagen! Daten wurden nicht persistiert.")
 
-    # Automatischer Abgleich bei Symbolwahl (nach dem Save-Button damit kein rerun den Save blockiert)
+    # Automatischer Abgleich bei Symbolwahl oder Unternehmenswahl
     if "watchlist_editor" in st.session_state and not df_symbols.empty:
         changes = st.session_state.watchlist_editor
         symbol_map = df_symbols.set_index('symbol')
+        company_map = df_symbols.set_index('company_name')
         any_auto_update = False
 
-        # Geänderte Zeilen prüfen - nur NEUE Symbol-Änderungen triggern Auto-Fill
+        # Geänderte Zeilen prüfen
         for row_idx_str, edited_cols in changes.get('edited_rows', {}).items():
+            row_idx = int(row_idx_str)
+            if row_idx >= len(st.session_state.watchlist_df):
+                continue
+                
             if 'Symbol' in edited_cols:
                 new_symbol = edited_cols['Symbol']
                 if new_symbol in symbol_map.index:
-                    row_idx = int(row_idx_str)
                     db_row = symbol_map.loc[new_symbol]
-                    if row_idx < len(st.session_state.watchlist_df):
-                        # Nur updaten wenn das Symbol sich wirklich geändert hat
-                        current_symbol = st.session_state.watchlist_df.at[row_idx, 'Symbol']
-                        if current_symbol != new_symbol:
-                            st.session_state.watchlist_df.at[row_idx, 'Symbol'] = new_symbol
-                            st.session_state.watchlist_df.at[row_idx, 'Unternehmen'] = db_row['company_name']
-                            st.session_state.watchlist_df.at[row_idx, 'Aktueller Kurs'] = db_row['live_stock_price']
-                            any_auto_update = True
+                    # Nur updaten wenn das Symbol sich wirklich geändert hat
+                    current_symbol = st.session_state.watchlist_df.at[row_idx, 'Symbol']
+                    if current_symbol != new_symbol:
+                        st.session_state.watchlist_df.at[row_idx, 'Symbol'] = new_symbol
+                        st.session_state.watchlist_df.at[row_idx, 'Unternehmen'] = db_row['company_name']
+                        st.session_state.watchlist_df.at[row_idx, 'Aktueller Kurs'] = db_row['live_stock_price']
+                        any_auto_update = True
+            
+            elif 'Unternehmen' in edited_cols:
+                new_company = edited_cols['Unternehmen']
+                if new_company in company_map.index:
+                    db_row = company_map.loc[new_company]
+                    # Nur updaten wenn das Unternehmen sich wirklich geändert hat
+                    current_company = st.session_state.watchlist_df.at[row_idx, 'Unternehmen']
+                    if current_company != new_company:
+                        st.session_state.watchlist_df.at[row_idx, 'Unternehmen'] = new_company
+                        st.session_state.watchlist_df.at[row_idx, 'Symbol'] = db_row['symbol']
+                        st.session_state.watchlist_df.at[row_idx, 'Aktueller Kurs'] = db_row['live_stock_price']
+                        any_auto_update = True
 
         # Neue Zeilen prüfen (added_rows)
         if changes.get('added_rows'):
-            new_rows = []
+            new_rows_to_add = []
             for row in changes['added_rows']:
-                if 'Symbol' in row:
-                    new_symbol = row['Symbol']
-                    if new_symbol in symbol_map.index:
-                        db_row = symbol_map.loc[new_symbol]
-                        new_entry = {col: None for col in COLUMNS}
-                        new_entry.update(row)
-                        new_entry['Unternehmen'] = db_row['company_name']
-                        new_entry['Aktueller Kurs'] = db_row['live_stock_price']
-                        new_entry['timestamp'] = datetime.datetime.now().replace(microsecond=0)
-                        new_rows.append(new_entry)
-                        any_auto_update = True
+                new_entry = {col: None for col in COLUMNS}
+                new_entry.update(row)
+                
+                if 'Symbol' in row and row['Symbol'] in symbol_map.index:
+                    db_row = symbol_map.loc[row['Symbol']]
+                    new_entry['Unternehmen'] = db_row['company_name']
+                    new_entry['Aktueller Kurs'] = db_row['live_stock_price']
+                    new_entry['timestamp'] = datetime.datetime.now().replace(microsecond=0)
+                    new_rows_to_add.append(new_entry)
+                    any_auto_update = True
+                elif 'Unternehmen' in row and row['Unternehmen'] in company_map.index:
+                    db_row = company_map.loc[row['Unternehmen']]
+                    new_entry['Symbol'] = db_row['symbol']
+                    new_entry['Aktueller Kurs'] = db_row['live_stock_price']
+                    new_entry['timestamp'] = datetime.datetime.now().replace(microsecond=0)
+                    new_rows_to_add.append(new_entry)
+                    any_auto_update = True
 
-            if new_rows:
+            if new_rows_to_add:
                 st.session_state.watchlist_df = pd.concat([
                     st.session_state.watchlist_df,
-                    pd.DataFrame(new_rows)
+                    pd.DataFrame(new_rows_to_add)
                 ], ignore_index=True)
 
         if any_auto_update:
