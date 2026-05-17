@@ -27,6 +27,8 @@ services:
       - POSTGRES_USER=${POSTGRES_USER:-admin}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB:-Skuld}
+    volumes:
+      - ./data:/app/data
     restart: unless-stopped
     networks:
       - web
