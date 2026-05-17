@@ -43,7 +43,7 @@ def main():
         max_per_sector = st.number_input("Max / Sektor", min_value=1, max_value=10, value=2, step=1,
                                          help="Maximale Aktien aus demselben Sektor")
     with col3:
-        exit_percentile = st.number_input("Exit below Top %", min_value=10.0, max_value=90.0, value=50.0, step=5.0,
+        exit_percentile = st.number_input("Exit below Top %", min_value=5.0, max_value=90.0, value=50.0, step=5.0,
                                           help="Unter diesem Percentil wird verkauft")
 
     # Load data

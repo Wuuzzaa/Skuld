@@ -118,7 +118,7 @@ export default function RslMomentumPage() {
         <div className="flex items-center gap-2">
           <label className="text-xs text-muted-foreground">Exit below Top %</label>
           <Input
-            type="number" min={10} max={90} step={5}
+            type="number" min={5} max={90} step={5}
             value={params.exit_percentile}
             onChange={(e) => setParams({ ...params, exit_percentile: +e.target.value })}
             className="w-20 h-8"
