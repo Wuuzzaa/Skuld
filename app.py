@@ -36,6 +36,7 @@ sector_rotation = st.Page('pages/sector_rotation.py', title="Sector Rotation")
 rsl_momentum = st.Page('pages/rsl_momentum.py', title="RSL Momentum")
 expected_value = st.Page('pages/expected_value.py', title="Expected Value")
 dividend_scanner = st.Page("pages/dividend_scanner.py", title="Dividend Scanner")
+zahltagstrategie = st.Page("pages/dividend_screener_zahltagstrategie.py", title="Zahltagstrategie")
 data_logs = st.Page("pages/data_change_logs.py", title="Data Logs")
 iron_condors = st.Page("pages/iron_condors.py", title="Iron Condors")
 symbolpage = st.Page("pages/symbolpage.py", title="Symbol Page")
@@ -54,6 +55,7 @@ page = st.navigation(
         rsl_momentum,
         expected_value,
         dividend_scanner,
+        zahltagstrategie,
         data_logs,
         symbolpage
     ]
