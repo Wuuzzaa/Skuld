@@ -19,6 +19,7 @@ PERSONS = ["JL", "DD", "JP", "JI", "KK", "MO"]
 COLUMNS = [
     "Symbol",
     "Unternehmen",
+    "Kategorie",
     "Aktueller Kurs",
     "Person",
     "Bemerkung",
@@ -229,6 +230,7 @@ def main():
     column_config = {
         "Symbol": st.column_config.SelectboxColumn("Symbol", help="Aktien Ticker", options=valid_symbols),
         "Unternehmen": st.column_config.SelectboxColumn("Unternehmen", help="Name des Unternehmens", options=valid_companies),
+        "Kategorie": st.column_config.TextColumn("Kategorie", help="Freitext Kategorie"),
         "Sektor": st.column_config.TextColumn("Sektor", disabled=True),
         "Person": st.column_config.SelectboxColumn("Person", options=PERSONS),
         "timestamp": st.column_config.DatetimeColumn("Zeitstempel", disabled=True),
@@ -301,7 +303,37 @@ def main():
         return df.style.apply(color_levels, axis=1).format({col: "{:.2f} €" for col in currency_cols}, na_rep="-")
 
     st.subheader("Aktuelle Watchlist")
+    
+    # Filter-Sektion
+    with st.expander("🔍 Filter", expanded=False):
+        f_col1, f_col2, f_col3, f_col4 = st.columns(4)
+        
+        # Verfügbare Werte für Filter sammeln
+        avail_symbols = sorted(st.session_state.watchlist_df['Symbol'].dropna().unique().tolist())
+        avail_companies = sorted(st.session_state.watchlist_df['Unternehmen'].dropna().unique().tolist())
+        avail_persons = sorted(st.session_state.watchlist_df['Person'].dropna().unique().tolist())
+        avail_categories = sorted(st.session_state.watchlist_df['Kategorie'].dropna().unique().tolist())
+        
+        with f_col1:
+            filter_symbol = st.multiselect("Symbol", options=avail_symbols)
+        with f_col2:
+            filter_company = st.multiselect("Unternehmen", options=avail_companies)
+        with f_col3:
+            filter_person = st.multiselect("Person", options=avail_persons)
+        with f_col4:
+            filter_category = st.multiselect("Kategorie", options=avail_categories)
+
     display_df = st.session_state.watchlist_df.copy()
+    
+    # Filter anwenden
+    if filter_symbol:
+        display_df = display_df[display_df['Symbol'].isin(filter_symbol)]
+    if filter_company:
+        display_df = display_df[display_df['Unternehmen'].isin(filter_company)]
+    if filter_person:
+        display_df = display_df[display_df['Person'].isin(filter_person)]
+    if filter_category:
+        display_df = display_df[display_df['Kategorie'].isin(filter_category)]
     
     # Spalten für die Anzeige (Sektor anzeigen)
     st.dataframe(style_watchlist(display_df), width="stretch")
