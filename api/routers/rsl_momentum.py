@@ -13,7 +13,7 @@ router = APIRouter()
 async def get_rsl_momentum(
     top_n: int = Query(5, ge=1, le=50),
     max_per_sector: int = Query(2, ge=1, le=10),
-    exit_percentile: float = Query(50.0, ge=5.0, le=90.0),
+    exit_percentile: float = Query(50.0, ge=1.0, le=90.0),
     current_user: dict = Depends(get_current_user),
 ):
     """Calculate RSL Momentum Rotation ranking for S&P 500."""

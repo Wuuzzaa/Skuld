@@ -43,7 +43,7 @@ def main():
         max_per_sector = st.number_input("Max / Sektor", min_value=1, max_value=10, value=2, step=1,
                                          help="Maximale Aktien aus demselben Sektor")
     with col3:
-        exit_percentile = st.number_input("Exit below Top %", min_value=5.0, max_value=90.0, value=50.0, step=5.0,
+        exit_percentile = st.number_input("Exit below Top %", min_value=1.0, max_value=90.0, value=50.0, step=5.0,
                                           help="Unter diesem Percentil wird verkauft")
 
     # Load data
@@ -154,39 +154,68 @@ def main():
             )
 
     # --- Strategy Guide ---
-    with st.expander("Strategy Guide / FAQ"):
+    with st.expander("📖 Strategie-Anleitung (Schritt für Schritt)"):
         st.markdown("""
-        **Was ist der RSL-Wert?**
-        RSL (Relative Strength Line) = Aktueller Kurs / 200-Tage-Durchschnitt (SMA200).
-        Ein RSL von 1.5 bedeutet, die Aktie notiert 50% über ihrem SMA200.
-        RSL > 1.0 = Aufwärtstrend, RSL < 1.0 = Abwärtstrend.
+        ### RSL Momentum Rotation — Wochenroutine
 
-        **Wie funktioniert die Rotation?**
-        Du hältst immer die Top-N Aktien mit dem höchsten RSL. Wöchentlich prüfst du das Ranking.
-        Fällt eine Position unter den Exit-Threshold, wird sie verkauft und durch den Nachrücker ersetzt.
+        **Grundidee:** Du hältst immer die stärksten Aktien aus dem S&P 500 (gemessen am RSL = Kurs/SMA200).
+        Jeden Montag prüfst du das Ranking und tauschst schwache Positionen gegen starke aus.
 
-        **Parameter:**
-        - **Top N** = Anzahl Positionen im Portfolio (Standard: 5)
-        - **Max / Sektor** = Maximale Aktien aus demselben Sektor, verhindert Klumpenrisiko (Standard: 2)
-        - **Exit below Top %** = Ab welcher Percentile-Schwelle verkauft wird (Standard: 50% = untere Hälfte)
+        ---
 
-        **Wann kaufen/verkaufen?**
-        - HOLD = Position bleibt im Portfolio (über der Schwelle)
-        - EXIT = Position unter der Schwelle → verkaufen, Nachrücker kaufen
+        #### Montag-Routine (5-10 Minuten):
 
-        **Wie oft rebalancen?**
-        Einmal pro Woche reicht (z.B. Freitag Abend). Tägliches Checken erzeugt unnötige Trades.
+        **1. Ranking öffnen & prüfen**
+        - Öffne diese Seite und schaue auf deine aktuellen Positionen
+        - Frage: Sind alle meine Positionen noch im grünen Bereich (HOLD)?
 
-        **Sektor-Diversifikation:**
-        Der Algorithmus geht das Ranking top-down durch und überspringt Aktien, deren Sektor bereits
-        das Maximum erreicht hat. So entsteht automatisch ein diversifiziertes Portfolio.
+        **2. EXIT-Signale umsetzen**
+        - Steht bei einer Position "EXIT" → **Verkaufen** (Market Order, Montag Vormittag)
+        - EXIT bedeutet: Die Aktie ist unter deinen Exit-Threshold gefallen (z.B. raus aus Top 5%)
 
-        **Positionsgröße:**
+        **3. Neue Top Picks kaufen**
+        - Die frei gewordenen Plätze werden mit den neuen Top Picks aufgefüllt
+        - Immer gleichgewichtet: Bei 5 Positionen = je 20% des Portfolios
+        - Nur kaufen was ein ⭐ (Top Pick) hat
+
+        **4. Nichts tun wenn alles HOLD ist**
+        - Kein Signal = Keine Aktion. Das ist der Normalfall!
+
+        ---
+
+        #### Parameter-Einstellungen:
+
+        | Parameter | Empfehlung | Bedeutung |
+        |-----------|-----------|-----------|
+        | **Top N** | 5 | Anzahl Positionen im Portfolio |
+        | **Max/Sektor** | 2 | Verhindert Klumpenrisiko in einem Sektor |
+        | **Exit below Top %** | 5% (aggressiv) bis 50% (konservativ) | Wann wird verkauft? |
+
+        **Exit-Threshold erklärt:**
+        - **5%** = Aktie muss aus den Top 25 (von 500) rausfallen bevor verkauft wird → wenige Trades, hohe Trefferquote
+        - **10%** = Aktie muss aus Top 50 rausfallen → guter Mittelweg
+        - **50%** = Aktie muss unter den Median fallen → viele Trades, schnellere Reaktion
+
+        ---
+
+        #### Was ist RSL?
+        **RSL** (Relative Strength Line) = Aktueller Kurs / 200-Tage-Durchschnitt (SMA200)
+
+        - RSL = 1.5 → Aktie notiert 50% über ihrem SMA200 (sehr stark)
+        - RSL = 1.0 → Aktie genau auf dem SMA200 (neutral)
+        - RSL = 0.8 → Aktie 20% unter SMA200 (schwach)
+
+        Die Strategie kauft systematisch die relativ stärksten Aktien und verkauft sie erst,
+        wenn ihre relative Stärke deutlich nachlässt.
+
+        ---
+
+        #### Positionsgröße:
         Gleichgewichtet — bei Top 5 = je 20%. Beim Einstieg alle Top-Picks gleichzeitig kaufen.
+        Rebalancing der Gewichte nur bei Tausch (nicht wöchentlich neu gewichten).
 
-        **Datenquelle:**
-        Live-Kurse aus OptionDataMerged (Polygon.io), SMA200 aus den Preisdaten.
-        Universum: S&P 500 Konstituenten.
+        #### Universum:
+        S&P 500 Konstituenten. Daten: Live-Kurse aus OptionDataMerged (Polygon.io).
         """)
 
 
