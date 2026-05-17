@@ -21,6 +21,8 @@ COLUMNS = [
     "Unternehmen",
     "Kategorie",
     "Aktueller Kurs",
+    "Kurs Watchlistanlage",
+    "Kursänderung",
     "Person",
     "Bemerkung",
     "Level Kaufkurs 1",
@@ -140,6 +142,19 @@ def load_watchlist():
             for col in COLUMNS:
                 if col not in df.columns:
                     df[col] = None
+            
+            # Explizite Typ-Konvertierung für Text-Spalten zur Vermeidung von Streamlit-Fehlern
+            text_columns = ["Symbol", "Unternehmen", "Kategorie", "Person", "Bemerkung"]
+            for col in text_columns:
+                if col in df.columns:
+                    df[col] = df[col].astype(str).replace(['nan', 'None', '<NA>'], '')
+
+            # Numerische Spalten initialisieren falls nötig
+            numeric_columns = ["Aktueller Kurs", "Kurs Watchlistanlage", "Kursänderung"]
+            for col in numeric_columns:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
+            
             return df[COLUMNS]
         except Exception as e:
             st.error(f"Fehler beim Laden der Watchlist: {e}")
@@ -177,6 +192,13 @@ def update_watchlist_prices(df_watchlist, df_market_data):
             new_price = market_map[symbol]['live_stock_price']
             new_company = market_map[symbol]['company_name']
             
+            # Kursänderung berechnen, falls Anlagekurs vorhanden
+            if 'Kurs Watchlistanlage' in row and pd.notna(row['Kurs Watchlistanlage']) and row['Kurs Watchlistanlage'] != 0:
+                change = ((new_price / row['Kurs Watchlistanlage']) - 1) * 100
+                if pd.isna(row['Kursänderung']) or abs(row['Kursänderung'] - change) > 0.001:
+                    df_watchlist.at[idx, 'Kursänderung'] = change
+                    updated = True
+
             if row['Aktueller Kurs'] != new_price or row['Unternehmen'] != new_company:
                 df_watchlist.at[idx, 'Aktueller Kurs'] = new_price
                 df_watchlist.at[idx, 'Unternehmen'] = new_company
@@ -216,7 +238,7 @@ def main():
     # Sektor-Informationen zum Watchlist-DF hinzufügen für die Prompt-Generierung
     if not df_symbols.empty:
         sector_map = df_symbols.set_index('symbol')['Sektor'].to_dict()
-        st.session_state.watchlist_df['Sektor'] = st.session_state.watchlist_df['Symbol'].map(sector_map)
+        st.session_state.watchlist_df['Sektor'] = st.session_state.watchlist_df['Symbol'].map(sector_map).fillna('').astype(str)
         
         # Spaltenreihenfolge anpassen: Sektor nach Unternehmen
         cols = list(st.session_state.watchlist_df.columns)
@@ -232,9 +254,11 @@ def main():
         "Unternehmen": st.column_config.SelectboxColumn("Unternehmen", help="Name des Unternehmens", options=valid_companies),
         "Kategorie": st.column_config.TextColumn("Kategorie", help="Freitext Kategorie"),
         "Sektor": st.column_config.TextColumn("Sektor", disabled=True),
+        "Aktueller Kurs": st.column_config.NumberColumn("Aktueller Kurs", format="%.2f €", disabled=True),
+        "Kurs Watchlistanlage": st.column_config.NumberColumn("Kurs Anlage", format="%.2f €", help="Kurs bei Anlage"),
+        "Kursänderung": st.column_config.NumberColumn("Änderung %", format="%.2f %%", disabled=True),
         "Person": st.column_config.SelectboxColumn("Person", options=PERSONS),
         "timestamp": st.column_config.DatetimeColumn("Zeitstempel", disabled=True),
-        "Aktueller Kurs": st.column_config.NumberColumn("Aktueller Kurs", format="%.2f €", disabled=True),
         "Level Kaufkurs 1": st.column_config.NumberColumn("Kauf 1", format="%.2f €", min_value=0.0),
         "Level Kaufkurs 2": st.column_config.NumberColumn("Kauf 2", format="%.2f €", min_value=0.0),
         "Level Kaufkurs 3": st.column_config.NumberColumn("Kauf 3", format="%.2f €", min_value=0.0),
@@ -297,10 +321,10 @@ def main():
             return styles
 
         # Währungsspalten definieren
-        currency_cols = ["Aktueller Kurs", "Level Kaufkurs 1", "Level Kaufkurs 2", "Level Kaufkurs 3", 
+        currency_cols = ["Aktueller Kurs", "Kurs Watchlistanlage", "Level Kaufkurs 1", "Level Kaufkurs 2", "Level Kaufkurs 3", 
                          "Level Verkaufkurs 1", "Level Verkaufkurs 2", "Level Verkaufkurs 3"]
         
-        return df.style.apply(color_levels, axis=1).format({col: "{:.2f} €" for col in currency_cols}, na_rep="-")
+        return df.style.apply(color_levels, axis=1).format({col: "{:.2f} €" for col in currency_cols} | {"Kursänderung": "{:.2f} %"}, na_rep="-")
 
     st.subheader("Aktuelle Watchlist")
     
@@ -336,7 +360,7 @@ def main():
         display_df = display_df[display_df['Kategorie'].isin(filter_category)]
     
     # Spalten für die Anzeige (Sektor anzeigen)
-    st.dataframe(style_watchlist(display_df), width="stretch")
+    st.dataframe(style_watchlist(display_df), column_config=column_config, width="stretch")
 
     # Claude KI Analyse Bereich
     if not st.session_state.watchlist_df.empty:
@@ -393,6 +417,12 @@ def main():
         st.info("Watchlist ist leer.")
 
     st.subheader("Bearbeitungsmodus")
+
+    # Vor der Bearbeitung sicherstellen, dass Textspalten wirklich Strings sind
+    # Dies verhindert StreamlitAPIException bei inkompatiblen Typen (z.B. Kategorie als Float)
+    for col in ["Symbol", "Unternehmen", "Kategorie", "Person", "Bemerkung", "Sektor"]:
+        if col in st.session_state.watchlist_df.columns:
+            st.session_state.watchlist_df[col] = st.session_state.watchlist_df[col].astype(str).replace(['nan', 'None', '<NA>'], '')
 
     edited_df = st.data_editor(
         st.session_state.watchlist_df,
@@ -477,6 +507,10 @@ def main():
                         edited_df.at[idx, 'Unternehmen'] = db_row['company_name']
                     if pd.isna(edited_df.at[idx, 'Aktueller Kurs']) or edited_df.at[idx, 'Aktueller Kurs'] == 0:
                         edited_df.at[idx, 'Aktueller Kurs'] = db_row['live_stock_price']
+                    
+                    # Initialen Kurs für Watchlistanlage setzen, falls noch nicht vorhanden
+                    if pd.isna(edited_df.at[idx, 'Kurs Watchlistanlage']) or edited_df.at[idx, 'Kurs Watchlistanlage'] == 0:
+                        edited_df.at[idx, 'Kurs Watchlistanlage'] = db_row['live_stock_price']
         
         st.session_state.watchlist_df = edited_df
         # Falls Sektor-Spalte fehlte (z.B. nach Save), wieder hinzufügen
@@ -513,6 +547,11 @@ def main():
                         st.session_state.watchlist_df.at[row_idx, 'Symbol'] = new_symbol
                         st.session_state.watchlist_df.at[row_idx, 'Unternehmen'] = db_row['company_name']
                         st.session_state.watchlist_df.at[row_idx, 'Aktueller Kurs'] = db_row['live_stock_price']
+                    
+                        # Initialen Kurs setzen
+                        if pd.isna(st.session_state.watchlist_df.at[row_idx, 'Kurs Watchlistanlage']) or st.session_state.watchlist_df.at[row_idx, 'Kurs Watchlistanlage'] == 0:
+                            st.session_state.watchlist_df.at[row_idx, 'Kurs Watchlistanlage'] = db_row['live_stock_price']
+                    
                         any_auto_update = True
             
             elif 'Unternehmen' in edited_cols:
@@ -525,6 +564,11 @@ def main():
                         st.session_state.watchlist_df.at[row_idx, 'Unternehmen'] = new_company
                         st.session_state.watchlist_df.at[row_idx, 'Symbol'] = db_row['symbol']
                         st.session_state.watchlist_df.at[row_idx, 'Aktueller Kurs'] = db_row['live_stock_price']
+                    
+                        # Initialen Kurs setzen
+                        if pd.isna(st.session_state.watchlist_df.at[row_idx, 'Kurs Watchlistanlage']) or st.session_state.watchlist_df.at[row_idx, 'Kurs Watchlistanlage'] == 0:
+                            st.session_state.watchlist_df.at[row_idx, 'Kurs Watchlistanlage'] = db_row['live_stock_price']
+                    
                         any_auto_update = True
 
         # Neue Zeilen prüfen (added_rows)
@@ -538,6 +582,7 @@ def main():
                     db_row = symbol_map.loc[row['Symbol']]
                     new_entry['Unternehmen'] = db_row['company_name']
                     new_entry['Aktueller Kurs'] = db_row['live_stock_price']
+                    new_entry['Kurs Watchlistanlage'] = db_row['live_stock_price']
                     new_entry['timestamp'] = datetime.datetime.now().replace(microsecond=0)
                     new_rows_to_add.append(new_entry)
                     any_auto_update = True
@@ -545,15 +590,29 @@ def main():
                     db_row = company_map.loc[row['Unternehmen']]
                     new_entry['Symbol'] = db_row['symbol']
                     new_entry['Aktueller Kurs'] = db_row['live_stock_price']
+                    new_entry['Kurs Watchlistanlage'] = db_row['live_stock_price']
                     new_entry['timestamp'] = datetime.datetime.now().replace(microsecond=0)
                     new_rows_to_add.append(new_entry)
                     any_auto_update = True
 
             if new_rows_to_add:
-                st.session_state.watchlist_df = pd.concat([
-                    st.session_state.watchlist_df,
-                    pd.DataFrame(new_rows_to_add)
-                ], ignore_index=True)
+                new_df = pd.DataFrame(new_rows_to_add)
+                # Sicherstellen, dass alle Spalten aus watchlist_df vorhanden sind
+                for col in st.session_state.watchlist_df.columns:
+                    if col not in new_df.columns:
+                        new_df[col] = None
+                
+                # Spaltenreihenfolge angleichen
+                new_df = new_df[st.session_state.watchlist_df.columns]
+                
+                # Vor der Verkettung leere/NA-Einträge bereinigen, falls sie Probleme machen
+                # Aber eigentlich reicht es, wenn die Spalten existieren.
+                # Um die FutureWarning zu vermeiden:
+                if not new_df.empty:
+                    st.session_state.watchlist_df = pd.concat([
+                        st.session_state.watchlist_df,
+                        new_df
+                    ], ignore_index=True)
 
         if any_auto_update:
             # Editor-Key löschen um Endlosschleife zu verhindern
