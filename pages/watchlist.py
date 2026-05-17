@@ -8,10 +8,13 @@ import datetime
 import urllib.parse
 from src.database import select_into_dataframe_pg
 
+# Projekt-Basisverzeichnis ermitteln
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 # Konfiguration
-WATCHLIST_FILE = "data/watchlist.xlsx"
-BACKUP_DIR = "data/backups"
-ANALYSES_DIR = "data/analyses"
+WATCHLIST_FILE = os.path.join(BASE_DIR, "data", "watchlist.xlsx")
+BACKUP_DIR = os.path.join(BASE_DIR, "data", "backups")
+ANALYSES_DIR = os.path.join(BASE_DIR, "data", "analyses")
 PERSONS = ["JL", "DD", "JP", "JI", "KK", "MO"]
 COLUMNS = [
     "Symbol",
@@ -29,17 +32,17 @@ COLUMNS = [
 ]
 
 SECTOR_TO_PROMPT_DICT = {
-    "Basic Materials": "src/prompts/prompt_materials.txt",
-    "Communication Services": "src/prompts/prompt_communication_services.txt",
-    "Consumer Cyclical": "src/prompts/prompt_consumer_discretionary.txt",
-    "Consumer Defensive": "src/prompts/prompt_consumer_staples.txt",
-    "Energy": "src/prompts/prompt_energy.txt",
-    "Financial Services": "src/prompts/prompt_financials.txt",
-    "Healthcare": "src/prompts/prompt_health_care.txt",
-    "Industrials": "src/prompts/prompt_industrials.txt",
-    "Real Estate": "src/prompts/prompt_real_estate.txt",
-    "Technology": "src/prompts/prompt_information_technology.txt",
-    "Utilities": "src/prompts/prompt_utilities.txt",
+    "Basic Materials": os.path.join(BASE_DIR, "src", "prompts", "prompt_materials.txt"),
+    "Communication Services": os.path.join(BASE_DIR, "src", "prompts", "prompt_communication_services.txt"),
+    "Consumer Cyclical": os.path.join(BASE_DIR, "src", "prompts", "prompt_consumer_discretionary.txt"),
+    "Consumer Defensive": os.path.join(BASE_DIR, "src", "prompts", "prompt_consumer_staples.txt"),
+    "Energy": os.path.join(BASE_DIR, "src", "prompts", "prompt_energy.txt"),
+    "Financial Services": os.path.join(BASE_DIR, "src", "prompts", "prompt_financials.txt"),
+    "Healthcare": os.path.join(BASE_DIR, "src", "prompts", "prompt_health_care.txt"),
+    "Industrials": os.path.join(BASE_DIR, "src", "prompts", "prompt_industrials.txt"),
+    "Real Estate": os.path.join(BASE_DIR, "src", "prompts", "prompt_real_estate.txt"),
+    "Technology": os.path.join(BASE_DIR, "src", "prompts", "prompt_information_technology.txt"),
+    "Utilities": os.path.join(BASE_DIR, "src", "prompts", "prompt_utilities.txt"),
 }
 
 def _get_sector_prompt(sector, symbol):
