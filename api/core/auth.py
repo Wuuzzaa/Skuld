@@ -1,5 +1,6 @@
 """JWT Authentication for SKULD API."""
 
+import os
 from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, HTTPException, status
@@ -13,16 +14,20 @@ ALGORITHM = "HS256"
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
+# User passwords from environment (fallback to secure defaults)
+_ADMIN_PASSWORD = os.getenv("SKULD_ADMIN_PASSWORD", "Kx9$mTr!vQ4pNw2z")
+_VIEWER_PASSWORD = os.getenv("SKULD_VIEWER_PASSWORD", "Vw7#hLs@jR3bYf8x")
+
 # Simple user store - in production, move to DB
 USERS = {
     "admin": {
         "username": "admin",
-        "hashed_password": pwd_context.hash("skuld2024"),
+        "hashed_password": pwd_context.hash(_ADMIN_PASSWORD),
         "role": "admin",
     },
     "viewer": {
         "username": "viewer",
-        "hashed_password": pwd_context.hash("viewer2024"),
+        "hashed_password": pwd_context.hash(_VIEWER_PASSWORD),
         "role": "viewer",
     },
 }
