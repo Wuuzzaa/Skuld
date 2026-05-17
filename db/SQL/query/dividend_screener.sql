@@ -29,7 +29,7 @@ SELECT
     ROUND(s."Summary_payoutRatio"::numeric * 100, 2) AS payout_ratio_pct,
     s.dividend_growth_years,
     s.dividend_classification,
-    s."NO_DIVIDEND_PAYOUTS_LAST_YEAR" AS dividend_payments_per_year,
+    s.no_dividend_payouts_last_year AS dividend_payments_per_year,
     ROUND(s."Summary_fiveYearAvgDividendYield"::numeric, 2) AS five_year_avg_yield,
 
     -- Technical indicator (1 criterion)
