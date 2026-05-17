@@ -21,6 +21,8 @@ import {
   Globe,
   Eye,
   Grid3X3,
+  Award,
+  Wallet,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { LoadingState } from '@/components/ui/spinner';
@@ -28,6 +30,8 @@ import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { useState } from 'react';
 
 const navItems = [
+  { href: '/dividend-screener', label: 'Dividend Screener', icon: Award, color: 'text-amber-400' },
+  { href: '/dividend-portfolio', label: 'Portfolio Builder', icon: Wallet, color: 'text-emerald-400' },
   { href: '/spreads', label: 'Spreads', icon: TrendingUp, color: 'text-emerald-400' },
   { href: '/iron-condors', label: 'Iron Condors', icon: Layers, color: 'text-blue-400' },
   { href: '/covered-calls', label: 'Covered Calls', icon: Shield, color: 'text-lime-400' },

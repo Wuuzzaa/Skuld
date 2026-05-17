@@ -164,3 +164,26 @@ export async function getCoveredCalls(params: Record<string, any>) {
   const { data } = await api.get('/covered-calls/', { params: cleanParams });
   return data;
 }
+
+// Dividend Screener (Zahltagstrategie)
+export async function getDividendScreener(params: Record<string, any>) {
+  const cleanParams = Object.fromEntries(
+    Object.entries(params).filter(([_, v]) => v != null && v !== '' && v !== 0)
+  );
+  const { data } = await api.get('/dividend-screener/', { params: cleanParams });
+  return data;
+}
+
+export async function getDividendScreenerSectors() {
+  const { data } = await api.get('/dividend-screener/sectors');
+  return data;
+}
+
+// Dividend Portfolio Builder
+export async function buildDividendPortfolio(params: Record<string, any>) {
+  const cleanParams = Object.fromEntries(
+    Object.entries(params).filter(([_, v]) => v != null)
+  );
+  const { data } = await api.get('/dividend-portfolio/', { params: cleanParams });
+  return data;
+}

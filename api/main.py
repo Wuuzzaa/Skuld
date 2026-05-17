@@ -24,6 +24,8 @@ from api.routers import (
     watchlist,
     covered_calls,
     correlation,
+    dividend_screener,
+    dividend_portfolio_builder,
 )
 
 
@@ -67,6 +69,8 @@ app.include_router(universe.router, prefix="/api/universe", tags=["Universe"])
 app.include_router(watchlist.router, prefix="/api/watchlist", tags=["Watchlist"])
 app.include_router(covered_calls.router, prefix="/api/covered-calls", tags=["Covered Calls"])
 app.include_router(correlation.router, prefix="/api/correlation", tags=["Correlation"])
+app.include_router(dividend_screener.router, prefix="/api/dividend-screener", tags=["Dividend Screener"])
+app.include_router(dividend_portfolio_builder.router, prefix="/api/dividend-portfolio", tags=["Dividend Portfolio Builder"])
 
 
 @app.get("/api/health")
