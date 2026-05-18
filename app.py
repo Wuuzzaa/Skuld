@@ -73,3 +73,5 @@ if skuld_branch and skuld_env != 'Production':
     footer_text += f" | Branch: {skuld_branch}"
 st.caption(footer_text)
 
+
+
