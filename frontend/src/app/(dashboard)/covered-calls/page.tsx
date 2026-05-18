@@ -74,11 +74,12 @@ export default function CoveredCallsPage() {
     return expirations.filter((e: any) => e.expiration_type === expTypeFilter);
   }, [expirations, expTypeFilter]);
 
-  // Auto-select expiration closest to 45 DTE (prefer those with enough symbols)
+  // Auto-select expiration closest to 45 DTE (prefer those with many symbols for good results)
   if (filteredExpirations.length && !selectedExpiration) {
-    const viable = filteredExpirations.filter((e: any) => (e.symbol_count || 0) >= 10);
-    const candidates = viable.length ? viable : filteredExpirations;
-    const target = candidates.find((e: any) => e.days_to_expiration >= 42) || candidates[candidates.length - 1];
+    const rich = filteredExpirations.filter((e: any) => (e.symbol_count || 0) >= 50);
+    const candidates = rich.length ? rich : filteredExpirations.filter((e: any) => (e.symbol_count || 0) >= 10);
+    const pool = candidates.length ? candidates : filteredExpirations;
+    const target = pool.find((e: any) => e.days_to_expiration >= 28) || pool[pool.length - 1];
     setSelectedExpiration(target.expiration_date.split('T')[0]);
   }
 
