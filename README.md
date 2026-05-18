@@ -246,3 +246,5 @@ skuld deploy home ──────> deploy.yml ──────────�
 | DB Replikation timeout | Backup ist ~6 GB, kann 15-20 Min dauern |
 
 
+
+
