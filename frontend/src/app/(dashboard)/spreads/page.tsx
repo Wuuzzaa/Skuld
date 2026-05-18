@@ -95,9 +95,11 @@ export default function SpreadsPage() {
     return expirations.filter((e: any) => e.expiration_type === expTypeFilter);
   }, [expirations, expTypeFilter]);
 
-  // Auto-select expiration closest to 30 DTE
+  // Auto-select expiration closest to 30 DTE (prefer those with enough symbols)
   if (filteredExpirations.length && !selectedExpiration) {
-    const target = filteredExpirations.find((e: any) => e.days_to_expiration >= 28) || filteredExpirations[filteredExpirations.length - 1];
+    const viable = filteredExpirations.filter((e: any) => (e.symbol_count || 0) >= 10);
+    const candidates = viable.length ? viable : filteredExpirations;
+    const target = candidates.find((e: any) => e.days_to_expiration >= 28) || candidates[candidates.length - 1];
     setSelectedExpiration(target.expiration_date);
   }
 
@@ -295,7 +297,7 @@ export default function SpreadsPage() {
           >
             {filteredExpirations.map((exp: any) => (
               <option key={exp.expiration_date} value={exp.expiration_date}>
-                {exp.days_to_expiration} DTE - {exp.day_of_week || ''} {exp.expiration_date.split('T')[0]} - {exp.expiration_type || ''}
+                {exp.days_to_expiration} DTE - {exp.day_of_week || ''} {exp.expiration_date.split('T')[0]} - {exp.expiration_type || ''}{exp.symbol_count ? ` (${exp.symbol_count})` : ''}
               </option>
             ))}
           </select>
