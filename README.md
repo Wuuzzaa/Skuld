@@ -244,3 +244,4 @@ skuld deploy home ──────> deploy.yml ──────────�
 | PowerShell erkennt `gh` nicht | `& "C:\Program Files\GitHub CLI\gh.exe" auth login` |
 | Deploy auf Staging schlaegt fehl | `skuld db healthcheck home` pruefen |
 | DB Replikation timeout | Backup ist ~6 GB, kann 15-20 Min dauern |
+
