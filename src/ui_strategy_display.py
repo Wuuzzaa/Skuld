@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import logging
 import os
+from datetime import datetime
 from typing import List, Optional
 from src.options_utils import OptionLeg, StrategyMetrics
 
@@ -22,6 +23,13 @@ def display_strategy_details(
     # 1. Legs Table
     legs_data = []
     for i, leg in enumerate(legs):
+        # Format last_updated if it's a timestamp
+        updated_str = leg.last_updated
+        if isinstance(updated_str, (pd.Timestamp, datetime)):
+            updated_str = updated_str.strftime('%d.%m.%Y %H:%M')
+        elif pd.isna(updated_str):
+            updated_str = "N/A"
+            
         legs_data.append({
             "Leg": f"Leg {i+1}",
             "Type": "Call" if leg.is_call else "Put",
@@ -33,7 +41,8 @@ def display_strategy_details(
             "Theta": leg.theta,
             "OI": leg.oi,
             "Volume": leg.volume,
-            "Exp Move": leg.expected_move
+            "Exp Move": leg.expected_move,
+            "Updated": updated_str
         })
     
     details_df = pd.DataFrame(legs_data)

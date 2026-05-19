@@ -27,14 +27,22 @@ def _calculate_metrics_for_row(row: pd.Series, strategy_type: str = 'credit', iv
             premium=row['sell_last_option_price'],
             is_call=row['option_type'] == 'call',
             is_long=not is_credit,
-            theta=row.get('sell_theta')
+            theta=row.get('sell_theta'),
+            oi=row.get('sell_open_interest'),
+            volume=row.get('sell_day_volume'),
+            expected_move=row.get('sell_expected_move'),
+            last_updated=row.get('sell_last_updated')
         ),
         OptionLeg(
             strike=row['buy_strike'],
             premium=row['buy_last_option_price'],
             is_call=row['option_type'] == 'call',
             is_long=is_credit,
-            theta=row.get('buy_theta')
+            theta=row.get('buy_theta'),
+            oi=row.get('buy_open_interest'),
+            volume=row.get('buy_day_volume'),
+            expected_move=row.get('buy_expected_move'),
+            last_updated=row.get('buy_last_updated')
         )
     ]
 
@@ -161,8 +169,10 @@ def get_page_spreads(df: pd.DataFrame, strategy_type: str = 'credit', iv_correct
         'expected_value', 'iv_correction_factor', 'APDI', 'APDI_EV', 'optionstrat_url',
         'sell_strike', 'sell_last_option_price', 'sell_delta', 'sell_iv', '%_otm', 
         'sell_theta', 'sell_open_interest', 'sell_expected_move', 'sell_day_volume',
+        'sell_last_updated',
         'buy_strike', 'buy_last_option_price', 'buy_delta', 'buy_iv', 'buy_theta', 
         'buy_open_interest', 'buy_expected_move', 'buy_day_volume',
+        'buy_last_updated',
         'option_type', 'expiration_date', 'days_to_expiration', 'days_to_earnings'
     ]
     
