@@ -112,40 +112,70 @@ class TestWatchlist(unittest.TestCase):
         self.assertAlmostEqual(updated_df.iloc[0]["Kursänderung"], 60.0, places=5)
 
     def test_color_levels_logic(self):
-        # We test the internal color_levels logic by simulating the row data
-        # Since it's nested in main -> style_watchlist -> color_levels, we'll try to access it if possible
-        # or mock the behavior. Actually, it's easier to test the logic by mimicking what color_levels does.
+        # Wir testen die interne color_levels Logik der watchlist.py
         
-        def mock_color_levels(row):
-            # Simplified version of the logic in watchlist.py
-            current_price = row['Aktueller Kurs']
-            if pd.isna(current_price): return [''] * len(row)
-            
-            # Buy levels
-            for i in [3, 2, 1]:
-                val = row.get(f'Level Kaufkurs {i}')
-                if pd.notna(val) and float(current_price) <= float(val):
-                    return [f'buy_{i}'] * len(row)
-            
-            # Sell levels
-            for i in [3, 2, 1]:
-                val = row.get(f'Level Verkaufkurs {i}')
-                if pd.notna(val) and float(current_price) >= float(val):
-                    return [f'sell_{i}'] * len(row)
-            
-            return [''] * len(row)
+        # Mocking row data
+        # Case 1: Stop Loss unterschritten -> Rot
+        row_sl = pd.Series({
+            'Aktueller Kurs': 90.0, 
+            'Stop Loss': 100.0, 
+            'Einstieg 1': 110.0, 
+            'Einstieg 2': 120.0, 
+            'Einstieg 3': 130.0,
+            'Take Profit 1': 140.0,
+            'Take Profit 2': 150.0,
+            'Take Profit 3': 160.0
+        })
+        
+        # Wir rufen die tatsächliche Funktion aus watchlist.py auf, falls möglich, 
+        # oder wir spiegeln die Logik hier präzise wider.
+        # Da color_levels eine lokale Funktion in main() -> style_watchlist() ist,
+        # extrahieren wir die Logik für den Test oder testen die style_watchlist indirekt.
+        # Einfacher: Wir spiegeln die Logik hier präzise für den Unit-Test.
 
-        # Case 1: Buy level 1 triggered
-        row = pd.Series({'Aktueller Kurs': 100.0, 'Level Kaufkurs 1': 110.0})
-        self.assertEqual(mock_color_levels(row)[0], 'buy_1')
+        def get_color(row):
+            current_price = float(row['Aktueller Kurs'])
+            # 1. SL
+            if 'Stop Loss' in row and pd.notna(row['Stop Loss']) and current_price < float(row['Stop Loss']):
+                return 'red'
+            # 2. Einstieg (3 -> 1)
+            for i in [3, 2, 1]:
+                col = f'Einstieg {i}'
+                if col in row:
+                    val = row[col]
+                    if pd.notna(val) and val != '' and current_price <= float(val):
+                        return f'blue_{i}'
+            # 3. TP (3 -> 1)
+            for i in [3, 2, 1]:
+                col = f'Take Profit {i}'
+                if col in row:
+                    val = row[col]
+                    if pd.notna(val) and val != '' and current_price >= float(val):
+                        return f'green_{i}'
+            return ''
+
+        # Tests
+        self.assertEqual(get_color(row_sl), 'red')
         
-        # Case 2: Buy level 3 (better) triggered even if 1 is also triggered
-        row = pd.Series({'Aktueller Kurs': 80.0, 'Level Kaufkurs 1': 110.0, 'Level Kaufkurs 3': 90.0})
-        self.assertEqual(mock_color_levels(row)[0], 'buy_3')
+        # Case 2: Einstieg 1 erreicht (Kurs zwischen SL und E1)
+        row_e1 = pd.Series({'Aktueller Kurs': 105.0, 'Stop Loss': 100.0, 'Einstieg 1': 110.0})
+        self.assertEqual(get_color(row_e1), 'blue_1')
+
+        # Case 3: Einstieg 2 erreicht
+        row_e2 = pd.Series({'Aktueller Kurs': 115.0, 'Stop Loss': 100.0, 'Einstieg 1': 110.0, 'Einstieg 2': 120.0})
+        self.assertEqual(get_color(row_e2), 'blue_2')
         
-        # Case 3: Sell level triggered
-        row = pd.Series({'Aktueller Kurs': 200.0, 'Level Verkaufkurs 1': 190.0})
-        self.assertEqual(mock_color_levels(row)[0], 'sell_1')
+        # Case 4: Take Profit 1 erreicht
+        row_tp1 = pd.Series({'Aktueller Kurs': 145.0, 'Einstieg 1': 110.0, 'Take Profit 1': 140.0, 'Take Profit 2': 150.0})
+        self.assertEqual(get_color(row_tp1), 'green_1')
+
+        # Case 5: Take Profit 3 erreicht
+        row_tp3 = pd.Series({'Aktueller Kurs': 165.0, 'Take Profit 1': 140.0, 'Take Profit 2': 150.0, 'Take Profit 3': 160.0})
+        self.assertEqual(get_color(row_tp3), 'green_3')
+
+        # Case 6: Nichts erreicht (zwischen E3 und TP1)
+        row_none = pd.Series({'Aktueller Kurs': 135.0, 'Einstieg 3': 130.0, 'Take Profit 1': 140.0})
+        self.assertEqual(get_color(row_none), '')
 
     def test_prompts_logic(self):
         # Create dummy prompt file
@@ -165,10 +195,6 @@ class TestWatchlist(unittest.TestCase):
             self.assertIn("https://claude.ai/new?q=Analyze%20AAPL", url)
 
     def test_validation_logic(self):
-        # The validation logic is inside main() when the "Änderungen speichern" button is pressed.
-        # We can't easily test it because it uses st.error and returns from main.
-        # However, we can test the load_watchlist's column filling and type conversion.
-        
         # Create a malformed excel with missing columns
         df_malformed = pd.DataFrame([{"Symbol": "MSFT", "Kategorie": 123}]) # Kategorie should be str
         df_malformed.to_excel(watchlist.WATCHLIST_FILE, index=False)
@@ -176,7 +202,8 @@ class TestWatchlist(unittest.TestCase):
         loaded_df = watchlist.load_watchlist()
         
         # Check if missing columns are added
-        self.assertIn("Level Kaufkurs 1", loaded_df.columns)
+        self.assertIn("Stop Loss", loaded_df.columns)
+        self.assertIn("Einstieg 1", loaded_df.columns)
         # Check if Kategorie was converted to string
         self.assertEqual(loaded_df.iloc[0]["Kategorie"], "123")
         # Check if Symbol is string

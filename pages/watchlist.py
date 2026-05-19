@@ -25,12 +25,13 @@ COLUMNS = [
     "Kursänderung",
     "Person",
     "Bemerkung",
-    "Level Kaufkurs 1",
-    "Level Kaufkurs 2",
-    "Level Kaufkurs 3",
-    "Level Verkaufkurs 1",
-    "Level Verkaufkurs 2",
-    "Level Verkaufkurs 3",
+    "Stop Loss",
+    "Einstieg 1",
+    "Einstieg 2",
+    "Einstieg 3",
+    "Take Profit 1",
+    "Take Profit 2",
+    "Take Profit 3",
     "timestamp",
 ]
 
@@ -150,7 +151,11 @@ def load_watchlist():
                     df[col] = df[col].astype(str).replace(['nan', 'None', '<NA>'], '')
 
             # Numerische Spalten initialisieren falls nötig
-            numeric_columns = ["Aktueller Kurs", "Kurs Watchlistanlage", "Kursänderung"]
+            numeric_columns = [
+                "Aktueller Kurs", "Kurs Watchlistanlage", "Kursänderung", 
+                "Stop Loss", "Einstieg 1", "Einstieg 2", "Einstieg 3", 
+                "Take Profit 1", "Take Profit 2", "Take Profit 3"
+            ]
             for col in numeric_columns:
                 if col in df.columns:
                     df[col] = pd.to_numeric(df[col], errors='coerce')
@@ -259,12 +264,13 @@ def main():
         "Kursänderung": st.column_config.NumberColumn("Änderung %", format="%.2f %%", disabled=True),
         "Person": st.column_config.SelectboxColumn("Person", options=PERSONS),
         "timestamp": st.column_config.DatetimeColumn("Zeitstempel", disabled=True),
-        "Level Kaufkurs 1": st.column_config.NumberColumn("Kauf 1", format="%.2f €", min_value=0.0),
-        "Level Kaufkurs 2": st.column_config.NumberColumn("Kauf 2", format="%.2f €", min_value=0.0),
-        "Level Kaufkurs 3": st.column_config.NumberColumn("Kauf 3", format="%.2f €", min_value=0.0),
-        "Level Verkaufkurs 1": st.column_config.NumberColumn("Verkauf 1", format="%.2f €", min_value=0.0),
-        "Level Verkaufkurs 2": st.column_config.NumberColumn("Verkauf 2", format="%.2f €", min_value=0.0),
-        "Level Verkaufkurs 3": st.column_config.NumberColumn("Verkauf 3", format="%.2f €", min_value=0.0),
+        "Stop Loss": st.column_config.NumberColumn("Stop Loss", format="%.2f €", min_value=0.0),
+        "Einstieg 1": st.column_config.NumberColumn("Einstieg 1", format="%.2f €", min_value=0.0),
+        "Einstieg 2": st.column_config.NumberColumn("Einstieg 2", format="%.2f €", min_value=0.0),
+        "Einstieg 3": st.column_config.NumberColumn("Einstieg 3", format="%.2f €", min_value=0.0),
+        "Take Profit 1": st.column_config.NumberColumn("TP1", format="%.2f €", min_value=0.0),
+        "Take Profit 2": st.column_config.NumberColumn("TP2", format="%.2f €", min_value=0.0),
+        "Take Profit 3": st.column_config.NumberColumn("TP3", format="%.2f €", min_value=0.0),
     }
 
     # Data Editor
@@ -277,52 +283,59 @@ def main():
                 if pd.isna(current_price):
                     return styles
                 
-                # Farben für Kauflevel (Grün-Töne)
-                # Kontrast optimiert für Darkmode: Dunklere Hintergründe mit weißer Schrift
-                buy_colors = {
-                    'Level Kaufkurs 1': 'background-color: #1e4620; color: white', # Dunkelgrün
-                    'Level Kaufkurs 2': 'background-color: #155724; color: white', # Mittleres Grün
-                    'Level Kaufkurs 3': 'background-color: #0b3d16; color: white'  # Sehr dunkles Grün
-                }
-                
-                # Prüfe Kauflevel (von 3 nach 1, um das "beste" Level zuerst zu finden)
+                current_price = float(current_price)
+
+                # 1. Stop Loss: Kurs < Stop Loss -> Rot
+                sl_val = row['Stop Loss']
+                if pd.notna(sl_val) and sl_val != '':
+                    try:
+                        if current_price < float(sl_val):
+                            return ['background-color: #5c1a1a; color: white'] * len(row)
+                    except (ValueError, TypeError):
+                        pass
+
+                # 2. Einstieg: Kurs <= Einstieg -> Blau
+                # Wir prüfen von E3 zu E1 (falls mehrere erreicht sind, nehmen wir das "tiefste" Blau)
                 for i in [3, 2, 1]:
-                    col_name = f'Level Kaufkurs {i}'
+                    col_name = f'Einstieg {i}'
                     val = row[col_name]
-                    if not pd.isna(val):
+                    if pd.notna(val) and val != '':
                         try:
-                            if float(current_price) <= float(val):
-                                return [buy_colors[col_name]] * len(row)
+                            if current_price <= float(val):
+                                # Blau-Töne für Einstieg
+                                blue_colors = {
+                                    'Einstieg 1': 'background-color: #004085; color: white',
+                                    'Einstieg 2': 'background-color: #003366; color: white',
+                                    'Einstieg 3': 'background-color: #002244; color: white'
+                                }
+                                return [blue_colors[col_name]] * len(row)
                         except (ValueError, TypeError):
                             continue
 
-                # Farben für Verkaufslevel (Rot-Töne)
-                # Kontrast optimiert für Darkmode: Dunklere Hintergründe mit weißer Schrift
-                sell_colors = {
-                    'Level Verkaufkurs 1': 'background-color: #5c1a1a; color: white', # Dunkelrot
-                    'Level Verkaufkurs 2': 'background-color: #721c24; color: white', # Mittleres Rot
-                    'Level Verkaufkurs 3': 'background-color: #4d0b0b; color: white'  # Sehr dunkles Rot
-                }
-
-                # Prüfe Verkaufslevel (von 3 nach 1)
+                # 3. Take Profit: Kurs >= Take Profit -> Grün
                 for i in [3, 2, 1]:
-                    col_name = f'Level Verkaufkurs {i}'
+                    col_name = f'Take Profit {i}'
                     val = row[col_name]
-                    if not pd.isna(val):
+                    if pd.notna(val) and val != '':
                         try:
-                            if float(current_price) >= float(val):
-                                return [sell_colors[col_name]] * len(row)
+                            if current_price >= float(val):
+                                # Grün-Töne für Take Profit
+                                green_colors = {
+                                    'Take Profit 1': 'background-color: #1e4620; color: white',
+                                    'Take Profit 2': 'background-color: #155724; color: white',
+                                    'Take Profit 3': 'background-color: #0b3d16; color: white'
+                                }
+                                return [green_colors[col_name]] * len(row)
                         except (ValueError, TypeError):
                             continue
-            except Exception as e:
-                # Debug Info falls nötig
-                # print(f"Error in color_levels: {e}")
+
+            except Exception:
                 pass
             return styles
 
         # Währungsspalten definieren
-        currency_cols = ["Aktueller Kurs", "Kurs Watchlistanlage", "Level Kaufkurs 1", "Level Kaufkurs 2", "Level Kaufkurs 3", 
-                         "Level Verkaufkurs 1", "Level Verkaufkurs 2", "Level Verkaufkurs 3"]
+        currency_cols = ["Aktueller Kurs", "Kurs Watchlistanlage", "Stop Loss", "Einstieg 1", "Einstieg 2", "Einstieg 3", 
+                         "Take Profit 1", "Take Profit 2", "Take Profit 3"]
         
         return df.style.apply(color_levels, axis=1).format({col: "{:.2f} €" for col in currency_cols} | {"Kursänderung": "{:.2f} %"}, na_rep="-")
 
@@ -437,31 +450,6 @@ def main():
         # Leere Zeilen entfernen (ohne Symbol)
         edited_df = edited_df.dropna(subset=['Symbol']).reset_index(drop=True)
 
-        # Validierung der Preis-Level
-        for idx, row in edited_df.iterrows():
-            k1 = row['Level Kaufkurs 1']
-            k2 = row['Level Kaufkurs 2']
-            k3 = row['Level Kaufkurs 3']
-            v1 = row['Level Verkaufkurs 1']
-            v2 = row['Level Verkaufkurs 2']
-            v3 = row['Level Verkaufkurs 3']
-
-            # Kauf 1 > Kauf 2 > Kauf 3
-            if pd.notna(k1) and pd.notna(k2) and not (k1 > k2):
-                st.error(f"Fehler in Zeile {idx + 1} ({row['Symbol']}): Kauf 1 ({k1}) muss größer als Kauf 2 ({k2}) sein.")
-                return
-            if pd.notna(k2) and pd.notna(k3) and not (k2 > k3):
-                st.error(f"Fehler in Zeile {idx + 1} ({row['Symbol']}): Kauf 2 ({k2}) muss größer als Kauf 3 ({k3}) sein.")
-                return
-
-            # Verkauf 1 < Verkauf 2 < Verkauf 3
-            if pd.notna(v1) and pd.notna(v2) and not (v1 < v2):
-                st.error(f"Fehler in Zeile {idx + 1} ({row['Symbol']}): Verkauf 1 ({v1}) muss kleiner als Verkauf 2 ({v2}) sein.")
-                return
-            if pd.notna(v2) and pd.notna(v3) and not (v2 < v3):
-                st.error(f"Fehler in Zeile {idx + 1} ({row['Symbol']}): Verkauf 2 ({v2}) muss kleiner als Verkauf 3 ({v3}) sein.")
-                return
-
         # Vergleiche edited_df mit st.session_state.watchlist_df
         # Um den Timestamp zu setzen, prüfen wir auf Änderungen
         
@@ -517,6 +505,46 @@ def main():
         if 'Sektor' not in st.session_state.watchlist_df.columns and not df_symbols.empty:
             sector_map = df_symbols.set_index('symbol')['Sektor'].to_dict()
             st.session_state.watchlist_df['Sektor'] = st.session_state.watchlist_df['Symbol'].map(sector_map)
+
+        # Validierung der Preis-Logik
+        errors = []
+        for idx, row in edited_df.iterrows():
+            symbol = row.get('Symbol', f"Zeile {idx+1}")
+            sl = row.get('Stop Loss')
+            e1 = row.get('Einstieg 1')
+            e2 = row.get('Einstieg 2')
+            e3 = row.get('Einstieg 3')
+            tp1 = row.get('Take Profit 1')
+            tp2 = row.get('Take Profit 2')
+            tp3 = row.get('Take Profit 3')
+
+            # Hilfsfunktion zum sicheren Vergleich
+            def is_less(a, b):
+                if pd.isna(a) or pd.isna(b): return True
+                return float(a) < float(b)
+
+            # Validierung: Stop Loss < Einstieg 1 < Take Profit 1
+            if not is_less(sl, e1):
+                errors.append(f"{symbol}: Stop Loss ({sl}) muss kleiner als Einstieg 1 ({e1}) sein.")
+            if not is_less(e1, tp1):
+                errors.append(f"{symbol}: Einstieg 1 ({e1}) muss kleiner als Take Profit 1 ({tp1}) sein.")
+
+            # Validierung: E1 < E2 < E3
+            if not is_less(e1, e2):
+                errors.append(f"{symbol}: Einstieg 1 ({e1}) muss kleiner als Einstieg 2 ({e2}) sein.")
+            if not is_less(e2, e3):
+                errors.append(f"{symbol}: Einstieg 2 ({e2}) muss kleiner als Einstieg 3 ({e3}) sein.")
+
+            # Validierung: TP1 < TP2 < TP3
+            if not is_less(tp1, tp2):
+                errors.append(f"{symbol}: Take Profit 1 ({tp1}) muss kleiner als Take Profit 2 ({tp2}) sein.")
+            if not is_less(tp2, tp3):
+                errors.append(f"{symbol}: Take Profit 2 ({tp2}) muss kleiner als Take Profit 3 ({tp3}) sein.")
+
+        if errors:
+            for err in errors:
+                st.error(err)
+            return
 
         if save_watchlist(edited_df[[c for c in edited_df.columns if c != 'Sektor']]):
             st.session_state.pop('prices_updated', None)  # Force price refresh on next load
@@ -663,36 +691,34 @@ def main():
         Diese Seite dient der Verwaltung und Überwachung deiner Aktientitel. Die Daten werden automatisch mit den aktuellen Marktpreisen aus der Datenbank abgeglichen.
 
         #### 1. Symbole hinzufügen & bearbeiten
-        - Klicke im Editor unten auf die letzte Zeile, um ein **neues Symbol** hinzuzufügen.
+        - Klicke im **Bearbeitungsmodus** (unten) auf die letzte Zeile, um ein **neues Symbol** hinzuzufügen.
         - Das Feld **Symbol** bietet eine Suche für alle in der Datenbank verfügbaren Titel.
-        - Sobald ein Symbol ausgewählt wird, werden **Unternehmen** und **Aktueller Kurs** automatisch ergänzt.
+        - Sobald ein Symbol ausgewählt wird, werden **Unternehmen**, **Sektor** und **Aktueller Kurs** automatisch ergänzt.
         - Die Spalte **Person** bietet ein Dropdown mit den Kürzeln (JL, DD, JP, JI, KK, MO).
+        - **Kategorie** und **Bemerkung** sind Freitextfelder für eigene Notizen.
 
-        #### 2. Preis-Levels setzen
-        Du kannst bis zu drei Kauf- und Verkaufslevels definieren:
-        - **Kauf-Levels:** Erwartung sinkender Kurse. Bedingung: `Kauf 1 > Kauf 2 > Kauf 3`.
-        - **Verkauf-Levels:** Erwartung steigender Kurse. Bedingung: `Verkauf 1 < Verkauf 2 < Verkauf 3`.
+        #### 2. Preis-Levels & Validierung
+        Du kannst Stop Loss, Einstiegs- und Take-Profit-Levels definieren. Beim Speichern werden folgende Bedingungen geprüft:
+        - **Stop Loss:** Muss kleiner als **Einstieg 1** sein.
+        - **Einstieg 1-3:** Level für Käufe. Es muss gelten: `Einstieg 1 < Einstieg 2 < Einstieg 3`.
+        - **Take Profit 1-3:** Level für Verkäufe. Es muss gelten: `Einstieg 1 < Take Profit 1` und `TP1 < TP2 < TP3`.
         - Alle Werte müssen positive Zahlen sein.
 
         #### 3. Automatische Formatierung (Farben)
-        Die obere Tabelle zeigt die Watchlist mit farblichen Hervorhebungen basierend auf dem aktuellen Marktkurs:
-        - 🟢 **Grün:** Der aktuelle Kurs hat ein **Kauf-Level** erreicht oder unterschritten (`Kurs <= Level`).
-        - 🔴 **Rot:** Der aktuelle Kurs hat ein **Verkauf-Level** erreicht oder überschritten (`Kurs >= Level`).
-        - Je höher die Level-Stufe (z.B. Kauf 3), desto intensiver die Farbe.
+        Die obere Tabelle (**Aktuelle Watchlist**) zeigt farbliche Hervorhebungen basierend auf dem aktuellen Marktkurs:
+        - 🔴 **Rot:** Der aktuelle Kurs hat den **Stop Loss** unterschritten (`Kurs < Stop Loss`).
+        - 🔵 **Blau:** Der aktuelle Kurs hat ein **Einstiegs-Level** erreicht oder unterschritten (`Kurs <= Einstieg`). Je tiefer der Kurs (E3 vs. E1), desto dunkler das Blau.
+        - 🟢 **Grün:** Der aktuelle Kurs hat ein **Take-Profit-Level** erreicht oder überschritten (`Kurs >= Take Profit`). Je höher der Kurs (TP3 vs. TP1), desto dunkler das Grün.
 
-        #### 4. Speichern
-        - Änderungen im Editor werden erst dauerhaft in der `watchlist.xlsx` gespeichert, wenn du auf den Button **'Änderungen speichern'** klickst.
-        - Dabei werden die Preis-Levels validiert und der **Zeitstempel** für geänderte Zeilen automatisch aktualisiert.
+        #### 4. Speichern & Backup
+        - Änderungen im Editor werden erst gespeichert, wenn du auf **'Änderungen speichern'** klickst.
+        - Bei jedem Speichervorgang wird automatisch ein **Backup** im Ordner `data/backups` erstellt.
+        - Backups können über die Sektion **'Backup & Restore'** wiederhergestellt werden.
 
-        #### 5. Aktualisierung
-        - Beim Laden der Seite werden die Marktpreise automatisch aus der Datenbank aktualisiert.
-
-        #### 6. Claude KI Analyse & Berichte
-        - Wähle ein Symbol aus der Watchlist im Bereich **'Claude KI Analyse & Berichte'** aus.
-        - **KI-Analyse:** Klicke auf **'Analyse in Claude öffnen'**, um einen Deep-Link zu Claude.ai mit einem sektorspezifischen Prompt zu generieren. Dieser Prompt enthält Experten-Anweisungen passend zum Sektor der Aktie.
-        - **Berichte ansehen:** Falls bereits ein HTML-Bericht für das Symbol hochgeladen wurde, wird dieser automatisch unter dem Auswahlfeld angezeigt.
-        - **Upload:** Du kannst eigene HTML-Berichte (z.B. Exporte von KI-Analysen) hochladen, um sie dauerhaft dem Symbol in der Watchlist zuzuordnen.
-        - **Löschen:** Vorhandene Berichte können über den Button 'Bericht löschen' entfernt werden.
+        #### 5. Claude KI Analyse & Berichte
+        - Wähle ein Symbol im Bereich **'Claude KI Analyse & Berichte'** aus.
+        - **KI-Analyse:** Klicke auf **'Analyse in Claude öffnen'**, um einen Deep-Link zu Claude.ai mit einem **sektorspezifischen Prompt** zu generieren.
+        - **Berichte:** Du kannst HTML-Exporte von KI-Analysen hochladen, um sie dauerhaft dem Symbol zuzuordnen und direkt in der App anzuzeigen.
         """)
 
 if __name__ == "__main__":
