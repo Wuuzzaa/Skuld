@@ -120,6 +120,11 @@ def get_page_covered_calls(
     exclude_biotech: bool = False,
     exclude_leveraged: bool = False,
     max_iv_hv_ratio: float = None,
+    # PowerOptions Monthly Picks filters
+    min_itm_pct: float = None,
+    min_stock_price: float = None,
+    max_stock_price: float = None,
+    min_premium: float = None,
 ) -> pd.DataFrame:
     """Filter and format covered calls for page display.
 
@@ -141,6 +146,10 @@ def get_page_covered_calls(
         exclude_biotech: Exclude biotech/drug manufacturers
         exclude_leveraged: Exclude leveraged/inverse ETFs
         max_iv_hv_ratio: Maximum IV/HV ratio (premium fairness check)
+        min_itm_pct: Minimum ITM percentage as decimal (0.10 = 10%)
+        min_stock_price: Minimum stock price in dollars
+        max_stock_price: Maximum stock price in dollars
+        min_premium: Minimum option premium in dollars
     """
     if df.empty:
         return df
@@ -156,6 +165,20 @@ def get_page_covered_calls(
     # Volume filter
     if min_volume > 0:
         filtered = filtered[filtered['volume'] >= min_volume]
+
+    # Min ITM % filter (moneyness must be at least X%)
+    if min_itm_pct is not None and 'moneyness' in filtered.columns:
+        filtered = filtered[filtered['moneyness'] >= min_itm_pct]
+
+    # Stock Price Range filter
+    if min_stock_price is not None:
+        filtered = filtered[filtered['stock_price'] >= min_stock_price]
+    if max_stock_price is not None:
+        filtered = filtered[filtered['stock_price'] <= max_stock_price]
+
+    # Min Premium filter (absolute dollar value)
+    if min_premium is not None:
+        filtered = filtered[filtered['premium'] >= min_premium]
 
     # Earnings filter: remove stocks with earnings before expiration + buffer
     if 'days_to_earnings' in filtered.columns:
@@ -267,6 +290,7 @@ def get_page_covered_calls(
     # Select and rename columns for display
     display_cols = [
         'symbol', 'company_name', 'company_sector', 'company_industry',
+        'expiration_date',
         'stock_price', 'strike_price', 'premium',
         'net_debit', 'investment', 'premium_income', 'net_cost', 'max_profit',
         'assigned_return_pct', 'annualized_return_pct',
@@ -311,6 +335,20 @@ def get_page_covered_calls(
         'iv_hv_ratio': 'IV/HV',
     }
     result.rename(columns=rename_map, inplace=True)
+
+    # Preserve raw numeric values for detail panel calculations
+    for col in ['Stock', 'Strike', 'Premium', 'Net Debit']:
+        if col in result.columns:
+            result[f'_raw_{col}'] = result[col]
+            result[col] = result[col].apply(
+                lambda x: f"${x:.2f}" if pd.notnull(x) else ""
+            )
+    for col in ['Investment', 'Prem Income', 'Net Cost', 'Max Profit']:
+        if col in result.columns:
+            result[f'_raw_{col}'] = result[col]
+            result[col] = result[col].apply(
+                lambda x: f"${x:,.0f}" if pd.notnull(x) else ""
+            )
 
     # Format large numbers for table readability (string columns)
     # These are display-only — detail panel should use raw values before rename

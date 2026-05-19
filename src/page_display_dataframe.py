@@ -60,8 +60,10 @@ def _add_claude_analysis_link(df: pd.DataFrame, page=None) -> pd.DataFrame:
         df['Claude'] = df.apply(_create_claude_prompt_page_spreads, axis=1)
     elif page == 'iron_condors':
         df['Claude'] = df.apply(_create_claude_prompt_page_iron_condors, axis=1)
+    elif page == 'dividend_scanner':
+        df['Claude'] = df.apply(_create_claude_prompt_dividend_scanner, axis=1)
     else:
-        raise ValueError('Page not recognized')
+        df['Claude'] = df.apply(_create_claude_prompt_default, axis=1)
     return df
 
 def _get_claude_prompt_header(symbol, company=None):
@@ -149,6 +151,36 @@ Call-Seite: Verkauf Strike {row['sell_strike_call']} (Delta {row['sell_delta_cal
 """
     prompt += _get_claude_prompt_footer()
 
+    encoded_prompt = urllib.parse.quote(prompt.strip())
+    return f'https://claude.ai/new?q={encoded_prompt}'
+
+def _create_claude_prompt_dividend_scanner(row):
+    symbol = row['symbol']
+    company = row.get('name') or row.get('Company')
+    sector = row.get('sector') or row.get('company_sector')
+
+    # Try sector-specific prompt
+    sector_prompt = _get_sector_prompt(sector, symbol)
+    
+    # Context for dividend scanner
+    scanner_context = f"""
+Aktuelle Kennzahlen aus meinem Screening:
+- KGV (P/E): {row.get('trailing_pe', 'N/A')}
+- Dividendenrendite: {row.get('dividend_yield', 0)*100:.2f}%
+- Payout Ratio: {row.get('payout_ratio', 0)*100:.1f}%
+- RSI (14): {row.get('rsi', 'N/A')}
+- IV-Rank: {row.get('iv_rank_val', 0)*100:.1f}%
+
+Analysiere die Aktie besonders im Hinblick auf die Nachhaltigkeit der Dividende und ob das aktuelle technische Niveau (RSI, Vola) einen attraktiven Einstieg (Long oder Short Put) rechtfertigt.
+"""
+
+    if sector_prompt:
+        prompt = sector_prompt.strip() + "\n" + scanner_context
+    else:
+        prompt = _get_claude_prompt_header(symbol, company) + scanner_context
+    
+    prompt += _get_claude_prompt_footer()
+    
     encoded_prompt = urllib.parse.quote(prompt.strip())
     return f'https://claude.ai/new?q={encoded_prompt}'
 

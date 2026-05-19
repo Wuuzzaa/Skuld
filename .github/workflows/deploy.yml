@@ -404,6 +404,7 @@ jobs:
           rsync -avz --delete \
             -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectionAttempts=1" \
             --exclude 'logs/' \
+            --exclude 'data/' \
             --exclude '.git/' \
             --exclude '.github/' \
             --exclude '__pycache__/' \
