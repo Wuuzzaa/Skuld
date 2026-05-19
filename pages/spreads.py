@@ -28,6 +28,7 @@ DEFAULT_SHOW_WEEKLY = False
 DEFAULT_SHOW_DAILY = False
 DEFAULT_SHOW_ONLY_POSITIV_EXPECTED_VALUE = True
 DEFAULT_SHOW_ONLY_SPREADS_WITH_NO_EARNINGS_TILL_EXPIRATION = True
+DEFAULT_SHOW_ONLY_SPREADS_WITH_NO_EARNINGS_WARNING = True
 DEFAULT_DELTA_TARGET = 0.2
 DEFAULT_SPREAD_WIDTH = 5
 DEFAULT_OPTION_TYPE = "put"
@@ -50,6 +51,7 @@ DEFAULTS = {
     'show_daily': DEFAULT_SHOW_DAILY,
     'show_only_positiv_expected_value': DEFAULT_SHOW_ONLY_POSITIV_EXPECTED_VALUE,
     'show_only_spreads_with_no_earnings_till_expiration': DEFAULT_SHOW_ONLY_SPREADS_WITH_NO_EARNINGS_TILL_EXPIRATION,
+    'show_only_spreads_with_no_earnings_warning': DEFAULT_SHOW_ONLY_SPREADS_WITH_NO_EARNINGS_WARNING,
     'delta_target': DEFAULT_DELTA_TARGET,
     'spread_width': DEFAULT_SPREAD_WIDTH,
     'option_type': DEFAULT_OPTION_TYPE,
@@ -80,6 +82,7 @@ def clear_all_filters():
     st.session_state.show_daily = True
     st.session_state.show_only_positiv_expected_value = False
     st.session_state.show_only_spreads_with_no_earnings_till_expiration = False
+    st.session_state.show_only_spreads_with_no_earnings_warning = False
     st.session_state.min_day_volume = 0
     st.session_state.min_open_interest = 0
     st.session_state.min_sell_iv = 0.0
@@ -187,8 +190,15 @@ with st.expander("Configuration and Filters", expanded=True):
             "Show only positive expected value",
             key="show_only_positiv_expected_value"
         )
-
+    
     with col10:
+        st.checkbox(
+            "Earnings Warning Filter",
+            key="show_only_spreads_with_no_earnings_warning",
+            help="Filters out spreads with an earnings warning (earnings shortly before expiration)"
+        )
+
+    with col11:
         min_day_volume = st.number_input(
             "Min dayvolume",
             min_value=0,
@@ -196,7 +206,7 @@ with st.expander("Configuration and Filters", expanded=True):
             key="min_day_volume"
         )
 
-    with col11:
+    with col12:
         min_open_interest = st.number_input(
             "Min Open Interest",
             min_value=0,
@@ -321,6 +331,13 @@ if st.session_state.show_only_spreads_with_no_earnings_till_expiration:
                 (pd.to_datetime(filtered_df['earnings_date']).dt.normalize() < expiration_date_ts)
         )
     ]
+
+# Earnings Warning Filter
+if st.session_state.show_only_spreads_with_no_earnings_warning:
+    if 'earnings_warning' in filtered_df.columns:
+        filtered_df = filtered_df[
+            (filtered_df['earnings_warning'] == '') | (filtered_df['earnings_warning'].isna())
+        ]
 
 # Reset index to ensure the zebra style works on the dataframe
 filtered_df.reset_index(drop=True, inplace=True)
