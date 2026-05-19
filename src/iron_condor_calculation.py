@@ -147,6 +147,7 @@ def _add_earnings_and_urls(df: pd.DataFrame) -> pd.DataFrame:
     df['expiration_date_put'] = pd.to_datetime(df['expiration_date_put'], errors='coerce')
     df['expiration_date_call'] = pd.to_datetime(df['expiration_date_call'], errors='coerce')
 
+    # Add earnings_warning
     df['earnings_warning'] = df.apply(
         lambda r: create_earnings_warning(r['earnings_date'], min(r['expiration_date_put'], r['expiration_date_call'])), 
         axis=1

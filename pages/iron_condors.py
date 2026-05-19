@@ -215,13 +215,13 @@ if not ic_df.empty:
     if st.session_state.ic_show_only_spreads_with_no_earnings_till_expiration:
         today = pd.Timestamp.now().normalize()
         # For IC, we check if earnings are between today and EITHER of the expiration dates
-        ic_df['expiration_date_put'] = pd.to_datetime(ic_df['expiration_date_put'])
-        ic_df['expiration_date_call'] = pd.to_datetime(ic_df['expiration_date_call'])
-        ic_df['earnings_date'] = pd.to_datetime(ic_df['earnings_date'])
+        ic_df['expiration_date_put'] = pd.to_datetime(ic_df['expiration_date_put']).dt.normalize()
+        ic_df['expiration_date_call'] = pd.to_datetime(ic_df['expiration_date_call']).dt.normalize()
+        ic_df['earnings_date'] = pd.to_datetime(ic_df['earnings_date']).dt.normalize()
         
         ic_df = ic_df[
             ~(
-                (ic_df['earnings_date'] > today) & 
+                (ic_df['earnings_date'] >= today) & 
                 (
                     (ic_df['earnings_date'] < ic_df['expiration_date_put']) | 
                     (ic_df['earnings_date'] < ic_df['expiration_date_call'])

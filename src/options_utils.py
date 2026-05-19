@@ -50,8 +50,20 @@ def create_earnings_warning(earnings_date: Any, expiration_date: Any) -> str:
     earnings_date = pd.to_datetime(earnings_date, errors='coerce')
     expiration_date = pd.to_datetime(expiration_date, errors='coerce')
     
-    if pd.notna(earnings_date) and pd.notna(expiration_date) and earnings_date > pd.Timestamp.now():
-        days_before_expiration = (expiration_date - earnings_date).days
+    if pd.isna(earnings_date) or pd.isna(expiration_date):
+        return ''
+
+    # Make dates timezone-naive if they are aware, to avoid comparison errors
+    if earnings_date.tzinfo is not None:
+        earnings_date = earnings_date.tz_localize(None)
+    if expiration_date.tzinfo is not None:
+        expiration_date = expiration_date.tz_localize(None)
+
+    now = pd.Timestamp.now().normalize()
+    earnings_date_norm = earnings_date.normalize()
+    
+    if earnings_date_norm >= now:
+        days_before_expiration = (expiration_date.normalize() - earnings_date.normalize()).days
         if 0 <= days_before_expiration <= EARNINGS_WARNING_DAYS:
             return f'⚠️ {days_before_expiration} days'
     return ''

@@ -312,13 +312,13 @@ if st.session_state.show_only_positiv_expected_value:
 
 # Only spreads with no earnings till expiration
 today = pd.Timestamp.now().normalize()
-expiration_date_ts = pd.Timestamp(expiration_date)
+expiration_date_ts = pd.Timestamp(expiration_date).normalize()
 
 if st.session_state.show_only_spreads_with_no_earnings_till_expiration:
     filtered_df = filtered_df[
         ~(
-                (filtered_df['earnings_date'] > today) &
-                (filtered_df['earnings_date'] < expiration_date_ts)
+                (pd.to_datetime(filtered_df['earnings_date']).dt.normalize() >= today) &
+                (pd.to_datetime(filtered_df['earnings_date']).dt.normalize() < expiration_date_ts)
         )
     ]
 
