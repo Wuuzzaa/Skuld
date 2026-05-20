@@ -45,15 +45,77 @@ def score_badge(score):
     return f"🔴 {score}/33"
 
 
-def _create_zahltag_claude_url(symbol):
-    """Erstellt einen Claude Deep-Link mit dem Zahltagstrategie-Prompt fuer ein Symbol."""
+def _create_zahltag_claude_url(symbol, row):
+    """Erstellt einen Claude Deep-Link mit dem Zahltagstrategie-Prompt + DB-Daten fuer ein Symbol."""
     try:
-        if os.path.exists(ZAHLTAG_PROMPT_FILE):
-            with open(ZAHLTAG_PROMPT_FILE, "r", encoding="utf-8") as f:
-                prompt = f.read()
-            prompt = prompt.replace("[ZZZ]", symbol)
-            encoded_prompt = urllib.parse.quote(prompt.strip())
-            return f"https://claude.ai/new?q={encoded_prompt}"
+        if not os.path.exists(ZAHLTAG_PROMPT_FILE):
+            return None
+        with open(ZAHLTAG_PROMPT_FILE, "r", encoding="utf-8") as f:
+            prompt = f.read()
+        prompt = prompt.replace("[ZZZ]", symbol)
+
+        # Kennzahlen aus der DB in den Prompt einbetten
+        def fmt(val, decimals=2, suffix=""):
+            if pd.isna(val):
+                return "N/A"
+            return f"{val:.{decimals}f}{suffix}"
+
+        data_block = f"""
+
+BEREITS VORLIEGENDE DATEN AUS UNSERER DATENBANK (Stand: heute, nutze diese als Ausgangsbasis):
+
+Kurs: ${fmt(row.get('price'))} | 52W-Tief: ${fmt(row.get('week_52_low'))} | 52W-Hoch: ${fmt(row.get('week_52_high'))}
+Sektor: {row.get('sector', 'N/A')} | Industrie: {row.get('industry', 'N/A')} | Land: {row.get('country', 'N/A')}
+
+BEWERTUNG:
+- Trailing P/E: {fmt(row.get('trailing_pe'), 1)}
+- Forward P/E: {fmt(row.get('forward_pe'), 1)}
+- Price/Book: {fmt(row.get('price_to_book'), 1)}
+- Market Cap: ${fmt(row.get('market_cap_b'), 1)} Mrd.
+- Beta: {fmt(row.get('beta'), 2)}
+
+DIVIDENDE:
+- Dividend Yield: {fmt(row.get('dividend_yield_pct'))}%
+- Annual Dividend Rate: ${fmt(row.get('annual_dividend_rate'), 4)}
+- Payout Ratio: {fmt(row.get('payout_ratio_pct'), 1)}%
+- Dividenden-Wachstumsjahre: {int(row.get('dividend_growth_years', 0)) if not pd.isna(row.get('dividend_growth_years')) else 'N/A'}
+- Klassifikation: {row.get('dividend_classification', 'N/A')}
+- 5-Jahres-Durchschnitts-Yield: {fmt(row.get('five_year_avg_yield'))}%
+- Zahlungen pro Jahr: {int(row.get('dividend_payments_per_year', 0)) if not pd.isna(row.get('dividend_payments_per_year')) else 'N/A'}
+
+PROFITABILITAET & BILANZ:
+- Profit Margin: {fmt(row.get('profit_margin_pct'), 1)}%
+- Operating Margin: {fmt(row.get('operating_margin_pct'), 1)}%
+- ROE: {fmt(row.get('roe_pct'), 1)}%
+- Debt/Equity: {fmt(row.get('debt_to_equity'), 0)}
+- Current Ratio: {fmt(row.get('current_ratio'), 2)}
+
+WACHSTUM:
+- EPS (trailing): ${fmt(row.get('trailing_eps'))}
+- EPS (forward): ${fmt(row.get('forward_eps'))}
+- Forward EPS Growth: {fmt(row.get('eps_growth_pct'), 1)}%
+
+TECHNIK:
+- RSI (14): {fmt(row.get('rsi_14'), 1)}
+- SMA 50: ${fmt(row.get('sma_50'))}
+- SMA 200: ${fmt(row.get('sma_200'))}
+- % von SMA200: {fmt(row.get('pct_from_sma200'), 1)}%
+- % vom 52W-Hoch: {fmt(row.get('pct_from_52w_high'), 1)}%
+- MACD Histogram: {fmt(row.get('macd_histogram'), 4)}
+
+ANALYSTEN:
+- Recommendation (1=Strong Buy, 5=Sell): {fmt(row.get('analyst_recommendation'), 1)}
+- Anzahl Analysten: {int(row.get('analyst_count', 0)) if not pd.isna(row.get('analyst_count')) else 'N/A'}
+- Short % Float: {fmt(row.get('short_pct_float'), 1)}%
+
+ZAHLTAGSTRATEGIE-SCORE: {int(row.get('score_total', 0))}/33 (F:{int(row.get('score_fundamental', 0))}/15 D:{int(row.get('score_dividend', 0))}/15 T:{int(row.get('score_technical', 0))}/3)
+Signal: {row.get('recommendation', 'N/A')}
+
+Anlagehorizont: 5-10 Jahre (Dividenden-Einkommensstrategie)
+"""
+        prompt += data_block
+        encoded_prompt = urllib.parse.quote(prompt.strip())
+        return f"https://claude.ai/new?q={encoded_prompt}"
     except Exception:
         pass
     return None
@@ -251,7 +313,7 @@ def main():
         )
 
         # Claude KI Analyse (Zahltagstrategie-Stil)
-        claude_url = _create_zahltag_claude_url(selected_symbol)
+        claude_url = _create_zahltag_claude_url(selected_symbol, row)
         if claude_url:
             st.link_button(f"🤖 Zahltag-Analyse in Claude öffnen ({selected_symbol})", claude_url, use_container_width=True)
 
