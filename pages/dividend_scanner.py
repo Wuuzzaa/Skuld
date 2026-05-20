@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import urllib.parse
 from api.core.database import query_dataframe
 from src.ui_strategy_display import display_external_links
 from src.page_display_dataframe import _create_claude_prompt_dividend_scanner
@@ -298,7 +299,51 @@ def main():
     # Formatierung
     df_display = df_filtered[display_cols].sort_values('CVS', ascending=False)
     df_display.index = range(1, len(df_display) + 1)
-    
+
+    # --- CSV Download & Gesamt-Analyse ---
+    col_dl1, col_dl2 = st.columns(2)
+    with col_dl1:
+        csv_bytes = df_display.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            label=f"⬇️ CSV Download ({len(df_display)} Aktien)",
+            data=csv_bytes,
+            file_name="dividend_scanner_ergebnisse.csv",
+            mime="text/csv",
+        )
+    with col_dl2:
+        # Claude-Prompt für Gesamtbewertung aller gefilterten Aktien
+        top_stocks = df_display.head(30)  # Max 30 um Prompt-Länge zu begrenzen
+        stock_lines = []
+        for _, r in top_stocks.iterrows():
+            stock_lines.append(
+                f"- {r['symbol']} ({r.get('name', '-')}): "
+                f"CVS {r['CVS']:.1f} [FVS:{r['FVS']:.0f} DVS:{r['DVS']:.0f} QVS:{r['QVS']:.0f} TVS:{r['TVS']:.0f} VVS:{r['VVS']:.0f}], "
+                f"Yield {r['dividend_yield']:.2%}, P/E {r['trailing_pe']:.1f}, "
+                f"RSI {r['rsi']:.1f}, IV-Rank {r['iv_rank_val']:.1%}, Kurs ${r['current_price']:.2f}"
+            )
+        all_prompt = (
+            "Analysiere die folgenden "
+            f"{len(top_stocks)} Dividendenaktien aus meinem Short-Put Dividend Scanner. "
+            "Jede Aktie hat einen Composite Value Score (CVS, 0-100) basierend auf: "
+            "Fundamental Value (FVS 30%), Dividend (DVS 25%), Quality (QVS 20%), Technical (TVS 15%), Volatility (VVS 10%).\n\n"
+            "Erstelle eine RANKING-ANALYSE mit folgender Struktur:\n\n"
+            "1. TOP 5 SHORT-PUT KANDIDATEN: Welche 5 Aktien eignen sich JETZT am besten fuer Short Puts? "
+            "Begruende mit CVS-Score, IV-Rank (ideal 40-60%), und Fundamental-Qualitaet. "
+            "Nenne ideale Strike-Preise (ca. 10-15% unter aktuellem Kurs).\n"
+            "2. TOP 5 DIREKT-KAUF: Welche 5 wuerdest du direkt kaufen (zu niedrige IV fuer Puts, aber fundamentale Qualitaet)?\n"
+            "3. WARNSIGNALE: Aktien mit hohem CVS aber versteckten Risiken (Payout zu hoch, D/E bedenklich, IV zu niedrig fuer Praemien)?\n"
+            "4. SEKTOR-ANALYSE: Klumpenrisiken? Diversifikationsvorschlaege?\n"
+            "5. FAZIT: 3 konkrete Trades die ich DIESE WOCHE aufsetzen sollte (Symbol, Strike, Laufzeit, erwartete Praemie).\n\n"
+            "AKTIEN-LISTE:\n" + "\n".join(stock_lines)
+        )
+        encoded = urllib.parse.quote(all_prompt)
+        claude_url = f"https://claude.ai/new?q={encoded}"
+        st.link_button(
+            f"🤖 Gesamt-Analyse in Claude ({len(top_stocks)} Aktien)",
+            claude_url,
+            use_container_width=True,
+        )
+
     selection_event = st.dataframe(
         df_display.style.background_gradient(subset=['CVS', 'FVS', 'DVS', 'QVS', 'TVS', 'VVS'], cmap='RdYlGn')
         .format({

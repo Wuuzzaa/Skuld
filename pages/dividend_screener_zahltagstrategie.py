@@ -283,6 +283,50 @@ def main():
                 colors.append('')
         return colors
 
+    # --- CSV Download & Gesamt-Analyse ---
+    col_dl1, col_dl2 = st.columns(2)
+    with col_dl1:
+        csv_bytes = df_display.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            label=f"⬇️ CSV Download ({len(df_display)} Aktien)",
+            data=csv_bytes,
+            file_name="zahltagstrategie_ergebnisse.csv",
+            mime="text/csv",
+        )
+    with col_dl2:
+        # Claude-Prompt für Gesamtbewertung aller gefilterten Aktien
+        top_stocks = df_filtered.head(30)  # Max 30 um Prompt-Länge zu begrenzen
+        stock_lines = []
+        for _, r in top_stocks.iterrows():
+            stock_lines.append(
+                f"- {r['symbol']} ({r.get('company_name', '-')}): "
+                f"Score {int(r['score_total'])}/33 [{r['recommendation']}], "
+                f"Yield {r['dividend_yield_pct']:.2f}%, P/E {r['trailing_pe']:.1f}, "
+                f"D/E {r['debt_to_equity']:.0f}, ROE {r['roe_pct']:.1f}%, "
+                f"Payout {r['payout_ratio_pct']:.1f}%, Div Years {int(r['dividend_growth_years']) if not pd.isna(r['dividend_growth_years']) else 0}, "
+                f"RSI {r['rsi_14']:.1f}, %SMA200 {r['pct_from_sma200']:.1f}%"
+            )
+        all_prompt = (
+            "Du bist Nils Gajowi von der Zahltagstrategie. Analysiere die folgenden "
+            f"{len(top_stocks)} Dividendenaktien aus meinem Screener (11-Punkte-Matrix, max 33 Punkte). "
+            "Erstelle eine RANKING-ANALYSE mit folgender Struktur:\n\n"
+            "1. TOP 5 FAVORITEN: Welche 5 Aktien wuerdest du JETZT kaufen und warum? "
+            "Nenne konkrete Einstiegskurse und Dividenden-Yields.\n"
+            "2. BEOBACHTUNGSLISTE: Welche 5 sind knapp dran und bei welchem Kurs werden sie interessant?\n"
+            "3. WARNSIGNALE: Gibt es Aktien in der Liste bei denen du Bedenken hast (Payout zu hoch, D/E bedenklich, etc.)?\n"
+            "4. SEKTOR-VERTEILUNG: Habe ich Klumpenrisiken? Welche Sektoren fehlen?\n"
+            "5. FAZIT: 3 konkrete Handlungsempfehlungen fuer mein Zahltag-Depot.\n\n"
+            "Sprich im Nils-Stil: persoenlich, erzaehlerisch, mit konkreten Kursschwellen.\n\n"
+            "AKTIEN-LISTE:\n" + "\n".join(stock_lines)
+        )
+        encoded = urllib.parse.quote(all_prompt)
+        claude_url = f"https://claude.ai/new?q={encoded}"
+        st.link_button(
+            f"🤖 Gesamt-Analyse in Claude ({len(top_stocks)} Aktien)",
+            claude_url,
+            use_container_width=True,
+        )
+
     selection_event = st.dataframe(
         df_display.style.apply(highlight_recommendation, axis=1).format(format_dict),
         use_container_width=True,
