@@ -517,6 +517,7 @@ export default function SpreadsPage() {
                     <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Leg</th>
                     <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Strike</th>
                     <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Price</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">BS Price</th>
                     <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Delta</th>
                     <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">IV</th>
                     <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Theta</th>
@@ -535,6 +536,13 @@ export default function SpreadsPage() {
                     </td>
                     <td className="px-3 py-2 text-right font-mono">{formatCurrency(selectedRow.sell_strike)}</td>
                     <td className="px-3 py-2 text-right font-mono">{formatCurrency(selectedRow.sell_last_option_price)}</td>
+                    <td className="px-3 py-2 text-right font-mono">
+                      {selectedRow.sell_bs_price != null ? (
+                        <span className={selectedRow.sell_last_option_price > selectedRow.sell_bs_price ? 'text-emerald-400' : 'text-red-400'}>
+                          {formatCurrency(selectedRow.sell_bs_price)}
+                        </span>
+                      ) : <span className="text-muted-foreground">—</span>}
+                    </td>
                     <td className="px-3 py-2 text-right font-mono">{formatNumber(selectedRow.sell_delta, 3)}</td>
                     <td className="px-3 py-2 text-right font-mono">{formatPercent(selectedRow.sell_iv * 100)}</td>
                     <td className="px-3 py-2 text-right font-mono">{formatNumber(selectedRow.sell_theta, 4)}</td>
@@ -551,6 +559,13 @@ export default function SpreadsPage() {
                     </td>
                     <td className="px-3 py-2 text-right font-mono">{formatCurrency(selectedRow.buy_strike)}</td>
                     <td className="px-3 py-2 text-right font-mono">{formatCurrency(selectedRow.buy_last_option_price)}</td>
+                    <td className="px-3 py-2 text-right font-mono">
+                      {selectedRow.buy_bs_price != null ? (
+                        <span className={selectedRow.buy_last_option_price > selectedRow.buy_bs_price ? 'text-emerald-400' : 'text-red-400'}>
+                          {formatCurrency(selectedRow.buy_bs_price)}
+                        </span>
+                      ) : <span className="text-muted-foreground">—</span>}
+                    </td>
                     <td className="px-3 py-2 text-right font-mono">{formatNumber(selectedRow.buy_delta, 3)}</td>
                     <td className="px-3 py-2 text-right font-mono">{formatPercent(selectedRow.buy_iv * 100)}</td>
                     <td className="px-3 py-2 text-right font-mono">{formatNumber(selectedRow.buy_theta, 4)}</td>

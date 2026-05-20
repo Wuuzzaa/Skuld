@@ -3,11 +3,13 @@ import logging
 import os
 from typing import Dict, Any
 from src.decorator_log_function import log_function
+from src.black_scholes import CallValue, PutValue
+from config import RISK_FREE_RATE
 from src.options_utils import (
-    MULTIPLIER, 
-    calculate_apdi, 
-    create_earnings_warning, 
-    format_strike, 
+    MULTIPLIER,
+    calculate_apdi,
+    create_earnings_warning,
+    format_strike,
     format_expiration_date,
     calculate_expected_value
 )
@@ -105,6 +107,27 @@ def _calculate_iron_condor_metrics(df: pd.DataFrame, iv_correction: str = 'auto'
     df["APDI"] = df.apply(lambda r: calculate_apdi(r["max_profit"], r["max_dte"], r["bpr"]), axis=1)
     df["APDI_EV"] = df.apply(lambda r: calculate_apdi(r["expected_value"], r["max_dte"], r["bpr"]), axis=1)
 
+    # Black-Scholes theoretical prices
+    def _bs_price(row, strike_col, iv_col, dte_col, close_col, is_call):
+        try:
+            S = row[close_col]
+            K = row[strike_col]
+            sigma = row[iv_col]
+            t = row[dte_col]
+            if pd.isna(S) or pd.isna(K) or pd.isna(sigma) or pd.isna(t) or sigma <= 0 or t <= 0:
+                return None
+            if is_call:
+                return round(CallValue(S, K, sigma, t, RISK_FREE_RATE), 2)
+            else:
+                return round(PutValue(S, K, sigma, t, RISK_FREE_RATE), 2)
+        except Exception:
+            return None
+
+    df["sell_bs_price_put"] = df.apply(lambda r: _bs_price(r, 'sell_strike_put', 'sell_iv_put', 'days_to_expiration_put', 'close_put', False), axis=1)
+    df["buy_bs_price_put"] = df.apply(lambda r: _bs_price(r, 'buy_strike_put', 'buy_iv_put', 'days_to_expiration_put', 'close_put', False), axis=1)
+    df["sell_bs_price_call"] = df.apply(lambda r: _bs_price(r, 'sell_strike_call', 'sell_iv_call', 'days_to_expiration_call', 'close_call', True), axis=1)
+    df["buy_bs_price_call"] = df.apply(lambda r: _bs_price(r, 'buy_strike_call', 'buy_iv_call', 'days_to_expiration_call', 'close_call', True), axis=1)
+
     return df
 
 def _add_earnings_and_urls(df: pd.DataFrame) -> pd.DataFrame:
@@ -190,6 +213,8 @@ def get_page_iron_condors(df: pd.DataFrame) -> pd.DataFrame:
         'expiration_date_call',
         'sell_last_option_price_put', 'buy_last_option_price_put',
         'sell_last_option_price_call', 'buy_last_option_price_call',
+        'sell_bs_price_put', 'buy_bs_price_put',
+        'sell_bs_price_call', 'buy_bs_price_call',
         'sell_iv_put', 'buy_iv_put', 'sell_iv_call', 'buy_iv_call',
         'sell_theta_put', 'buy_theta_put', 'sell_theta_call', 'buy_theta_call',
         'sell_open_interest_put', 'buy_open_interest_put',

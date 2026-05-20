@@ -20,6 +20,8 @@ import pandas as pd
 import numpy as np
 import logging
 import os
+from src.black_scholes import CallValue
+from config import RISK_FREE_RATE
 
 logger = logging.getLogger(os.path.basename(__file__))
 
@@ -93,6 +95,22 @@ def calc_covered_calls(df: pd.DataFrame) -> pd.DataFrame:
             df['iv'] / df['hv_30d'],
             np.nan
         )
+
+    # Black-Scholes theoretical price for the call option
+    def _bs_call_price(row):
+        try:
+            S = row['stock_price']
+            K = row['strike_price']
+            sigma = row.get('iv', None)
+            t = row.get('DTE', None)
+            if pd.isna(S) or pd.isna(K) or pd.isna(sigma) or pd.isna(t) or sigma <= 0 or t <= 0:
+                return None
+            return round(CallValue(S, K, sigma, t, RISK_FREE_RATE), 2)
+        except Exception:
+            return None
+
+    if 'iv' in df.columns and 'DTE' in df.columns:
+        df['bs_price'] = df.apply(_bs_call_price, axis=1)
 
     # Filter out invalid rows
     df = df[df['net_debit'] > 0].copy()

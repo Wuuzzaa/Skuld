@@ -284,6 +284,76 @@ export default function IronCondorsPage() {
                 <p className="text-base font-bold">{formatNumber(selectedRow.iv_rank, 1)}</p>
               </div>
             </div>
+            {/* Leg details table */}
+            <div className="rounded-lg overflow-hidden border border-border/40">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50">
+                  <tr>
+                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Leg</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Strike</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Price</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">BS Price</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Delta</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">IV</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">OI</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-t border-border/30">
+                    <td className="px-3 py-2"><span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-400" /><span className="font-medium">Short Put</span></span></td>
+                    <td className="px-3 py-2 text-right font-mono">{formatCurrency(selectedRow.sell_strike_put)}</td>
+                    <td className="px-3 py-2 text-right font-mono">{formatCurrency(selectedRow.sell_last_option_price_put)}</td>
+                    <td className="px-3 py-2 text-right font-mono">
+                      {selectedRow.sell_bs_price_put != null ? (
+                        <span className={selectedRow.sell_last_option_price_put > selectedRow.sell_bs_price_put ? 'text-emerald-400' : 'text-red-400'}>{formatCurrency(selectedRow.sell_bs_price_put)}</span>
+                      ) : <span className="text-muted-foreground">—</span>}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono">{formatNumber(selectedRow.sell_delta_put, 3)}</td>
+                    <td className="px-3 py-2 text-right font-mono">{formatPercent((selectedRow.sell_iv_put || 0) * 100)}</td>
+                    <td className="px-3 py-2 text-right font-mono">{selectedRow.sell_open_interest_put?.toLocaleString()}</td>
+                  </tr>
+                  <tr className="border-t border-border/30">
+                    <td className="px-3 py-2"><span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-400" /><span className="font-medium">Long Put</span></span></td>
+                    <td className="px-3 py-2 text-right font-mono">{formatCurrency(selectedRow.buy_strike_put)}</td>
+                    <td className="px-3 py-2 text-right font-mono">{formatCurrency(selectedRow.buy_last_option_price_put)}</td>
+                    <td className="px-3 py-2 text-right font-mono">
+                      {selectedRow.buy_bs_price_put != null ? (
+                        <span className={selectedRow.buy_last_option_price_put > selectedRow.buy_bs_price_put ? 'text-emerald-400' : 'text-red-400'}>{formatCurrency(selectedRow.buy_bs_price_put)}</span>
+                      ) : <span className="text-muted-foreground">—</span>}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono">{formatNumber(selectedRow.buy_delta_put, 3)}</td>
+                    <td className="px-3 py-2 text-right font-mono">{formatPercent((selectedRow.buy_iv_put || 0) * 100)}</td>
+                    <td className="px-3 py-2 text-right font-mono">{selectedRow.buy_open_interest_put?.toLocaleString()}</td>
+                  </tr>
+                  <tr className="border-t border-border/30">
+                    <td className="px-3 py-2"><span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-400" /><span className="font-medium">Short Call</span></span></td>
+                    <td className="px-3 py-2 text-right font-mono">{formatCurrency(selectedRow.sell_strike_call)}</td>
+                    <td className="px-3 py-2 text-right font-mono">{formatCurrency(selectedRow.sell_last_option_price_call)}</td>
+                    <td className="px-3 py-2 text-right font-mono">
+                      {selectedRow.sell_bs_price_call != null ? (
+                        <span className={selectedRow.sell_last_option_price_call > selectedRow.sell_bs_price_call ? 'text-emerald-400' : 'text-red-400'}>{formatCurrency(selectedRow.sell_bs_price_call)}</span>
+                      ) : <span className="text-muted-foreground">—</span>}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono">{formatNumber(selectedRow.sell_delta_call, 3)}</td>
+                    <td className="px-3 py-2 text-right font-mono">{formatPercent((selectedRow.sell_iv_call || 0) * 100)}</td>
+                    <td className="px-3 py-2 text-right font-mono">{selectedRow.sell_open_interest_call?.toLocaleString()}</td>
+                  </tr>
+                  <tr className="border-t border-border/30">
+                    <td className="px-3 py-2"><span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-400" /><span className="font-medium">Long Call</span></span></td>
+                    <td className="px-3 py-2 text-right font-mono">{formatCurrency(selectedRow.buy_strike_call)}</td>
+                    <td className="px-3 py-2 text-right font-mono">{formatCurrency(selectedRow.buy_last_option_price_call)}</td>
+                    <td className="px-3 py-2 text-right font-mono">
+                      {selectedRow.buy_bs_price_call != null ? (
+                        <span className={selectedRow.buy_last_option_price_call > selectedRow.buy_bs_price_call ? 'text-emerald-400' : 'text-red-400'}>{formatCurrency(selectedRow.buy_bs_price_call)}</span>
+                      ) : <span className="text-muted-foreground">—</span>}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono">{formatNumber(selectedRow.buy_delta_call, 3)}</td>
+                    <td className="px-3 py-2 text-right font-mono">{formatPercent((selectedRow.buy_iv_call || 0) * 100)}</td>
+                    <td className="px-3 py-2 text-right font-mono">{selectedRow.buy_open_interest_call?.toLocaleString()}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
             <div className="flex flex-wrap gap-2">
               {[
                 { name: 'TradingView', url: `https://www.tradingview.com/chart/?symbol=${selectedRow.symbol}` },

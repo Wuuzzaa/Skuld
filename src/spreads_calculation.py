@@ -3,6 +3,8 @@ import logging
 import os
 from typing import Dict, Any
 from src.decorator_log_function import log_function
+from src.black_scholes import CallValue, PutValue
+from config import RISK_FREE_RATE
 from src.options_utils import (
     MULTIPLIER,
     calculate_apdi,
@@ -105,6 +107,25 @@ def _calculate_spread_metrics(df: pd.DataFrame, strategy_type: str = 'credit', i
     df["APDI"] = df.apply(lambda r: calculate_apdi(r["max_profit"], r["days_to_expiration"], r["bpr"]), axis=1)
     df["APDI_EV"] = df.apply(lambda r: calculate_apdi(r["expected_value"], r["days_to_expiration"], r["bpr"]), axis=1)
 
+    # Black-Scholes theoretical prices
+    def _bs_price(row, strike_col, iv_col):
+        try:
+            S = row['close']
+            K = row[strike_col]
+            sigma = row[iv_col]
+            t = row['days_to_expiration']
+            if pd.isna(S) or pd.isna(K) or pd.isna(sigma) or pd.isna(t) or sigma <= 0 or t <= 0:
+                return None
+            if row['option_type'] == 'put':
+                return round(PutValue(S, K, sigma, t, RISK_FREE_RATE), 2)
+            else:
+                return round(CallValue(S, K, sigma, t, RISK_FREE_RATE), 2)
+        except Exception:
+            return None
+
+    df["sell_bs_price"] = df.apply(lambda r: _bs_price(r, 'sell_strike', 'sell_iv'), axis=1)
+    df["buy_bs_price"] = df.apply(lambda r: _bs_price(r, 'buy_strike', 'buy_iv'), axis=1)
+
     # Ensure Company name is handled correctly
     if 'Company' in df.columns:
         df["Company"] = df["Company"].replace("", None).fillna(df["symbol"])
@@ -186,9 +207,9 @@ def get_page_spreads(df: pd.DataFrame, strategy_type: str = 'credit', iv_correct
         'historical_volatility_30d', 'iv_rank', 'iv_percentile',
         'spread_width', 'max_profit', 'bpr', 'profit_to_bpr', 'spread_theta', 
         'expected_value', 'iv_correction_factor', 'APDI', 'APDI_EV', 'optionstrat_url',
-        'sell_strike', 'sell_last_option_price', 'sell_delta', 'sell_iv', '%_otm', 
+        'sell_strike', 'sell_last_option_price', 'sell_bs_price', 'sell_delta', 'sell_iv', '%_otm',
         'sell_theta', 'sell_open_interest', 'sell_expected_move', 'sell_day_volume',
-        'buy_strike', 'buy_last_option_price', 'buy_delta', 'buy_iv', 'buy_theta', 
+        'buy_strike', 'buy_last_option_price', 'buy_bs_price', 'buy_delta', 'buy_iv', 'buy_theta',
         'buy_open_interest', 'buy_expected_move', 'buy_day_volume',
         'option_type', 'expiration_date', 'days_to_expiration', 'days_to_earnings'
     ]
