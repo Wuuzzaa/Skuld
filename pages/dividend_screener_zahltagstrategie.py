@@ -9,12 +9,14 @@ Scoring: 5 Fundamental + 5 Dividend + 1 Technik = max 33 Punkte.
 import streamlit as st
 import pandas as pd
 import os
+import urllib.parse
 
 from src.database import select_into_dataframe_pg
 from src.dividend_screener import calculate_dividend_scores, filter_dividend_screener
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SQL_FILE = os.path.join(BASE_DIR, "db", "SQL", "query", "dividend_screener.sql")
+ZAHLTAG_PROMPT_FILE = os.path.join(BASE_DIR, "src", "prompts", "prompt_zahltagstrategie.txt")
 
 
 @st.cache_data(ttl=600)
@@ -41,6 +43,20 @@ def score_badge(score):
     elif score >= 12:
         return f"🟡 {score}/33"
     return f"🔴 {score}/33"
+
+
+def _create_zahltag_claude_url(symbol):
+    """Erstellt einen Claude Deep-Link mit dem Zahltagstrategie-Prompt fuer ein Symbol."""
+    try:
+        if os.path.exists(ZAHLTAG_PROMPT_FILE):
+            with open(ZAHLTAG_PROMPT_FILE, "r", encoding="utf-8") as f:
+                prompt = f.read()
+            prompt = prompt.replace("[ZZZ]", symbol)
+            encoded_prompt = urllib.parse.quote(prompt.strip())
+            return f"https://claude.ai/new?q={encoded_prompt}"
+    except Exception:
+        pass
+    return None
 
 
 def main():
@@ -233,6 +249,11 @@ def main():
             f"[Yahoo Finance](https://finance.yahoo.com/quote/{selected_symbol}) | "
             f"[Seeking Alpha Dividends](https://seekingalpha.com/symbol/{selected_symbol}/dividends)"
         )
+
+        # Claude KI Analyse (Zahltagstrategie-Stil)
+        claude_url = _create_zahltag_claude_url(selected_symbol)
+        if claude_url:
+            st.link_button(f"🤖 Zahltag-Analyse in Claude öffnen ({selected_symbol})", claude_url, use_container_width=True)
 
         # Score breakdown
         col1, col2, col3 = st.columns(3)
