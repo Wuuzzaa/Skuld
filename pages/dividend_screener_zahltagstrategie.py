@@ -226,6 +226,14 @@ def main():
         st.subheader(f"📋 {row['company_name']} ({selected_symbol})")
         st.write(f"**Sektor:** {row['sector']} | **Industrie:** {row.get('industry', '-')} | **Land:** {row.get('country', '-')}")
 
+        # External Links
+        st.markdown(
+            f"[📈 TradingView Chart](https://www.tradingview.com/chart/?symbol={selected_symbol}) | "
+            f"[Finviz](https://finviz.com/quote.ashx?t={selected_symbol}) | "
+            f"[Yahoo Finance](https://finance.yahoo.com/quote/{selected_symbol}) | "
+            f"[Seeking Alpha Dividends](https://seekingalpha.com/symbol/{selected_symbol}/dividends)"
+        )
+
         # Score breakdown
         col1, col2, col3 = st.columns(3)
 
