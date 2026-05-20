@@ -46,6 +46,7 @@ async def get_spreads(
     min_day_volume: int = 20,
     min_iv_rank: int = 0,
     min_iv_percentile: int = 0,
+    risk_free_rate: float = 0.043,
     current_user: dict = Depends(get_current_user),
 ):
     """Calculate spreads for given parameters. Returns raw data from SQL + Python calculation."""
@@ -59,6 +60,7 @@ async def get_spreads(
         "min_day_volume": min_day_volume,
         "min_iv_rank": min_iv_rank,
         "min_iv_percentile": min_iv_percentile,
+        "risk_free_rate": risk_free_rate,
     }
 
     cached = cache.get("spreads", params)
@@ -77,7 +79,7 @@ async def get_spreads(
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
     from src.spreads_calculation import get_page_spreads
 
-    spreads_df = get_page_spreads(df, strategy_type=strategy_type, iv_correction="auto")
+    spreads_df = get_page_spreads(df, strategy_type=strategy_type, iv_correction="auto", risk_free_rate=risk_free_rate)
 
     if spreads_df.empty:
         return []

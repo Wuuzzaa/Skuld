@@ -20,6 +20,7 @@ export default function IronCondorsPage() {
     min_open_interest: 100,
     min_day_volume: 20,
     min_iv_rank: 0,
+    risk_free_rate: 4.3,
   });
   const [expPut, setExpPut] = useState('');
   const [expCall, setExpCall] = useState('');
@@ -54,6 +55,7 @@ export default function IronCondorsPage() {
         expiration_date_put: expPut,
         expiration_date_call: expCall,
         ...params,
+        risk_free_rate: params.risk_free_rate / 100,
       }),
     enabled: !!expPut && !!expCall,
   });
@@ -183,6 +185,10 @@ export default function IronCondorsPage() {
         <div className="flex items-center gap-2">
           <label className="text-xs text-muted-foreground">Call Delta</label>
           <Input type="number" step="0.01" value={params.delta_call} onChange={(e) => setParams({ ...params, delta_call: +e.target.value })} className="w-20 h-8" />
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-muted-foreground">Rate %</label>
+          <Input type="number" step="0.1" value={params.risk_free_rate} onChange={(e) => setParams({ ...params, risk_free_rate: +e.target.value })} className="w-20 h-8" />
         </div>
         {selectedDTE && (
           <span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-blue-500/20 text-blue-400 border border-blue-500/30">

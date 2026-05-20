@@ -17,7 +17,7 @@ from src.options_utils import (
 # Setup logging
 logger = logging.getLogger(os.path.basename(__file__))
 
-def _calculate_combined_ev(row: pd.Series, iv_correction: str = 'auto') -> Dict[str, Any]:
+def _calculate_combined_ev(row: pd.Series, iv_correction: str = 'auto', risk_free_rate: float = RISK_FREE_RATE) -> Dict[str, Any]:
     """
     Calculates the combined Expected Value and IV details for an Iron Condor using Monte Carlo simulation.
     Processes 4 legs: Short Put, Long Put, Short Call, Long Call.
@@ -37,10 +37,11 @@ def _calculate_combined_ev(row: pd.Series, iv_correction: str = 'auto') -> Dict[
         volatility=row['sell_iv_put'],
         options=options,
         iv_correction=iv_correction,
+        risk_free_rate=risk_free_rate,
         return_details=True
     )
 
-def _calculate_iron_condor_metrics(df: pd.DataFrame, iv_correction: str = 'auto') -> pd.DataFrame:
+def _calculate_iron_condor_metrics(df: pd.DataFrame, iv_correction: str = 'auto', risk_free_rate: float = RISK_FREE_RATE) -> pd.DataFrame:
     if df.empty:
         return df
 
@@ -95,7 +96,7 @@ def _calculate_iron_condor_metrics(df: pd.DataFrame, iv_correction: str = 'auto'
     df["%_otm_call"] = (df["sell_strike_call"] - df["close_call"]) / df["close_call"] * 100
 
     # Expected Value and IV Details
-    ev_results = df.apply(_calculate_combined_ev, axis=1, iv_correction=iv_correction)
+    ev_results = df.apply(_calculate_combined_ev, axis=1, iv_correction=iv_correction, risk_free_rate=risk_free_rate)
     df["expected_value"] = ev_results.apply(lambda x: x["expected_value"])
     df["iv_correction_factor"] = ev_results.apply(lambda x: x["iv_correction_factor"])
 
@@ -117,9 +118,9 @@ def _calculate_iron_condor_metrics(df: pd.DataFrame, iv_correction: str = 'auto'
             if pd.isna(S) or pd.isna(K) or pd.isna(sigma) or pd.isna(t) or sigma <= 0 or t <= 0:
                 return None
             if is_call:
-                return round(CallValue(S, K, sigma, t, RISK_FREE_RATE), 2)
+                return round(CallValue(S, K, sigma, t, risk_free_rate), 2)
             else:
-                return round(PutValue(S, K, sigma, t, RISK_FREE_RATE), 2)
+                return round(PutValue(S, K, sigma, t, risk_free_rate), 2)
         except Exception:
             return None
 
@@ -155,7 +156,7 @@ def _build_optionstrat_url(row: pd.Series) -> str:
     return f"{base_url}/{symbol}/{p_buy},{p_sell},{c_sell},{c_buy}"
 
 @log_function
-def calc_iron_condors(put_spreads: pd.DataFrame, call_spreads: pd.DataFrame, iv_correction: str = 'auto') -> pd.DataFrame:
+def calc_iron_condors(put_spreads: pd.DataFrame, call_spreads: pd.DataFrame, iv_correction: str = 'auto', risk_free_rate: float = RISK_FREE_RATE) -> pd.DataFrame:
     if put_spreads.empty or call_spreads.empty:
         return pd.DataFrame()
 
@@ -169,7 +170,7 @@ def calc_iron_condors(put_spreads: pd.DataFrame, call_spreads: pd.DataFrame, iv_
         return combined
 
     logger.debug(f"Combined DF before metrics: {combined[['symbol', 'sell_theta_put', 'buy_theta_put', 'sell_theta_call', 'buy_theta_call']].head()}")
-    combined = _calculate_iron_condor_metrics(combined, iv_correction=iv_correction)
+    combined = _calculate_iron_condor_metrics(combined, iv_correction=iv_correction, risk_free_rate=risk_free_rate)
     combined = _add_earnings_and_urls(combined)
 
     return combined

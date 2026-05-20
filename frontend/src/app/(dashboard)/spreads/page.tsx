@@ -66,6 +66,7 @@ export default function SpreadsPage() {
     min_sell_iv: 0.1,
     max_sell_iv: 2.0,
     min_max_profit: 30,
+    risk_free_rate: 4.3,
   });
   const [selectedExpiration, setSelectedExpiration] = useState('');
   const [selectedRow, setSelectedRow] = useState<any>(null);
@@ -84,7 +85,7 @@ export default function SpreadsPage() {
     isFetching,
   } = useQuery({
     queryKey: ['spreads', selectedExpiration, params],
-    queryFn: () => getSpreads({ ...params, expiration_date: selectedExpiration }),
+    queryFn: () => getSpreads({ ...params, expiration_date: selectedExpiration, risk_free_rate: params.risk_free_rate / 100 }),
     enabled: !!selectedExpiration,
   });
 
@@ -319,6 +320,16 @@ export default function SpreadsPage() {
             type="number"
             value={params.spread_width}
             onChange={(e) => setParams({ ...params, spread_width: +e.target.value })}
+            className="w-20 h-8"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-muted-foreground">Rate %</label>
+          <Input
+            type="number"
+            step="0.1"
+            value={params.risk_free_rate}
+            onChange={(e) => setParams({ ...params, risk_free_rate: +e.target.value })}
             className="w-20 h-8"
           />
         </div>

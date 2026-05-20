@@ -17,10 +17,10 @@ from src.options_utils import (
 # Setup logging
 logger = logging.getLogger(os.path.basename(__file__))
 
-def _calculate_expected_value_for_symbol(row: pd.Series, strategy_type: str = 'credit', iv_correction: str = 'auto') -> Dict[str, Any]:
+def _calculate_expected_value_for_symbol(row: pd.Series, strategy_type: str = 'credit', iv_correction: str = 'auto', risk_free_rate: float = RISK_FREE_RATE) -> Dict[str, Any]:
     """Calculates the Expected Value and IV details for a single spread using Monte Carlo simulation."""
     is_credit = strategy_type == 'credit'
-    
+
     options = [
         {
             'strike': row['sell_strike'],
@@ -42,10 +42,11 @@ def _calculate_expected_value_for_symbol(row: pd.Series, strategy_type: str = 'c
         volatility=row['sell_iv'],
         options=options,
         iv_correction=iv_correction,
+        risk_free_rate=risk_free_rate,
         return_details=True
     )
 
-def _calculate_spread_metrics(df: pd.DataFrame, strategy_type: str = 'credit', iv_correction: str = 'auto') -> pd.DataFrame:
+def _calculate_spread_metrics(df: pd.DataFrame, strategy_type: str = 'credit', iv_correction: str = 'auto', risk_free_rate: float = RISK_FREE_RATE) -> pd.DataFrame:
     """Calculates all relevant metrics for the spreads."""
     if df.empty:
         return df
@@ -99,7 +100,7 @@ def _calculate_spread_metrics(df: pd.DataFrame, strategy_type: str = 'credit', i
     df["%_otm"] = (df["sell_strike"] - df["close"]).abs() / df["close"] * 100
 
     # Expected Value and IV Details
-    ev_results = df.apply(lambda r: _calculate_expected_value_for_symbol(r, strategy_type, iv_correction=iv_correction), axis=1)
+    ev_results = df.apply(lambda r: _calculate_expected_value_for_symbol(r, strategy_type, iv_correction=iv_correction, risk_free_rate=risk_free_rate), axis=1)
     df["expected_value"] = ev_results.apply(lambda x: x["expected_value"])
     df["iv_correction_factor"] = ev_results.apply(lambda x: x["iv_correction_factor"])
 
@@ -117,9 +118,9 @@ def _calculate_spread_metrics(df: pd.DataFrame, strategy_type: str = 'credit', i
             if pd.isna(S) or pd.isna(K) or pd.isna(sigma) or pd.isna(t) or sigma <= 0 or t <= 0:
                 return None
             if row['option_type'] == 'put':
-                return round(PutValue(S, K, sigma, t, RISK_FREE_RATE), 2)
+                return round(PutValue(S, K, sigma, t, risk_free_rate), 2)
             else:
-                return round(CallValue(S, K, sigma, t, RISK_FREE_RATE), 2)
+                return round(CallValue(S, K, sigma, t, risk_free_rate), 2)
         except Exception:
             return None
 
@@ -181,22 +182,22 @@ def _build_optionstrat_url(row: pd.Series, strategy_type: str = 'credit') -> str
     return f"{base_url}/{strategy}/{symbol}/{options}"
 
 @log_function
-def calc_spreads(df: pd.DataFrame, strategy_type: str = 'credit', iv_correction: str = 'auto') -> pd.DataFrame:
+def calc_spreads(df: pd.DataFrame, strategy_type: str = 'credit', iv_correction: str = 'auto', risk_free_rate: float = RISK_FREE_RATE) -> pd.DataFrame:
     """Main calculation entry point for spreads."""
     if df.empty:
         return df
-    
-    df = _calculate_spread_metrics(df, strategy_type, iv_correction=iv_correction)
+
+    df = _calculate_spread_metrics(df, strategy_type, iv_correction=iv_correction, risk_free_rate=risk_free_rate)
     df = _add_earnings_and_urls(df, strategy_type)
-    
+
     return df
 
-def get_page_spreads(df: pd.DataFrame, strategy_type: str = 'credit', iv_correction: str = 'auto') -> pd.DataFrame:
+def get_page_spreads(df: pd.DataFrame, strategy_type: str = 'credit', iv_correction: str = 'auto', risk_free_rate: float = RISK_FREE_RATE) -> pd.DataFrame:
     """Prepares the DataFrame for display in the frontend."""
     if df.empty:
         return df
-        
-    df = calc_spreads(df, strategy_type, iv_correction=iv_correction)
+
+    df = calc_spreads(df, strategy_type, iv_correction=iv_correction, risk_free_rate=risk_free_rate)
     
     if df.empty:
         return df
