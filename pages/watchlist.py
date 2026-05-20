@@ -84,6 +84,18 @@ def create_watchlist_backup():
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_path = os.path.join(BACKUP_DIR, f"watchlist_{timestamp}.xlsx")
     shutil.copy2(WATCHLIST_FILE, backup_path)
+    # Cleanup: Backups älter als 14 Tage löschen
+    cleanup_old_backups(max_age_days=14)
+
+
+def cleanup_old_backups(max_age_days=14):
+    """Löscht Backups die älter als max_age_days sind."""
+    if not os.path.exists(BACKUP_DIR):
+        return
+    cutoff = datetime.datetime.now() - datetime.timedelta(days=max_age_days)
+    for f in glob.glob(os.path.join(BACKUP_DIR, "watchlist_*.xlsx")):
+        if os.path.getmtime(f) < cutoff.timestamp():
+            os.remove(f)
 
 
 def list_backups():
