@@ -51,6 +51,17 @@ jobs:
         with:
           clean: false
 
+      - name: Notify start via Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: "-5262458068"
+        run: |
+          TEXT="🔄 <b>DB Replication gestartet</b>%0A%0A📥 Source: ${{ inputs.source }}%0A👤 ${{ github.actor }}%0A%0A⚠️ Alle Jobs werden gestoppt bis Restore abgeschlossen ist."
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d text="${TEXT}" \
+            -d parse_mode=HTML >/dev/null 2>&1 || true
+
       - name: Load config
         id: config
         run: |
