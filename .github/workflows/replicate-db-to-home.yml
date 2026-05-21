@@ -112,10 +112,12 @@ jobs:
           FILESIZE=$(du -h /tmp/${{ steps.find_backup.outputs.backup_name }} | cut -f1)
           echo "Downloaded: ${FILESIZE}"
 
-      - name: Stop app containers
-        if: ${{ inputs.restart_app }}
+      - name: Stop ALL app containers (kill DB connections)
         run: |
-          docker stop skuld-frontend skuld-backend 2>/dev/null || true
+          echo "Stopping all application containers that may hold DB connections..."
+          docker stop skuld-backend skuld-frontend skuld-api skuld-react 2>/dev/null || true
+          echo "Waiting 5s for connections to fully close..."
+          sleep 5
 
       - name: Restore backup
         run: |
@@ -123,9 +125,17 @@ jobs:
           DB_CONTAINER="${{ steps.config.outputs.home_db_container }}"
           BACKUP_FILE="/tmp/${{ steps.find_backup.outputs.backup_name }}"
 
-          echo "Dropping and recreating Skuld database..."
-          echo 'DROP DATABASE IF EXISTS "Skuld"; CREATE DATABASE "Skuld";' | \
-            docker exec -i "$DB_CONTAINER" psql -U admin -d postgres
+          echo "Force-terminating ALL remaining database connections..."
+          docker exec "$DB_CONTAINER" psql -U admin -d postgres -c \
+            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'Skuld' AND pid <> pg_backend_pid();" || true
+
+          echo "Dropping Skuld database..."
+          docker exec "$DB_CONTAINER" psql -U admin -d postgres -c \
+            'DROP DATABASE IF EXISTS "Skuld";'
+
+          echo "Creating fresh Skuld database..."
+          docker exec "$DB_CONTAINER" psql -U admin -d postgres -c \
+            'CREATE DATABASE "Skuld";'
 
           echo "Restoring backup (this may take a while for large dumps)..."
           gzip -dc "$BACKUP_FILE" | docker exec -i "$DB_CONTAINER" psql -U admin -d Skuld
@@ -140,7 +150,7 @@ jobs:
       - name: Start app containers
         if: ${{ inputs.restart_app }}
         run: |
-          docker restart skuld-backend skuld-frontend 2>/dev/null || true
+          docker restart skuld-backend skuld-frontend skuld-api skuld-react 2>/dev/null || true
           echo "Waiting 15s for backend to connect to DB and run migrations..."
           sleep 15
 
