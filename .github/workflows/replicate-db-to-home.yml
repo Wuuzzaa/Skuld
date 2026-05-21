@@ -116,12 +116,41 @@ jobs:
       - name: Download backup from source
         run: |
           echo "Downloading ${{ steps.find_backup.outputs.backup_name }} from ${{ inputs.source }}..."
+          DEST="/tmp/${{ steps.find_backup.outputs.backup_name }}"
+
+          # Get remote file size for progress calculation
+          REMOTE_SIZE=$(ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ steps.config.outputs.source_user }}@${{ steps.config.outputs.source_host }} \
+            "stat --printf='%s' ${{ steps.find_backup.outputs.backup_path }}" 2>/dev/null || echo "0")
+
+          if [ "$REMOTE_SIZE" -gt 0 ]; then
+            REMOTE_SIZE_MB=$((REMOTE_SIZE / 1024 / 1024))
+            echo "Remote file size: ${REMOTE_SIZE_MB} MB"
+          fi
+
+          # Start SCP in background
           scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${{ steps.config.outputs.source_user }}@${{ steps.config.outputs.source_host }}:${{ steps.find_backup.outputs.backup_path }} \
-            /tmp/${{ steps.find_backup.outputs.backup_name }}
+            "$DEST" &
+          SCP_PID=$!
 
-          FILESIZE=$(du -h /tmp/${{ steps.find_backup.outputs.backup_name }} | cut -f1)
-          echo "Downloaded: ${FILESIZE}"
+          # Log progress every 30s
+          while kill -0 $SCP_PID 2>/dev/null; do
+            if [ -f "$DEST" ]; then
+              CURRENT=$(du -m "$DEST" 2>/dev/null | cut -f1)
+              if [ "$REMOTE_SIZE" -gt 0 ]; then
+                PCT=$((CURRENT * 100 / REMOTE_SIZE_MB))
+                echo "  Progress: ${CURRENT} MB / ${REMOTE_SIZE_MB} MB (${PCT}%)"
+              else
+                echo "  Downloaded so far: ${CURRENT} MB"
+              fi
+            fi
+            sleep 30
+          done
+
+          wait $SCP_PID
+          FILESIZE=$(du -h "$DEST" | cut -f1)
+          echo "Download complete: ${FILESIZE}"
 
       - name: Stop ALL app containers (kill DB connections)
         run: |
