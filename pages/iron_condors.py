@@ -1,7 +1,7 @@
 import logging
 import os
 import streamlit as st
-from config import PATH_DATABASE_QUERY_FOLDER, IV_CORRECTION_MODE
+from config import PATH_DATABASE_QUERY_FOLDER, IV_CORRECTION_MODE, RISK_FREE_RATE
 from pages.documentation_text.iron_condors_page_doc import get_iron_condor_documentation
 from src.database import select_into_dataframe
 from src.logger_config import setup_logging
@@ -48,7 +48,8 @@ DEFAULTS = {
     'ic_min_sell_iv': DEFAULT_MIN_SELL_IV,
     'ic_max_sell_iv': DEFAULT_MAX_SELL_IV,
     'ic_min_max_profit': DEFAULT_MIN_MAX_PROFIT,
-    'ic_iv_correction': IV_CORRECTION_MODE
+    'ic_iv_correction': IV_CORRECTION_MODE,
+    'ic_risk_free_rate': RISK_FREE_RATE * 100  # stored as percentage for UI
 }
 
 init_session_state(DEFAULTS)
@@ -153,7 +154,7 @@ with st.expander("Configuration and Filters", expanded=True):
         st.checkbox("Show only spreads with no earnings till expiration", key="ic_show_only_spreads_with_no_earnings_till_expiration")
 
     st.divider()
-    col15, col16 = st.columns(2)
+    col15, col16, col17 = st.columns(3)
     with col15:
         iv_corr_input = st.text_input("IV Correction (auto, 0.0-1.0)", value=str(st.session_state.ic_iv_correction), key="ic_iv_correction_input")
         # Process input to match expected types (float or "auto")
@@ -166,6 +167,8 @@ with st.expander("Configuration and Filters", expanded=True):
                 st.error("Invalid IV Correction. Use 'auto' or a number.")
                 st.session_state.ic_iv_correction = 0.0
     with col16:
+        st.number_input("Risk-Free Rate %", min_value=0.0, max_value=20.0, step=0.1, format="%.1f", key="ic_risk_free_rate")
+    with col17:
         st.info("IV correction mode: 'auto' (Automatic), 0.0-1.0 (Manual reduction), 0.0 (No correction)")
 
 @st.cache_data
@@ -173,8 +176,8 @@ def _cached_select_into_dataframe(sql_file_path, params):
     return select_into_dataframe(sql_file_path=sql_file_path, params=params)
 
 @st.cache_data
-def _cached_calc_iron_condors(put_df, call_df, iv_correction):
-    return calc_iron_condors(put_df, call_df, iv_correction=iv_correction)
+def _cached_calc_iron_condors(put_df, call_df, iv_correction, risk_free_rate):
+    return calc_iron_condors(put_df, call_df, iv_correction=iv_correction, risk_free_rate=risk_free_rate)
 
 @st.cache_data
 def _cached_get_page_iron_condors(ic_df_raw):
@@ -199,7 +202,7 @@ with st.spinner("Calculating Iron Condors..."):
     call_params = {**common_params, "expiration_date": expiration_date_call, "option_type": "call", "delta_target": st.session_state.ic_delta_call, "spread_width": st.session_state.ic_width_call}
     call_df = _cached_select_into_dataframe(sql_file_path=sql_query_path, params=call_params)
     
-    ic_df_raw = _cached_calc_iron_condors(put_df, call_df, st.session_state.ic_iv_correction)
+    ic_df_raw = _cached_calc_iron_condors(put_df, call_df, st.session_state.ic_iv_correction, st.session_state.ic_risk_free_rate / 100)
     ic_df = _cached_get_page_iron_condors(ic_df_raw)
 
 if not ic_df.empty:
@@ -271,25 +274,29 @@ if not ic_df.empty:
                 strike=row['sell_strike_put'], premium=row['sell_last_option_price_put'], is_call=False, is_long=False,
                 delta=row['sell_delta_put'], iv=row['sell_iv_put'], theta=row['sell_theta_put'], oi=row['sell_open_interest_put'],
                 volume=row.get('sell_day_volume_put'), expected_move=row.get('sell_expected_move_put'),
-                last_updated=row.get('sell_last_updated_put')
+                last_updated=row.get('sell_last_updated_put'),
+                bs_price=row.get('sell_bs_price_put')
             ),
             OptionLeg(
                 strike=row['buy_strike_put'], premium=row['buy_last_option_price_put'], is_call=False, is_long=True,
                 delta=row['buy_delta_put'], iv=row['buy_iv_put'], theta=row['buy_theta_put'], oi=row['buy_open_interest_put'],
                 volume=row.get('buy_day_volume_put'), expected_move=row.get('buy_expected_move_put'),
-                last_updated=row.get('buy_last_updated_put')
+                last_updated=row.get('buy_last_updated_put'),
+                bs_price=row.get('buy_bs_price_put')
             ),
             OptionLeg(
                 strike=row['sell_strike_call'], premium=row['sell_last_option_price_call'], is_call=True, is_long=False,
                 delta=row['sell_delta_call'], iv=row['sell_iv_call'], theta=row['sell_theta_call'], oi=row['sell_open_interest_call'],
                 volume=row.get('sell_day_volume_call'), expected_move=row.get('sell_expected_move_call'),
-                last_updated=row.get('sell_last_updated_call')
+                last_updated=row.get('sell_last_updated_call'),
+                bs_price=row.get('sell_bs_price_call')
             ),
             OptionLeg(
                 strike=row['buy_strike_call'], premium=row['buy_last_option_price_call'], is_call=True, is_long=True,
                 delta=row['buy_delta_call'], iv=row['buy_iv_call'], theta=row['buy_theta_call'], oi=row['buy_open_interest_call'],
                 volume=row.get('buy_day_volume_call'), expected_move=row.get('buy_expected_move_call'),
-                last_updated=row.get('buy_last_updated_call')
+                last_updated=row.get('buy_last_updated_call'),
+                bs_price=row.get('buy_bs_price_call')
             )
         ]
         

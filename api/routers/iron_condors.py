@@ -21,6 +21,7 @@ async def get_iron_condors(
     min_day_volume: int = 20,
     min_iv_rank: int = 0,
     min_iv_percentile: int = 0,
+    risk_free_rate: float = 0.03,
     current_user: dict = Depends(get_current_user),
 ):
     """Calculate iron condors from put and call spreads."""
@@ -35,6 +36,7 @@ async def get_iron_condors(
         "min_day_volume": min_day_volume,
         "min_iv_rank": min_iv_rank,
         "min_iv_percentile": min_iv_percentile,
+        "risk_free_rate": risk_free_rate,
     }
 
     cached = cache.get("iron_condors", all_params)
@@ -74,7 +76,7 @@ async def get_iron_condors(
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
     from src.iron_condor_calculation import calc_iron_condors, get_page_iron_condors
 
-    ic_df = calc_iron_condors(put_df, call_df, iv_correction="auto")
+    ic_df = calc_iron_condors(put_df, call_df, iv_correction="auto", risk_free_rate=risk_free_rate)
     ic_df = get_page_iron_condors(ic_df)
 
     result = df_to_json_safe(ic_df)

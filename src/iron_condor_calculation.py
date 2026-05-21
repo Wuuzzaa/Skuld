@@ -4,15 +4,17 @@ import os
 from typing import Dict, Any
 from src.decorator_log_function import log_function
 from src.options_utils import (
-    MULTIPLIER, 
-    calculate_apdi, 
-    create_earnings_warning, 
-    format_strike, 
+    MULTIPLIER,
+    calculate_apdi,
+    create_earnings_warning,
+    format_strike,
     format_expiration_date,
     calculate_expected_value,
     OptionLeg,
     calculate_strategy_metrics
 )
+from src.black_scholes import CallValue, PutValue
+from config import RISK_FREE_RATE
 
 # Setup logging
 logger = logging.getLogger(os.path.basename(__file__))
@@ -90,7 +92,20 @@ def _calculate_combined_metrics(row: pd.Series, iv_correction: str = 'auto') -> 
         "sell_iv": (row["sell_iv_put"] + row["sell_iv_call"]) / 2
     })
 
-def _calculate_iron_condor_metrics(df: pd.DataFrame, iv_correction: str = 'auto') -> pd.DataFrame:
+def _calculate_bs_price(S, K, sigma, t, r, is_call):
+    """Central BS price calculation for a single option leg."""
+    try:
+        if pd.isna(S) or pd.isna(K) or pd.isna(sigma) or pd.isna(t) or sigma <= 0 or t <= 0:
+            return None
+        if is_call:
+            return round(CallValue(S, K, sigma, t, r), 2)
+        else:
+            return round(PutValue(S, K, sigma, t, r), 2)
+    except Exception:
+        return None
+
+
+def _calculate_iron_condor_metrics(df: pd.DataFrame, iv_correction: str = 'auto', risk_free_rate: float = RISK_FREE_RATE) -> pd.DataFrame:
     if df.empty:
         return df
 
@@ -130,6 +145,16 @@ def _calculate_iron_condor_metrics(df: pd.DataFrame, iv_correction: str = 'auto'
     df["width_put"] = (df["sell_strike_put"] - df["buy_strike_put"]).abs()
     df["width_call"] = (df["buy_strike_call"] - df["sell_strike_call"]).abs()
 
+    # Black-Scholes theoretical prices for all 4 legs
+    df['sell_bs_price_put'] = df.apply(
+        lambda r: _calculate_bs_price(r['close_put'], r['sell_strike_put'], r['sell_iv_put'], r['days_to_expiration_put'], risk_free_rate, False), axis=1)
+    df['buy_bs_price_put'] = df.apply(
+        lambda r: _calculate_bs_price(r['close_put'], r['buy_strike_put'], r['buy_iv_put'], r['days_to_expiration_put'], risk_free_rate, False), axis=1)
+    df['sell_bs_price_call'] = df.apply(
+        lambda r: _calculate_bs_price(r['close_call'], r['sell_strike_call'], r['sell_iv_call'], r['days_to_expiration_call'], risk_free_rate, True), axis=1)
+    df['buy_bs_price_call'] = df.apply(
+        lambda r: _calculate_bs_price(r['close_call'], r['buy_strike_call'], r['buy_iv_call'], r['days_to_expiration_call'], risk_free_rate, True), axis=1)
+
     # Calculate all generic metrics
     metrics_df = df.apply(lambda r: _calculate_combined_metrics(r, iv_correction=iv_correction), axis=1)
     df = pd.concat([df, metrics_df], axis=1)
@@ -168,7 +193,7 @@ def _build_optionstrat_url(row: pd.Series) -> str:
     return f"{base_url}/{symbol}/{p_buy},{p_sell},{c_sell},{c_buy}"
 
 @log_function
-def calc_iron_condors(put_spreads: pd.DataFrame, call_spreads: pd.DataFrame, iv_correction: str = 'auto') -> pd.DataFrame:
+def calc_iron_condors(put_spreads: pd.DataFrame, call_spreads: pd.DataFrame, iv_correction: str = 'auto', risk_free_rate: float = RISK_FREE_RATE) -> pd.DataFrame:
     if put_spreads.empty or call_spreads.empty:
         return pd.DataFrame()
 
@@ -182,7 +207,7 @@ def calc_iron_condors(put_spreads: pd.DataFrame, call_spreads: pd.DataFrame, iv_
         return combined
 
     logger.debug(f"Combined DF before metrics: {combined[['symbol', 'sell_theta_put', 'buy_theta_put', 'sell_theta_call', 'buy_theta_call']].head()}")
-    combined = _calculate_iron_condor_metrics(combined, iv_correction=iv_correction)
+    combined = _calculate_iron_condor_metrics(combined, iv_correction=iv_correction, risk_free_rate=risk_free_rate)
     combined = _add_earnings_and_urls(combined)
 
     return combined
@@ -226,6 +251,8 @@ def get_page_iron_condors(df: pd.DataFrame) -> pd.DataFrame:
         'expiration_date_call',
         'sell_last_option_price_put', 'buy_last_option_price_put',
         'sell_last_option_price_call', 'buy_last_option_price_call',
+        'sell_bs_price_put', 'buy_bs_price_put',
+        'sell_bs_price_call', 'buy_bs_price_call',
         'sell_iv_put', 'buy_iv_put', 'sell_iv_call', 'buy_iv_call',
         'sell_theta_put', 'buy_theta_put', 'sell_theta_call', 'buy_theta_call',
         'sell_open_interest_put', 'buy_open_interest_put',

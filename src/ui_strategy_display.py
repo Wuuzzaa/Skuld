@@ -29,13 +29,14 @@ def display_strategy_details(
             updated_str = updated_str.strftime('%d.%m.%Y %H:%M')
         elif pd.isna(updated_str):
             updated_str = "N/A"
-            
+
         legs_data.append({
             "Leg": f"Leg {i+1}",
             "Type": "Call" if leg.is_call else "Put",
             "Action": "Long" if leg.is_long else "Short",
             "Strike": leg.strike,
             "Price": leg.premium,
+            "BS Price": leg.bs_price if leg.bs_price is not None else "—",
             "Delta": leg.delta,
             "IV": leg.iv,
             "Theta": leg.theta,
@@ -44,9 +45,28 @@ def display_strategy_details(
             "Exp Move": leg.expected_move,
             "Updated": updated_str
         })
-    
+
     details_df = pd.DataFrame(legs_data)
-    st.table(details_df)
+
+    # Color-code BS Price comparison: green if market > BS (overpriced, good for sellers), red otherwise
+    def _highlight_bs(row):
+        styles = [''] * len(row)
+        bs_idx = details_df.columns.get_loc('BS Price')
+        price_idx = details_df.columns.get_loc('Price')
+        if row['BS Price'] != '—' and row['BS Price'] is not None and row['Price'] is not None:
+            try:
+                bs_val = float(row['BS Price'])
+                price_val = float(row['Price'])
+                if price_val > bs_val:
+                    styles[bs_idx] = 'color: #2ecc71'  # green
+                else:
+                    styles[bs_idx] = 'color: #e74c3c'  # red
+            except (ValueError, TypeError):
+                pass
+        return styles
+
+    styled_df = details_df.style.apply(_highlight_bs, axis=1)
+    st.dataframe(styled_df, hide_index=True, use_container_width=True)
     
     # 2. Key Metrics
     st.markdown("#### Kennzahlen & Unternehmensinfos")

@@ -25,6 +25,7 @@ class OptionLeg:
     volume: Optional[int] = None
     expected_move: Optional[float] = None
     last_updated: Optional[Union[str, datetime]] = None
+    bs_price: Optional[float] = None
 
 @dataclass
 class StrategyMetrics:

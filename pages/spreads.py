@@ -2,7 +2,7 @@ import logging
 import os
 import streamlit as st
 import pandas as pd
-from config import PATH_DATABASE_QUERY_FOLDER, IV_CORRECTION_MODE
+from config import PATH_DATABASE_QUERY_FOLDER, IV_CORRECTION_MODE, RISK_FREE_RATE
 from pages.documentation_text.spreads_page_doc import get_spreads_documentation
 from src.database import select_into_dataframe
 from src.logger_config import setup_logging
@@ -63,7 +63,8 @@ DEFAULTS = {
     'min_iv_rank': DEFAULT_MIN_IV_RANK,
     'min_iv_percentile': DEFAULT_MIN_IV_PERCENTILE,
     'strategy_type': DEFAULT_STRATEGY_TYPE,
-    'iv_correction': IV_CORRECTION_MODE
+    'iv_correction': IV_CORRECTION_MODE,
+    'risk_free_rate': RISK_FREE_RATE * 100  # stored as percentage for UI (e.g. 3.0 = 3%)
 }
 
 init_session_state(DEFAULTS)
@@ -263,7 +264,7 @@ with st.expander("Configuration and Filters", expanded=True):
         )
 
     st.divider()
-    col17, col18 = st.columns(2)
+    col17, col18, col19 = st.columns(3)
     with col17:
         iv_corr_input = st.text_input("IV Correction (auto, 0.0-1.0)", value=str(st.session_state.iv_correction), key="iv_correction_input")
         if iv_corr_input.lower() == "auto":
@@ -275,6 +276,8 @@ with st.expander("Configuration and Filters", expanded=True):
                 st.error("Invalid IV Correction. Use 'auto' or a number.")
                 st.session_state.iv_correction = 0.0
     with col18:
+        st.number_input("Risk-Free Rate %", min_value=0.0, max_value=20.0, step=0.1, format="%.1f", key="risk_free_rate")
+    with col19:
         st.info("IV correction mode: 'auto' (Automatic), 0.0-1.0 (Manual reduction), 0.0 (No correction)")
 
 @st.cache_data
@@ -283,8 +286,8 @@ def _cached_select_into_dataframe(sql_file_path, params):
 
 
 @st.cache_data
-def _cached_get_page_spreads(df, strategy_type, iv_correction):
-    return get_page_spreads(df, strategy_type=strategy_type, iv_correction=iv_correction)
+def _cached_get_page_spreads(df, strategy_type, iv_correction, risk_free_rate):
+    return get_page_spreads(df, strategy_type=strategy_type, iv_correction=iv_correction, risk_free_rate=risk_free_rate)
 
 
 # Calculate the spread values with a loading indicator
@@ -307,7 +310,7 @@ with st.spinner("Calculating spreads..."):
     df = _cached_select_into_dataframe(sql_file_path=sql_file_path, params=params)
     logging.debug(f"Input data head: {df.head()}")
 
-    spreads_df = _cached_get_page_spreads(df, strategy_type=strategy_type, iv_correction=st.session_state.iv_correction)
+    spreads_df = _cached_get_page_spreads(df, strategy_type=strategy_type, iv_correction=st.session_state.iv_correction, risk_free_rate=st.session_state.risk_free_rate / 100)
     logging.debug(f"Calculated spreads head: {spreads_df.head()}")
 
 # Apply spread filters
@@ -418,20 +421,22 @@ if not filtered_df.empty:
         
         legs = [
             OptionLeg(
-                strike=row['sell_strike'], premium=row['sell_last_option_price'], 
+                strike=row['sell_strike'], premium=row['sell_last_option_price'],
                 is_call=row['option_type'] == 'call', is_long=not is_credit,
-                delta=row.get('sell_delta'), iv=row.get('sell_iv'), 
+                delta=row.get('sell_delta'), iv=row.get('sell_iv'),
                 theta=row.get('sell_theta'), oi=row.get('sell_open_interest'),
                 volume=row.get('sell_day_volume'), expected_move=row.get('sell_expected_move'),
-                last_updated=row.get('sell_last_updated')
+                last_updated=row.get('sell_last_updated'),
+                bs_price=row.get('sell_bs_price')
             ),
             OptionLeg(
-                strike=row['buy_strike'], premium=row['buy_last_option_price'], 
+                strike=row['buy_strike'], premium=row['buy_last_option_price'],
                 is_call=row['option_type'] == 'call', is_long=is_credit,
-                delta=row.get('buy_delta'), iv=row.get('buy_iv'), 
+                delta=row.get('buy_delta'), iv=row.get('buy_iv'),
                 theta=row.get('buy_theta'), oi=row.get('buy_open_interest'),
                 volume=row.get('buy_day_volume'), expected_move=row.get('buy_expected_move'),
-                last_updated=row.get('buy_last_updated')
+                last_updated=row.get('buy_last_updated'),
+                bs_price=row.get('buy_bs_price')
             )
         ]
 

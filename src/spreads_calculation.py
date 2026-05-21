@@ -13,6 +13,8 @@ from src.options_utils import (
     OptionLeg,
     calculate_strategy_metrics
 )
+from src.black_scholes import CallValue, PutValue
+from config import RISK_FREE_RATE
 
 # Setup logging
 logger = logging.getLogger(os.path.basename(__file__))
@@ -67,7 +69,20 @@ def _calculate_metrics_for_row(row: pd.Series, strategy_type: str = 'credit', iv
         "corrected_volatility": metrics.corrected_volatility
     })
 
-def _calculate_spread_metrics(df: pd.DataFrame, strategy_type: str = 'credit', iv_correction: str = 'auto') -> pd.DataFrame:
+def _calculate_bs_price(S, K, sigma, t, r, is_call):
+    """Central BS price calculation for a single option leg."""
+    try:
+        if pd.isna(S) or pd.isna(K) or pd.isna(sigma) or pd.isna(t) or sigma <= 0 or t <= 0:
+            return None
+        if is_call:
+            return round(CallValue(S, K, sigma, t, r), 2)
+        else:
+            return round(PutValue(S, K, sigma, t, r), 2)
+    except Exception:
+        return None
+
+
+def _calculate_spread_metrics(df: pd.DataFrame, strategy_type: str = 'credit', iv_correction: str = 'auto', risk_free_rate: float = RISK_FREE_RATE) -> pd.DataFrame:
     """Calculates all relevant metrics for the spreads."""
     if df.empty:
         return df
@@ -77,6 +92,13 @@ def _calculate_spread_metrics(df: pd.DataFrame, strategy_type: str = 'credit', i
 
     # % Out-of-the-Money (OTM)
     df["%_otm"] = (df["sell_strike"] - df["close"]).abs() / df["close"] * 100
+
+    # Black-Scholes theoretical prices
+    is_call = df['option_type'] == 'call'
+    df['sell_bs_price'] = df.apply(
+        lambda r: _calculate_bs_price(r['close'], r['sell_strike'], r['sell_iv'], r['days_to_expiration'], risk_free_rate, r['option_type'] == 'call'), axis=1)
+    df['buy_bs_price'] = df.apply(
+        lambda r: _calculate_bs_price(r['close'], r['buy_strike'], r['buy_iv'], r['days_to_expiration'], risk_free_rate, r['option_type'] == 'call'), axis=1)
 
     # Calculate all generic metrics
     metrics_df = df.apply(lambda r: _calculate_metrics_for_row(r, strategy_type, iv_correction=iv_correction), axis=1)
@@ -141,22 +163,22 @@ def _build_optionstrat_url(row: pd.Series, strategy_type: str = 'credit') -> str
     return f"{base_url}/{strategy}/{symbol}/{options}"
 
 @log_function
-def calc_spreads(df: pd.DataFrame, strategy_type: str = 'credit', iv_correction: str = 'auto') -> pd.DataFrame:
+def calc_spreads(df: pd.DataFrame, strategy_type: str = 'credit', iv_correction: str = 'auto', risk_free_rate: float = RISK_FREE_RATE) -> pd.DataFrame:
     """Main calculation entry point for spreads."""
     if df.empty:
         return df
-    
-    df = _calculate_spread_metrics(df, strategy_type, iv_correction=iv_correction)
+
+    df = _calculate_spread_metrics(df, strategy_type, iv_correction=iv_correction, risk_free_rate=risk_free_rate)
     df = _add_earnings_and_urls(df, strategy_type)
-    
+
     return df
 
-def get_page_spreads(df: pd.DataFrame, strategy_type: str = 'credit', iv_correction: str = 'auto') -> pd.DataFrame:
+def get_page_spreads(df: pd.DataFrame, strategy_type: str = 'credit', iv_correction: str = 'auto', risk_free_rate: float = RISK_FREE_RATE) -> pd.DataFrame:
     """Prepares the DataFrame for display in the frontend."""
     if df.empty:
         return df
-        
-    df = calc_spreads(df, strategy_type, iv_correction=iv_correction)
+
+    df = calc_spreads(df, strategy_type, iv_correction=iv_correction, risk_free_rate=risk_free_rate)
     
     if df.empty:
         return df
@@ -167,12 +189,12 @@ def get_page_spreads(df: pd.DataFrame, strategy_type: str = 'credit', iv_correct
         'historical_volatility_30d', 'iv_rank', 'iv_percentile',
         'spread_width', 'max_profit', 'bpr', 'profit_to_bpr', 'spread_theta', 
         'expected_value', 'iv_correction_factor', 'APDI', 'APDI_EV', 'optionstrat_url',
-        'sell_strike', 'sell_last_option_price', 'sell_delta', 'sell_iv', '%_otm', 
+        'sell_strike', 'sell_last_option_price', 'sell_delta', 'sell_iv', '%_otm',
         'sell_theta', 'sell_open_interest', 'sell_expected_move', 'sell_day_volume',
-        'sell_last_updated',
-        'buy_strike', 'buy_last_option_price', 'buy_delta', 'buy_iv', 'buy_theta', 
+        'sell_last_updated', 'sell_bs_price',
+        'buy_strike', 'buy_last_option_price', 'buy_delta', 'buy_iv', 'buy_theta',
         'buy_open_interest', 'buy_expected_move', 'buy_day_volume',
-        'buy_last_updated',
+        'buy_last_updated', 'buy_bs_price',
         'option_type', 'expiration_date', 'days_to_expiration', 'days_to_earnings'
     ]
     
