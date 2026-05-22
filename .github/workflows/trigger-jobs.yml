@@ -31,6 +31,7 @@ on:
           - historization
           - historical_prices
           - historical_technical_indicators
+          - historical_iv
           - historical_full
           - db_backup
           - db_healthcheck
