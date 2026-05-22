@@ -164,6 +164,11 @@ def get_page_covered_calls(
         exclude_biotech: Exclude biotech/drug manufacturers
         exclude_leveraged: Exclude leveraged/inverse ETFs
         max_iv_hv_ratio: Maximum IV/HV ratio (premium fairness check)
+        max_iv_hv_ratio: Maximum IV/HV ratio (premium fairness check)
+        min_itm_pct: Minimum ITM percentage as decimal (0.10 = 10%)
+        min_stock_price: Minimum stock price in dollars
+        max_stock_price: Maximum stock price in dollars
+        min_premium: Minimum option premium in dollars
     """
     if df.empty:
         return df

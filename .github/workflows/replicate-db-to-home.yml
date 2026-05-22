@@ -51,6 +51,17 @@ jobs:
         with:
           clean: false
 
+      - name: Notify start via Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: "-5262458068"
+        run: |
+          TEXT="🔄 <b>DB Replication gestartet</b>%0A%0A📥 Source: ${{ inputs.source }}%0A👤 ${{ github.actor }}%0A%0A⚠️ Alle Jobs werden gestoppt bis Restore abgeschlossen ist."
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d text="${TEXT}" \
+            -d parse_mode=HTML >/dev/null 2>&1 || true
+
       - name: Load config
         id: config
         run: |
@@ -105,17 +116,48 @@ jobs:
       - name: Download backup from source
         run: |
           echo "Downloading ${{ steps.find_backup.outputs.backup_name }} from ${{ inputs.source }}..."
+          DEST="/tmp/${{ steps.find_backup.outputs.backup_name }}"
+
+          # Get remote file size for progress calculation
+          REMOTE_SIZE=$(ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ steps.config.outputs.source_user }}@${{ steps.config.outputs.source_host }} \
+            "stat --printf='%s' ${{ steps.find_backup.outputs.backup_path }}" 2>/dev/null || echo "0")
+
+          if [ "$REMOTE_SIZE" -gt 0 ]; then
+            REMOTE_SIZE_MB=$((REMOTE_SIZE / 1024 / 1024))
+            echo "Remote file size: ${REMOTE_SIZE_MB} MB"
+          fi
+
+          # Start SCP in background
           scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${{ steps.config.outputs.source_user }}@${{ steps.config.outputs.source_host }}:${{ steps.find_backup.outputs.backup_path }} \
-            /tmp/${{ steps.find_backup.outputs.backup_name }}
+            "$DEST" &
+          SCP_PID=$!
 
-          FILESIZE=$(du -h /tmp/${{ steps.find_backup.outputs.backup_name }} | cut -f1)
-          echo "Downloaded: ${FILESIZE}"
+          # Log progress every 30s
+          while kill -0 $SCP_PID 2>/dev/null; do
+            if [ -f "$DEST" ]; then
+              CURRENT=$(du -m "$DEST" 2>/dev/null | cut -f1)
+              if [ "$REMOTE_SIZE" -gt 0 ]; then
+                PCT=$((CURRENT * 100 / REMOTE_SIZE_MB))
+                echo "  Progress: ${CURRENT} MB / ${REMOTE_SIZE_MB} MB (${PCT}%)"
+              else
+                echo "  Downloaded so far: ${CURRENT} MB"
+              fi
+            fi
+            sleep 30
+          done
 
-      - name: Stop app containers
-        if: ${{ inputs.restart_app }}
+          wait $SCP_PID
+          FILESIZE=$(du -h "$DEST" | cut -f1)
+          echo "Download complete: ${FILESIZE}"
+
+      - name: Stop ALL app containers (kill DB connections)
         run: |
-          docker stop skuld-frontend skuld-backend 2>/dev/null || true
+          echo "Stopping all application containers that may hold DB connections..."
+          docker stop skuld-backend skuld-frontend skuld-api skuld-react 2>/dev/null || true
+          echo "Waiting 5s for connections to fully close..."
+          sleep 5
 
       - name: Restore backup
         run: |
@@ -123,9 +165,17 @@ jobs:
           DB_CONTAINER="${{ steps.config.outputs.home_db_container }}"
           BACKUP_FILE="/tmp/${{ steps.find_backup.outputs.backup_name }}"
 
-          echo "Dropping and recreating Skuld database..."
-          echo 'DROP DATABASE IF EXISTS "Skuld"; CREATE DATABASE "Skuld";' | \
-            docker exec -i "$DB_CONTAINER" psql -U admin -d postgres
+          echo "Force-terminating ALL remaining database connections..."
+          docker exec "$DB_CONTAINER" psql -U admin -d postgres -c \
+            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'Skuld' AND pid <> pg_backend_pid();" || true
+
+          echo "Dropping Skuld database..."
+          docker exec "$DB_CONTAINER" psql -U admin -d postgres -c \
+            'DROP DATABASE IF EXISTS "Skuld";'
+
+          echo "Creating fresh Skuld database..."
+          docker exec "$DB_CONTAINER" psql -U admin -d postgres -c \
+            'CREATE DATABASE "Skuld";'
 
           echo "Restoring backup (this may take a while for large dumps)..."
           gzip -dc "$BACKUP_FILE" | docker exec -i "$DB_CONTAINER" psql -U admin -d Skuld
@@ -140,7 +190,7 @@ jobs:
       - name: Start app containers
         if: ${{ inputs.restart_app }}
         run: |
-          docker restart skuld-backend skuld-frontend 2>/dev/null || true
+          docker restart skuld-backend skuld-frontend skuld-api skuld-react 2>/dev/null || true
           echo "Waiting 15s for backend to connect to DB and run migrations..."
           sleep 15
 

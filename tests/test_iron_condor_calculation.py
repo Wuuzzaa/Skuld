@@ -66,6 +66,12 @@ def test_calc_iron_condors_basic(sample_ic_data):
     assert row['bpr'] == 150.0
     # Sell IV = (0.3 + 0.28) / 2 = 0.29
     assert row['sell_iv'] == pytest.approx(0.29)
+    
+    # Total Theta
+    # Put side: short -0.1, long -0.05 -> (-1*-0.1) + (1*-0.05) = 0.1 - 0.05 = 0.05
+    # Call side: short -0.08, long -0.04 -> (-1*-0.08) + (1*-0.04) = 0.08 - 0.04 = 0.04
+    # Strategy Theta = 0.05 + 0.04 = 0.09
+    assert row['total_theta'] == pytest.approx(0.09)
 
 def test_get_page_iron_condors_columns(sample_ic_data):
     puts, calls = sample_ic_data

@@ -63,7 +63,7 @@ async def get_spreads(
         "risk_free_rate": risk_free_rate,
     }
 
-    cached = cache.get("spreads", params)
+    cached = cache.get("spreads", {**params, "risk_free_rate": risk_free_rate})
     if cached is not None:
         return cached
 
@@ -92,5 +92,5 @@ async def get_spreads(
         logging.getLogger(__name__).warning(f"Claude link generation failed: {e}")
 
     result = df_to_json_safe(spreads_df)
-    cache.set("spreads", params, result, ttl=300)  # 5 min cache
+    cache.set("spreads", {**params, "risk_free_rate": risk_free_rate}, result, ttl=300)  # 5 min cache
     return result

@@ -27,12 +27,16 @@ st.title("SKULD - Option Viewer")
 
 # Define pages
 analyst_prices = st.Page("pages/analyst_prices.py", title="Analyst Prices")
+watchlist = st.Page("pages/watchlist.py", title="Watchlist")
 spreads = st.Page("pages/spreads.py", title="Spreads")
 marrieds = st.Page("pages/married_put_analysis.py", title="Married Puts")
 position_insurance = st.Page("pages/position_insurance_tool.py", title="Position Insurance Tool")
 multifactor_swingtrading = st.Page('pages/multifactor_swingtrading.py', title="Multifactor Swingtrading")
 sector_rotation = st.Page('pages/sector_rotation.py', title="Sector Rotation")
+rsl_momentum = st.Page('pages/rsl_momentum.py', title="RSL Momentum")
 expected_value = st.Page('pages/expected_value.py', title="Expected Value")
+dividend_scanner = st.Page("pages/dividend_scanner.py", title="Dividend Scanner")
+zahltagstrategie = st.Page("pages/dividend_screener_zahltagstrategie.py", title="Zahltagstrategie")
 data_logs = st.Page("pages/data_change_logs.py", title="Data Logs")
 iron_condors = st.Page("pages/iron_condors.py", title="Iron Condors")
 symbolpage = st.Page("pages/symbolpage.py", title="Symbol Page")
@@ -41,13 +45,17 @@ symbolpage = st.Page("pages/symbolpage.py", title="Symbol Page")
 page = st.navigation(
     [
         analyst_prices,
+        watchlist,
         spreads,
         iron_condors,
         marrieds,
         position_insurance,
         multifactor_swingtrading,
         sector_rotation,
+        rsl_momentum,
         expected_value,
+        dividend_scanner,
+        zahltagstrategie,
         data_logs,
         symbolpage
     ]
@@ -64,4 +72,6 @@ footer_text = f"SKULD Option Viewer - Data analysis tool for option trading stra
 if skuld_branch and skuld_env != 'Production':
     footer_text += f" | Branch: {skuld_branch}"
 st.caption(footer_text)
+
+
 

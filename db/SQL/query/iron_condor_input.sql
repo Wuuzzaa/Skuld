@@ -16,6 +16,7 @@ WITH FilteredOptions AS (
         expected_move,
         analyst_mean_target,
         day_volume,
+        day_last_updated,
         company_name,
         company_industry,
         company_sector,
@@ -70,6 +71,7 @@ SELECT
     sell.option_open_interest AS sell_open_interest,
     sell.expected_move AS sell_expected_move,
     sell.day_volume AS sell_day_volume,
+    sell.day_last_updated AS sell_last_updated,
     -- buy option
     buy.strike AS buy_strike,
     buy.last_option_price AS buy_last_option_price,
@@ -77,7 +79,8 @@ SELECT
     buy.iv AS buy_iv,
     buy.theta AS buy_theta,
     buy.option_open_interest AS buy_open_interest,
-    buy.expected_move AS buy_expected_move
+    buy.expected_move AS buy_expected_move,
+    buy.day_last_updated AS buy_last_updated
 FROM
     TargetOptions sell
 INNER JOIN

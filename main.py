@@ -3,12 +3,10 @@ import logging
 import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from src.massiv_api import get_symbols
-from src.live_stock_price_collector import fetch_current_prices
 from src.logger_config import setup_logging
 from src.database import run_migrations
 from src.send_alert import send_telegram_message
 from src.massiv_api import load_option_chains
-from src.price_and_technical_analysis_data_scrapper import scrape_and_save_price_and_technical_indicators
 from src.stock_volatility import calculate_and_store_stock_implied_volatility_history
 from src.technical_indicators import calc_technical_indicators, calc_technical_indicators_history
 from src.yahoo_asset_profile import load_asset_profile
@@ -20,7 +18,7 @@ from config import *
 from src.historization import run_historization_pipeline
 from src.pipeline_monitor import PipelineMonitor
 
-setup_logging(component="data_collector", log_level=logging.DEBUG, console_output=True)
+setup_logging(component="data_collector", log_level=logging.INFO, console_output=True)
 logger = logging.getLogger(__name__)
 logger.info("data_collector")
 
@@ -66,53 +64,70 @@ def main(args):
 
         symbols = get_symbols()
 
-        # select the data collection tasks to run
-        parallel_tasks = None
-        if args.mode == "all":
-            parallel_tasks = [
+        # define the data collection tasks to run based on the mode
+        task_map = {
+            "all": [
                 ("Massive Option Chains", load_option_chains, (symbols["options"],)),
-                ("Fetch Current Stock Day Prices", load_stock_prices, (symbols["stocks"],)),
+                ("Fetch Current Stock Day Prices", load_stock_prices, (symbols["all"],)),
                 ("Yahoo Finance Analyst Price Targets", scrape_yahoo_finance_analyst_price_targets, (symbols["stocks"],)),
                 ("Earning Dates", scrape_earning_dates, (symbols["stocks"],)),
                 ("Yahoo Query Fundamentals", generate_fundamental_data, (symbols["stocks"],)),
-                ("Fetch Current Stock Prices", fetch_current_prices, (symbols["stocks"],)),
                 ("Yahoo Dividends", calculate_dividend_classification, ()),
-                ("Yahoo Asset Profiles", load_asset_profile, (symbols["stocks"],)),
-                ("Technical Indicators", calc_technical_indicators, (symbols["stocks"],)),
-            ]
-        elif args.mode == "saturday_night":
-            parallel_tasks = [
+                ("Yahoo Asset Profiles", load_asset_profile, (symbols["all"],)),
+                ("Technical Indicators", calc_technical_indicators, (symbols["all"],)),
+            ],
+            "saturday_night": [
                 ("Yahoo Dividends", calculate_dividend_classification, ()),
                 ("Yahoo Query Fundamentals", generate_fundamental_data, (symbols["stocks"],)),
                 ("Yahoo Finance Analyst Price Targets", scrape_yahoo_finance_analyst_price_targets, (symbols["stocks"],)),
                 ("Earning Dates", scrape_earning_dates, (symbols["stocks"],)),
-                ("Yahoo Asset Profiles", load_asset_profile, (symbols["stocks"],)),
-            ]
-        elif args.mode == "market_start_mid_end":
-            parallel_tasks = [
-                ("Fetch Current Stock Day Prices", load_stock_prices, (symbols["stocks"],)),
-            ]
-        elif args.mode == "stock_data_daily":
-            parallel_tasks = [
-                ("Technical Indicators", calc_technical_indicators, (symbols["stocks"],)),
-            ]
-        elif args.mode == "option_data":
-            parallel_tasks = [
+                ("Yahoo Asset Profiles", load_asset_profile, (symbols["all"],)),
+            ],
+            "market_start_mid_end": [
+                ("Fetch Current Stock Day Prices", load_stock_prices, (symbols["all"],)),
+            ],
+            "stock_data_daily": [
+                ("Technical Indicators", calc_technical_indicators, (symbols["all"],)),
+            ],
+            "option_data": [
                 ("Massive Option Chains", load_option_chains, (symbols["options"],)),
-            ]
-        elif args.mode == "historical_prices":
+            ],
+            "historical_technical_indicators": [
+                ("Technical Indicators History", calc_technical_indicators_history, (symbols["all"],)),
+            ],
+        }
+
+        parallel_tasks = task_map.get(args.mode)
+
+        if args.mode == "historical_prices":
             parallel_tasks = []
-            load_historical_prices(symbols["stocks"])
+            task_name, result, error, mem_diff, peak_mem, duration = pipeline.run_task(
+                "Historical Prices", load_historical_prices, symbols["all"]
+            )
+            pipeline.record_result(task_name, result, error, mem_diff, peak_mem)
         elif args.mode == "historical_iv":
             parallel_tasks = []
-            calculate_and_store_stock_implied_volatility_history()
-        elif args.mode == "historical_technical_indicators":
-            parallel_tasks = [
-                ("Technical Indicators History", calc_technical_indicators_history, (symbols["stocks"],)),
-            ]
+            task_name, result, error, mem_diff, peak_mem, duration = pipeline.run_task(
+                "Historical IV", calculate_and_store_stock_implied_volatility_history
+            )
+            pipeline.record_result(task_name, result, error, mem_diff, peak_mem)
+        elif args.mode == "historical_full":
+            # Sequential: first historical prices, then technical indicators
+            parallel_tasks = []
+            task_name, result, error, mem_diff, peak_mem, duration = pipeline.run_task(
+                "Historical Prices", load_historical_prices, symbols["all"]
+            )
+            pipeline.record_result(task_name, result, error, mem_diff, peak_mem)
+            if error:
+                raise RuntimeError(f"Historical Prices failed: {error}")
+
+            task_name, result, error, mem_diff, peak_mem, duration = pipeline.run_task(
+                "Technical Indicators History", calc_technical_indicators_history, symbols["all"]
+            )
+            pipeline.record_result(task_name, result, error, mem_diff, peak_mem)
         elif args.mode == "historization":
-            pass
-        else:
+            parallel_tasks = []
+        elif args.mode not in task_map:
             raise ValueError(f"Unknown mode: {args.mode}")
 
         if parallel_tasks:
@@ -207,9 +222,10 @@ if __name__ == "__main__":
                             "option_data",
                             "historical_prices",
                             "historical_iv",
+                            "historical_technical_indicators",
+                            "historical_full",
                             "historization",
                             "only_run_migrations",
-                            "historical_technical_indicators"
                         ],
                         help="Mode for data collection")
     parser.add_argument("--env", type=str, required=False, default=None,

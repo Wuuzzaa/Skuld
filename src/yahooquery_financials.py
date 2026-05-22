@@ -289,6 +289,8 @@ def generate_fundamental_data_oom(symbols):
 
 def load_stock_prices(symbols):
     logger.info("Fetching day stock prices (high, low, close) using YahooQueryScraper...")
+    # replace symbol prefix I: with ^ for indices to match yahoo format
+    symbols = [symbol.replace('I:', '^') for symbol in symbols]
     yahoo_query = YahooQueryScraper.instance(symbols)
     with get_postgres_engine().begin() as connection:
         truncate_table(connection, TABLE_STOCK_PRICES_YAHOO)
@@ -297,6 +299,8 @@ def load_stock_prices(symbols):
                 # drop date column
                 if 'date' in df.columns:
                     df = df.drop(columns=['date'])
+                    # replace symbol prefix ^ with :I for indices to match symbols table
+                    df['symbol'] = df['symbol'].str.replace('^', 'I:')
                     insert_into_table(
                         connection,
                         TABLE_STOCK_PRICES_YAHOO,
@@ -305,6 +309,8 @@ def load_stock_prices(symbols):
                     )
 
 def load_historical_prices_(symbols):
+    # replace symbol prefix I: with ^ for indices to match yahoo format
+    symbols = [symbol.replace('I:', '^') for symbol in symbols]
     yahoo_query = YahooQueryScraper.instance(symbols)
     for df in yahoo_query.get_historical_prices(period='26y'):
         if df is not None and not df.empty:
@@ -312,6 +318,8 @@ def load_historical_prices_(symbols):
             if 'date' in df.columns:
                 df = df.rename(columns={'date': 'snapshot_date'})
             with get_postgres_engine().begin() as connection:
+                # replace symbol prefix ^ with :I for indices to match symbols table
+                df['symbol'] = df['symbol'].str.replace('^', 'I:')
                 insert_into_table(
                     connection, 
                     f"{TABLE_STOCK_PRICES_YAHOO}HistoryDaily", 
@@ -322,6 +330,8 @@ def load_historical_prices_(symbols):
 def load_historical_prices(symbols):
     logger.info("Fetching historical stock prices (high, low, close) using YahooQueryScraper...")
     table_name = f"{TABLE_STOCK_PRICES_YAHOO}HistoryDaily"
+    # replace symbol prefix I: with ^ for indices to match yahoo format
+    symbols = [symbol.replace('I:', '^') for symbol in symbols]
     yahoo_query = YahooQueryScraper.instance(symbols)
     total_rows = 0
     conn = get_postgres_engine().raw_connection()
@@ -336,6 +346,8 @@ def load_historical_prices(symbols):
                 df = df.rename(columns={'date': 'snapshot_date'})
                 # df = df.astype({'volume':'int'})
                 df['volume'] = df['volume'].fillna(0).astype(int)
+                # replace symbol prefix ^ with :I for indices to match symbols table
+                df['symbol'] = df['symbol'].str.replace('^', 'I:')
                 insert_into_table_bulk(
                     conn, 
                     table_name, 

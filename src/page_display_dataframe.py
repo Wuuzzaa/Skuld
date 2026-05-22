@@ -60,8 +60,10 @@ def _add_claude_analysis_link(df: pd.DataFrame, page=None) -> pd.DataFrame:
         df['Claude'] = df.apply(_create_claude_prompt_page_spreads, axis=1)
     elif page == 'iron_condors':
         df['Claude'] = df.apply(_create_claude_prompt_page_iron_condors, axis=1)
+    elif page == 'dividend_scanner':
+        df['Claude'] = df.apply(_create_claude_prompt_dividend_scanner, axis=1)
     else:
-        raise ValueError('Page not recognized')
+        df['Claude'] = df.apply(_create_claude_prompt_default, axis=1)
     return df
 
 def _get_claude_prompt_header(symbol, company=None):
@@ -152,6 +154,36 @@ Call-Seite: Verkauf Strike {row['sell_strike_call']} (Delta {row['sell_delta_cal
     encoded_prompt = urllib.parse.quote(prompt.strip())
     return f'https://claude.ai/new?q={encoded_prompt}'
 
+def _create_claude_prompt_dividend_scanner(row):
+    symbol = row['symbol']
+    company = row.get('name') or row.get('Company')
+    sector = row.get('sector') or row.get('company_sector')
+
+    # Try sector-specific prompt
+    sector_prompt = _get_sector_prompt(sector, symbol)
+
+    # Context for dividend scanner
+    scanner_context = f"""
+Aktuelle Kennzahlen aus meinem Screening:
+- KGV (P/E): {row.get('trailing_pe', 'N/A')}
+- Dividendenrendite: {row.get('dividend_yield', 0)*100:.2f}%
+- Payout Ratio: {row.get('payout_ratio', 0)*100:.1f}%
+- RSI (14): {row.get('rsi', 'N/A')}
+- IV-Rank: {row.get('iv_rank_val', 0)*100:.1f}%
+
+Analysiere die Aktie besonders im Hinblick auf die Nachhaltigkeit der Dividende und ob das aktuelle technische Niveau (RSI, Vola) einen attraktiven Einstieg (Long oder Short Put) rechtfertigt.
+"""
+
+    if sector_prompt:
+        prompt = sector_prompt.strip() + "\n" + scanner_context
+    else:
+        prompt = _get_claude_prompt_header(symbol, company) + scanner_context
+
+    prompt += _get_claude_prompt_footer()
+
+    encoded_prompt = urllib.parse.quote(prompt.strip())
+    return f'https://claude.ai/new?q={encoded_prompt}'
+
 def _create_claude_prompt_default(row):
     symbol = row['symbol']
     sector = row.get('company_sector')
@@ -217,8 +249,11 @@ def page_display_dataframe(
             'option_type', 'expiration_date',
             'sell_strike', 'sell_last_option_price', 'sell_delta', 'sell_iv',
             '%_otm', 'sell_theta', 'sell_open_interest', 'sell_expected_move',
-            'sell_day_volume', 'buy_strike', 'buy_last_option_price', 'buy_delta',
+            'sell_day_volume', 'sell_last_updated', 'buy_strike', 'buy_last_option_price', 'buy_delta',
             'buy_iv', 'buy_theta', 'buy_open_interest', 'buy_expected_move',
+            'buy_day_volume', 'buy_last_updated',
+            'sell_last_updated_put', 'buy_last_updated_put',
+            'sell_last_updated_call', 'buy_last_updated_call',
             'company_industry', 'company_sector', 'historical_volatility_30d',
             'days_to_earnings', 'analyst_mean_target', 'spread_theta',
             'TradingView', 'Chart', 'Claude', 'optionstrat_url'
@@ -243,6 +278,9 @@ def page_display_dataframe(
             'buy_delta_put', 'buy_delta_call',
             'sell_day_volume_put', 'buy_day_volume_put',
             'sell_day_volume_call', 'buy_day_volume_call',
+            'sell_last_updated_put', 'buy_last_updated_put',
+            'sell_last_updated_call', 'buy_last_updated_call',
+            'sell_last_updated', 'buy_last_updated',
             'sell_expected_move_put', 'buy_expected_move_put',
             'sell_expected_move_call', 'buy_expected_move_call',
             'historical_volatility_30d_put', 'industry', 'sector',
