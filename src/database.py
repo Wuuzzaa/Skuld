@@ -401,7 +401,7 @@ def _run_migrations_for_engine(engine):
                             connection.execute(text(statement))
                         except Exception as e:
                             logger.error(f"[{label}] Error applying migration {migration_file}: \n{e}")
-                            if not 'duplicate column' in e:
+                            if 'duplicate column' not in str(e) and 'already exists' not in str(e):
                                 raise e
                         
                 logger.info(f"[{label}] Migration {migration_file} applied successfully.")
