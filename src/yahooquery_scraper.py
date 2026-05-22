@@ -141,7 +141,7 @@ class YahooQueryScraper:
             return df
 
     def get_historical_prices(self, period="1d"):
-        local_batch_size = 2000
+        local_batch_size = 500
         local_ticker_batches = _get_ticker_batches(self.symbols, local_batch_size, self.retries, asynchronous=True)
         batch = 1
         for ticker_batch in local_ticker_batches:
