@@ -112,19 +112,32 @@ def main(args):
             )
             pipeline.record_result(task_name, result, error, mem_diff, peak_mem)
         elif args.mode == "historical_full":
-            # Sequential: first historical prices, then technical indicators
+            # Sequential: prices -> technical indicators -> IV
             parallel_tasks = []
-            task_name, result, error, mem_diff, peak_mem, duration = pipeline.run_task(
-                "Historical Prices", load_historical_prices, symbols["all"]
-            )
-            pipeline.record_result(task_name, result, error, mem_diff, peak_mem)
-            if error:
-                raise RuntimeError(f"Historical Prices failed: {error}")
-
-            task_name, result, error, mem_diff, peak_mem, duration = pipeline.run_task(
-                "Technical Indicators History", calc_technical_indicators_history, symbols["all"]
-            )
-            pipeline.record_result(task_name, result, error, mem_diff, peak_mem)
+            steps = [
+                ("Historical Prices", load_historical_prices, (symbols["all"],)),
+                ("Technical Indicators History", calc_technical_indicators_history, (symbols["all"],)),
+                ("Historical IV", calculate_and_store_stock_implied_volatility_history, ()),
+            ]
+            for step_name, step_func, step_args in steps:
+                send_telegram_message(
+                    f"SKULD Job: Historical Full",
+                    f"▶️ Starting: <b>{step_name}</b>"
+                )
+                task_name, result, error, mem_diff, peak_mem, duration = pipeline.run_task(
+                    step_name, step_func, *step_args
+                )
+                pipeline.record_result(task_name, result, error, mem_diff, peak_mem)
+                if error:
+                    send_telegram_message(
+                        f"SKULD Job: Historical Full",
+                        f"❌ <b>{step_name}</b> failed after {duration}s:\n<code>{error}</code>"
+                    )
+                    raise RuntimeError(f"{step_name} failed: {error}")
+                send_telegram_message(
+                    f"SKULD Job: Historical Full",
+                    f"✅ <b>{step_name}</b> completed in {duration}s"
+                )
         elif args.mode == "historization":
             parallel_tasks = []
         elif args.mode not in task_map:
