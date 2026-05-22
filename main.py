@@ -101,10 +101,30 @@ def main(args):
 
         if args.mode == "historical_prices":
             parallel_tasks = []
-            load_historical_prices(symbols["all"])
+            task_name, result, error, mem_diff, peak_mem, duration = pipeline.run_task(
+                "Historical Prices", load_historical_prices, symbols["all"]
+            )
+            pipeline.record_result(task_name, result, error, mem_diff, peak_mem)
         elif args.mode == "historical_iv":
             parallel_tasks = []
-            calculate_and_store_stock_implied_volatility_history()
+            task_name, result, error, mem_diff, peak_mem, duration = pipeline.run_task(
+                "Historical IV", calculate_and_store_stock_implied_volatility_history
+            )
+            pipeline.record_result(task_name, result, error, mem_diff, peak_mem)
+        elif args.mode == "historical_full":
+            # Sequential: first historical prices, then technical indicators
+            parallel_tasks = []
+            task_name, result, error, mem_diff, peak_mem, duration = pipeline.run_task(
+                "Historical Prices", load_historical_prices, symbols["all"]
+            )
+            pipeline.record_result(task_name, result, error, mem_diff, peak_mem)
+            if error:
+                raise RuntimeError(f"Historical Prices failed: {error}")
+
+            task_name, result, error, mem_diff, peak_mem, duration = pipeline.run_task(
+                "Technical Indicators History", calc_technical_indicators_history, symbols["all"]
+            )
+            pipeline.record_result(task_name, result, error, mem_diff, peak_mem)
         elif args.mode == "historization":
             parallel_tasks = []
         elif args.mode not in task_map:
@@ -202,9 +222,10 @@ if __name__ == "__main__":
                             "option_data",
                             "historical_prices",
                             "historical_iv",
+                            "historical_technical_indicators",
+                            "historical_full",
                             "historization",
                             "only_run_migrations",
-                            "historical_technical_indicators"
                         ],
                         help="Mode for data collection")
     parser.add_argument("--env", type=str, required=False, default=None,

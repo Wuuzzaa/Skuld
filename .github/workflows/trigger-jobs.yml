@@ -29,6 +29,9 @@ on:
           - market_start_mid_end
           - stock_data_daily
           - historization
+          - historical_prices
+          - historical_technical_indicators
+          - historical_full
           - db_backup
           - db_healthcheck
       dry_run:

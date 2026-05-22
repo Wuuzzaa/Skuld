@@ -68,7 +68,7 @@ with c_cb:
     )
 with c_btn:
     st.write("")  # vertical spacing
-    load_btn = st.button("CALCULATE", type="primary", use_container_width=True)
+    load_btn = st.button("CALCULATE", type="primary", width="stretch")
 
 # ── Load Data ───────────────────────────────────────────────────────
 if load_btn and symbol_input:
@@ -384,7 +384,7 @@ if st.session_state["pit_puts_df"] is not None:
                     margin=dict(b=100)
                 )
 
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
             else:
                 st.bar_chart(chart_data, x=x_col, y=vis_metric)
 
@@ -413,7 +413,7 @@ if st.session_state["pit_puts_df"] is not None:
 
         event = st.dataframe(
             styler,
-            use_container_width=True,
+            width="stretch",
             height=min(800, 40 + 35 * len(display_df)),
             selection_mode="single-row",
             on_select="rerun",

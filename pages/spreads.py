@@ -2,14 +2,16 @@ import logging
 import os
 import streamlit as st
 import pandas as pd
-from config import PATH_DATABASE_QUERY_FOLDER, IV_CORRECTION_MODE
+from config import PATH_DATABASE_QUERY_FOLDER, IV_CORRECTION_MODE, RISK_FREE_RATE
 from pages.documentation_text.spreads_page_doc import get_spreads_documentation
 from src.database import select_into_dataframe
 from src.logger_config import setup_logging
-from src.page_display_dataframe import page_display_dataframe
+from src.page_display_dataframe import page_display_dataframe, _create_claude_prompt_page_spreads
 from src.spreads_calculation import get_page_spreads
 from src.utils.option_utils import get_expiration_type
 from src.ui_utils import init_session_state, reset_to_defaults as ui_reset, filter_by_expiration_type
+from src.ui_strategy_display import display_strategy_details
+from src.options_utils import OptionLeg, StrategyMetrics
 
 # Ensure logfile gets all columns of wide dataframes
 pd.set_option('display.max_columns', None)
@@ -26,6 +28,7 @@ DEFAULT_SHOW_WEEKLY = False
 DEFAULT_SHOW_DAILY = False
 DEFAULT_SHOW_ONLY_POSITIV_EXPECTED_VALUE = True
 DEFAULT_SHOW_ONLY_SPREADS_WITH_NO_EARNINGS_TILL_EXPIRATION = True
+DEFAULT_SHOW_ONLY_SPREADS_WITH_NO_EARNINGS_WARNING = True
 DEFAULT_DELTA_TARGET = 0.2
 DEFAULT_SPREAD_WIDTH = 5
 DEFAULT_OPTION_TYPE = "put"
@@ -48,6 +51,7 @@ DEFAULTS = {
     'show_daily': DEFAULT_SHOW_DAILY,
     'show_only_positiv_expected_value': DEFAULT_SHOW_ONLY_POSITIV_EXPECTED_VALUE,
     'show_only_spreads_with_no_earnings_till_expiration': DEFAULT_SHOW_ONLY_SPREADS_WITH_NO_EARNINGS_TILL_EXPIRATION,
+    'show_only_spreads_with_no_earnings_warning': DEFAULT_SHOW_ONLY_SPREADS_WITH_NO_EARNINGS_WARNING,
     'delta_target': DEFAULT_DELTA_TARGET,
     'spread_width': DEFAULT_SPREAD_WIDTH,
     'option_type': DEFAULT_OPTION_TYPE,
@@ -59,7 +63,8 @@ DEFAULTS = {
     'min_iv_rank': DEFAULT_MIN_IV_RANK,
     'min_iv_percentile': DEFAULT_MIN_IV_PERCENTILE,
     'strategy_type': DEFAULT_STRATEGY_TYPE,
-    'iv_correction': IV_CORRECTION_MODE
+    'iv_correction': IV_CORRECTION_MODE,
+    'risk_free_rate': RISK_FREE_RATE * 100  # stored as percentage for UI (e.g. 3.0 = 3%)
 }
 
 init_session_state(DEFAULTS)
@@ -78,6 +83,7 @@ def clear_all_filters():
     st.session_state.show_daily = True
     st.session_state.show_only_positiv_expected_value = False
     st.session_state.show_only_spreads_with_no_earnings_till_expiration = False
+    st.session_state.show_only_spreads_with_no_earnings_warning = False
     st.session_state.min_day_volume = 0
     st.session_state.min_open_interest = 0
     st.session_state.min_sell_iv = 0.0
@@ -92,9 +98,9 @@ with st.expander("Configuration and Filters", expanded=True):
     # Action buttons
     btn_col1, btn_col2 = st.columns(2)
     with btn_col1:
-        st.button("Reset to Defaults", on_click=reset_to_defaults, use_container_width=True)
+        st.button("Reset to Defaults", on_click=reset_to_defaults, width="stretch")
     with btn_col2:
-        st.button("Clear All Filters (Show All)", on_click=clear_all_filters, use_container_width=True)
+        st.button("Clear All Filters (Show All)", on_click=clear_all_filters, width="stretch")
 
     # First row
     col1, col2, col3, col4 = st.columns(4)
@@ -185,8 +191,15 @@ with st.expander("Configuration and Filters", expanded=True):
             "Show only positive expected value",
             key="show_only_positiv_expected_value"
         )
-
+    
     with col10:
+        st.checkbox(
+            "Earnings Warning Filter",
+            key="show_only_spreads_with_no_earnings_warning",
+            help="Filters out spreads with an earnings warning (earnings shortly before expiration)"
+        )
+
+    with col11:
         min_day_volume = st.number_input(
             "Min dayvolume",
             min_value=0,
@@ -194,7 +207,7 @@ with st.expander("Configuration and Filters", expanded=True):
             key="min_day_volume"
         )
 
-    with col11:
+    with col12:
         min_open_interest = st.number_input(
             "Min Open Interest",
             min_value=0,
@@ -251,7 +264,7 @@ with st.expander("Configuration and Filters", expanded=True):
         )
 
     st.divider()
-    col17, col18 = st.columns(2)
+    col17, col18, col19 = st.columns(3)
     with col17:
         iv_corr_input = st.text_input("IV Correction (auto, 0.0-1.0)", value=str(st.session_state.iv_correction), key="iv_correction_input")
         if iv_corr_input.lower() == "auto":
@@ -263,7 +276,19 @@ with st.expander("Configuration and Filters", expanded=True):
                 st.error("Invalid IV Correction. Use 'auto' or a number.")
                 st.session_state.iv_correction = 0.0
     with col18:
+        st.number_input("Risk-Free Rate %", min_value=0.0, max_value=20.0, step=0.1, format="%.1f", key="risk_free_rate")
+    with col19:
         st.info("IV correction mode: 'auto' (Automatic), 0.0-1.0 (Manual reduction), 0.0 (No correction)")
+
+@st.cache_data
+def _cached_select_into_dataframe(sql_file_path, params):
+    return select_into_dataframe(sql_file_path=sql_file_path, params=params)
+
+
+@st.cache_data
+def _cached_get_page_spreads(df, strategy_type, iv_correction, risk_free_rate):
+    return get_page_spreads(df, strategy_type=strategy_type, iv_correction=iv_correction, risk_free_rate=risk_free_rate)
+
 
 # Calculate the spread values with a loading indicator
 with st.spinner("Calculating spreads..."):
@@ -282,10 +307,10 @@ with st.spinner("Calculating spreads..."):
     logging.debug(f"Params for database query: {params}")
 
     sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'spreads_input.sql'
-    df = select_into_dataframe(sql_file_path=sql_file_path, params=params)
+    df = _cached_select_into_dataframe(sql_file_path=sql_file_path, params=params)
     logging.debug(f"Input data head: {df.head()}")
 
-    spreads_df = get_page_spreads(df, strategy_type=strategy_type, iv_correction=st.session_state.iv_correction)
+    spreads_df = _cached_get_page_spreads(df, strategy_type=strategy_type, iv_correction=st.session_state.iv_correction, risk_free_rate=st.session_state.risk_free_rate / 100)
     logging.debug(f"Calculated spreads head: {spreads_df.head()}")
 
 # Apply spread filters
@@ -300,19 +325,25 @@ if st.session_state.show_only_positiv_expected_value:
 
 # Only spreads with no earnings till expiration
 today = pd.Timestamp.now().normalize()
-expiration_date_ts = pd.Timestamp(expiration_date)
+expiration_date_ts = pd.Timestamp(expiration_date).normalize()
 
 if st.session_state.show_only_spreads_with_no_earnings_till_expiration:
     filtered_df = filtered_df[
         ~(
-                (filtered_df['earnings_date'] > today) &
-                (filtered_df['earnings_date'] < expiration_date_ts)
+                (pd.to_datetime(filtered_df['earnings_date']).dt.normalize() >= today) &
+                (pd.to_datetime(filtered_df['earnings_date']).dt.normalize() < expiration_date_ts)
         )
     ]
 
-# Convert 'earnings_date' to datetime and format it
-filtered_df['earnings_date'] = pd.to_datetime(filtered_df['earnings_date'])
-filtered_df['earnings_date'] = filtered_df['earnings_date'].dt.strftime('%d.%m.%Y')
+# Earnings Warning Filter
+if st.session_state.show_only_spreads_with_no_earnings_warning:
+    if 'earnings_warning' in filtered_df.columns:
+        filtered_df = filtered_df[
+            (filtered_df['earnings_warning'] == '') | (filtered_df['earnings_warning'].isna())
+        ]
+
+# Reset index to ensure the zebra style works on the dataframe
+filtered_df.reset_index(drop=True, inplace=True)
 
 # Min sell IV
 filtered_df = filtered_df[filtered_df['sell_iv'] >= min_sell_iv]
@@ -320,14 +351,43 @@ filtered_df = filtered_df[filtered_df['sell_iv'] >= min_sell_iv]
 # Max sell IV
 filtered_df = filtered_df[filtered_df['sell_iv'] <= max_sell_iv]
 
-# Reset index to ensure the zebra style works on the dataframe
+# Re-reset index after all filters are applied
 filtered_df.reset_index(drop=True, inplace=True)
+
+# Format 'earnings_date' for display (do this AFTER all calculations and filtering)
+filtered_df['earnings_date'] = pd.to_datetime(filtered_df['earnings_date']).dt.strftime('%d.%m.%Y')
 
 # Pre-format columns that we want to show in details but not in the main table
 # This ensures they are available in 'row' even after page_display_dataframe might have dropped them from display
 # Actually page_display_dataframe creates a copy for display, so filtered_df remains intact.
 
 st.markdown(f"### {len(filtered_df)} Results")
+
+# Export All button - downloads all filtered spreads with full details as CSV
+if not filtered_df.empty:
+    export_columns = [
+        'symbol', 'Company', 'close', 'option_type',
+        'sell_strike', 'sell_last_option_price', 'sell_delta', 'sell_iv', 'sell_theta',
+        'sell_open_interest', 'sell_day_volume', 'sell_expected_move',
+        'buy_strike', 'buy_last_option_price', 'buy_delta', 'buy_iv', 'buy_theta',
+        'buy_open_interest', 'buy_day_volume', 'buy_expected_move',
+        'spread_width', 'max_profit', 'bpr', 'profit_to_bpr',
+        'expected_value', 'APDI', 'APDI_EV',
+        'iv_rank', 'iv_percentile', 'iv_correction_factor',
+        'spread_theta', '%_otm', 'days_to_expiration',
+        'earnings_date', 'earnings_warning',
+        'company_sector', 'company_industry', 'analyst_mean_target',
+    ]
+    # Only include columns that actually exist in the dataframe
+    available_cols = [c for c in export_columns if c in filtered_df.columns]
+    export_df = filtered_df[available_cols]
+    csv_data = export_df.to_csv(index=False)
+    st.download_button(
+        label=f"⬇️ Export All ({len(filtered_df)} trades) as CSV",
+        data=csv_data,
+        file_name=f"spreads_{option_type}_{spread_width}w_{expiration_date}.csv",
+        mime="text/csv",
+    )
 
 # Optionstrat URL configuration
 column_config = {
@@ -349,97 +409,65 @@ event = page_display_dataframe(
 )
 
 # Leg Details View
-selected_rows = event.selection.rows if hasattr(event, "selection") else []
-if selected_rows and not filtered_df.empty:
-    selected_idx = selected_rows[0]
-    row = filtered_df.iloc[selected_idx]
+if not filtered_df.empty:
+    selected_rows = event.selection.rows if hasattr(event, "selection") else []
+    if selected_rows:
+        selected_idx = selected_rows[0]
+        row = filtered_df.iloc[selected_idx]
 
-    st.divider()
-    strategy_label = "Credit" if strategy_type == "credit" else "Debit"
-    st.subheader(f"Details für {row['symbol']} {row['option_type'].capitalize()} {strategy_label} Spread")
+        st.divider()
+        
+        is_credit = strategy_type == "credit"
+        
+        legs = [
+            OptionLeg(
+                strike=row['sell_strike'], premium=row['sell_last_option_price'],
+                is_call=row['option_type'] == 'call', is_long=not is_credit,
+                delta=row.get('sell_delta'), iv=row.get('sell_iv'),
+                theta=row.get('sell_theta'), oi=row.get('sell_open_interest'),
+                volume=row.get('sell_day_volume'), expected_move=row.get('sell_expected_move'),
+                last_updated=row.get('sell_last_updated'),
+                bs_price=row.get('sell_bs_price')
+            ),
+            OptionLeg(
+                strike=row['buy_strike'], premium=row['buy_last_option_price'],
+                is_call=row['option_type'] == 'call', is_long=is_credit,
+                delta=row.get('buy_delta'), iv=row.get('buy_iv'),
+                theta=row.get('buy_theta'), oi=row.get('buy_open_interest'),
+                volume=row.get('buy_day_volume'), expected_move=row.get('buy_expected_move'),
+                last_updated=row.get('buy_last_updated'),
+                bs_price=row.get('buy_bs_price')
+            )
+        ]
 
-    # Create detailed table for legs
-    if strategy_type == "credit":
-        leg1_label = f"Short {row['option_type'].capitalize()}"
-        leg2_label = f"Long {row['option_type'].capitalize()}"
-    else:
-        leg1_label = f"Long {row['option_type'].capitalize()}"
-        leg2_label = f"Short {row['option_type'].capitalize()}"
+        metrics = StrategyMetrics(
+            max_profit=row['max_profit'],
+            max_loss=row['max_loss'] if 'max_loss' in row else row['bpr'],
+            bpr=row['bpr'],
+            expected_value=row['expected_value'],
+            total_theta=row.get('spread_theta', 0),
+            profit_to_bpr=row.get('profit_to_bpr', 0),
+            apdi=row.get('APDI', 0),
+            apdi_ev=row.get('APDI_EV', 0),
+            iv_correction_factor=row.get('iv_correction_factor', 1),
+            corrected_volatility=row.get('corrected_volatility', row.get('sell_iv', 0))
+        )
 
-    legs_data = [
-        {
-            "Leg": leg1_label,
-            "Strike": row['sell_strike'],
-            "Price": row['sell_last_option_price'],
-            "Delta": row['sell_delta'],
-            "IV": row['sell_iv'],
-            "Theta": row['sell_theta'],
-            "OI": row['sell_open_interest'],
-            "Volume": row.get('sell_day_volume'),
-            "Exp Move": row.get('sell_expected_move')
-        },
-        {
-            "Leg": leg2_label,
-            "Strike": row['buy_strike'],
-            "Price": row['buy_last_option_price'],
-            "Delta": row['buy_delta'],
-            "IV": row['buy_iv'],
-            "Theta": row['buy_theta'],
-            "OI": row['buy_open_interest'],
-            "Volume": row.get('buy_day_volume'),
-            "Exp Move": row.get('buy_expected_move')
+        extra_info = {
+            'iv_rank': row.get('iv_rank'),
+            'iv_percentile': row.get('iv_percentile'),
+            'company_sector': row.get('company_sector'),
+            'company_industry': row.get('company_industry'),
+            'analyst_mean_target': row.get('analyst_mean_target'),
+            'close': row.get('close'),
+            'optionstrat_url': row.get('optionstrat_url'),
+            'Claude': _create_claude_prompt_page_spreads(row)
         }
-    ]
-    
-    details_df = pd.DataFrame(legs_data)
-    st.table(details_df)
-    
-    # Additional Info
-    st.markdown("#### Kennzahlen & Unternehmensinfos")
-    st.write(f"**Unternehmen:** {row.get('Company', 'N/A')}")
-    
-    col_info1, col_info2, col_info3, col_info4 = st.columns(4)
-    with col_info1:
-        st.metric("Max Profit", f"${row['max_profit']:.2f}")
-        st.metric("BPR", f"${row['bpr']:.2f}")
-    with col_info2:
-        st.metric("Expected Value", f"${row['expected_value']:.2f}")
-        st.metric("APDI", f"{row['APDI']:.2f}%")
-    with col_info3:
-        st.metric("IV Rank", f"{row['iv_rank']:.1f}")
-        st.metric("IV Percentile", f"{row['iv_percentile']:.1f}")
-    with col_info4:
-        st.metric("Sell IV", f"{row.get('sell_iv', 0)*100:.1f}%")
-        st.metric("Theta", f"{row.get('spread_theta', 0):.4f}")
 
-    iv_corr_display = str(st.session_state.iv_correction)
-    if st.session_state.iv_correction == "auto" and "iv_correction_factor" in row:
-        iv_corr_display = f"auto ({row['iv_correction_factor']*100:.1f}%)"
-    st.write(f"**IV Correction Setting:** {iv_corr_display}")
-    st.write(f"**Sektor:** {row['company_sector']} | **Branche:** {row['company_industry']}")
+        display_strategy_details(row['symbol'], row.get('Company', 'N/A'), legs, metrics, extra_info)
 
-    if 'analyst_mean_target' in row:
-        st.write(f"**Analyst Kursziel:** ${row['analyst_mean_target']:.2f} (Aktuell: ${row['close']:.2f})")
-
-    # External Links
-    st.markdown("#### Links")
-    link_col1, link_col2, link_col3, link_col4 = st.columns(4)
-    with link_col1:
-        st.link_button("TradingView", f"https://www.tradingview.com/symbols/{row['symbol']}/", use_container_width=True)
-        st.link_button("Chart", f"https://www.tradingview.com/chart/?symbol={row['symbol']}", use_container_width=True)
-    with link_col2:
-        st.link_button("Finviz", f"https://finviz.com/quote.ashx?t={row['symbol']}", use_container_width=True)
-        if 'optionstrat_url' in row and row['optionstrat_url']:
-            st.link_button("OptionStrat", row['optionstrat_url'], use_container_width=True)
-    with link_col3:
-        st.link_button("Seeking Alpha", f"https://seekingalpha.com/symbol/{row['symbol']}", use_container_width=True)
-        if 'Claude' in row and row['Claude']:
-            st.link_button("Claude AI Analysis", row['Claude'], use_container_width=True)
-    with link_col4:
-        st.link_button("Yahoo Finance", f"https://finance.yahoo.com/quote/{row['symbol']}", use_container_width=True)
-
-else:
-    st.caption("💡 Klicke auf eine Zeile in der Tabelle, um die Details der einzelnen Legs zu sehen.")
+    else:
+        st.caption("💡 Klicke auf eine Zeile in der Tabelle, um die Details der einzelnen Legs zu sehen.")
 
 # Show documentation
 with st.expander("📖 Documentation - Fields Overview", expanded=False):

@@ -23,3 +23,9 @@ PYTHONPATH=/app/Skuld
 #############################################################################################
 # Log Cleanup: Taeglich um 03:00 UTC - Logs aelter als 14 Tage loeschen
 0 3 * * * find /app/Skuld/logs -type f -mtime +14 -delete && find /app/Skuld/logs -type d -empty -delete
+
+# Watchlist Daily Backup: Taeglich um 02:00 UTC - Sicherung unabhaengig vom User-Save
+0 2 * * * mkdir -p /app/Skuld/data/backups && cp /app/Skuld/data/watchlist.xlsx /app/Skuld/data/backups/watchlist_daily_$(date +\%Y\%m\%d).xlsx 2>/dev/null
+
+# Watchlist Backup Cleanup: Taeglich um 03:05 UTC - Backups aelter als 3 Tage loeschen
+5 3 * * * find /app/Skuld/data/backups -name "watchlist_*.xlsx" -mtime +3 -delete 2>/dev/null

@@ -1,0 +1,113 @@
+name: Deploy React Frontend
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Action to perform"
+        required: true
+        type: choice
+        options:
+          - deploy
+          - teardown
+        default: deploy
+      ref:
+        description: "Git ref to deploy"
+        required: false
+        default: frontend-migration-react
+
+concurrency:
+  group: deploy-react
+  cancel-in-progress: false
+
+jobs:
+  deploy-react:
+    name: Deploy React to Home Server
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Create .env for React stack
+        run: |
+          # Re-use existing .env from main deployment for DB credentials
+          if [ -f /opt/skuld/.env ]; then
+            cp /opt/skuld/.env .env
+          fi
+          # Add React-specific vars
+          echo "" >> .env
+          echo "REACT_DOMAIN=react-test.skuld-options.com" >> .env
+          echo "SECRET_KEY=$(openssl rand -hex 32)" >> .env
+          echo "TRAEFIK_ENTRYPOINT=web" >> .env
+
+      - name: Deploy React containers
+        if: inputs.action == 'deploy'
+        run: |
+          echo "Building and starting React + API containers..."
+          # Remove old containers from previous project names if they exist
+          docker compose -p skuld-react -f docker-compose.react.yml down 2>/dev/null || true
+          docker stop skuld-react skuld-api 2>/dev/null || true
+          docker rm skuld-react skuld-api 2>/dev/null || true
+          # Build and start fresh
+          docker compose -f docker-compose.react.yml up -d --build
+          echo ""
+          echo "Waiting for containers to be ready..."
+          sleep 15
+          echo "Restarting Traefik to pick up new routes..."
+          docker restart traefik_staging
+          sleep 5
+          docker compose -f docker-compose.react.yml ps
+          echo ""
+          echo "=== skuld-api logs ==="
+          docker logs skuld-api 2>&1 | tail -50
+          echo ""
+          echo "=== Test API health ==="
+          curl -s http://localhost:3101/health || echo "Health check failed"
+          echo ""
+          echo "=== Test login endpoint ==="
+          TOKEN=$(curl -s -X POST http://localhost:3101/api/auth/login -H "Content-Type: application/json" -d '{"username":"admin","password":"skuld2024"}' | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))")
+          echo "Token: ${TOKEN:0:20}..."
+          echo ""
+          echo "=== Test expirations endpoint ==="
+          curl -s http://localhost:3101/api/spreads/expirations -H "Authorization: Bearer $TOKEN" | head -c 500
+          echo ""
+          echo "=== Test spreads endpoint ==="
+          curl -s "http://localhost:3101/api/spreads/?expiration_date=2026-05-04&option_type=put&delta_target=0.2&spread_width=5&strategy_type=credit&min_open_interest=100&min_day_volume=20&min_iv_rank=0&min_iv_percentile=0" -H "Authorization: Bearer $TOKEN" | head -c 1000
+          echo ""
+          echo "=== skuld-api error logs ==="
+          docker logs skuld-api 2>&1 | grep -A10 "Error\|Traceback\|Exception\|ModuleNotFound" | tail -30
+          echo ""
+          echo "=== Traefik Router Debug ==="
+          curl -s http://localhost:8080/api/http/routers 2>/dev/null | python3 -m json.tool 2>/dev/null || echo "Traefik API not reachable"
+          echo ""
+          echo "=== Network IDs ==="
+          echo "All web networks:"
+          docker network ls | grep web
+          echo ""
+          echo "Traefik network:"
+          docker inspect traefik_staging --format '{{json .NetworkSettings.Networks}}' 2>/dev/null | python3 -m json.tool 2>/dev/null || true
+          echo ""
+          echo "React container network:"
+          docker inspect skuld-react --format '{{json .NetworkSettings.Networks}}' 2>/dev/null | python3 -m json.tool 2>/dev/null || true
+          echo ""
+          echo "=== Traefik full command ==="
+          docker inspect traefik_staging --format '{{json .Config.Cmd}}' 2>/dev/null || true
+          echo ""
+          echo "=== Traefik env ==="
+          docker inspect traefik_staging --format '{{json .Config.Env}}' 2>/dev/null || true
+          echo ""
+          echo "=== Network check ==="
+          docker inspect skuld-react --format '{{json .NetworkSettings.Networks}}' 2>/dev/null | python3 -m json.tool 2>/dev/null || true
+          echo ""
+          echo "React frontend should be available at: https://react-test.skuld-options.com"
+          echo "Direct ports (bypass Traefik): React=3100, API=3101"
+          echo ""
+          echo "IMPORTANT: Cloudflare Tunnel must route react-test.skuld-options.com -> http://localhost:3100"
+
+      - name: Teardown React containers
+        if: inputs.action == 'teardown'
+        run: |
+          echo "Stopping and removing React containers..."
+          docker compose -f docker-compose.react.yml down --rmi local
+          echo "Done. React containers removed."

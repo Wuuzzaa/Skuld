@@ -1,0 +1,47 @@
+AKTIENANALYSE PROMPT v4.0 – SEKTOR: ENERGY
+
+Ticker: [ZZZ]
+
+REGELN (STRICT): 1. Nur Primärquellen (letzter 10-Q / 10-K). Jede Zahl:
+Quelle + Datum. 2. Marktdaten (Kurs, Market Cap, Rohstoffpreis): Yahoo
+Finance + Datum/Uhrzeit. 3. Kennzahlen IMMER selbst berechnen (Formel +
+Werte zeigen). 4. Fehlende Daten: "Aktuell nicht verifizierbar (Quelle
+fehlt)". 5. Operative Daten nur aus Originalberichten. 6. Peers: Nur
+deren Originalberichte, Schätzungen markieren.
+
+HEADER: - Analysedatum: - Kurs: - Market Cap: - Shares (diluted): -
+Rohstoffpreis: - Nettoschulden: - Quelle Unternehmen:
+
+TEIL 1: KERNKENNZAHLEN
+P/E Ratio | EV/EBITDA | P/CF | P/NAV | EV/Reserves | FCF Yield |
+Dividend Yield | Buyback Yield | Shareholder Yield | Revenue Growth |
+Earnings Growth | EBITDA Margin | Gross Margin | Operating Margin |
+ROIC | ROE | Net Debt / EBITDA | Gearing (Net Debt / Equity)
+
+→ Für JEDE: Wert + Formel + Zahlen + Quelle + Bewertung
+
+TEIL 2: ANALYSTEN - Konsens + Anzahl - Kursziel + Upside - Änderungen
+(90 Tage)
+
+TEIL 3: PEERS Tabelle: P/E Ratio | EV/EBITDA | P/NAV | EV/Reserves |
+FCF Yield → Fazit: günstig / fair / teuer
+
+TEIL 4: CHANCEN & RISIKEN (je max. 5)
+
+TEIL 5: NEWS (12M) - Events + Datum - Negative Events - Kursreaktion
+
+TEIL 6: MANAGEMENT / HEDGING / KAPITAL - Track Record - Hedging % -
+Dividendenrendite
+
+TEIL 7: AKTIONÄRE - Shares - Top Holder - Short Interest -
+Kapitalerhöhungen
+
+TEIL 8: FAZIT - 4–6 Sätze - Hinweis auf fehlende Daten - Empfehlung:
+KAUFEN / HALTEN / VERKAUFEN
+
+CHECKLISTE: - Quellen + Datum überall - Yahoo-Daten korrekt - Kennzahlen
+selbst berechnet - Keine ungesicherten Zahlen
+
+Bitte angeben, ab welchem Kurs du die Aktie auf Kaufen setzen würdest.
+Vollständige Analyse anschießend bitte als html download.
+

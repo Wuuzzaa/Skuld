@@ -9,41 +9,80 @@ from src.options_utils import (
     create_earnings_warning,
     format_strike,
     format_expiration_date,
-    calculate_expected_value
+    calculate_expected_value,
+    OptionLeg,
+    calculate_strategy_metrics
 )
+from src.black_scholes import CallValue, PutValue
+from config import RISK_FREE_RATE
 
 # Setup logging
 logger = logging.getLogger(os.path.basename(__file__))
 
-def _calculate_expected_value_for_symbol(row: pd.Series, strategy_type: str = 'credit', iv_correction: str = 'auto') -> Dict[str, Any]:
-    """Calculates the Expected Value and IV details for a single spread using Monte Carlo simulation."""
+def _calculate_metrics_for_row(row: pd.Series, strategy_type: str = 'credit', iv_correction: str = 'auto') -> pd.Series:
+    """Calculates all metrics for a single spread using the generic calculator."""
     is_credit = strategy_type == 'credit'
     
-    options = [
-        {
-            'strike': row['sell_strike'],
-            'premium': row['sell_last_option_price'],
-            'is_call': row['option_type'] == 'call',
-            'is_long': not is_credit  # In Debit Spread, the "sell" side from SQL is actually the bought one if we follow the naming
-        },
-        {
-            'strike': row['buy_strike'],
-            'premium': row['buy_last_option_price'],
-            'is_call': row['option_type'] == 'call',
-            'is_long': is_credit
-        }
+    legs = [
+        OptionLeg(
+            strike=row['sell_strike'],
+            premium=row['sell_last_option_price'],
+            is_call=row['option_type'] == 'call',
+            is_long=not is_credit,
+            theta=row.get('sell_theta'),
+            oi=row.get('sell_open_interest'),
+            volume=row.get('sell_day_volume'),
+            expected_move=row.get('sell_expected_move'),
+            last_updated=row.get('sell_last_updated')
+        ),
+        OptionLeg(
+            strike=row['buy_strike'],
+            premium=row['buy_last_option_price'],
+            is_call=row['option_type'] == 'call',
+            is_long=is_credit,
+            theta=row.get('buy_theta'),
+            oi=row.get('buy_open_interest'),
+            volume=row.get('buy_day_volume'),
+            expected_move=row.get('buy_expected_move'),
+            last_updated=row.get('buy_last_updated')
+        )
     ]
 
-    return calculate_expected_value(
+    metrics = calculate_strategy_metrics(
         current_price=row['close'],
         dte=row['days_to_expiration'],
         volatility=row['sell_iv'],
-        options=options,
-        iv_correction=iv_correction,
-        return_details=True
+        legs=legs,
+        iv_correction=iv_correction
     )
+    
+    return pd.Series({
+        "max_profit": metrics.max_profit,
+        "max_loss": metrics.max_loss,
+        "bpr": metrics.bpr,
+        "expected_value": metrics.expected_value,
+        "spread_theta": metrics.total_theta,
+        "profit_to_bpr": metrics.profit_to_bpr,
+        "APDI": metrics.apdi,
+        "APDI_EV": metrics.apdi_ev,
+        "iv_correction_factor": metrics.iv_correction_factor,
+        "corrected_volatility": metrics.corrected_volatility
+    })
 
-def _calculate_spread_metrics(df: pd.DataFrame, strategy_type: str = 'credit', iv_correction: str = 'auto') -> pd.DataFrame:
+def _calculate_bs_price(S, K, sigma, t, r, is_call):
+    """Central BS price calculation for a single option leg."""
+    try:
+        if pd.isna(S) or pd.isna(K) or pd.isna(sigma) or pd.isna(t) or sigma <= 0 or t <= 0:
+            return None
+        if is_call:
+            return round(CallValue(S, K, sigma, t, r), 2)
+        else:
+            return round(PutValue(S, K, sigma, t, r), 2)
+    except Exception:
+        return None
+
+
+def _calculate_spread_metrics(df: pd.DataFrame, strategy_type: str = 'credit', iv_correction: str = 'auto', risk_free_rate: float = RISK_FREE_RATE) -> pd.DataFrame:
     """Calculates all relevant metrics for the spreads."""
     if df.empty:
         return df
@@ -51,59 +90,23 @@ def _calculate_spread_metrics(df: pd.DataFrame, strategy_type: str = 'credit', i
     # Spread Width
     df["spread_width"] = (df['sell_strike'] - df['buy_strike']).abs()
 
-    # Max Profit & Max Loss (BPR usually represents max loss for credit, but we clarify)
-    if strategy_type == 'credit':
-        # Credit Spread: Premium received
-        df["max_profit"] = MULTIPLIER * (df["sell_last_option_price"] - df["buy_last_option_price"])
-        # Buying Power Reduction (BPR) / Max Risk
-        df["bpr"] = df["spread_width"] * MULTIPLIER - df["max_profit"]
-    else:
-        # Debit Spread: Premium paid
-        # In Debit spreads, sell_strike is long and buy_strike is short
-        # Net Debit = Long Price - Short Price
-        df["max_loss"] = MULTIPLIER * (df["sell_last_option_price"] - df["buy_last_option_price"])
-        df["max_profit"] = (df["spread_width"] * MULTIPLIER) - df["max_loss"]
-        df["bpr"] = df["max_loss"]
-    
-    # Filter out negative profit spreads
-    df = df[df['max_profit'] > 0].copy()
-    if df.empty:
-        return df
-
-    # Filter out negative BPR spreads
-    df = df[df['bpr'] > 0].copy()
-    if df.empty:
-        return df
-
-    # Profit to BPR ratio
-    df["profit_to_bpr"] = df["max_profit"] / df["bpr"]
-
-    # Spread Theta
-    if strategy_type == 'credit':
-        df["spread_theta"] = df["sell_theta"].fillna(0) - df["buy_theta"].fillna(0)
-    else:
-        # In Debit spreads, sell_strike is the LONG leg (closer to money), buy_strike is SHORT leg (further)
-        # Total Theta = Theta(Long) + Theta(Short)
-        # Long Theta is negative (time decay hurts), Short Theta is positive (time decay helps)
-        # In our SQL: sell_theta is from the long leg, buy_theta is from the short leg.
-        # So it should be: sell_theta (negative) + (-buy_theta) ? 
-        # Actually, option greeks in data are usually signed (negative for puts/calls theta).
-        # Short position flips the sign of the greek.
-        # Long Theta = sell_theta
-        # Short Theta = -buy_theta
-        df["spread_theta"] = df["sell_theta"].fillna(0) - df["buy_theta"].fillna(0)
-
     # % Out-of-the-Money (OTM)
     df["%_otm"] = (df["sell_strike"] - df["close"]).abs() / df["close"] * 100
 
-    # Expected Value and IV Details
-    ev_results = df.apply(lambda r: _calculate_expected_value_for_symbol(r, strategy_type, iv_correction=iv_correction), axis=1)
-    df["expected_value"] = ev_results.apply(lambda x: x["expected_value"])
-    df["iv_correction_factor"] = ev_results.apply(lambda x: x["iv_correction_factor"])
+    # Black-Scholes theoretical prices
+    is_call = df['option_type'] == 'call'
+    df['sell_bs_price'] = df.apply(
+        lambda r: _calculate_bs_price(r['close'], r['sell_strike'], r['sell_iv'], r['days_to_expiration'], risk_free_rate, r['option_type'] == 'call'), axis=1)
+    df['buy_bs_price'] = df.apply(
+        lambda r: _calculate_bs_price(r['close'], r['buy_strike'], r['buy_iv'], r['days_to_expiration'], risk_free_rate, r['option_type'] == 'call'), axis=1)
 
-    # APDI
-    df["APDI"] = df.apply(lambda r: calculate_apdi(r["max_profit"], r["days_to_expiration"], r["bpr"]), axis=1)
-    df["APDI_EV"] = df.apply(lambda r: calculate_apdi(r["expected_value"], r["days_to_expiration"], r["bpr"]), axis=1)
+    # Calculate all generic metrics
+    metrics_df = df.apply(lambda r: _calculate_metrics_for_row(r, strategy_type, iv_correction=iv_correction), axis=1)
+    df = pd.concat([df, metrics_df], axis=1)
+
+    # Filter out invalid spreads
+    df = df[df['max_profit'] > 0].copy()
+    df = df[df['bpr'] > 0].copy()
 
     # Ensure Company name is handled correctly
     if 'Company' in df.columns:
@@ -160,22 +163,22 @@ def _build_optionstrat_url(row: pd.Series, strategy_type: str = 'credit') -> str
     return f"{base_url}/{strategy}/{symbol}/{options}"
 
 @log_function
-def calc_spreads(df: pd.DataFrame, strategy_type: str = 'credit', iv_correction: str = 'auto') -> pd.DataFrame:
+def calc_spreads(df: pd.DataFrame, strategy_type: str = 'credit', iv_correction: str = 'auto', risk_free_rate: float = RISK_FREE_RATE) -> pd.DataFrame:
     """Main calculation entry point for spreads."""
     if df.empty:
         return df
-    
-    df = _calculate_spread_metrics(df, strategy_type, iv_correction=iv_correction)
+
+    df = _calculate_spread_metrics(df, strategy_type, iv_correction=iv_correction, risk_free_rate=risk_free_rate)
     df = _add_earnings_and_urls(df, strategy_type)
-    
+
     return df
 
-def get_page_spreads(df: pd.DataFrame, strategy_type: str = 'credit', iv_correction: str = 'auto') -> pd.DataFrame:
+def get_page_spreads(df: pd.DataFrame, strategy_type: str = 'credit', iv_correction: str = 'auto', risk_free_rate: float = RISK_FREE_RATE) -> pd.DataFrame:
     """Prepares the DataFrame for display in the frontend."""
     if df.empty:
         return df
-        
-    df = calc_spreads(df, strategy_type, iv_correction=iv_correction)
+
+    df = calc_spreads(df, strategy_type, iv_correction=iv_correction, risk_free_rate=risk_free_rate)
     
     if df.empty:
         return df
@@ -186,10 +189,12 @@ def get_page_spreads(df: pd.DataFrame, strategy_type: str = 'credit', iv_correct
         'historical_volatility_30d', 'iv_rank', 'iv_percentile',
         'spread_width', 'max_profit', 'bpr', 'profit_to_bpr', 'spread_theta', 
         'expected_value', 'iv_correction_factor', 'APDI', 'APDI_EV', 'optionstrat_url',
-        'sell_strike', 'sell_last_option_price', 'sell_delta', 'sell_iv', '%_otm', 
+        'sell_strike', 'sell_last_option_price', 'sell_delta', 'sell_iv', '%_otm',
         'sell_theta', 'sell_open_interest', 'sell_expected_move', 'sell_day_volume',
-        'buy_strike', 'buy_last_option_price', 'buy_delta', 'buy_iv', 'buy_theta', 
+        'sell_last_updated', 'sell_bs_price',
+        'buy_strike', 'buy_last_option_price', 'buy_delta', 'buy_iv', 'buy_theta',
         'buy_open_interest', 'buy_expected_move', 'buy_day_volume',
+        'buy_last_updated', 'buy_bs_price',
         'option_type', 'expiration_date', 'days_to_expiration', 'days_to_earnings'
     ]
     
@@ -212,106 +217,124 @@ if __name__ == "__main__":
     logger.info(f"Start {__name__} ({__file__})")
 
     params = {
-        "expiration_date": "2026-02-20",
+        "expiration_date": "2026-07-17",
         "option_type": "put",
         "delta_target": 0.2,
         "spread_width": 5,
-        "min_open_interest": 100
+        "min_open_interest": 0,
+        "min_day_volume": 0,
+        "min_iv_rank": 0,
+        "min_iv_percentile":0,
+        "strategy_type": "credit",
     }
 
 
     # test query. ensure to use the running query in the production code as well :D
     sql_query = """
     WITH FilteredOptions AS (
-        SELECT
-            symbol,
-            expiration_date,
-            contract_type AS option_type,
-            strike_price AS strike,
-            day_close AS last_option_price,
-            abs(greeks_delta) AS delta,
-            implied_volatility AS iv,
-            greeks_theta AS theta,
-            close,
-            earnings_date,
-            days_to_expiration,
-            days_to_earnings,
-            open_interest AS option_open_interest,
-            expected_move,
-            ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY abs(greeks_delta) DESC) AS row_num,
-            analyst_mean_target,
-            recommendation
-        FROM
-            "OptionDataMerged"
-        WHERE
-            expiration_date = :expiration_date
-            AND contract_type = :option_type
-            AND abs(greeks_delta) <= :delta_target
-            AND open_interest >= :min_open_interest
-    ),
-    
-    SelectedSellOptions AS (
-        SELECT
-            symbol,
-            strike AS sell_strike,
-            expiration_date,
-            option_type,
-            last_option_price AS sell_last_option_price,
-            delta AS sell_delta,
-            iv AS sell_iv,
-            theta AS sell_theta,
-            close AS sell_close,
-            earnings_date,
-            days_to_expiration,
-            days_to_earnings,
-            option_open_interest AS sell_open_interest,
-            expected_move AS sell_expected_move,
-            analyst_mean_target,
-            recommendation
-        FROM
-            FilteredOptions
-        WHERE
-            row_num = 1
-    )
-    
-    --spread data
     SELECT
-        -- sell option
-        sell.symbol,
-        sell.expiration_date,
-        sell.option_type,
-        sell.sell_close AS close,
-        sell.earnings_date,
-        sell.days_to_expiration,
-        sell.days_to_earnings,
-        sell.sell_strike,
-        sell.sell_last_option_price,
-        sell.sell_delta,
-        sell.sell_iv,
-        sell.sell_theta,
-        sell.sell_open_interest,
-        sell.sell_expected_move,
-        sell.analyst_mean_target,
-        sell.recommendation,
-        -- buy option
-        buy.strike               AS buy_strike,
-        buy.last_option_price    AS buy_last_option_price,
-        buy.delta                AS buy_delta,
-        buy.iv                   AS buy_iv,
-        buy.theta                AS buy_theta,
-        buy.option_open_interest AS buy_open_interest,
-        buy.expected_move        AS buy_expected_move
+        symbol,
+        expiration_date,
+        contract_type AS option_type,
+        strike_price AS strike,
+        day_close AS last_option_price,
+        abs(greeks_delta) AS delta,
+        implied_volatility AS iv,
+        greeks_theta AS theta,
+        LIVE_STOCK_PRICE AS close,
+        earnings_date,
+        days_to_expiration,
+        days_to_earnings,
+        open_interest AS option_open_interest,
+        expected_move,
+        analyst_mean_target,
+        day_volume,
+        company_name,
+        company_industry,
+        company_sector,
+        historical_volatility_30d,
+        iv_rank,
+        iv_percentile
     FROM
-        SelectedSellOptions sell
-    INNER JOIN
-        FilteredOptions buy
-        ON sell.symbol = buy.symbol
-        AND buy.strike = (
-            CASE
-                WHEN sell.option_type = 'put' THEN sell.sell_strike - :spread_width
-                WHEN sell.option_type = 'call' THEN sell.sell_strike + :spread_width
-            END
-        );
+        "OptionDataMerged"
+    WHERE
+        open_interest >= :min_open_interest
+        AND day_volume >= :min_day_volume
+        AND iv_rank >= :min_iv_rank
+        AND iv_percentile >= :min_iv_percentile
+),
+
+TargetOptions AS (
+    SELECT
+        *,
+        ROW_NUMBER() OVER (
+            PARTITION BY symbol, expiration_date, option_type
+            ORDER BY abs(delta - :delta_target) ASC
+        ) as delta_rank
+    FROM
+        FilteredOptions
+    WHERE
+        expiration_date = :expiration_date
+        AND option_type = :option_type
+)
+
+SELECT
+    -- symbol data
+    sell.symbol,
+    sell.expiration_date,
+    sell.option_type,
+    sell.close,
+    sell.earnings_date,
+    sell.company_name AS "Company",
+    sell.days_to_expiration,
+    sell.days_to_earnings,
+    sell.analyst_mean_target,
+    sell.company_industry,
+    sell.company_sector,
+    sell.historical_volatility_30d,
+    sell.iv_rank,
+    sell.iv_percentile,
+    -- sell option
+    sell.strike AS sell_strike,
+    sell.last_option_price AS sell_last_option_price,
+    sell.delta AS sell_delta,
+    sell.iv AS sell_iv,
+    sell.theta AS sell_theta,
+    sell.option_open_interest AS sell_open_interest,
+    sell.expected_move AS sell_expected_move,
+    sell.day_volume AS sell_day_volume,
+    -- buy option
+    buy.strike AS buy_strike,
+    buy.last_option_price AS buy_last_option_price,
+    buy.delta AS buy_delta,
+    buy.iv AS buy_iv,
+    buy.theta AS buy_theta,
+    buy.option_open_interest AS buy_open_interest,
+    buy.expected_move AS buy_expected_move,
+    buy.day_volume AS buy_day_volume
+FROM
+    TargetOptions sell
+INNER JOIN
+    FilteredOptions buy
+    ON sell.symbol = buy.symbol
+    AND sell.expiration_date = buy.expiration_date
+    AND sell.option_type = buy.option_type
+    AND buy.strike = (
+        CASE
+            WHEN :strategy_type = 'credit' THEN 
+                CASE
+                    WHEN sell.option_type = 'put' THEN sell.strike - :spread_width
+                    WHEN sell.option_type = 'call' THEN sell.strike + :spread_width
+                END
+            WHEN :strategy_type = 'debit' THEN
+                CASE
+                    WHEN sell.option_type = 'put' THEN sell.strike + :spread_width
+                    WHEN sell.option_type = 'call' THEN sell.strike - :spread_width
+                END
+        END
+    )
+WHERE
+    sell.delta_rank = 1;
 
     """
 

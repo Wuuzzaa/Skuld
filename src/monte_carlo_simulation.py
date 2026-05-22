@@ -63,6 +63,8 @@ class UniversalOptionsMonteCarloSimulator:
         # Store correction factor for reporting
         if isinstance(iv_correction, str) and iv_correction == "auto":
             self.iv_correction_factor = self._calculate_iv_correction_factor(dte)
+        elif isinstance(iv_correction, str) and iv_correction.lower() == "none":
+            self.iv_correction_factor = 0.0
         elif isinstance(iv_correction, (int, float)) and iv_correction > 0:
             self.iv_correction_factor = float(iv_correction)
         else:
@@ -128,6 +130,9 @@ class UniversalOptionsMonteCarloSimulator:
             # Automatic correction based on research
             correction_factor = self._calculate_iv_correction_factor(dte)
             corrected_iv = market_iv * (1.0 - correction_factor)
+        elif isinstance(correction_mode, str) and correction_mode.lower() == "none":
+            # No correction
+            corrected_iv = market_iv
         elif isinstance(correction_mode, (int, float)):
             if correction_mode == 0.0:
                 # No correction

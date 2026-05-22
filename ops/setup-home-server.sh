@@ -1,5 +1,22 @@
 #!/usr/bin/env bash
 # ============================================================================
+# DEPRECATED: Use ops/provision-server.sh instead!
+#
+# This script is kept for reference only. The new provision-server.sh handles:
+#   - Everything this script does, plus:
+#   - Docker installation from scratch
+#   - Firewall (UFW) configuration
+#   - SSH hardening
+#   - GitHub Actions Runner installation
+#   - Cloudflare Tunnel setup (optional)
+#   - Works on both cloud VPS and physical servers
+#
+# Migration:
+#   TOKEN=$(gh api repos/Wuuzzaa/Skuld/actions/runners/registration-token --jq .token)
+#   ssh root@SERVER "RUNNER_TOKEN=$TOKEN RUNNER_LABELS=skuld-home bash -s" < ops/provision-server.sh
+# ============================================================================
+#
+# --- ORIGINAL DESCRIPTION (for reference) ---
 # setup-home-server.sh
 #
 # Makes the home server comply with the SKULD Deployment Contract:
