@@ -276,7 +276,7 @@ function JobTrigger() {
     }
   }, [logLines, isLiveViewing]);
 
-  // Polling logic
+  // Polling logic - resolves actual filename via /latest endpoint if predicted file not found
   const startPolling = useCallback((component: string, date: string, filename: string) => {
     if (intervalRef.current) clearInterval(intervalRef.current);
 
@@ -284,20 +284,43 @@ function JobTrigger() {
     setLogLines([]);
     setIsLiveViewing(true);
 
+    let resolvedFile = filename;
+    let resolvedDate = date;
+    let retryCount = 0;
+
     const poll = async () => {
       try {
-        const data = await tailLog(component, date, filename, sinceLineRef.current);
+        const data = await tailLog(component, resolvedDate, resolvedFile, sinceLineRef.current);
         if (data.lines?.length > 0) {
           setLogLines(prev => [...prev, ...data.lines]);
           sinceLineRef.current += data.lines.length;
+          retryCount = 0;
+        } else if (data.total_lines === 0 && retryCount < 15) {
+          // File not found or empty — try to find the actual latest log
+          retryCount++;
+          if (retryCount >= 3) {
+            try {
+              const latest = await getLatestLog(component);
+              if (latest?.filename && latest.filename !== resolvedFile) {
+                resolvedFile = latest.filename;
+                resolvedDate = latest.date;
+                sinceLineRef.current = 0;
+                // Update the liveLog state so UI shows correct filename
+                setLiveLog(prev => prev ? { ...prev, filename: resolvedFile, date: resolvedDate } : prev);
+              }
+            } catch {
+              // ignore
+            }
+          }
         }
       } catch {
         // File may not exist yet, keep polling
+        retryCount++;
       }
     };
 
-    // First poll immediately
-    poll();
+    // First poll after a short delay (give the job time to create the file)
+    setTimeout(poll, 1500);
     intervalRef.current = setInterval(poll, 2000);
   }, [sinceLineRef]);
 

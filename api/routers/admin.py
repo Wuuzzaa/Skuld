@@ -129,7 +129,7 @@ async def get_job_modes(current_user: dict = Depends(get_current_user)):
 
 @router.post("/jobs/trigger")
 async def trigger_job(request: TriggerJobRequest, current_user: dict = Depends(get_current_user)):
-    """Trigger a job by running main.py in the background."""
+    """Trigger a job by running main.py in the skuld-backend container."""
     if request.mode not in JOB_MODES:
         raise HTTPException(status_code=400, detail=f"Unknown mode: {request.mode}")
 
@@ -141,24 +141,32 @@ async def trigger_job(request: TriggerJobRequest, current_user: dict = Depends(g
         timestamp_str = now.strftime("%Y%m%d_%H%M%S")
         filename = f"{timestamp_str}_{component}.log"
 
-        # Run in background using subprocess (detached)
-        cmd = ["/bin/bash", "/app/Skuld/run_data_collection.sh", request.mode]
+        # Run in skuld-backend container via docker exec (detached)
+        cmd = [
+            "docker", "exec", "-d", "skuld-backend",
+            "/bin/bash", "/app/Skuld/run_data_collection.sh", request.mode
+        ]
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            start_new_session=True,
         )
-        logger.info(f"Job triggered: {request.mode} (PID: {process.pid})")
+        process.wait(timeout=10)  # docker exec -d returns immediately
+        if process.returncode != 0:
+            raise HTTPException(status_code=500, detail="Failed to start job in skuld-backend container")
+
+        logger.info(f"Job triggered: {request.mode} via docker exec skuld-backend")
         return {
             "status": "triggered",
             "mode": request.mode,
-            "pid": process.pid,
+            "pid": 0,  # PID is inside the backend container
             "component": component,
             "date": date_str,
             "filename": filename,
             "started_at": now.isoformat(),
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to trigger job {request.mode}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to trigger: {str(e)}")
@@ -166,21 +174,28 @@ async def trigger_job(request: TriggerJobRequest, current_user: dict = Depends(g
 
 @router.get("/jobs/running")
 async def get_running_jobs(current_user: dict = Depends(get_current_user)):
-    """Check for active lockfiles to determine running jobs."""
-    import glob
-
-    lockfiles = glob.glob("/tmp/skuld_data_collection_*.lock")
+    """Check for active lockfiles in the skuld-backend container."""
     running = []
-    for lf in lockfiles:
-        mode = Path(lf).stem.replace("skuld_data_collection_", "")
-        try:
-            pid = Path(lf).read_text().strip()
-            # Check if PID is still alive
-            result = subprocess.run(["ps", "-p", pid], capture_output=True)
-            is_alive = result.returncode == 0
-            running.append({"mode": mode, "pid": pid, "alive": is_alive})
-        except Exception:
-            running.append({"mode": mode, "pid": "?", "alive": False})
+    try:
+        # Query lockfiles inside skuld-backend container
+        cmd = [
+            "docker", "exec", "skuld-backend", "bash", "-c",
+            "for f in /tmp/skuld_data_collection_*.lock; do "
+            "[ -f \"$f\" ] && echo \"$(basename $f .lock | sed 's/skuld_data_collection_//'):$(cat $f)\"; "
+            "done"
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        if result.returncode == 0 and result.stdout.strip():
+            for line in result.stdout.strip().split("\n"):
+                if ":" in line:
+                    mode, pid = line.split(":", 1)
+                    # Check if PID is still alive inside the container
+                    check_cmd = ["docker", "exec", "skuld-backend", "ps", "-p", pid.strip()]
+                    check_result = subprocess.run(check_cmd, capture_output=True, timeout=5)
+                    is_alive = check_result.returncode == 0
+                    running.append({"mode": mode.strip(), "pid": pid.strip(), "alive": is_alive})
+    except Exception as e:
+        logger.warning(f"Could not check running jobs: {e}")
 
     return running
 
