@@ -1,10 +1,12 @@
 """
 Admin page for job management and log viewing.
-Allows viewing pipeline logs and triggering jobs manually.
+Allows viewing pipeline logs, triggering jobs manually, and monitoring activity.
+Uses Docker Engine API via Unix socket to exec in skuld-backend container.
 """
 import logging
-import subprocess
-import os
+import http.client
+import socket
+import json as json_lib
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -15,10 +17,10 @@ from src.database import select_into_dataframe
 
 logger = logging.getLogger(__name__)
 
-# Base path for logs (works both locally and in Docker)
+# Base path for logs (shared Docker volume: ./logs:/app/Skuld/logs)
 LOGS_BASE = Path(__file__).resolve().parent.parent / "logs"
 
-# Available job modes (from main.py argument parser)
+# Available job modes
 JOB_MODES = [
     "all",
     "option_data",
@@ -48,6 +50,95 @@ JOB_DESCRIPTIONS = {
 }
 
 
+# ==============================================================================
+# Docker Engine API helpers (via Unix socket)
+# ==============================================================================
+
+class DockerUnixConnection(http.client.HTTPConnection):
+    """HTTP connection over Unix socket to Docker Engine API."""
+    def __init__(self):
+        super().__init__("localhost")
+
+    def connect(self):
+        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.sock.connect("/var/run/docker.sock")
+
+
+def _docker_exec_detached(container: str, cmd: list[str]) -> str | None:
+    """Run a command detached in a container. Returns exec ID or None on failure."""
+    try:
+        conn = DockerUnixConnection()
+        exec_config = json_lib.dumps({"Cmd": cmd, "Detach": True})
+        conn.request("POST", f"/containers/{container}/exec",
+                     body=exec_config,
+                     headers={"Content-Type": "application/json"})
+        resp = conn.getresponse()
+        if resp.status != 201:
+            return None
+        exec_id = json_lib.loads(resp.read().decode())["Id"]
+
+        conn2 = DockerUnixConnection()
+        start_config = json_lib.dumps({"Detach": True})
+        conn2.request("POST", f"/exec/{exec_id}/start",
+                      body=start_config,
+                      headers={"Content-Type": "application/json"})
+        resp2 = conn2.getresponse()
+        resp2.read()
+        return exec_id if resp2.status == 200 else None
+    except Exception as e:
+        logger.warning(f"Docker exec failed: {e}")
+        return None
+
+
+def _docker_exec_output(container: str, cmd: list[str]) -> str | None:
+    """Run a command attached in a container and return stdout."""
+    try:
+        conn = DockerUnixConnection()
+        exec_config = json_lib.dumps({
+            "Cmd": cmd,
+            "AttachStdout": True,
+            "AttachStderr": True,
+        })
+        conn.request("POST", f"/containers/{container}/exec",
+                     body=exec_config,
+                     headers={"Content-Type": "application/json"})
+        resp = conn.getresponse()
+        if resp.status != 201:
+            return None
+        exec_id = json_lib.loads(resp.read().decode())["Id"]
+
+        conn2 = DockerUnixConnection()
+        start_config = json_lib.dumps({"Detach": False})
+        conn2.request("POST", f"/exec/{exec_id}/start",
+                      body=start_config,
+                      headers={"Content-Type": "application/json"})
+        resp2 = conn2.getresponse()
+        if resp2.status != 200:
+            return None
+        raw_output = resp2.read()
+
+        # Parse Docker multiplexed stream (8-byte frame headers)
+        output = ""
+        i = 0
+        while i < len(raw_output):
+            if i + 8 <= len(raw_output):
+                frame_size = int.from_bytes(raw_output[i+4:i+8], 'big')
+                i += 8
+                if i + frame_size <= len(raw_output):
+                    output += raw_output[i:i+frame_size].decode("utf-8", errors="replace")
+                i += frame_size
+            else:
+                break
+        return output
+    except Exception as e:
+        logger.warning(f"Docker exec output failed: {e}")
+        return None
+
+
+# ==============================================================================
+# Page Layout
+# ==============================================================================
+
 st.subheader("Admin - Job Management")
 
 tab_logs, tab_jobs, tab_activity = st.tabs(["Log Viewer", "Trigger Jobs", "Recent Activity"])
@@ -58,19 +149,18 @@ tab_logs, tab_jobs, tab_activity = st.tabs(["Log Viewer", "Trigger Jobs", "Recen
 with tab_logs:
     st.markdown("#### Pipeline Logs")
 
-    # Discover available components
+    # Discover available components from local shared volume
     components = []
     if LOGS_BASE.exists():
         components = sorted([d.name for d in LOGS_BASE.iterdir() if d.is_dir()])
 
     if not components:
-        st.info("No log directories found. Logs appear after jobs run in Docker.")
+        st.info("No log directories found. Logs appear after jobs run.")
     else:
         col1, col2 = st.columns(2)
         with col1:
             selected_component = st.selectbox("Component", components, index=0)
         with col2:
-            # Discover available dates for this component
             component_dir = LOGS_BASE / selected_component
             dates = sorted(
                 [d.name for d in component_dir.iterdir() if d.is_dir()],
@@ -129,14 +219,11 @@ with tab_logs:
                         if search_term:
                             lines = [l for l in lines if search_term.lower() in l.lower()]
 
-                        # Stats
                         st.caption(f"{len(lines)} lines displayed | File: {selected_file.name}")
 
-                        # Show last N lines (most recent first)
                         max_lines = st.slider("Lines to show", 50, 2000, 500, step=50)
                         display_lines = lines[-max_lines:] if len(lines) > max_lines else lines
 
-                        # Color-code log output
                         log_text = "\n".join(display_lines)
                         st.code(log_text, language="log")
 
@@ -145,13 +232,10 @@ with tab_logs:
             else:
                 st.info("No log files for this date.")
 
-    # Cron logs (from /var/log/ in Docker)
+    # Cron schedule reference
     st.markdown("---")
-    st.markdown("#### Cron Logs (Backend Container)")
-    st.caption("These logs are available inside the skuld-backend container at /var/log/cron_*.log")
-
-    # Show cron schedule for reference
-    with st.expander("Cron Schedule Reference"):
+    st.markdown("#### Cron Schedule Reference")
+    with st.expander("Show Cron Schedule"):
         st.code("""# Option Data: Monday-Friday, every 30 min 08:00-21:00 UTC
 0,30 8-20 * * 1-5  option_data
 
@@ -173,10 +257,9 @@ with tab_logs:
 # ==============================================================================
 with tab_jobs:
     st.markdown("#### Manually Trigger Jobs")
-    st.warning(
+    st.info(
         "Jobs run inside the **skuld-backend** Docker container. "
-        "Triggering from here executes `docker exec` on the host. "
-        "Make sure the container is running."
+        "Triggering from here uses the Docker Engine API via mounted socket."
     )
 
     selected_mode = st.selectbox(
@@ -195,8 +278,9 @@ with tab_jobs:
         st.session_state.live_log_filename = ""
         st.session_state.live_log_mode = ""
         st.session_state.live_log_since_line = 0
+        st.session_state.live_log_retry_count = 0
 
-    # Safety: confirm before triggering
+    # Trigger button
     col_btn, col_status = st.columns([1, 3])
     with col_btn:
         trigger = st.button("Start Job", type="primary", use_container_width=True)
@@ -204,38 +288,26 @@ with tab_jobs:
     if trigger:
         with col_status:
             with st.spinner(f"Triggering {selected_mode}..."):
-                try:
-                    # Execute via docker exec on the backend container
-                    cmd = [
-                        "docker", "exec", "-d", "skuld-backend",
-                        "/bin/bash", "/app/Skuld/run_data_collection.sh", selected_mode
-                    ]
-                    result = subprocess.run(
-                        cmd,
-                        capture_output=True,
-                        text=True,
-                        timeout=30
+                cmd = ["/bin/bash", "/app/Skuld/run_data_collection.sh", selected_mode]
+                exec_id = _docker_exec_detached("skuld-backend", cmd)
+
+                if exec_id:
+                    now = datetime.now()
+                    st.success(f"Job **{selected_mode}** triggered successfully!")
+                    # Set up live log tracking
+                    st.session_state.live_log_active = True
+                    st.session_state.live_log_component = "data_collector"
+                    st.session_state.live_log_date = now.strftime("%Y-%m-%d")
+                    st.session_state.live_log_filename = f"{now.strftime('%Y%m%d_%H%M%S')}_data_collector.log"
+                    st.session_state.live_log_mode = selected_mode
+                    st.session_state.live_log_since_line = 0
+                    st.session_state.live_log_retry_count = 0
+                else:
+                    st.error(
+                        "Failed to trigger job. Possible causes:\n"
+                        "- Docker socket not mounted (`/var/run/docker.sock`)\n"
+                        "- `skuld-backend` container not running"
                     )
-                    if result.returncode == 0:
-                        st.success(
-                            f"Job **{selected_mode}** triggered successfully!"
-                        )
-                        # Set up live log tracking
-                        now = datetime.now()
-                        st.session_state.live_log_active = True
-                        st.session_state.live_log_component = "data_collector"
-                        st.session_state.live_log_date = now.strftime("%Y-%m-%d")
-                        st.session_state.live_log_filename = f"{now.strftime('%Y%m%d_%H%M%S')}_data_collector.log"
-                        st.session_state.live_log_mode = selected_mode
-                        st.session_state.live_log_since_line = 0
-                    else:
-                        st.error(f"Failed to trigger job: {result.stderr or result.stdout}")
-                except subprocess.TimeoutExpired:
-                    st.error("Timeout: Could not reach Docker. Is the backend container running?")
-                except FileNotFoundError:
-                    st.error("Docker CLI not found. This feature works on the server where Docker is running.")
-                except Exception as e:
-                    st.error(f"Error: {e}")
 
     # Live Log Panel
     if st.session_state.live_log_active:
@@ -262,44 +334,73 @@ with tab_jobs:
                 content = log_file_path.read_text(encoding="utf-8", errors="replace")
                 lines = content.splitlines()
                 total_lines = len(lines)
-
-                # Show new lines since last check
-                new_lines = lines[st.session_state.live_log_since_line:]
                 st.session_state.live_log_since_line = total_lines
+                st.session_state.live_log_retry_count = 0
 
                 st.caption(f"Total: {total_lines} lines | File: {st.session_state.live_log_filename}")
 
-                # Show last 200 lines of the full log (most recent)
+                # Show last 200 lines
                 display_lines = lines[-200:] if len(lines) > 200 else lines
                 log_text = "\n".join(display_lines)
                 st.code(log_text, language="log")
             except Exception as e:
                 st.warning(f"Error reading log: {e}")
         else:
+            # Fallback: try to find the actual latest log file
+            st.session_state.live_log_retry_count += 1
+            if st.session_state.live_log_retry_count >= 3:
+                component_dir = LOGS_BASE / st.session_state.live_log_component
+                if component_dir.exists():
+                    date_dirs = sorted([d for d in component_dir.iterdir() if d.is_dir()], reverse=True)
+                    if date_dirs:
+                        latest_date = date_dirs[0]
+                        files = sorted(
+                            [f for f in latest_date.iterdir() if f.suffix == ".log"],
+                            key=lambda f: f.name,
+                            reverse=True,
+                        )
+                        if files:
+                            st.session_state.live_log_date = latest_date.name
+                            st.session_state.live_log_filename = files[0].name
+                            st.session_state.live_log_retry_count = 0
+                            st.rerun()
+
             st.info(f"Waiting for log file to appear: `{st.session_state.live_log_filename}`")
-            st.caption("The log file will be created once the job starts writing output.")
+            st.caption("The log file will be created once the job starts writing output. Click Refresh.")
 
         if refresh_log:
             st.rerun()
 
-    # Show currently running jobs (lockfiles)
+    # Running Jobs section
     st.markdown("---")
     st.markdown("#### Running Jobs")
     st.caption("Checks for active lockfiles in the backend container.")
 
     if st.button("Check Running Jobs"):
-        try:
-            cmd = ["docker", "exec", "skuld-backend", "bash", "-c",
-                   "ls -la /tmp/skuld_data_collection_*.lock 2>/dev/null && "
-                   "for f in /tmp/skuld_data_collection_*.lock; do "
-                   "echo \"$(basename $f .lock): PID=$(cat $f)\"; done"]
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-            if result.stdout.strip():
-                st.code(result.stdout, language="bash")
-            else:
-                st.success("No jobs currently running.")
-        except Exception as e:
-            st.warning(f"Could not check: {e}")
+        output = _docker_exec_output("skuld-backend", [
+            "bash", "-c",
+            "for f in /tmp/skuld_data_collection_*.lock; do "
+            "[ -f \"$f\" ] || continue; "
+            "MODE=$(basename $f .lock | sed 's/skuld_data_collection_//'); "
+            "PID=$(cat $f); "
+            "if ps -p $PID > /dev/null 2>&1; then ALIVE=1; else ALIVE=0; fi; "
+            "echo \"$MODE:$PID:$ALIVE\"; "
+            "done"
+        ])
+
+        if output is None:
+            st.warning("Could not reach Docker socket. Is `/var/run/docker.sock` mounted?")
+        elif output.strip():
+            for line in output.strip().split("\n"):
+                line = line.strip()
+                if ":" in line and len(line.split(":")) >= 3:
+                    parts = line.split(":")
+                    mode, pid, alive = parts[0], parts[1], parts[2] == "1"
+                    icon = "🟢" if alive else "🔴"
+                    status_text = "running" if alive else "stale lockfile"
+                    st.write(f"{icon} **{mode}** — PID {pid} ({status_text})")
+        else:
+            st.success("No jobs currently running.")
 
 
 # ==============================================================================
@@ -308,7 +409,6 @@ with tab_jobs:
 with tab_activity:
     st.markdown("#### Recent Data Operations")
 
-    # Time range filter
     hours_back = st.selectbox("Show last", [6, 12, 24, 48, 72, 168], index=2,
                               format_func=lambda h: f"{h} hours" if h < 48 else f"{h // 24} days")
 
