@@ -13,7 +13,7 @@ class PipelineMonitor:
         self.results = {}
         self.memory_stats = {}
         self.parallel_duration = 0
-        self.monitor = MemoryMonitor(interval=5.0)
+        self.monitor = MemoryMonitor(interval=30.0)
         self.tasks_started = {}
 
     def start(self):

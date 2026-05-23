@@ -40,12 +40,14 @@ def calculate_and_store_stock_implied_volatility_history():
         sql = f"""
             INSERT INTO "{vola_history_table_name}"
             {select}
-        """       
+        """
 
         with get_postgres_engine().begin() as connection:
+            logger.info(f"Truncating {vola_history_table_name}...")
             truncate_table(connection, vola_history_table_name)
+            logger.info(f"Executing INSERT INTO {vola_history_table_name} (this is a single large SQL operation, may take 30-60+ min)...")
             execute_sql(connection, sql, vola_history_table_name, "INSERT", "Calculating and storing stock implied volatility history")
-            logger.info(f"[PostgreSQL] Successfully executed SQL query and stored implied volatility history.")
+            logger.info(f"Successfully stored implied volatility history into {vola_history_table_name}.")
 
     except Exception as e:
         logger.error(f"[PostgreSQL] Error executing query: \n{e}")
