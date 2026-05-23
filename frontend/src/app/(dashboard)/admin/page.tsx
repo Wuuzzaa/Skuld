@@ -132,7 +132,7 @@ function LogViewer() {
     enabled: !!component && !!date,
   });
 
-  const { data: logContent, isLoading: loadingContent } = useQuery({
+  const { data: logContent, isLoading: loadingContent, refetch: refetchLog } = useQuery({
     queryKey: ['admin-log-content', component, date, file, level, search],
     queryFn: () => getLogContent(component, date, file, level, search),
     enabled: !!component && !!date && !!file,
@@ -210,9 +210,17 @@ function LogViewer() {
         <LoadingState message="Loading logs..." />
       ) : logContent ? (
         <div>
-          <p className="text-xs text-muted-foreground mb-2">
-            {logContent.displayed_lines} / {logContent.total_lines} lines
-          </p>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs text-muted-foreground">
+              {logContent.displayed_lines} / {logContent.total_lines} lines
+            </p>
+            <button
+              onClick={() => refetchLog()}
+              className="text-xs text-muted-foreground hover:text-foreground border border-border rounded px-2 py-1"
+            >
+              Refresh
+            </button>
+          </div>
           <pre className="bg-card border border-border rounded-lg p-4 text-xs font-mono overflow-auto max-h-[600px] whitespace-pre-wrap">
             {logContent.content.map((line: string, i: number) => (
               <div
