@@ -23,6 +23,7 @@ import {
   Grid3X3,
   Award,
   Wallet,
+  Settings,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { LoadingState } from '@/components/ui/spinner';
@@ -47,6 +48,7 @@ const navItems = [
   { href: '/universe', label: 'Universe', icon: Globe, color: 'text-teal-400' },
   { href: '/symbols', label: 'Symbols', icon: Search, color: 'text-indigo-400' },
   { href: '/data-logs', label: 'Data Logs', icon: Database, color: 'text-gray-400' },
+  { href: '/admin', label: 'Admin', icon: Settings, color: 'text-red-400' },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {

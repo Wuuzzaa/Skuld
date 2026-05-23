@@ -8,6 +8,7 @@ from api.core.config import settings
 from api.core.database import engine
 from api.core import cache
 from api.routers import (
+    admin,
     auth,
     analyst_prices,
     spreads,
@@ -71,6 +72,7 @@ app.include_router(covered_calls.router, prefix="/api/covered-calls", tags=["Cov
 app.include_router(correlation.router, prefix="/api/correlation", tags=["Correlation"])
 app.include_router(dividend_screener.router, prefix="/api/dividend-screener", tags=["Dividend Screener"])
 app.include_router(dividend_portfolio_builder.router, prefix="/api/dividend-portfolio", tags=["Dividend Portfolio Builder"])
+app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 
 
 @app.get("/api/health")
