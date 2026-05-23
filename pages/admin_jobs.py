@@ -1,13 +1,14 @@
 """
 Admin page for job management and log viewing.
-Allows viewing pipeline logs and triggering jobs manually.
+Allows viewing pipeline logs, triggering jobs manually, and monitoring activity.
+Uses the skuld-api container for job triggering and running-job checks.
 """
 import logging
-import subprocess
 import os
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import requests
 import streamlit as st
 import pandas as pd
 
@@ -15,10 +16,13 @@ from src.database import select_into_dataframe
 
 logger = logging.getLogger(__name__)
 
-# Base path for logs (works both locally and in Docker)
+# Base path for logs (shared Docker volume: ./logs:/app/Skuld/logs)
 LOGS_BASE = Path(__file__).resolve().parent.parent / "logs"
 
-# Available job modes (from main.py argument parser)
+# API base URL (skuld-api container on same Docker network)
+API_BASE_URL = os.getenv("SKULD_API_URL", "http://skuld-api:8000")
+
+# Available job modes
 JOB_MODES = [
     "all",
     "option_data",
@@ -48,6 +52,64 @@ JOB_DESCRIPTIONS = {
 }
 
 
+def _get_api_token() -> str | None:
+    """Get JWT token from skuld-api using admin credentials."""
+    if "api_token" in st.session_state and st.session_state.get("api_token_expiry", datetime.min) > datetime.now():
+        return st.session_state["api_token"]
+
+    admin_password = os.getenv("SKULD_ADMIN_PASSWORD", "Kx9$mTr!vQ4pNw2z")
+    try:
+        resp = requests.post(
+            f"{API_BASE_URL}/api/auth/login",
+            json={"username": "admin", "password": admin_password},
+            timeout=5,
+        )
+        if resp.status_code == 200:
+            token = resp.json()["access_token"]
+            st.session_state["api_token"] = token
+            st.session_state["api_token_expiry"] = datetime.now() + timedelta(hours=12)
+            return token
+    except Exception as e:
+        logger.warning(f"Failed to get API token: {e}")
+    return None
+
+
+def _api_headers() -> dict:
+    """Get authorization headers for API calls."""
+    token = _get_api_token()
+    if token:
+        return {"Authorization": f"Bearer {token}"}
+    return {}
+
+
+def _api_get(path: str, params: dict = None) -> requests.Response | None:
+    """Make authenticated GET request to skuld-api."""
+    try:
+        return requests.get(
+            f"{API_BASE_URL}/api/admin{path}",
+            headers=_api_headers(),
+            params=params,
+            timeout=15,
+        )
+    except Exception as e:
+        logger.warning(f"API GET {path} failed: {e}")
+        return None
+
+
+def _api_post(path: str, json_data: dict = None) -> requests.Response | None:
+    """Make authenticated POST request to skuld-api."""
+    try:
+        return requests.post(
+            f"{API_BASE_URL}/api/admin{path}",
+            headers=_api_headers(),
+            json=json_data,
+            timeout=30,
+        )
+    except Exception as e:
+        logger.warning(f"API POST {path} failed: {e}")
+        return None
+
+
 st.subheader("Admin - Job Management")
 
 tab_logs, tab_jobs, tab_activity = st.tabs(["Log Viewer", "Trigger Jobs", "Recent Activity"])
@@ -58,19 +120,18 @@ tab_logs, tab_jobs, tab_activity = st.tabs(["Log Viewer", "Trigger Jobs", "Recen
 with tab_logs:
     st.markdown("#### Pipeline Logs")
 
-    # Discover available components
+    # Discover available components from local shared volume
     components = []
     if LOGS_BASE.exists():
         components = sorted([d.name for d in LOGS_BASE.iterdir() if d.is_dir()])
 
     if not components:
-        st.info("No log directories found. Logs appear after jobs run in Docker.")
+        st.info("No log directories found. Logs appear after jobs run.")
     else:
         col1, col2 = st.columns(2)
         with col1:
             selected_component = st.selectbox("Component", components, index=0)
         with col2:
-            # Discover available dates for this component
             component_dir = LOGS_BASE / selected_component
             dates = sorted(
                 [d.name for d in component_dir.iterdir() if d.is_dir()],
@@ -129,14 +190,11 @@ with tab_logs:
                         if search_term:
                             lines = [l for l in lines if search_term.lower() in l.lower()]
 
-                        # Stats
                         st.caption(f"{len(lines)} lines displayed | File: {selected_file.name}")
 
-                        # Show last N lines (most recent first)
                         max_lines = st.slider("Lines to show", 50, 2000, 500, step=50)
                         display_lines = lines[-max_lines:] if len(lines) > max_lines else lines
 
-                        # Color-code log output
                         log_text = "\n".join(display_lines)
                         st.code(log_text, language="log")
 
@@ -145,13 +203,10 @@ with tab_logs:
             else:
                 st.info("No log files for this date.")
 
-    # Cron logs (from /var/log/ in Docker)
+    # Cron schedule reference
     st.markdown("---")
-    st.markdown("#### Cron Logs (Backend Container)")
-    st.caption("These logs are available inside the skuld-backend container at /var/log/cron_*.log")
-
-    # Show cron schedule for reference
-    with st.expander("Cron Schedule Reference"):
+    st.markdown("#### Cron Schedule Reference")
+    with st.expander("Show Cron Schedule"):
         st.code("""# Option Data: Monday-Friday, every 30 min 08:00-21:00 UTC
 0,30 8-20 * * 1-5  option_data
 
@@ -173,10 +228,9 @@ with tab_logs:
 # ==============================================================================
 with tab_jobs:
     st.markdown("#### Manually Trigger Jobs")
-    st.warning(
+    st.info(
         "Jobs run inside the **skuld-backend** Docker container. "
-        "Triggering from here executes `docker exec` on the host. "
-        "Make sure the container is running."
+        "Triggering from here calls the **skuld-api** which executes via Docker socket."
     )
 
     selected_mode = st.selectbox(
@@ -195,8 +249,9 @@ with tab_jobs:
         st.session_state.live_log_filename = ""
         st.session_state.live_log_mode = ""
         st.session_state.live_log_since_line = 0
+        st.session_state.live_log_retry_count = 0
 
-    # Safety: confirm before triggering
+    # Trigger button
     col_btn, col_status = st.columns([1, 3])
     with col_btn:
         trigger = st.button("Start Job", type="primary", use_container_width=True)
@@ -204,38 +259,23 @@ with tab_jobs:
     if trigger:
         with col_status:
             with st.spinner(f"Triggering {selected_mode}..."):
-                try:
-                    # Execute via docker exec on the backend container
-                    cmd = [
-                        "docker", "exec", "-d", "skuld-backend",
-                        "/bin/bash", "/app/Skuld/run_data_collection.sh", selected_mode
-                    ]
-                    result = subprocess.run(
-                        cmd,
-                        capture_output=True,
-                        text=True,
-                        timeout=30
-                    )
-                    if result.returncode == 0:
-                        st.success(
-                            f"Job **{selected_mode}** triggered successfully!"
-                        )
-                        # Set up live log tracking
-                        now = datetime.now()
-                        st.session_state.live_log_active = True
-                        st.session_state.live_log_component = "data_collector"
-                        st.session_state.live_log_date = now.strftime("%Y-%m-%d")
-                        st.session_state.live_log_filename = f"{now.strftime('%Y%m%d_%H%M%S')}_data_collector.log"
-                        st.session_state.live_log_mode = selected_mode
-                        st.session_state.live_log_since_line = 0
-                    else:
-                        st.error(f"Failed to trigger job: {result.stderr or result.stdout}")
-                except subprocess.TimeoutExpired:
-                    st.error("Timeout: Could not reach Docker. Is the backend container running?")
-                except FileNotFoundError:
-                    st.error("Docker CLI not found. This feature works on the server where Docker is running.")
-                except Exception as e:
-                    st.error(f"Error: {e}")
+                resp = _api_post("/jobs/trigger", {"mode": selected_mode})
+                if resp and resp.status_code == 200:
+                    data = resp.json()
+                    st.success(f"Job **{selected_mode}** triggered successfully!")
+                    # Set up live log tracking
+                    st.session_state.live_log_active = True
+                    st.session_state.live_log_component = data.get("component", "data_collector")
+                    st.session_state.live_log_date = data.get("date", datetime.now().strftime("%Y-%m-%d"))
+                    st.session_state.live_log_filename = data.get("filename", "")
+                    st.session_state.live_log_mode = selected_mode
+                    st.session_state.live_log_since_line = 0
+                    st.session_state.live_log_retry_count = 0
+                elif resp:
+                    detail = resp.json().get("detail", resp.text) if resp.headers.get("content-type", "").startswith("application/json") else resp.text
+                    st.error(f"Failed to trigger job: {detail}")
+                else:
+                    st.error("Failed to reach skuld-api. Is the API container running?")
 
     # Live Log Panel
     if st.session_state.live_log_active:
@@ -262,44 +302,63 @@ with tab_jobs:
                 content = log_file_path.read_text(encoding="utf-8", errors="replace")
                 lines = content.splitlines()
                 total_lines = len(lines)
-
-                # Show new lines since last check
-                new_lines = lines[st.session_state.live_log_since_line:]
                 st.session_state.live_log_since_line = total_lines
+                st.session_state.live_log_retry_count = 0
 
                 st.caption(f"Total: {total_lines} lines | File: {st.session_state.live_log_filename}")
 
-                # Show last 200 lines of the full log (most recent)
+                # Show last 200 lines
                 display_lines = lines[-200:] if len(lines) > 200 else lines
                 log_text = "\n".join(display_lines)
                 st.code(log_text, language="log")
             except Exception as e:
                 st.warning(f"Error reading log: {e}")
         else:
+            # Fallback: try to find the actual latest log file
+            st.session_state.live_log_retry_count += 1
+            if st.session_state.live_log_retry_count >= 3:
+                # Try finding actual latest file via API or local filesystem
+                component_dir = LOGS_BASE / st.session_state.live_log_component
+                if component_dir.exists():
+                    date_dirs = sorted([d for d in component_dir.iterdir() if d.is_dir()], reverse=True)
+                    if date_dirs:
+                        latest_date = date_dirs[0]
+                        files = sorted(
+                            [f for f in latest_date.iterdir() if f.suffix == ".log"],
+                            key=lambda f: f.name,
+                            reverse=True,
+                        )
+                        if files:
+                            st.session_state.live_log_date = latest_date.name
+                            st.session_state.live_log_filename = files[0].name
+                            st.session_state.live_log_retry_count = 0
+                            st.rerun()
+
             st.info(f"Waiting for log file to appear: `{st.session_state.live_log_filename}`")
-            st.caption("The log file will be created once the job starts writing output.")
+            st.caption("The log file will be created once the job starts writing output. Click Refresh.")
 
         if refresh_log:
             st.rerun()
 
-    # Show currently running jobs (lockfiles)
+    # Running Jobs section
     st.markdown("---")
     st.markdown("#### Running Jobs")
-    st.caption("Checks for active lockfiles in the backend container.")
+    st.caption("Checks for active lockfiles in the backend container via API.")
 
     if st.button("Check Running Jobs"):
-        try:
-            cmd = ["docker", "exec", "skuld-backend", "bash", "-c",
-                   "ls -la /tmp/skuld_data_collection_*.lock 2>/dev/null && "
-                   "for f in /tmp/skuld_data_collection_*.lock; do "
-                   "echo \"$(basename $f .lock): PID=$(cat $f)\"; done"]
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-            if result.stdout.strip():
-                st.code(result.stdout, language="bash")
+        resp = _api_get("/jobs/running")
+        if resp and resp.status_code == 200:
+            running = resp.json()
+            if running:
+                for job in running:
+                    status_icon = "🟢" if job.get("alive") else "🔴"
+                    st.write(f"{status_icon} **{job['mode']}** — PID {job['pid']} ({'running' if job.get('alive') else 'stale lockfile'})")
             else:
                 st.success("No jobs currently running.")
-        except Exception as e:
-            st.warning(f"Could not check: {e}")
+        elif resp:
+            st.warning(f"API returned {resp.status_code}")
+        else:
+            st.warning("Could not reach skuld-api to check running jobs.")
 
 
 # ==============================================================================
@@ -308,7 +367,6 @@ with tab_jobs:
 with tab_activity:
     st.markdown("#### Recent Data Operations")
 
-    # Time range filter
     hours_back = st.selectbox("Show last", [6, 12, 24, 48, 72, 168], index=2,
                               format_func=lambda h: f"{h} hours" if h < 48 else f"{h // 24} days")
 
