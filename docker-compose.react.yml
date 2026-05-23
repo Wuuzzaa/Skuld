@@ -29,6 +29,7 @@ services:
       - POSTGRES_DB=${POSTGRES_DB:-Skuld}
     volumes:
       - ./data:/app/data
+      - ./logs:/app/Skuld/logs
     restart: unless-stopped
     networks:
       - web
