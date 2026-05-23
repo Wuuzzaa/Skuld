@@ -134,6 +134,9 @@ async def trigger_job(request: TriggerJobRequest, current_user: dict = Depends(g
         raise HTTPException(status_code=400, detail=f"Unknown mode: {request.mode}")
 
     try:
+        import urllib.request
+        import json as json_lib
+
         # Determine expected log path
         now = datetime.now()
         component = "data_collector"
@@ -141,25 +144,50 @@ async def trigger_job(request: TriggerJobRequest, current_user: dict = Depends(g
         timestamp_str = now.strftime("%Y%m%d_%H%M%S")
         filename = f"{timestamp_str}_{component}.log"
 
-        # Run in skuld-backend container via docker exec (detached)
-        cmd = [
-            "docker", "exec", "-d", "skuld-backend",
-            "/bin/bash", "/app/Skuld/run_data_collection.sh", request.mode
-        ]
-        process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        process.wait(timeout=10)  # docker exec -d returns immediately
-        if process.returncode != 0:
-            raise HTTPException(status_code=500, detail="Failed to start job in skuld-backend container")
+        # Use Docker Engine API via Unix socket to exec in skuld-backend
+        import http.client
+        import socket
 
-        logger.info(f"Job triggered: {request.mode} via docker exec skuld-backend")
+        class DockerUnixConnection(http.client.HTTPConnection):
+            def __init__(self):
+                super().__init__("localhost")
+
+            def connect(self):
+                self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                self.sock.connect("/var/run/docker.sock")
+
+        # Step 1: Create exec instance
+        conn = DockerUnixConnection()
+        exec_config = json_lib.dumps({
+            "Cmd": ["/bin/bash", "/app/Skuld/run_data_collection.sh", request.mode],
+            "Detach": True,
+        })
+        conn.request("POST", "/containers/skuld-backend/exec",
+                     body=exec_config,
+                     headers={"Content-Type": "application/json"})
+        resp = conn.getresponse()
+        if resp.status != 201:
+            error_body = resp.read().decode()
+            raise HTTPException(status_code=500, detail=f"Docker exec create failed: {error_body}")
+        exec_id = json_lib.loads(resp.read().decode())["Id"]
+
+        # Step 2: Start exec
+        conn2 = DockerUnixConnection()
+        start_config = json_lib.dumps({"Detach": True})
+        conn2.request("POST", f"/exec/{exec_id}/start",
+                      body=start_config,
+                      headers={"Content-Type": "application/json"})
+        resp2 = conn2.getresponse()
+        if resp2.status != 200:
+            error_body = resp2.read().decode()
+            raise HTTPException(status_code=500, detail=f"Docker exec start failed: {error_body}")
+        resp2.read()  # consume response
+
+        logger.info(f"Job triggered: {request.mode} via Docker socket exec in skuld-backend")
         return {
             "status": "triggered",
             "mode": request.mode,
-            "pid": 0,  # PID is inside the backend container
+            "pid": 0,
             "component": component,
             "date": date_str,
             "filename": filename,
@@ -175,25 +203,74 @@ async def trigger_job(request: TriggerJobRequest, current_user: dict = Depends(g
 @router.get("/jobs/running")
 async def get_running_jobs(current_user: dict = Depends(get_current_user)):
     """Check for active lockfiles in the skuld-backend container."""
+    import http.client
+    import socket
+    import json as json_lib
+
+    class DockerUnixConnection(http.client.HTTPConnection):
+        def __init__(self):
+            super().__init__("localhost")
+
+        def connect(self):
+            self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            self.sock.connect("/var/run/docker.sock")
+
     running = []
     try:
-        # Query lockfiles inside skuld-backend container
-        cmd = [
-            "docker", "exec", "skuld-backend", "bash", "-c",
-            "for f in /tmp/skuld_data_collection_*.lock; do "
-            "[ -f \"$f\" ] && echo \"$(basename $f .lock | sed 's/skuld_data_collection_//'):$(cat $f)\"; "
-            "done"
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-        if result.returncode == 0 and result.stdout.strip():
-            for line in result.stdout.strip().split("\n"):
-                if ":" in line:
-                    mode, pid = line.split(":", 1)
-                    # Check if PID is still alive inside the container
-                    check_cmd = ["docker", "exec", "skuld-backend", "ps", "-p", pid.strip()]
-                    check_result = subprocess.run(check_cmd, capture_output=True, timeout=5)
-                    is_alive = check_result.returncode == 0
-                    running.append({"mode": mode.strip(), "pid": pid.strip(), "alive": is_alive})
+        # Exec a command in skuld-backend to list lockfiles and check PIDs
+        conn = DockerUnixConnection()
+        exec_config = json_lib.dumps({
+            "Cmd": ["bash", "-c",
+                    "for f in /tmp/skuld_data_collection_*.lock; do "
+                    "[ -f \"$f\" ] || continue; "
+                    "MODE=$(basename $f .lock | sed 's/skuld_data_collection_//'); "
+                    "PID=$(cat $f); "
+                    "if ps -p $PID > /dev/null 2>&1; then ALIVE=1; else ALIVE=0; fi; "
+                    "echo \"$MODE:$PID:$ALIVE\"; "
+                    "done"],
+            "AttachStdout": True,
+            "AttachStderr": True,
+        })
+        conn.request("POST", "/containers/skuld-backend/exec",
+                     body=exec_config,
+                     headers={"Content-Type": "application/json"})
+        resp = conn.getresponse()
+        if resp.status != 201:
+            return []
+        exec_id = json_lib.loads(resp.read().decode())["Id"]
+
+        # Start exec (attached to get output)
+        conn2 = DockerUnixConnection()
+        start_config = json_lib.dumps({"Detach": False})
+        conn2.request("POST", f"/exec/{exec_id}/start",
+                      body=start_config,
+                      headers={"Content-Type": "application/json"})
+        resp2 = conn2.getresponse()
+        if resp2.status != 200:
+            return []
+        raw_output = resp2.read()
+
+        # Docker multiplexed stream: skip 8-byte frame headers
+        output = ""
+        i = 0
+        while i < len(raw_output):
+            if i + 8 <= len(raw_output):
+                frame_size = int.from_bytes(raw_output[i+4:i+8], 'big')
+                i += 8
+                if i + frame_size <= len(raw_output):
+                    output += raw_output[i:i+frame_size].decode("utf-8", errors="replace")
+                i += frame_size
+            else:
+                break
+
+        for line in output.strip().split("\n"):
+            line = line.strip()
+            if ":" in line and len(line.split(":")) >= 3:
+                parts = line.split(":")
+                mode = parts[0]
+                pid = parts[1]
+                alive = parts[2] == "1"
+                running.append({"mode": mode, "pid": pid, "alive": alive})
     except Exception as e:
         logger.warning(f"Could not check running jobs: {e}")
 
