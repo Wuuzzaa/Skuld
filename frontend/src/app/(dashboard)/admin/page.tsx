@@ -492,19 +492,39 @@ function JobTrigger() {
 
         {running?.length ? (
           <div className="space-y-2">
-            {running.map((job: any) => (
-              <div key={job.mode} className="flex items-center gap-3 text-sm">
-                <span className={cn(
-                  'w-2 h-2 rounded-full',
-                  job.alive ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'
-                )} />
-                <span className="font-mono">{job.mode}</span>
-                <span className="text-muted-foreground">PID: {job.pid}</span>
-                <span className={job.alive ? 'text-emerald-400' : 'text-red-400'}>
-                  {job.alive ? 'running' : 'stale lockfile'}
-                </span>
-              </div>
-            ))}
+            {running.map((job: any) => {
+              const elapsed = job.started_at
+                ? Math.floor((Date.now() - new Date(job.started_at).getTime()) / 1000)
+                : null;
+              const elapsedStr = elapsed !== null
+                ? elapsed >= 3600
+                  ? `${Math.floor(elapsed / 3600)}h ${Math.floor((elapsed % 3600) / 60)}m`
+                  : elapsed >= 60
+                    ? `${Math.floor(elapsed / 60)}m ${elapsed % 60}s`
+                    : `${elapsed}s`
+                : null;
+              const startStr = job.started_at
+                ? new Date(job.started_at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+                : null;
+              return (
+                <div key={job.mode} className="flex items-center gap-3 text-sm">
+                  <span className={cn(
+                    'w-2 h-2 rounded-full',
+                    job.alive ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'
+                  )} />
+                  <span className="font-mono">{job.mode}</span>
+                  <span className="text-muted-foreground">PID: {job.pid}</span>
+                  <span className={job.alive ? 'text-emerald-400' : 'text-red-400'}>
+                    {job.alive ? 'running' : 'stale lockfile'}
+                  </span>
+                  {startStr && (
+                    <span className="text-muted-foreground text-xs">
+                      Started: {startStr}{elapsedStr && ` | ${elapsedStr}`}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">No jobs currently running.</p>

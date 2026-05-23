@@ -226,7 +226,8 @@ async def get_running_jobs(current_user: dict = Depends(get_current_user)):
                     "MODE=$(basename $f .lock | sed 's/skuld_data_collection_//'); "
                     "PID=$(cat $f); "
                     "if ps -p $PID > /dev/null 2>&1; then ALIVE=1; else ALIVE=0; fi; "
-                    "echo \"$MODE:$PID:$ALIVE\"; "
+                    "START=$(stat -c %Y \"$f\" 2>/dev/null || echo 0); "
+                    "echo \"$MODE:$PID:$ALIVE:$START\"; "
                     "done"],
             "AttachStdout": True,
             "AttachStderr": True,
@@ -270,7 +271,13 @@ async def get_running_jobs(current_user: dict = Depends(get_current_user)):
                 mode = parts[0]
                 pid = parts[1]
                 alive = parts[2] == "1"
-                running.append({"mode": mode, "pid": pid, "alive": alive})
+                started_at = None
+                if len(parts) >= 4 and parts[3] != "0":
+                    try:
+                        started_at = datetime.fromtimestamp(int(parts[3])).isoformat()
+                    except (ValueError, OSError):
+                        pass
+                running.append({"mode": mode, "pid": pid, "alive": alive, "started_at": started_at})
     except Exception as e:
         logger.warning(f"Could not check running jobs: {e}")
 
