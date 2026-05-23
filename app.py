@@ -40,6 +40,7 @@ zahltagstrategie = st.Page("pages/dividend_screener_zahltagstrategie.py", title=
 data_logs = st.Page("pages/data_change_logs.py", title="Data Logs")
 iron_condors = st.Page("pages/iron_condors.py", title="Iron Condors")
 symbolpage = st.Page("pages/symbolpage.py", title="Symbol Page")
+admin_jobs = st.Page("pages/admin_jobs.py", title="Admin - Jobs")
 
 # Set up navigation
 page = st.navigation(
@@ -57,7 +58,8 @@ page = st.navigation(
         dividend_scanner,
         zahltagstrategie,
         data_logs,
-        symbolpage
+        symbolpage,
+        admin_jobs
     ]
 )
 
