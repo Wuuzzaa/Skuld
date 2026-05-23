@@ -1,11 +1,52 @@
 import logging
 import sys
 import os
+import time
+import threading
 import pandas as pd
+from sqlalchemy import text
 from config import TABLE_STOCK_IMPLIED_VOLATILITY_MASSIVE
 from src.database import execute_sql, get_postgres_engine, insert_into_table, select_into_dataframe, truncate_table
 
 logger = logging.getLogger(__name__)
+
+
+class SQLProgressMonitor(threading.Thread):
+    """Background thread that checks pg_stat_activity to confirm a long-running query is still active."""
+
+    def __init__(self, engine, query_snippet, interval=60):
+        super().__init__(daemon=True)
+        self.engine = engine
+        self.query_snippet = query_snippet
+        self.interval = interval
+        self.stop_event = threading.Event()
+        self.start_time = time.time()
+
+    def run(self):
+        while not self.stop_event.is_set():
+            self.stop_event.wait(self.interval)
+            if self.stop_event.is_set():
+                break
+            elapsed = int(time.time() - self.start_time)
+            elapsed_str = f"{elapsed // 3600}h {(elapsed % 3600) // 60}m" if elapsed >= 3600 else f"{elapsed // 60}m {elapsed % 60}s"
+            try:
+                with self.engine.connect() as conn:
+                    result = conn.execute(text(
+                        "SELECT pid, state, now() - query_start AS duration "
+                        "FROM pg_stat_activity "
+                        "WHERE state = 'active' AND query LIKE :snippet "
+                        "ORDER BY query_start LIMIT 1"
+                    ), {"snippet": f"%{self.query_snippet}%"})
+                    row = result.fetchone()
+                    if row:
+                        logger.info(f"[SQL Monitor] Query still running (PID: {row[0]}, PG duration: {row[2]}, elapsed: {elapsed_str})")
+                    else:
+                        logger.info(f"[SQL Monitor] No active query found matching '{self.query_snippet}' (elapsed: {elapsed_str}) - may have just finished")
+            except Exception as e:
+                logger.warning(f"[SQL Monitor] Could not check pg_stat_activity (elapsed: {elapsed_str}): {e}")
+
+    def stop(self):
+        self.stop_event.set()
 
 def calculate_and_store_stock_implied_volatility():
     logger.info("Calculating and storing stock implied volatility...")
@@ -46,7 +87,16 @@ def calculate_and_store_stock_implied_volatility_history():
             logger.info(f"Truncating {vola_history_table_name}...")
             truncate_table(connection, vola_history_table_name)
             logger.info(f"Executing INSERT INTO {vola_history_table_name} (this is a single large SQL operation, may take 30-60+ min)...")
-            execute_sql(connection, sql, vola_history_table_name, "INSERT", "Calculating and storing stock implied volatility history")
+
+            # Start background monitor to confirm Postgres is still working
+            monitor = SQLProgressMonitor(get_postgres_engine(), vola_history_table_name, interval=60)
+            monitor.start()
+            try:
+                execute_sql(connection, sql, vola_history_table_name, "INSERT", "Calculating and storing stock implied volatility history")
+            finally:
+                monitor.stop()
+                monitor.join(timeout=5)
+
             logger.info(f"Successfully stored implied volatility history into {vola_history_table_name}.")
 
     except Exception as e:
