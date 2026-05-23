@@ -169,7 +169,7 @@ with tab_logs:
 
 
 # ==============================================================================
-# TAB 2: TRIGGER JOBS
+# TAB 2: TRIGGER JOBS (with Live Log)
 # ==============================================================================
 with tab_jobs:
     st.markdown("#### Manually Trigger Jobs")
@@ -186,6 +186,15 @@ with tab_jobs:
     )
 
     st.info(f"**{selected_mode}**: {JOB_DESCRIPTIONS.get(selected_mode, 'No description')}")
+
+    # Initialize live log session state
+    if "live_log_active" not in st.session_state:
+        st.session_state.live_log_active = False
+        st.session_state.live_log_component = ""
+        st.session_state.live_log_date = ""
+        st.session_state.live_log_filename = ""
+        st.session_state.live_log_mode = ""
+        st.session_state.live_log_since_line = 0
 
     # Safety: confirm before triggering
     col_btn, col_status = st.columns([1, 3])
@@ -209,9 +218,16 @@ with tab_jobs:
                     )
                     if result.returncode == 0:
                         st.success(
-                            f"Job **{selected_mode}** triggered successfully! "
-                            f"Check Telegram or logs for progress."
+                            f"Job **{selected_mode}** triggered successfully!"
                         )
+                        # Set up live log tracking
+                        now = datetime.now()
+                        st.session_state.live_log_active = True
+                        st.session_state.live_log_component = "data_collector"
+                        st.session_state.live_log_date = now.strftime("%Y-%m-%d")
+                        st.session_state.live_log_filename = f"{now.strftime('%Y%m%d_%H%M%S')}_data_collector.log"
+                        st.session_state.live_log_mode = selected_mode
+                        st.session_state.live_log_since_line = 0
                     else:
                         st.error(f"Failed to trigger job: {result.stderr or result.stdout}")
                 except subprocess.TimeoutExpired:
@@ -220,6 +236,51 @@ with tab_jobs:
                     st.error("Docker CLI not found. This feature works on the server where Docker is running.")
                 except Exception as e:
                     st.error(f"Error: {e}")
+
+    # Live Log Panel
+    if st.session_state.live_log_active:
+        st.markdown("---")
+        st.markdown(f"#### Live Log Output — `{st.session_state.live_log_mode}`")
+
+        log_file_path = (
+            LOGS_BASE
+            / st.session_state.live_log_component
+            / st.session_state.live_log_date
+            / st.session_state.live_log_filename
+        )
+
+        col_refresh, col_stop = st.columns([1, 1])
+        with col_refresh:
+            refresh_log = st.button("Refresh Log", type="secondary", use_container_width=True)
+        with col_stop:
+            if st.button("Stop Live View", use_container_width=True):
+                st.session_state.live_log_active = False
+                st.rerun()
+
+        if log_file_path.exists():
+            try:
+                content = log_file_path.read_text(encoding="utf-8", errors="replace")
+                lines = content.splitlines()
+                total_lines = len(lines)
+
+                # Show new lines since last check
+                new_lines = lines[st.session_state.live_log_since_line:]
+                st.session_state.live_log_since_line = total_lines
+
+                st.caption(f"Total: {total_lines} lines | File: {st.session_state.live_log_filename}")
+
+                # Show last 200 lines of the full log (most recent)
+                display_lines = lines[-200:] if len(lines) > 200 else lines
+                log_text = "\n".join(display_lines)
+                st.code(log_text, language="log")
+            except Exception as e:
+                st.warning(f"Error reading log: {e}")
+        else:
+            st.info(f"Waiting for log file to appear: `{st.session_state.live_log_filename}`")
+            st.caption("The log file will be created once the job starts writing output.")
+
+        if refresh_log:
+            st.rerun()
 
     # Show currently running jobs (lockfiles)
     st.markdown("---")

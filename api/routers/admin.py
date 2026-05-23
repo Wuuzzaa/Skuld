@@ -134,6 +134,13 @@ async def trigger_job(request: TriggerJobRequest, current_user: dict = Depends(g
         raise HTTPException(status_code=400, detail=f"Unknown mode: {request.mode}")
 
     try:
+        # Determine expected log path
+        now = datetime.now()
+        component = "data_collector"
+        date_str = now.strftime("%Y-%m-%d")
+        timestamp_str = now.strftime("%Y%m%d_%H%M%S")
+        filename = f"{timestamp_str}_{component}.log"
+
         # Run in background using subprocess (detached)
         cmd = ["/bin/bash", "/app/Skuld/run_data_collection.sh", request.mode]
         process = subprocess.Popen(
@@ -143,7 +150,15 @@ async def trigger_job(request: TriggerJobRequest, current_user: dict = Depends(g
             start_new_session=True,
         )
         logger.info(f"Job triggered: {request.mode} (PID: {process.pid})")
-        return {"status": "triggered", "mode": request.mode, "pid": process.pid}
+        return {
+            "status": "triggered",
+            "mode": request.mode,
+            "pid": process.pid,
+            "component": component,
+            "date": date_str,
+            "filename": filename,
+            "started_at": now.isoformat(),
+        }
     except Exception as e:
         logger.error(f"Failed to trigger job {request.mode}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to trigger: {str(e)}")
@@ -206,3 +221,63 @@ async def get_cron_schedule(current_user: dict = Depends(get_current_user)):
         {"schedule": "45 9 * * 1-5", "mode": "stock_data_daily", "description": "Mon-Fri 09:45 UTC"},
         {"schedule": "30 21 * * 1-5", "mode": "historization", "description": "Mon-Fri 21:30 UTC"},
     ]
+
+
+@router.get("/logs/tail/{component}/{date}/{filename}")
+async def tail_log(
+    component: str,
+    date: str,
+    filename: str,
+    since_line: int = Query(default=0, description="Return lines starting from this line number"),
+    limit: int = Query(default=200, description="Max lines to return"),
+    current_user: dict = Depends(get_current_user),
+):
+    """Read new log lines since a given line number. Used for live tailing."""
+    log_file = LOGS_BASE / component / date / filename
+    if not log_file.exists():
+        return {"total_lines": 0, "lines": [], "has_more": False}
+
+    try:
+        content = log_file.read_text(encoding="utf-8", errors="replace")
+        all_lines = content.splitlines()
+        total_lines = len(all_lines)
+
+        start_idx = max(0, since_line)
+        returned_lines = all_lines[start_idx:start_idx + limit]
+
+        return {
+            "total_lines": total_lines,
+            "lines": returned_lines,
+            "has_more": total_lines > start_idx + limit,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading log: {str(e)}")
+
+
+@router.get("/logs/latest/{component}")
+async def get_latest_log(component: str, current_user: dict = Depends(get_current_user)):
+    """Find the most recent log file for a component."""
+    component_dir = LOGS_BASE / component
+    if not component_dir.exists():
+        return None
+
+    # Get latest date directory
+    dates = sorted([d for d in component_dir.iterdir() if d.is_dir()], reverse=True)
+    if not dates:
+        return None
+
+    # Get latest file in that date
+    latest_date = dates[0]
+    files = sorted(
+        [f for f in latest_date.iterdir() if f.suffix == ".log"],
+        key=lambda f: f.name,
+        reverse=True,
+    )
+    if not files:
+        return None
+
+    return {
+        "component": component,
+        "date": latest_date.name,
+        "filename": files[0].name,
+    }

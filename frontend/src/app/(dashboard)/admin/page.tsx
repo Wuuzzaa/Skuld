@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
 import { LoadingState } from '@/components/ui/spinner';
@@ -26,6 +26,18 @@ async function getLogContent(component: string, date: string, filename: string, 
   const { data } = await api.get(`/admin/logs/content/${component}/${date}/${filename}`, {
     params: { level, search, tail: 500 },
   });
+  return data;
+}
+
+async function tailLog(component: string, date: string, filename: string, sinceLine: number) {
+  const { data } = await api.get(`/admin/logs/tail/${component}/${date}/${filename}`, {
+    params: { since_line: sinceLine, limit: 200 },
+  });
+  return data;
+}
+
+async function getLatestLog(component: string) {
+  const { data } = await api.get(`/admin/logs/latest/${component}`);
   return data;
 }
 
@@ -62,7 +74,7 @@ async function getSchedule() {
 type Tab = 'logs' | 'jobs' | 'activity';
 
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState<Tab>('logs');
+  const [activeTab, setActiveTab] = useState<Tab>('jobs');
 
   return (
     <div className="space-y-4">
@@ -70,7 +82,7 @@ export default function AdminPage() {
 
       {/* Tab buttons */}
       <div className="flex gap-1 border-b border-border pb-0">
-        {(['logs', 'jobs', 'activity'] as Tab[]).map((tab) => (
+        {(['jobs', 'logs', 'activity'] as Tab[]).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -227,11 +239,24 @@ function LogViewer() {
 }
 
 // ==============================================================================
-// JOB TRIGGER
+// JOB TRIGGER with Live Log
 // ==============================================================================
 function JobTrigger() {
   const [selectedMode, setSelectedMode] = useState('');
   const queryClient = useQueryClient();
+
+  // Live log state
+  const [liveLog, setLiveLog] = useState<{
+    component: string;
+    date: string;
+    filename: string;
+    mode: string;
+  } | null>(null);
+  const [logLines, setLogLines] = useState<string[]>([]);
+  const [isLiveViewing, setIsLiveViewing] = useState(false);
+  const [sinceLineRef] = useState({ current: 0 });
+  const logEndRef = useRef<HTMLDivElement>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { data: modes } = useQuery({
     queryKey: ['admin-job-modes'],
@@ -241,13 +266,77 @@ function JobTrigger() {
   const { data: running, refetch: refetchRunning } = useQuery({
     queryKey: ['admin-running-jobs'],
     queryFn: getRunningJobs,
-    refetchInterval: 10000,
+    refetchInterval: isLiveViewing ? 5000 : 10000,
   });
+
+  // Auto-scroll when new lines appear
+  useEffect(() => {
+    if (logEndRef.current && isLiveViewing) {
+      logEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [logLines, isLiveViewing]);
+
+  // Polling logic
+  const startPolling = useCallback((component: string, date: string, filename: string) => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+
+    sinceLineRef.current = 0;
+    setLogLines([]);
+    setIsLiveViewing(true);
+
+    const poll = async () => {
+      try {
+        const data = await tailLog(component, date, filename, sinceLineRef.current);
+        if (data.lines?.length > 0) {
+          setLogLines(prev => [...prev, ...data.lines]);
+          sinceLineRef.current += data.lines.length;
+        }
+      } catch {
+        // File may not exist yet, keep polling
+      }
+    };
+
+    // First poll immediately
+    poll();
+    intervalRef.current = setInterval(poll, 2000);
+  }, [sinceLineRef]);
+
+  const stopPolling = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    setIsLiveViewing(false);
+  }, []);
+
+  // Auto-stop polling when job finishes
+  useEffect(() => {
+    if (!isLiveViewing || !liveLog) return;
+    const jobStillRunning = running?.some((j: any) => j.mode === liveLog.mode && j.alive);
+    // Only stop if we've been polling for a while and job is gone
+    if (running && !jobStillRunning && logLines.length > 0) {
+      // Give it a few more seconds to flush final lines
+      const timeout = setTimeout(() => stopPolling(), 5000);
+      return () => clearTimeout(timeout);
+    }
+  }, [running, isLiveViewing, liveLog, logLines.length, stopPolling]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, []);
 
   const trigger = useMutation({
     mutationFn: (mode: string) => triggerJob(mode),
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['admin-running-jobs'] });
+      // Start live log viewing
+      if (data?.component && data?.date && data?.filename) {
+        setLiveLog({ component: data.component, date: data.date, filename: data.filename, mode: data.mode });
+        startPolling(data.component, data.date, data.filename);
+      }
     },
   });
 
@@ -289,9 +378,9 @@ function JobTrigger() {
           </button>
         </div>
 
-        {trigger.isSuccess && (
+        {trigger.isSuccess && !isLiveViewing && (
           <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-3 py-2 rounded-md text-sm">
-            Job <strong>{trigger.data?.mode}</strong> triggered (PID: {trigger.data?.pid}). Check Telegram for progress.
+            Job <strong>{trigger.data?.mode}</strong> triggered (PID: {trigger.data?.pid}).
           </div>
         )}
         {trigger.isError && (
@@ -300,6 +389,71 @@ function JobTrigger() {
           </div>
         )}
       </div>
+
+      {/* Live Log Panel */}
+      {(isLiveViewing || logLines.length > 0) && liveLog && (
+        <div className="bg-card border border-border rounded-lg p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <h3 className="text-sm font-semibold">Live Log Output</h3>
+              {isLiveViewing && (
+                <span className="flex items-center gap-1.5 text-xs text-emerald-400">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  Streaming — {liveLog.mode}
+                </span>
+              )}
+              {!isLiveViewing && (
+                <span className="text-xs text-muted-foreground">Stopped</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">{logLines.length} lines</span>
+              {isLiveViewing ? (
+                <button
+                  onClick={stopPolling}
+                  className="px-2 py-1 text-xs bg-red-500/20 text-red-400 border border-red-500/30 rounded hover:bg-red-500/30"
+                >
+                  Stop
+                </button>
+              ) : (
+                <button
+                  onClick={() => startPolling(liveLog.component, liveLog.date, liveLog.filename)}
+                  className="px-2 py-1 text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded hover:bg-emerald-500/30"
+                >
+                  Resume
+                </button>
+              )}
+              <button
+                onClick={() => { stopPolling(); setLogLines([]); setLiveLog(null); }}
+                className="px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+
+          <pre className="bg-background border border-border rounded-lg p-3 text-xs font-mono overflow-auto max-h-[500px] whitespace-pre-wrap">
+            {logLines.length === 0 ? (
+              <span className="text-muted-foreground">Waiting for log output...</span>
+            ) : (
+              logLines.map((line, i) => (
+                <div
+                  key={i}
+                  className={cn(
+                    'py-0.5',
+                    line.includes('ERROR') && 'text-red-400',
+                    line.includes('WARNING') && 'text-yellow-400',
+                    line.includes('SUCCESS') && 'text-emerald-400',
+                  )}
+                >
+                  {line}
+                </div>
+              ))
+            )}
+            <div ref={logEndRef} />
+          </pre>
+        </div>
+      )}
 
       {/* Running jobs */}
       <div className="bg-card border border-border rounded-lg p-4 space-y-3">
