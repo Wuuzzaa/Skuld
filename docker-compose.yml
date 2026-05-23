@@ -65,6 +65,7 @@ services:
     volumes:
       - ./logs:/app/Skuld/logs
       - ./data:/app/Skuld/data
+      - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
     networks:
       - web
