@@ -328,7 +328,7 @@ def load_historical_prices_(symbols):
                 )
 
 def load_historical_prices(symbols):
-    logger.info("Fetching historical stock prices (high, low, close) using YahooQueryScraper...")
+    logger.info(f"Fetching historical stock prices (high, low, close) for {len(symbols)} symbols using YahooQueryScraper...")
     table_name = f"{TABLE_STOCK_PRICES_YAHOO}HistoryDaily"
     # replace symbol prefix I: with ^ for indices to match yahoo format
     symbols = [symbol.replace('I:', '^') for symbol in symbols]

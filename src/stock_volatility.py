@@ -100,7 +100,7 @@ def calculate_and_store_stock_implied_volatility_history():
 
         with get_postgres_engine().begin() as connection:
             logger.info(f"Truncating {vola_history_table_name}...")
-            truncate_table(connection, vola_history_table_name)
+            truncate_table(connection, vola_history_table_name)  # delta load
             logger.info(f"Executing INSERT INTO {vola_history_table_name} (this is a single large SQL operation, may take 30-60+ min)...")
 
             # Start background monitor to confirm Postgres is still working

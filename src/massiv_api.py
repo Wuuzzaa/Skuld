@@ -276,6 +276,8 @@ def load_option_chains(symbols: List[str]):
 
     calculate_and_store_stock_implied_volatility()
 
+    _historize_data('INTC')
+
 def get_symbols(include: Optional[str] = None) -> Union[List[str], Dict[str, List[str]]]:
     """
     Returns a list or dictionary of stock symbols, indices, and symbols with options.
@@ -337,6 +339,25 @@ def load_symbols():
             if_exists="append"
         )
     logger.info(f"Loaded {len(df)} symbols with exchange and options into the database.")
+
+def _historize_data(symbol: str):
+    select = f"""
+        SELECT current_timestamp as timestamp, *
+        FROM "{TABLE_OPTION_DATA_MASSIVE}"
+        WHERE symbol = '{symbol}'
+    """
+    df = select_into_dataframe(select)
+    if df.empty:
+        logger.warning(f"No data found for symbol {symbol} to historize.")
+        return
+
+    with get_postgres_engine().begin() as connection:
+        insert_into_table(
+            connection,
+            table_name=TABLE_OPTION_DATA_MASSIVE + "HistoryHourly",
+            dataframe=df,
+            if_exists="append"
+        )
 
 if __name__ == "__main__":
     setup_logging(log_level=logging.DEBUG, console_output=True)
