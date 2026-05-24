@@ -18,9 +18,14 @@ async def get_sector_rotation(
     volatility_threshold_high: float = 0.30,
     lookback_days: int = 120,
     tail_days: int = 6,
+    rs_weight: float = 0.60,
+    momentum_weight: float = 0.40,
+    mps_long_months: int = 8,
+    mps_short_months: int = 6,
+    allocated_capital: float = 0.0,
     current_user: dict = Depends(get_current_user),
 ):
-    """Calculate sector rotation RS-Ratio and RS-Momentum."""
+    """Calculate sector rotation RS-Ratio, RS-Momentum, RRG Score, MPS, and SMA200 signals."""
     import sys
     from pathlib import Path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
@@ -40,6 +45,11 @@ async def get_sector_rotation(
         volatility_threshold_high=volatility_threshold_high,
         lookback_days=lookback_days,
         tail_days=tail_days,
+        rs_weight=rs_weight,
+        momentum_weight=momentum_weight,
+        mps_long_months=mps_long_months,
+        mps_short_months=mps_short_months,
+        allocated_capital=allocated_capital,
     )
 
     price_history = load_sector_rotation_price_history(parameters)
@@ -48,7 +58,7 @@ async def get_sector_rotation(
     if rotation_data.empty:
         return {"snapshot": [], "timeseries": []}
 
-    snapshot = build_latest_sector_snapshot(rotation_data)
+    snapshot = build_latest_sector_snapshot(rotation_data, parameters)
 
     return {
         "snapshot": df_to_json_safe(snapshot),

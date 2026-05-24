@@ -32,16 +32,30 @@ const QUADRANT_COLORS: Record<string, string> = {
   Improving: '#2E7D32',
 };
 
+const MPS_COLORS: Record<string, string> = {
+  strong: '#2e8b57',
+  moderate: '#f39c12',
+  weak: '#c0392b',
+};
+
 interface RotationPoint {
   date: string;
   symbol: string;
   sector_name: string;
+  etf_name?: string;
+  isin?: string;
   rs_ratio: number;
   rs_momentum: number;
   historical_volatility: number;
   volatility_signal: string;
   quadrant: string;
   volatility_pct?: number;
+  rrg_score?: number;
+  mps_score?: number;
+  mps_signal?: string;
+  sma200_signal?: string;
+  above_sma200?: boolean;
+  investment_amount?: number;
 }
 
 export default function SectorRotationPage() {
@@ -51,6 +65,11 @@ export default function SectorRotationPage() {
     volatility_window: 20,
     lookback_days: 120,
     tail_days: 6,
+    rs_weight: 0.60,
+    momentum_weight: 0.40,
+    mps_long_months: 8,
+    mps_short_months: 6,
+    allocated_capital: 0,
   });
   const [showFilters, setShowFilters] = useState(false);
 
@@ -121,9 +140,51 @@ export default function SectorRotationPage() {
       sortable: true,
       format: (v: string) => <span className="font-semibold text-foreground">{v}</span>,
     },
-    { key: 'sector_name', label: 'Sector', sortable: true },
-    { key: 'rs_ratio', label: 'RS-Ratio', format: (v: number) => formatNumber(v), sortable: true, align: 'right' },
-    { key: 'rs_momentum', label: 'RS-Mom.', format: (v: number) => formatNumber(v), sortable: true, align: 'right' },
+    { key: 'sector_name', label: 'Sektor', sortable: true },
+    { key: 'etf_name', label: 'ETF Name', sortable: true,
+      format: (v: string) => <span className="text-xs text-muted-foreground truncate max-w-[180px] inline-block" title={v}>{v}</span>,
+    },
+    { key: 'rs_ratio', label: 'Rel. Stärke', format: (v: number) => formatNumber(v), sortable: true, align: 'right' },
+    { key: 'rs_momentum', label: 'Momentum', format: (v: number) => formatNumber(v), sortable: true, align: 'right' },
+    {
+      key: 'rrg_score',
+      label: 'RRG Score',
+      sortable: true,
+      align: 'right',
+      format: (v: number) => v != null ? <span className="font-semibold">{v.toFixed(2)}</span> : '—',
+    },
+    {
+      key: 'mps_signal',
+      label: 'Persistenz',
+      sortable: true,
+      format: (v: string, row: any) => {
+        const color = MPS_COLORS[v] || '#999';
+        const label = v === 'strong' ? 'Stark' : v === 'moderate' ? 'Moderat' : 'Schwach';
+        const months = row?.mps_score != null ? ` (${Math.abs(row.mps_score).toFixed(0)}M)` : '';
+        return (
+          <span className="inline-flex items-center gap-1">
+            <span className="w-2.5 h-2.5 rounded-full" style={{ background: color }} />
+            <span className="text-xs" style={{ color }}>{label}{months}</span>
+          </span>
+        );
+      },
+    },
+    {
+      key: 'sma200_signal',
+      label: '200T',
+      sortable: true,
+      format: (v: string) => {
+        const isAbove = v === 'Gruen';
+        return (
+          <span className="inline-flex items-center gap-1">
+            <span className="w-2.5 h-2.5 rounded-full" style={{ background: isAbove ? '#2e8b57' : '#c0392b' }} />
+            <span className="text-xs" style={{ color: isAbove ? '#2e8b57' : '#c0392b' }}>
+              {isAbove ? 'Über' : 'Unter'}
+            </span>
+          </span>
+        );
+      },
+    },
     {
       key: 'quadrant',
       label: 'Quadrant',
@@ -152,6 +213,13 @@ export default function SectorRotationPage() {
       align: 'right',
       format: (v: number) => v != null ? `${v.toFixed(1)}%` : '—',
     },
+    {
+      key: 'investment_amount',
+      label: 'Invest. (€)',
+      sortable: true,
+      align: 'right',
+      format: (v: number) => v > 0 ? `€${v.toLocaleString('de-DE', { maximumFractionDigits: 0 })}` : '—',
+    },
   ];
 
   const [hoveredSymbol, setHoveredSymbol] = useState<string | null>(null);
@@ -161,7 +229,7 @@ export default function SectorRotationPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold">Relative Rotation Graph</h1>
+          <h1 className="text-2xl font-bold">Sektorrotation (RRG)</h1>
           {isFetching && <div className="w-2 h-2 rounded-full bg-pink-400 animate-pulse" />}
           <span className="text-xs text-muted-foreground bg-secondary/60 px-2 py-0.5 rounded-full">Benchmark: SPY</span>
         </div>
@@ -171,14 +239,14 @@ export default function SectorRotationPage() {
             showFilters ? 'bg-primary/20 text-primary border border-primary/30' : 'bg-secondary/60 text-muted-foreground border border-border/50 hover:text-foreground'
           }`}
         >
-          <Filter className="w-3 h-3" /> Parameters
+          <Filter className="w-3 h-3" /> Parameter
         </button>
       </div>
 
       {/* Parameters */}
       {showFilters && (
         <Card className="border-pink-500/20">
-          <CardContent className="pt-4">
+          <CardContent className="pt-4 space-y-3">
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
               <div>
                 <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Short WMA (P1)</label>
@@ -201,18 +269,40 @@ export default function SectorRotationPage() {
                 <Input type="number" value={params.tail_days} onChange={(e) => setParams({ ...params, tail_days: +e.target.value })} className="h-8 mt-1" />
               </div>
             </div>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              <div>
+                <label className="text-[11px] text-muted-foreground uppercase tracking-wider">RS Gewicht (%)</label>
+                <Input type="number" step="0.05" min="0" max="1" value={params.rs_weight} onChange={(e) => setParams({ ...params, rs_weight: +e.target.value, momentum_weight: +(1 - +e.target.value).toFixed(2) })} className="h-8 mt-1" />
+              </div>
+              <div>
+                <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Mom. Gewicht (%)</label>
+                <Input type="number" step="0.05" min="0" max="1" value={params.momentum_weight} onChange={(e) => setParams({ ...params, momentum_weight: +e.target.value, rs_weight: +(1 - +e.target.value).toFixed(2) })} className="h-8 mt-1" />
+              </div>
+              <div>
+                <label className="text-[11px] text-muted-foreground uppercase tracking-wider">MPS Lang (Mon.)</label>
+                <Input type="number" value={params.mps_long_months} onChange={(e) => setParams({ ...params, mps_long_months: +e.target.value })} className="h-8 mt-1" />
+              </div>
+              <div>
+                <label className="text-[11px] text-muted-foreground uppercase tracking-wider">MPS Kurz (Mon.)</label>
+                <Input type="number" value={params.mps_short_months} onChange={(e) => setParams({ ...params, mps_short_months: +e.target.value })} className="h-8 mt-1" />
+              </div>
+              <div>
+                <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Kapital (€)</label>
+                <Input type="number" value={params.allocated_capital} onChange={(e) => setParams({ ...params, allocated_capital: +e.target.value })} className="h-8 mt-1" placeholder="0 = aus" />
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}
 
       {isLoading ? (
-        <LoadingState message="Calculating sector rotation..." />
+        <LoadingState message="Berechne Sektorrotation..." />
       ) : (
         <>
           {/* Quadrant Legend */}
           <div className="flex flex-wrap gap-4">
             <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              <span className="font-medium text-foreground/70">Quadrants:</span>
+              <span className="font-medium text-foreground/70">Quadranten:</span>
               {Object.entries(QUADRANT_COLORS).map(([q, c]) => (
                 <span key={q} className="inline-flex items-center gap-1">
                   <span className="w-2.5 h-2.5 rounded-sm" style={{ background: c }} />
@@ -221,10 +311,16 @@ export default function SectorRotationPage() {
               ))}
             </div>
             <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              <span className="font-medium text-foreground/70">Volatility:</span>
+              <span className="font-medium text-foreground/70">Volatilität:</span>
               <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full" style={{ background: VOLATILITY_COLORS.Gruen }} />Low</span>
               <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full" style={{ background: VOLATILITY_COLORS.Orange }} />Medium</span>
               <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full" style={{ background: VOLATILITY_COLORS.Rot }} />High</span>
+            </div>
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <span className="font-medium text-foreground/70">Persistenz:</span>
+              <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full" style={{ background: MPS_COLORS.strong }} />Stark ({params.mps_long_months}M+)</span>
+              <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full" style={{ background: MPS_COLORS.moderate }} />Moderat ({params.mps_short_months}M+)</span>
+              <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full" style={{ background: MPS_COLORS.weak }} />Schwach</span>
             </div>
           </div>
 
@@ -354,7 +450,7 @@ export default function SectorRotationPage() {
                         </text>
                         {/* Tooltip on hover */}
                         {isHovered && (
-                          <title>{`${s.symbol} (${s.sector_name})\nRS-Ratio: ${s.rs_ratio?.toFixed(2)}\nRS-Momentum: ${s.rs_momentum?.toFixed(2)}\nHV: ${(s.volatility_pct ?? s.historical_volatility * 100)?.toFixed(1)}%\nQuadrant: ${s.quadrant}`}</title>
+                          <title>{`${s.symbol} (${s.sector_name})\nRRG Score: ${s.rrg_score?.toFixed(2)}\nRS-Ratio: ${s.rs_ratio?.toFixed(2)}\nRS-Momentum: ${s.rs_momentum?.toFixed(2)}\nHV: ${(s.volatility_pct ?? s.historical_volatility * 100)?.toFixed(1)}%\nQuadrant: ${s.quadrant}\n200T: ${s.sma200_signal === 'Gruen' ? 'Über SMA200' : 'Unter SMA200'}\nPersistenz: ${s.mps_signal} (${Math.abs(s.mps_score || 0).toFixed(0)}M)`}</title>
                         )}
                       </g>
                     );
@@ -364,11 +460,11 @@ export default function SectorRotationPage() {
             </Card>
           )}
 
-          {/* Table */}
+          {/* Table - sorted by RRG Score */}
           <DataTable
             data={snapshot}
             columns={columns}
-            defaultSort={{ key: 'rs_ratio', direction: 'desc' }}
+            defaultSort={{ key: 'rrg_score', direction: 'desc' }}
             striped
           />
         </>

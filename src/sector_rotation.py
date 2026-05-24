@@ -8,17 +8,17 @@ import plotly.graph_objects as go
 
 
 SECTOR_ETFS = {
-    "XLC": "Kommunikation",
-    "XLY": "Nicht-Basiskonsumgueter",
-    "XLP": "Basiskonsumgueter",
-    "XLE": "Energie",
-    "XLF": "Finanzen",
-    "XLV": "Gesundheit",
-    "XLI": "Industrie",
-    "XLB": "Materialien",
-    "XLRE": "Immobilien",
-    "XLK": "Technologie",
-    "XLU": "Versorger",
+    "XLC": {"name": "Kommunikation", "full_name": "Communication Services Select Sector SPDR Fund", "isin": "US81369Y8030"},
+    "XLY": {"name": "Nicht-Basiskonsumgueter", "full_name": "Consumer Discretionary Select Sector SPDR Fund", "isin": "US81369Y5069"},
+    "XLP": {"name": "Basiskonsumgueter", "full_name": "Consumer Staples Select Sector SPDR Fund", "isin": "US81369Y7070"},
+    "XLE": {"name": "Energie", "full_name": "Energy Select Sector SPDR Fund", "isin": "US81369Y2033"},
+    "XLF": {"name": "Finanzen", "full_name": "Financial Select Sector SPDR Fund", "isin": "US81369Y4016"},
+    "XLV": {"name": "Gesundheit", "full_name": "Health Care Select Sector SPDR Fund", "isin": "US81369Y2090"},
+    "XLI": {"name": "Industrie", "full_name": "Industrial Select Sector SPDR Fund", "isin": "US81369Y3056"},
+    "XLB": {"name": "Materialien", "full_name": "Materials Select Sector SPDR Fund", "isin": "US81369Y1001"},
+    "XLRE": {"name": "Immobilien", "full_name": "Real Estate Select Sector SPDR Fund", "isin": "US81369Y8618"},
+    "XLK": {"name": "Technologie", "full_name": "Technology Select Sector SPDR Fund", "isin": "US81369Y6059"},
+    "XLU": {"name": "Versorger", "full_name": "Utilities Select Sector SPDR Fund", "isin": "US81369Y8865"},
 }
 
 VOLATILITY_COLORS = {
@@ -47,6 +47,16 @@ class RotationParameters:
     volatility_threshold_high: float = 0.30
     lookback_days: int = 120
     tail_days: int = 6
+    # RRG Score weights (must sum to 1.0)
+    rs_weight: float = 0.60
+    momentum_weight: float = 0.40
+    # Momentum Persistence Score (MPS) — consecutive months above/below 100
+    mps_long_months: int = 8   # months required for "strong" persistence
+    mps_short_months: int = 6  # months required for "moderate" persistence
+    # Capital allocation
+    allocated_capital: float = 0.0  # total capital to allocate (0 = disabled)
+    # SMA200 lookback (needs more history)
+    sma200_days: int = 200
 
 
 def required_history_length(parameters: RotationParameters) -> int:
@@ -72,7 +82,9 @@ def load_sector_rotation_price_history(parameters: RotationParameters) -> pd.Dat
     from src.database import select_into_dataframe
 
     symbols = [parameters.benchmark_symbol, *SECTOR_ETFS.keys()]
-    query = build_sector_rotation_query(symbols=symbols, lookback_days=parameters.lookback_days)
+    # Use max of lookback_days and sma200_days + buffer to ensure SMA200 can be computed
+    effective_lookback = max(parameters.lookback_days, parameters.sma200_days + 30)
+    query = build_sector_rotation_query(symbols=symbols, lookback_days=effective_lookback)
     return select_into_dataframe(query=query)
 
 
@@ -144,10 +156,11 @@ def calculate_sector_rotation(
     benchmark_prices = pivot[parameters.benchmark_symbol]
     results: list[pd.DataFrame] = []
 
-    for symbol, sector_name in SECTOR_ETFS.items():
+    for symbol, sector_info in SECTOR_ETFS.items():
         if symbol not in pivot.columns:
             continue
 
+        sector_name = sector_info["name"]
         sector_prices = pivot[symbol]
         rs_raw = sector_prices / benchmark_prices
         rs_smooth = rolling_wma(rs_raw, parameters.short_window)
@@ -163,11 +176,17 @@ def calculate_sector_rotation(
             min_periods=parameters.volatility_window,
         ).std() * np.sqrt(252)
 
+        # SMA200 signal
+        sma200 = sector_prices.rolling(window=parameters.sma200_days, min_periods=parameters.sma200_days).mean()
+        sma200_signal = sector_prices > sma200  # True = above SMA200
+
         symbol_frame = pd.DataFrame(
             {
                 "date": pivot.index,
                 "symbol": symbol,
                 "sector_name": sector_name,
+                "etf_name": sector_info["full_name"],
+                "isin": sector_info["isin"],
                 "benchmark_symbol": parameters.benchmark_symbol,
                 "price": sector_prices,
                 "benchmark_price": benchmark_prices,
@@ -179,6 +198,8 @@ def calculate_sector_rotation(
                 "rs_ratio_smooth": rs_ratio_smooth,
                 "rs_momentum": rs_momentum,
                 "historical_volatility": historical_volatility,
+                "sma200": sma200,
+                "above_sma200": sma200_signal,
             }
         )
         symbol_frame["volatility_signal"] = symbol_frame["historical_volatility"].apply(
@@ -197,6 +218,8 @@ def calculate_sector_rotation(
                 "date",
                 "symbol",
                 "sector_name",
+                "etf_name",
+                "isin",
                 "benchmark_symbol",
                 "price",
                 "benchmark_price",
@@ -208,17 +231,87 @@ def calculate_sector_rotation(
                 "rs_ratio_smooth",
                 "rs_momentum",
                 "historical_volatility",
+                "sma200",
+                "above_sma200",
                 "volatility_signal",
                 "quadrant",
+                "rrg_score",
+                "mps_score",
+                "mps_signal",
+                "sma200_signal",
             ]
         )
 
     rotation = pd.concat(results, ignore_index=True)
     rotation = rotation.dropna(subset=["rs_ratio", "rs_momentum"]).reset_index(drop=True)
+
+    # Calculate weighted RRG Score (normalized: RS-Ratio and Momentum centered at 100)
+    rotation["rrg_score"] = (
+        parameters.rs_weight * rotation["rs_ratio"]
+        + parameters.momentum_weight * rotation["rs_momentum"]
+    )
+
+    # Calculate Momentum Persistence Score (MPS)
+    # MPS counts consecutive months where RS-Ratio stays in same direction (above or below 100)
+    rotation = _calculate_mps(rotation, parameters)
+
     return rotation
 
 
-def build_latest_sector_snapshot(rotation_data: pd.DataFrame) -> pd.DataFrame:
+def _calculate_mps(rotation: pd.DataFrame, parameters: RotationParameters) -> pd.DataFrame:
+    """Calculate Momentum Persistence Score per symbol.
+
+    MPS = number of consecutive months the RS-Ratio has been above (positive) or below (negative) 100.
+    Signal: 'strong' if |MPS| >= mps_long_months, 'moderate' if >= mps_short_months, else 'weak'.
+    """
+    trading_days_per_month = 21
+    rotation["mps_score"] = 0
+    rotation["mps_signal"] = "weak"
+
+    for symbol in rotation["symbol"].unique():
+        mask = rotation["symbol"] == symbol
+        symbol_data = rotation.loc[mask].sort_values("date")
+
+        if symbol_data.empty:
+            continue
+
+        # Sample monthly (every ~21 trading days) to count consecutive months
+        rs_ratio_values = symbol_data["rs_ratio"].values
+        dates = symbol_data["date"].values
+
+        # Count consecutive days above/below 100 at the end of the series, convert to months
+        if len(rs_ratio_values) == 0:
+            continue
+
+        latest_above = rs_ratio_values[-1] >= 100
+        consecutive_days = 0
+        for i in range(len(rs_ratio_values) - 1, -1, -1):
+            if (rs_ratio_values[i] >= 100) == latest_above:
+                consecutive_days += 1
+            else:
+                break
+
+        consecutive_months = consecutive_days / trading_days_per_month
+        mps_value = consecutive_months if latest_above else -consecutive_months
+
+        # Determine signal
+        abs_months = abs(mps_value)
+        if abs_months >= parameters.mps_long_months:
+            signal = "strong"
+        elif abs_months >= parameters.mps_short_months:
+            signal = "moderate"
+        else:
+            signal = "weak"
+
+        # Assign to latest row only (snapshot use)
+        latest_idx = symbol_data.index[-1]
+        rotation.loc[latest_idx, "mps_score"] = round(mps_value, 1)
+        rotation.loc[latest_idx, "mps_signal"] = signal
+
+    return rotation
+
+
+def build_latest_sector_snapshot(rotation_data: pd.DataFrame, parameters: RotationParameters | None = None) -> pd.DataFrame:
     if rotation_data.empty:
         return rotation_data.copy()
 
@@ -226,10 +319,26 @@ def build_latest_sector_snapshot(rotation_data: pd.DataFrame) -> pd.DataFrame:
         rotation_data.sort_values(["symbol", "date"])
         .groupby("symbol", as_index=False)
         .tail(1)
-        .sort_values("rs_ratio", ascending=False)
+        .sort_values("rrg_score", ascending=False)
         .reset_index(drop=True)
     )
     latest_snapshot["volatility_pct"] = latest_snapshot["historical_volatility"] * 100
+
+    # SMA200 signal as traffic light: "Gruen" (above), "Rot" (below)
+    latest_snapshot["sma200_signal"] = latest_snapshot["above_sma200"].apply(
+        lambda x: "Gruen" if x else "Rot"
+    )
+
+    # Capital allocation (equal weight among "Leading" quadrant ETFs, or all if none leading)
+    if parameters and parameters.allocated_capital > 0:
+        leading_mask = latest_snapshot["quadrant"] == "Leading"
+        eligible = latest_snapshot[leading_mask] if leading_mask.any() else latest_snapshot
+        per_etf = parameters.allocated_capital / len(eligible)
+        latest_snapshot["investment_amount"] = 0.0
+        latest_snapshot.loc[eligible.index, "investment_amount"] = per_etf
+    else:
+        latest_snapshot["investment_amount"] = 0.0
+
     return latest_snapshot
 
 
@@ -324,7 +433,7 @@ def build_rotation_figure(rotation_data: pd.DataFrame, parameters: RotationParam
         .groupby("symbol", as_index=False)
         .tail(parameters.tail_days)
     )
-    latest_snapshot = build_latest_sector_snapshot(rotation_data)
+    latest_snapshot = build_latest_sector_snapshot(rotation_data, None)
 
     for symbol in latest_snapshot["symbol"]:
         path = tail[tail["symbol"] == symbol]
