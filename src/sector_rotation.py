@@ -82,8 +82,8 @@ def load_sector_rotation_price_history(parameters: RotationParameters) -> pd.Dat
     from src.database import select_into_dataframe
 
     symbols = [parameters.benchmark_symbol, *SECTOR_ETFS.keys()]
-    # Use max of lookback_days and sma200_days + buffer to ensure SMA200 can be computed
-    effective_lookback = max(parameters.lookback_days, parameters.sma200_days + 30)
+    # Use max of lookback_days and sma200_days + generous buffer for trading days vs calendar days
+    effective_lookback = max(parameters.lookback_days, int(parameters.sma200_days * 1.6) + 30)
     query = build_sector_rotation_query(symbols=symbols, lookback_days=effective_lookback)
     return select_into_dataframe(query=query)
 
@@ -265,7 +265,7 @@ def _calculate_mps(rotation: pd.DataFrame, parameters: RotationParameters) -> pd
     Signal: 'strong' if |MPS| >= mps_long_months, 'moderate' if >= mps_short_months, else 'weak'.
     """
     trading_days_per_month = 21
-    rotation["mps_score"] = 0
+    rotation["mps_score"] = 0.0
     rotation["mps_signal"] = "weak"
 
     for symbol in rotation["symbol"].unique():
