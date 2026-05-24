@@ -144,6 +144,9 @@ export default function SectorRotationPage() {
     { key: 'etf_name', label: 'ETF Name', sortable: true,
       format: (v: string) => <span className="text-xs text-muted-foreground truncate max-w-[180px] inline-block" title={v}>{v}</span>,
     },
+    { key: 'isin', label: 'ISIN', sortable: true,
+      format: (v: string) => <span className="text-xs text-muted-foreground font-mono">{v}</span>,
+    },
     { key: 'rs_ratio', label: 'Rel. Stärke', format: (v: number) => formatNumber(v), sortable: true, align: 'right' },
     { key: 'rs_momentum', label: 'Momentum', format: (v: number) => formatNumber(v), sortable: true, align: 'right' },
     {
