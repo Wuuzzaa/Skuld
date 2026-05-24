@@ -1,2 +1,2 @@
 DELETE FROM "StockSymbolsMassive";
-ALTER TABLE "StockSymbolsMassive" ADD COLUMN "type" TEXT;
+ALTER TABLE "StockSymbolsMassive" ADD COLUMN IF NOT EXISTS "type" TEXT;

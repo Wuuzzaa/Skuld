@@ -43,7 +43,7 @@ def calculate_and_store_stock_implied_volatility_history():
         """       
 
         with get_postgres_engine().begin() as connection:
-            truncate_table(connection, vola_history_table_name)
+            truncate_table(connection, vola_history_table_name) # delta load
             execute_sql(connection, sql, vola_history_table_name, "INSERT", "Calculating and storing stock implied volatility history")
             logger.info(f"[PostgreSQL] Successfully executed SQL query and stored implied volatility history.")
 

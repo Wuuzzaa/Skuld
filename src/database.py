@@ -398,6 +398,7 @@ def _run_migrations_for_engine(engine):
                 with connection.begin():
                     for statement in statements:
                         try:
+                            logger.debug(f"[{label}] Executing statement from {migration_file}:\n{text(statement)}")
                             connection.execute(text(statement))
                         except Exception as e:
                             logger.error(f"[{label}] Error applying migration {migration_file}: \n{e}")
