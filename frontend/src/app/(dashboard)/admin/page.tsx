@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
 import { LoadingState } from '@/components/ui/spinner';
@@ -71,7 +71,14 @@ async function getSchedule() {
   return data;
 }
 
-type Tab = 'logs' | 'jobs' | 'activity';
+async function getJobHistory(days: number, modeFilter: string) {
+  const { data } = await api.get('/admin/jobs/history', {
+    params: { days, mode_filter: modeFilter || undefined },
+  });
+  return data;
+}
+
+type Tab = 'logs' | 'jobs' | 'activity' | 'history';
 
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<Tab>('jobs');
@@ -82,7 +89,7 @@ export default function AdminPage() {
 
       {/* Tab buttons */}
       <div className="flex gap-1 border-b border-border pb-0">
-        {(['jobs', 'logs', 'activity'] as Tab[]).map((tab) => (
+        {(['jobs', 'history', 'logs', 'activity'] as Tab[]).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -93,13 +100,14 @@ export default function AdminPage() {
                 : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
             )}
           >
-            {tab === 'logs' ? 'Log Viewer' : tab === 'jobs' ? 'Trigger Jobs' : 'Recent Activity'}
+            {tab === 'logs' ? 'Log Viewer' : tab === 'jobs' ? 'Trigger Jobs' : tab === 'history' ? 'Job History' : 'Recent Activity'}
           </button>
         ))}
       </div>
 
       {activeTab === 'logs' && <LogViewer />}
       {activeTab === 'jobs' && <JobTrigger />}
+      {activeTab === 'history' && <JobHistory />}
       {activeTab === 'activity' && <ActivityView />}
     </div>
   );
@@ -654,6 +662,174 @@ function ActivityView() {
         </div>
       ) : (
         <p className="text-muted-foreground text-sm">No activity in the selected time range.</p>
+      )}
+    </div>
+  );
+}
+
+// ==============================================================================
+// JOB HISTORY
+// ==============================================================================
+function JobHistory() {
+  const [days, setDays] = useState(14);
+  const [modeFilter, setModeFilter] = useState('');
+  const [expandedRow, setExpandedRow] = useState<number | null>(null);
+
+  const { data: history, isLoading } = useQuery({
+    queryKey: ['admin-job-history', days, modeFilter],
+    queryFn: () => getJobHistory(days, modeFilter),
+  });
+
+  const statusBadge = (status: string) => {
+    const styles: Record<string, string> = {
+      success: 'bg-emerald-500/20 text-emerald-400',
+      failed: 'bg-red-500/20 text-red-400',
+      partial: 'bg-yellow-500/20 text-yellow-400',
+      timeout: 'bg-orange-500/20 text-orange-400',
+      oom: 'bg-red-500/20 text-red-400',
+      unknown: 'bg-zinc-500/20 text-zinc-400',
+    };
+    const labels: Record<string, string> = {
+      success: 'OK',
+      failed: 'FAILED',
+      partial: 'PARTIAL',
+      timeout: 'TIMEOUT',
+      oom: 'OOM',
+      unknown: '?',
+    };
+    return (
+      <span className={cn('px-1.5 py-0.5 rounded text-xs font-medium', styles[status] || styles.unknown)}>
+        {labels[status] || status}
+      </span>
+    );
+  };
+
+  const formatDuration = (seconds: number | null) => {
+    if (seconds == null) return '-';
+    if (seconds >= 3600) return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+    if (seconds >= 60) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+    return `${seconds}s`;
+  };
+
+  // Stats
+  const totalRuns = history?.length || 0;
+  const successRuns = history?.filter((h: any) => h.status === 'success').length || 0;
+  const failedRuns = history?.filter((h: any) => ['failed', 'timeout', 'oom'].includes(h.status)).length || 0;
+  const modes = [...new Set(history?.map((h: any) => h.mode) || [])].sort();
+
+  return (
+    <div className="space-y-4">
+      {/* Filters */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs text-muted-foreground mb-1 block">Time Range</label>
+          <select
+            value={days}
+            onChange={(e) => setDays(Number(e.target.value))}
+            className="w-full bg-card border border-border rounded-md px-3 py-2 text-sm"
+          >
+            <option value={3}>Last 3 days</option>
+            <option value={7}>Last 7 days</option>
+            <option value={14}>Last 14 days</option>
+            <option value={30}>Last 30 days</option>
+          </select>
+        </div>
+        <div>
+          <label className="text-xs text-muted-foreground mb-1 block">Job Mode</label>
+          <select
+            value={modeFilter}
+            onChange={(e) => setModeFilter(e.target.value)}
+            className="w-full bg-card border border-border rounded-md px-3 py-2 text-sm"
+          >
+            <option value="">All modes</option>
+            {modes.map((m: string) => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {/* Stats cards */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="bg-card border border-border rounded-lg p-3 text-center">
+          <p className="text-2xl font-bold">{totalRuns}</p>
+          <p className="text-xs text-muted-foreground">Total Runs</p>
+        </div>
+        <div className="bg-card border border-border rounded-lg p-3 text-center">
+          <p className="text-2xl font-bold text-emerald-400">{successRuns}</p>
+          <p className="text-xs text-muted-foreground">Successful</p>
+        </div>
+        <div className="bg-card border border-border rounded-lg p-3 text-center">
+          <p className="text-2xl font-bold text-red-400">{failedRuns}</p>
+          <p className="text-xs text-muted-foreground">Failed</p>
+        </div>
+      </div>
+
+      {/* History table */}
+      {isLoading ? (
+        <LoadingState message="Loading job history..." />
+      ) : history?.length ? (
+        <div className="overflow-auto max-h-[600px] border border-border rounded-lg">
+          <table className="w-full text-sm">
+            <thead className="bg-card sticky top-0">
+              <tr className="border-b border-border">
+                <th className="text-left px-3 py-2 text-xs text-muted-foreground">Date</th>
+                <th className="text-left px-3 py-2 text-xs text-muted-foreground">Started</th>
+                <th className="text-left px-3 py-2 text-xs text-muted-foreground">Mode</th>
+                <th className="text-left px-3 py-2 text-xs text-muted-foreground">Status</th>
+                <th className="text-right px-3 py-2 text-xs text-muted-foreground">Duration</th>
+                <th className="text-right px-3 py-2 text-xs text-muted-foreground">Lines</th>
+                <th className="text-right px-3 py-2 text-xs text-muted-foreground">Size</th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.map((run: any, i: number) => {
+                const startTime = new Date(run.started_at).toLocaleTimeString('de-DE', {
+                  hour: '2-digit', minute: '2-digit',
+                });
+                return (
+                  <React.Fragment key={i}>
+                    <tr
+                      className={cn(
+                        'border-b border-border/50 hover:bg-accent/30 cursor-pointer',
+                        expandedRow === i && 'bg-accent/20'
+                      )}
+                      onClick={() => setExpandedRow(expandedRow === i ? null : i)}
+                    >
+                      <td className="px-3 py-1.5 font-mono text-xs">{run.date}</td>
+                      <td className="px-3 py-1.5 font-mono text-xs">{startTime}</td>
+                      <td className="px-3 py-1.5">
+                        <span className="font-mono text-xs">{run.mode}</span>
+                      </td>
+                      <td className="px-3 py-1.5">{statusBadge(run.status)}</td>
+                      <td className="px-3 py-1.5 text-right font-mono text-xs">
+                        {formatDuration(run.duration_seconds)}
+                      </td>
+                      <td className="px-3 py-1.5 text-right text-xs text-muted-foreground">
+                        {run.total_lines?.toLocaleString()}
+                      </td>
+                      <td className="px-3 py-1.5 text-right text-xs text-muted-foreground">
+                        {run.file_size_kb} KB
+                      </td>
+                    </tr>
+                    {expandedRow === i && run.error_summary && (
+                      <tr className="border-b border-border/50">
+                        <td colSpan={7} className="px-3 py-2">
+                          <div className="bg-red-500/5 border border-red-500/20 rounded-md p-3">
+                            <p className="text-xs font-medium text-red-400 mb-1">Errors:</p>
+                            <pre className="text-xs font-mono text-red-300/80 whitespace-pre-wrap">
+                              {run.error_summary}
+                            </pre>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="text-muted-foreground text-sm">No job runs found in the selected time range.</p>
       )}
     </div>
   );
