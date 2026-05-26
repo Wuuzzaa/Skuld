@@ -715,7 +715,9 @@ function JobHistory() {
   const totalRuns = history?.length || 0;
   const successRuns = history?.filter((h: any) => h.status === 'success').length || 0;
   const failedRuns = history?.filter((h: any) => ['failed', 'timeout', 'oom'].includes(h.status)).length || 0;
-  const modes = [...new Set(history?.map((h: any) => h.mode) || [])].sort();
+  const modes: string[] = history
+    ? [...new Set(history.map((h: any) => h.mode))] as string[]
+    : [];
 
   return (
     <div className="space-y-4">
