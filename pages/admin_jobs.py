@@ -421,8 +421,13 @@ with tab_history:
 
     # Parse log files locally (same shared Docker volume as Log Viewer)
     cutoff_date = (datetime.now() - timedelta(days=history_days)).strftime("%Y-%m-%d")
-    log_components = ["data_collector", "historization"]
     history_entries = []
+
+    # Scan all component directories (dynamic, same as Log Viewer)
+    if LOGS_BASE.exists():
+        log_components = [d.name for d in LOGS_BASE.iterdir() if d.is_dir()]
+    else:
+        log_components = []
 
     for component in log_components:
         comp_dir = LOGS_BASE / component
@@ -470,20 +475,20 @@ with tab_history:
                 if history_mode_filter != "All" and mode != history_mode_filter:
                     continue
 
-                # Status detection from tail
+                # Status detection from tail (aligned with pipeline_monitor.py output)
                 status = "unknown"
-                if re.search(r"All tasks completed successfully|[✓✅].*success", tail_joined, re.IGNORECASE):
+                if re.search(r"✗.*ABORTED|Pipeline ABORTED", tail_joined):
+                    status = "failed"
+                elif re.search(r"Out of Memory|Exit Code 137", tail_joined, re.IGNORECASE):
+                    status = "oom"
+                elif re.search(r"timed out", tail_joined, re.IGNORECASE):
+                    status = "timeout"
+                elif re.search(r"⚠.*finished with.*failure", tail_joined):
+                    status = "partial"
+                elif re.search(r"✓.*All tasks completed successfully", tail_joined):
                     status = "success"
                 elif re.search(r"Historization Pipeline Completed Successfully", tail_joined):
                     status = "success"
-                elif re.search(r"ABORTED|FAILED|Pipeline Failed", tail_joined):
-                    status = "failed"
-                elif re.search(r"with failures", tail_joined, re.IGNORECASE) or "⚠" in tail_joined:
-                    status = "partial"
-                elif re.search(r"timed out", tail_joined, re.IGNORECASE):
-                    status = "timeout"
-                elif re.search(r"Out of Memory|Exit Code 137", tail_joined, re.IGNORECASE):
-                    status = "oom"
 
                 # Duration extraction
                 duration_seconds = None
@@ -512,6 +517,7 @@ with tab_history:
                     "total_lines": total_lines,
                     "file_size_kb": file_size_kb,
                     "error_summary": error_summary,
+                    "log_path": str(log_file),
                 })
 
     # Sort by date + started descending
@@ -580,15 +586,38 @@ with tab_history:
         styled_df = df_history.style.map(_color_status, subset=["Status"])
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
-        # Expandable error details for failed jobs
-        failed_jobs = [j for j in history_entries if j["error_summary"]]
-        if failed_jobs:
-            st.markdown("---")
-            st.markdown("#### Error Details")
-            for job in failed_jobs[:20]:  # limit to avoid UI overload
-                label = f"{job['date']} {job['started']} — {job['mode']} ({STATUS_LABELS.get(job['status'], '?')})"
-                with st.expander(label):
-                    st.code(job["error_summary"][:1000], language="log")
+        # Expandable log detail per job
+        st.markdown("---")
+        st.markdown("#### Job Details")
+        st.caption("Click a job to view its full log output.")
+        for idx, job in enumerate(history_entries[:50]):  # limit to avoid UI overload
+            status_label = STATUS_LABELS.get(job["status"], "?")
+            label = f"{job['date']} {job['started']} — {job['mode']} ({status_label})"
+            if job["error_summary"]:
+                label += " ⚠"
+            with st.expander(label):
+                if job["error_summary"]:
+                    st.error("**Errors found:**")
+                    st.code(job["error_summary"][:1500], language="log")
+                    st.markdown("---")
+                # Full log content
+                log_path = Path(job["log_path"])
+                if log_path.exists():
+                    try:
+                        content = log_path.read_text(encoding="utf-8", errors="replace")
+                        lines = content.splitlines()
+                        st.caption(f"{len(lines)} lines | {job.get('file_size_kb', 0):.0f} KB")
+                        # Show last 500 lines (configurable per job)
+                        max_show = st.slider(
+                            "Lines to display", 100, 2000, 500, step=100,
+                            key=f"hist_lines_{idx}"
+                        )
+                        display = lines[-max_show:] if len(lines) > max_show else lines
+                        st.code("\n".join(display), language="log")
+                    except Exception as e:
+                        st.warning(f"Error reading log: {e}")
+                else:
+                    st.info("Log file no longer available on disk.")
     else:
         st.info(f"No job runs found in the last {history_days} days.")
 
