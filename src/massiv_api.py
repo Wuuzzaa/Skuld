@@ -208,6 +208,10 @@ def _option_chains_to_dataframe(option_chains: List[dict]) -> pd.DataFrame:
     if "day_last_updated" in df.columns:
         df["day_last_updated"] = pd.to_datetime(df["day_last_updated"], unit='ns', utc=True)
 
+    # convert open_interest and shares_per_contract to BIGINT
+    df["open_interest"] = df["open_interest"].astype('Int64')
+    df["shares_per_contract"] = df["shares_per_contract"].astype('Int64')
+    
     return df
 
 async def _fetch_option_chains_tickers_async(tickers: List[str], limit: int = 250) -> List[dict]:
