@@ -18,9 +18,19 @@ from config import *
 from src.historization import run_historization_pipeline
 from src.pipeline_monitor import PipelineMonitor
 
-setup_logging(component="data_collector", log_level=logging.DEBUG, console_output=True)
+# Determine log component from mode argument (before full argparse)
+import sys
+_log_component = "data_collector"
+for i, arg in enumerate(sys.argv):
+    if arg == "--mode" and i + 1 < len(sys.argv):
+        _mode = sys.argv[i + 1]
+        if _mode == "historization":
+            _log_component = "historization"
+        break
+
+setup_logging(component=_log_component, log_level=logging.DEBUG, console_output=True)
 logger = logging.getLogger(__name__)
-logger.info("data_collector")
+logger.info(f"Log component: {_log_component}")
 
 
 def main(args):

@@ -139,7 +139,7 @@ async def trigger_job(request: TriggerJobRequest, current_user: dict = Depends(g
 
         # Determine expected log path
         now = datetime.now()
-        component = "data_collector"
+        component = "historization" if request.mode == "historization" else "data_collector"
         date_str = now.strftime("%Y-%m-%d")
         timestamp_str = now.strftime("%Y%m%d_%H%M%S")
         filename = f"{timestamp_str}_{component}.log"
@@ -397,152 +397,164 @@ async def get_job_history(
     """
     import re
 
-    component_dir = LOGS_BASE / "data_collector"
-    if not component_dir.exists():
-        return []
-
+    # Search across all log component directories
+    log_components = ["data_collector", "historization"]
     cutoff_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
     history = []
 
-    # Iterate date directories
-    try:
-        date_dirs = sorted(
-            [d for d in component_dir.iterdir() if d.is_dir() and d.name >= cutoff_date],
-            reverse=True,
-        )
-    except Exception:
-        return []
+    for log_component in log_components:
+        component_dir = LOGS_BASE / log_component
+        if not component_dir.exists():
+            continue
 
-    for date_dir in date_dirs:
+        # Iterate date directories
         try:
-            log_files = sorted(
-                [f for f in date_dir.iterdir() if f.suffix == ".log"],
+            date_dirs = sorted(
+                [d for d in component_dir.iterdir() if d.is_dir() and d.name >= cutoff_date],
                 reverse=True,
             )
         except Exception:
             continue
 
-        for log_file in log_files:
+        for date_dir in date_dirs:
             try:
-                # Extract start time from filename: YYYYMMDD_HHMMSS_data_collector.log
-                match = re.match(r"(\d{8}_\d{6})_data_collector\.log", log_file.name)
-                if not match:
-                    continue
-
-                ts_str = match.group(1)
-                started_at = datetime.strptime(ts_str, "%Y%m%d_%H%M%S")
-
-                # Read last portion of the file to determine status
-                content = log_file.read_text(encoding="utf-8", errors="replace")
-                lines = content.splitlines()
-                total_lines = len(lines)
-
-                # Determine job mode from first few lines
-                job_mode = ""
-                for line in lines[:20]:
-                    if "mode" in line.lower() or "Mode:" in line:
-                        mode_match = re.search(r"[Mm]ode[:\s=]+['\"]?(\w+)", line)
-                        if mode_match:
-                            job_mode = mode_match.group(1)
-                            break
-                    # Also check for "Starting pipeline in mode: X"
-                    if "Starting" in line and "pipeline" in line.lower():
-                        mode_match = re.search(r"mode[:\s]+(\w+)", line, re.IGNORECASE)
-                        if mode_match:
-                            job_mode = mode_match.group(1)
-                            break
-
-                # Check task lines for mode detection
-                if not job_mode:
-                    for line in lines[:50]:
-                        if "Starting:" in line:
-                            # e.g. "Starting: fetch_option_data" -> option_data
-                            if "historiz" in line.lower():
-                                job_mode = "historization"
-                            elif "option" in line.lower():
-                                job_mode = "option_data"
-                            elif "saturday" in line.lower() or "dividends" in line.lower():
-                                job_mode = "saturday_night"
-                            elif "stock_data" in line.lower() or "technical_indicators" in line.lower():
-                                job_mode = "stock_data_daily"
-                            elif "market_start" in line.lower() or "intraday" in line.lower():
-                                job_mode = "market_start_mid_end"
-                            elif "historical_prices" in line.lower():
-                                job_mode = "historical_prices"
-                            elif "historical_iv" in line.lower():
-                                job_mode = "historical_iv"
-                            elif "historical_technical" in line.lower():
-                                job_mode = "historical_technical_indicators"
-                            break
-
-                # Apply mode filter
-                if mode_filter and job_mode != mode_filter:
-                    continue
-
-                # Determine status and duration from last lines
-                status = "unknown"
-                duration_seconds = None
-                error_summary = ""
-                ended_at = None
-
-                # Look at last 30 lines for completion indicators
-                tail_lines = lines[-30:] if len(lines) > 30 else lines
-                tail_text = "\n".join(tail_lines)
-
-                if "All tasks completed successfully" in tail_text or "✓" in tail_text and "success" in tail_text.lower():
-                    status = "success"
-                elif "ABORTED" in tail_text or "FAILED" in tail_text:
-                    status = "failed"
-                elif "with failures" in tail_text.lower() or "⚠" in tail_text:
-                    status = "partial"
-                elif "timed out" in tail_text.lower():
-                    status = "timeout"
-                elif "Out of Memory" in tail_text or "Exit Code 137" in tail_text:
-                    status = "oom"
-
-                # Extract duration from report lines
-                for line in tail_lines:
-                    dur_match = re.search(r"Total Runtime:\s*(\d+)s", line)
-                    if dur_match:
-                        duration_seconds = int(dur_match.group(1))
-                        break
-
-                # If no explicit duration, estimate from last timestamp
-                if duration_seconds is None and lines:
-                    # Try to get timestamp from last line
-                    last_ts_match = re.match(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", lines[-1])
-                    if last_ts_match:
-                        try:
-                            ended_at = datetime.strptime(last_ts_match.group(1), "%Y-%m-%d %H:%M:%S")
-                            duration_seconds = int((ended_at - started_at).total_seconds())
-                        except (ValueError, OverflowError):
-                            pass
-
-                # Extract error lines (last 5 ERROR lines)
-                error_lines = [l for l in lines if "ERROR" in l][-5:]
-                if error_lines:
-                    error_summary = "\n".join(
-                        re.sub(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} - \S+ - ERROR - ", "", l)
-                        for l in error_lines
-                    )
-
-                # File size as indicator of job scope
-                file_size = log_file.stat().st_size
-
-                history.append({
-                    "date": date_dir.name,
-                    "started_at": started_at.isoformat(),
-                    "mode": job_mode or "unknown",
-                    "status": status,
-                    "duration_seconds": duration_seconds,
-                    "total_lines": total_lines,
-                    "file_size_kb": round(file_size / 1024, 1),
-                    "error_summary": error_summary[:500],  # Truncate
-                    "log_file": log_file.name,
-                })
-
-            except Exception as e:
-                logger.debug(f"Error parsing log file {log_file}: {e}")
+                log_files = sorted(
+                    [f for f in date_dir.iterdir() if f.suffix == ".log"],
+                    reverse=True,
+                )
+            except Exception:
                 continue
+
+            for log_file in log_files:
+                try:
+                    # Extract start time from filename: YYYYMMDD_HHMMSS_{component}.log
+                    match = re.match(r"(\d{8}_\d{6})_(\w+)\.log", log_file.name)
+                    if not match:
+                        continue
+
+                    ts_str = match.group(1)
+                    started_at = datetime.strptime(ts_str, "%Y%m%d_%H%M%S")
+
+                    # Read last portion of the file to determine status
+                    content = log_file.read_text(encoding="utf-8", errors="replace")
+                    lines = content.splitlines()
+                    total_lines = len(lines)
+
+                    # Determine job mode from first few lines
+                    job_mode = ""
+                    for line in lines[:20]:
+                        if "mode" in line.lower() or "Mode:" in line:
+                            mode_match = re.search(r"[Mm]ode[:\s=]+['\"]?(\w+)", line)
+                            if mode_match:
+                                job_mode = mode_match.group(1)
+                                break
+                        # Also check for "Starting pipeline in mode: X"
+                        if "Starting" in line and "pipeline" in line.lower():
+                            mode_match = re.search(r"mode[:\s]+(\w+)", line, re.IGNORECASE)
+                            if mode_match:
+                                job_mode = mode_match.group(1)
+                                break
+
+                    # Check task lines for mode detection
+                    if not job_mode:
+                        for line in lines[:50]:
+                            if "Starting:" in line:
+                                if "historiz" in line.lower():
+                                    job_mode = "historization"
+                                elif "option" in line.lower():
+                                    job_mode = "option_data"
+                                elif "saturday" in line.lower() or "dividends" in line.lower():
+                                    job_mode = "saturday_night"
+                                elif "stock_data" in line.lower() or "technical_indicators" in line.lower():
+                                    job_mode = "stock_data_daily"
+                                elif "market_start" in line.lower() or "intraday" in line.lower():
+                                    job_mode = "market_start_mid_end"
+                                elif "historical_prices" in line.lower():
+                                    job_mode = "historical_prices"
+                                elif "historical_iv" in line.lower():
+                                    job_mode = "historical_iv"
+                                elif "historical_technical" in line.lower():
+                                    job_mode = "historical_technical_indicators"
+                                break
+
+                    # If component is historization, default mode to historization
+                    if not job_mode and log_component == "historization":
+                        job_mode = "historization"
+
+                    # Apply mode filter
+                    if mode_filter and job_mode != mode_filter:
+                        continue
+
+                    # Determine status and duration from last lines
+                    status = "unknown"
+                    duration_seconds = None
+                    error_summary = ""
+                    ended_at = None
+
+                    # Look at last 30 lines for completion indicators
+                    tail_lines = lines[-30:] if len(lines) > 30 else lines
+                    tail_text = "\n".join(tail_lines)
+
+                    if "All tasks completed successfully" in tail_text or "✓" in tail_text and "success" in tail_text.lower():
+                        status = "success"
+                    elif "Historization Pipeline Completed Successfully" in tail_text:
+                        status = "success"
+                    elif "ABORTED" in tail_text or "FAILED" in tail_text or "Pipeline Failed" in tail_text:
+                        status = "failed"
+                    elif "with failures" in tail_text.lower() or "⚠" in tail_text:
+                        status = "partial"
+                    elif "timed out" in tail_text.lower():
+                        status = "timeout"
+                    elif "Out of Memory" in tail_text or "Exit Code 137" in tail_text:
+                        status = "oom"
+
+                    # Extract duration from report lines
+                    for line in tail_lines:
+                        dur_match = re.search(r"Total Runtime:\s*(\d+)s", line)
+                        if dur_match:
+                            duration_seconds = int(dur_match.group(1))
+                            break
+                        # Also match historization pipeline duration
+                        dur_match2 = re.search(r"Finished in (\d+\.?\d*)s", line)
+                        if dur_match2:
+                            duration_seconds = int(float(dur_match2.group(1)))
+                            break
+
+                    # If no explicit duration, estimate from last timestamp
+                    if duration_seconds is None and lines:
+                        last_ts_match = re.match(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", lines[-1])
+                        if last_ts_match:
+                            try:
+                                ended_at = datetime.strptime(last_ts_match.group(1), "%Y-%m-%d %H:%M:%S")
+                                duration_seconds = int((ended_at - started_at).total_seconds())
+                            except (ValueError, OverflowError):
+                                pass
+
+                    # Extract error lines (last 5 ERROR lines)
+                    error_lines = [l for l in lines if "ERROR" in l][-5:]
+                    if error_lines:
+                        error_summary = "\n".join(
+                            re.sub(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} - \S+ - ERROR - ", "", l)
+                            for l in error_lines
+                        )
+
+                    # File size as indicator of job scope
+                    file_size = log_file.stat().st_size
+
+                    history.append({
+                        "date": date_dir.name,
+                        "started_at": started_at.isoformat(),
+                        "mode": job_mode or "unknown",
+                        "status": status,
+                        "duration_seconds": duration_seconds,
+                        "total_lines": total_lines,
+                        "file_size_kb": round(file_size / 1024, 1),
+                        "error_summary": error_summary[:500],  # Truncate
+                        "log_file": log_file.name,
+                    })
+
+                except Exception as e:
+                    logger.debug(f"Error parsing log file {log_file}: {e}")
+                    continue
 
     return history
