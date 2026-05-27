@@ -5,6 +5,7 @@ Uses Docker Engine API via Unix socket to exec in skuld-backend container.
 """
 import logging
 import http.client
+import re
 import socket
 import json as json_lib
 from datetime import datetime, timedelta
@@ -141,7 +142,7 @@ def _docker_exec_output(container: str, cmd: list[str]) -> str | None:
 
 st.subheader("Admin - Job Management")
 
-tab_logs, tab_jobs, tab_activity = st.tabs(["Log Viewer", "Trigger Jobs", "Recent Activity"])
+tab_logs, tab_jobs, tab_history, tab_activity = st.tabs(["Log Viewer", "Trigger Jobs", "Job History", "Recent Activity"])
 
 # ==============================================================================
 # TAB 1: LOG VIEWER
@@ -404,7 +405,196 @@ with tab_jobs:
 
 
 # ==============================================================================
-# TAB 3: RECENT ACTIVITY (from DataChangeLogs)
+# TAB 3: JOB HISTORY (parsed from log files)
+# ==============================================================================
+with tab_history:
+    st.markdown("#### Job Run History")
+    st.caption("Parsed from log files — shows status, duration, and errors for past job runs.")
+
+    col_days, col_mode = st.columns(2)
+    with col_days:
+        history_days = st.selectbox("Time Range", [3, 7, 14, 30], index=2,
+                                    format_func=lambda d: f"Last {d} days")
+    with col_mode:
+        history_mode_filter = st.selectbox("Filter by Mode", ["All"] + JOB_MODES,
+                                           key="history_mode_filter")
+
+    # Parse log files locally (same shared Docker volume as Log Viewer)
+    cutoff_date = (datetime.now() - timedelta(days=history_days)).strftime("%Y-%m-%d")
+    log_components = ["data_collector", "historization"]
+    history_entries = []
+
+    for component in log_components:
+        comp_dir = LOGS_BASE / component
+        if not comp_dir.exists():
+            continue
+        for date_dir in comp_dir.iterdir():
+            if not date_dir.is_dir() or date_dir.name < cutoff_date:
+                continue
+            for log_file in date_dir.iterdir():
+                if log_file.suffix != ".log":
+                    continue
+                # Extract start time from filename: YYYYMMDD_HHMMSS_component.log
+                match = re.match(r"(\d{8})_(\d{6})_", log_file.name)
+                if not match:
+                    continue
+
+                started_str = match.group(2)
+                started_time = f"{started_str[:2]}:{started_str[2:4]}"
+
+                # Detect mode from first 50 lines
+                try:
+                    with open(log_file, "r", encoding="utf-8", errors="replace") as f:
+                        head_lines = [f.readline() for _ in range(50)]
+                    tail_text = log_file.read_text(encoding="utf-8", errors="replace")
+                    all_lines = tail_text.splitlines()
+                    tail_lines = all_lines[-30:] if len(all_lines) > 30 else all_lines
+                    tail_joined = "\n".join(tail_lines)
+                except Exception:
+                    continue
+
+                # Mode detection
+                mode = "unknown"
+                for line in head_lines:
+                    if not line:
+                        continue
+                    # Pattern: "Starting: option_data" or "mode: all"
+                    m = re.search(r"(?:Starting|mode)[:\s]+(\w+)", line, re.IGNORECASE)
+                    if m and m.group(1).lower() in [x.lower() for x in JOB_MODES]:
+                        mode = m.group(1).lower()
+                        break
+                if mode == "unknown":
+                    mode = component  # fallback to component name
+
+                # Apply mode filter
+                if history_mode_filter != "All" and mode != history_mode_filter:
+                    continue
+
+                # Status detection from tail
+                status = "unknown"
+                if re.search(r"All tasks completed successfully|[✓✅].*success", tail_joined, re.IGNORECASE):
+                    status = "success"
+                elif re.search(r"Historization Pipeline Completed Successfully", tail_joined):
+                    status = "success"
+                elif re.search(r"ABORTED|FAILED|Pipeline Failed", tail_joined):
+                    status = "failed"
+                elif re.search(r"with failures", tail_joined, re.IGNORECASE) or "⚠" in tail_joined:
+                    status = "partial"
+                elif re.search(r"timed out", tail_joined, re.IGNORECASE):
+                    status = "timeout"
+                elif re.search(r"Out of Memory|Exit Code 137", tail_joined, re.IGNORECASE):
+                    status = "oom"
+
+                # Duration extraction
+                duration_seconds = None
+                dur_match = re.search(r"Total Runtime:\s*(\d+)s", tail_joined)
+                if dur_match:
+                    duration_seconds = int(dur_match.group(1))
+                else:
+                    dur_match2 = re.search(r"Finished in\s+([\d.]+)s", tail_joined)
+                    if dur_match2:
+                        duration_seconds = int(float(dur_match2.group(1)))
+
+                # Error summary (last ERROR lines)
+                error_lines = [l for l in all_lines if "ERROR" in l]
+                error_summary = "\n".join(error_lines[-5:]) if error_lines else ""
+
+                # File stats
+                file_size_kb = log_file.stat().st_size / 1024
+                total_lines = len(all_lines)
+
+                history_entries.append({
+                    "date": date_dir.name,
+                    "started": started_time,
+                    "mode": mode,
+                    "status": status,
+                    "duration_seconds": duration_seconds,
+                    "total_lines": total_lines,
+                    "file_size_kb": file_size_kb,
+                    "error_summary": error_summary,
+                })
+
+    # Sort by date + started descending
+    history_entries.sort(key=lambda x: (x["date"], x["started"]), reverse=True)
+
+    if history_entries:
+        # Statistics cards
+        total = len(history_entries)
+        successful = sum(1 for j in history_entries if j["status"] == "success")
+        failed = sum(1 for j in history_entries if j["status"] in ("failed", "timeout", "oom"))
+
+        col_s1, col_s2, col_s3 = st.columns(3)
+        with col_s1:
+            st.metric("Total Runs", total)
+        with col_s2:
+            st.metric("Successful", successful)
+        with col_s3:
+            st.metric("Failed", failed)
+
+        # Format duration
+        def _fmt_duration(seconds):
+            if not seconds:
+                return "—"
+            s = int(seconds)
+            if s >= 3600:
+                return f"{s // 3600}h {(s % 3600) // 60}m"
+            elif s >= 60:
+                return f"{s // 60}m {s % 60}s"
+            return f"{s}s"
+
+        STATUS_LABELS = {
+            "success": "OK",
+            "failed": "FAILED",
+            "partial": "PARTIAL",
+            "timeout": "TIMEOUT",
+            "oom": "OOM",
+            "unknown": "?",
+        }
+
+        # Build display dataframe
+        rows = []
+        for job in history_entries:
+            rows.append({
+                "Date": job["date"],
+                "Started": job["started"],
+                "Mode": job["mode"],
+                "Status": STATUS_LABELS.get(job["status"], "?"),
+                "Duration": _fmt_duration(job["duration_seconds"]),
+                "Lines": f"{job['total_lines']:,}",
+                "Size": f"{job['file_size_kb']:.0f} KB",
+            })
+
+        df_history = pd.DataFrame(rows)
+
+        def _color_status(val):
+            colors = {
+                "OK": "background-color: #d4edda; color: #155724;",
+                "FAILED": "background-color: #f8d7da; color: #721c24;",
+                "PARTIAL": "background-color: #fff3cd; color: #856404;",
+                "TIMEOUT": "background-color: #ffe0b2; color: #e65100;",
+                "OOM": "background-color: #f8d7da; color: #721c24;",
+                "?": "background-color: #e2e3e5; color: #383d41;",
+            }
+            return colors.get(val, "")
+
+        styled_df = df_history.style.map(_color_status, subset=["Status"])
+        st.dataframe(styled_df, use_container_width=True, hide_index=True)
+
+        # Expandable error details for failed jobs
+        failed_jobs = [j for j in history_entries if j["error_summary"]]
+        if failed_jobs:
+            st.markdown("---")
+            st.markdown("#### Error Details")
+            for job in failed_jobs[:20]:  # limit to avoid UI overload
+                label = f"{job['date']} {job['started']} — {job['mode']} ({STATUS_LABELS.get(job['status'], '?')})"
+                with st.expander(label):
+                    st.code(job["error_summary"][:1000], language="log")
+    else:
+        st.info(f"No job runs found in the last {history_days} days.")
+
+
+# ==============================================================================
+# TAB 4: RECENT ACTIVITY (from DataChangeLogs)
 # ==============================================================================
 with tab_activity:
     st.markdown("#### Recent Data Operations")
