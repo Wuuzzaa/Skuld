@@ -54,20 +54,54 @@ def log_memory_usage(prefix=""):
 class MemoryMonitor(threading.Thread):
     """
     Background thread to monitor and log memory usage periodically.
-    Useful for debugging OOM crashes where the process dies before logging.
+    Only logs when memory changes significantly (>5 MB delta) or every 60s as heartbeat.
     """
-    def __init__(self, interval=2.0):
+    def __init__(self, interval=30.0):
         super().__init__()
         self.interval = interval
         self.stop_event = threading.Event()
-        self.daemon = True  # Daemon thread dies when main thread dies
+        self.daemon = True
+        self._last_logged_mb = 0
+        self._last_log_time = 0
+        self._heartbeat_interval = 60  # Always log at least every 60s
 
     def run(self):
-        logger.info(f"[Monitor] Starting memory monitor (interval={self.interval}s)...")
+        import time
+        logger.info(f"[Monitor] Memory monitor started (interval={self.interval}s, delta-threshold=5MB)")
+        self._last_log_time = time.time()
         while not self.stop_event.is_set():
-            log_memory_usage("[Monitor] ")
+            current_mb = self._get_memory_mb()
+            now = time.time()
+            delta = abs(current_mb - self._last_logged_mb)
+            time_since_last = now - self._last_log_time
+
+            # Log if: significant change OR heartbeat interval exceeded
+            if delta > 5 or time_since_last >= self._heartbeat_interval:
+                if delta > 5:
+                    logger.info(f"[Monitor] Memory: {current_mb:.0f} MB (delta: +{current_mb - self._last_logged_mb:.0f} MB)")
+                else:
+                    logger.info(f"[Monitor] Memory: {current_mb:.0f} MB (heartbeat)")
+                self._last_logged_mb = current_mb
+                self._last_log_time = now
+
             self.stop_event.wait(self.interval)
         logger.info("[Monitor] Memory monitor stopped.")
+
+    def _get_memory_mb(self) -> float:
+        try:
+            import psutil
+            return psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024
+        except ImportError:
+            pass
+        try:
+            if os.path.exists('/proc/self/status'):
+                with open('/proc/self/status', 'r') as f:
+                    for line in f:
+                        if line.startswith('VmRSS:'):
+                            return int(line.split()[1]) / 1024
+        except Exception:
+            pass
+        return 0
 
     def stop(self):
         self.stop_event.set()

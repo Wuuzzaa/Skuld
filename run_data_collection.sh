@@ -31,14 +31,13 @@ fi
 # Create lockfile with current PID
 echo $$ > "$LOCKFILE"
 
-# Start Memory Monitor
+# Start Memory Monitor (lightweight, 60s interval — Python has its own detailed monitor)
 echo "Timestamp,RSS_MB" > "$MONITOR_LOG"
 (
     while true; do
-        # RSS in MB (Sum of all python processes)
         RSS=$(ps -e -o rss,comm | grep python | awk '{s+=$1} END {print int(s/1024)}')
         echo "$(date '+%Y-%m-%d %H:%M:%S'),${RSS:-0}" >> "$MONITOR_LOG"
-        sleep 5
+        sleep 60
     done
 ) &
 MONITOR_PID=$!
@@ -46,9 +45,16 @@ MONITOR_PID=$!
 # Run data collection with timeout and reduced CPU/IO priority
 # nice -n 10: lower CPU scheduling priority (default=0, max=19)
 # ionice -c 2 -n 6: best-effort IO class with lower priority (0=highest, 7=lowest)
+# Historical modes get 24h timeout; regular modes get 5h
+case "$MODE" in
+    historical_*) TIMEOUT=86400 ;;
+    all|saturday_night) TIMEOUT=21600 ;;
+    *) TIMEOUT=18000 ;;
+esac
+
 cd /app/Skuld
-echo "$(date): Starting data collection (${MODE})..." >> "$LOGFILE"
-timeout 18000 nice -n 10 ionice -c 2 -n 6 /usr/local/bin/python main.py --mode "$MODE" >> "$LOGFILE" 2>&1
+echo "$(date): Starting data collection (${MODE}) [timeout=${TIMEOUT}s]..." >> "$LOGFILE"
+timeout $TIMEOUT nice -n 10 ionice -c 2 -n 6 /usr/local/bin/python main.py --mode "$MODE" >> "$LOGFILE" 2>&1
 EXIT_CODE=$?
 
 # Stop Memory Monitor
@@ -59,8 +65,9 @@ rm -f "$LOCKFILE"
 
 # Handle exit codes
 if [ $EXIT_CODE -eq 124 ]; then
-    echo "$(date): Data collection (${MODE}) timed out after 2 hours" >> "$LOGFILE"
-    /usr/local/bin/python src/send_alert.py "SKULD Alert: Timeout" "Data collection (${MODE}) timed out after 2 hours." >> "$LOGFILE" 2>&1
+    TIMEOUT_H=$((TIMEOUT / 3600))
+    echo "$(date): Data collection (${MODE}) timed out after ${TIMEOUT_H}h" >> "$LOGFILE"
+    /usr/local/bin/python src/send_alert.py "SKULD Alert: Timeout" "Data collection (${MODE}) timed out after ${TIMEOUT_H}h." >> "$LOGFILE" 2>&1
 elif [ $EXIT_CODE -eq 0 ]; then
     echo "$(date): Data collection (${MODE}) completed successfully" >> "$LOGFILE"
     # Success alert handled by main.py

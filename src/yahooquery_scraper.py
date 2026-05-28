@@ -4,6 +4,7 @@ import sys
 import os
 import time
 import threading
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 import pandas as pd
 from yahooquery import Ticker
 from config import MAX_WORKERS
@@ -11,6 +12,25 @@ from src.util import Singleton, log_memory_usage
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
+
+# Per-request timeout (seconds) - if a single Yahoo API call hangs longer than this, skip it
+YAHOO_REQUEST_TIMEOUT = 600  # 10 minutes per batch request
+
+# Executor for timeout-wrapped calls (daemon threads so they don't block exit)
+_timeout_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="yahoo_timeout")
+
+
+def _call_with_timeout(fn, timeout_seconds=YAHOO_REQUEST_TIMEOUT, description="Yahoo API call"):
+    """Execute fn() with a timeout. Returns None if timed out."""
+    future = _timeout_executor.submit(fn)
+    try:
+        return future.result(timeout=timeout_seconds)
+    except FuturesTimeoutError:
+        logger.error(f"TIMEOUT ({timeout_seconds}s): {description} — skipping this batch")
+        return None
+    except Exception as e:
+        logger.error(f"ERROR in {description}: {e}")
+        raise
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -59,7 +79,13 @@ class YahooQueryScraper:
                         try:
                             if len(symbols) > local_batch_size:
                                 logger.info(f"Fetching Yahoo module data for batch of up to {local_batch_size} symbols...")
-                            data = ticker_batch.get_modules(modules)
+                            data = _call_with_timeout(
+                                lambda tb=ticker_batch, m=modules: tb.get_modules(m),
+                                timeout_seconds=YAHOO_REQUEST_TIMEOUT,
+                                description=f"get_modules batch {batch-1}/{len(local_ticker_batches)}"
+                            )
+                            if data is None:
+                                break  # timeout — skip this batch
                             all_data.update(data)
                         except Exception as e:
                             logger.error(f"ERROR: Error fetching module data - {str(e)}")
@@ -95,7 +121,7 @@ class YahooQueryScraper:
         if not symbols:
             symbols = self.symbols
         with self.all_financial_data_lock:
-            all_data = [] 
+            all_data = []
             batch = 1
             logger.info(f"Loading for {len(symbols)} symbols all financial data from Yahoo Finance")
             # Symbole in 2000er-Pakete aufteilen
@@ -108,7 +134,14 @@ class YahooQueryScraper:
                     try:
                         if len(symbols) > local_batch_size:
                             logger.info(f"Fetching Yahoo all financial data for batch of up to {local_batch_size} symbols...")
-                        df = ticker_batch.all_financial_data()
+                        df = _call_with_timeout(
+                            lambda tb=ticker_batch: tb.all_financial_data(),
+                            timeout_seconds=YAHOO_REQUEST_TIMEOUT,
+                            description=f"all_financial_data batch {batch-1}/{len(local_ticker_batches)}"
+                        )
+                        if df is None:
+                            logger.warning(f"Batch {batch-1} timed out — skipping")
+                            break  # timeout — skip this batch
                         df.reset_index(inplace=True)
                         if df is not None and not df.empty:
                             df_mem_mb = df.memory_usage(deep=True).sum() / 1024 / 1024
@@ -123,7 +156,7 @@ class YahooQueryScraper:
                         logger.error(f"ERROR: Error fetching all financial data - {str(e)}")
                         logger.error(f"{attempt} failed -> Retry after 10s")
                         time.sleep(10)
-                    else: 
+                    else:
                         # Success - exit the retry loop
                         break
                 else:
@@ -132,18 +165,18 @@ class YahooQueryScraper:
                     logger.error(" ! " * 80)
                     raise Exception("RETRY LIMIT REACHED")
 
-            if all_data is None:
+            if all_data is None or len(all_data) == 0:
                 logger.warning("WARNING: No financial data found for any symbols")
-                return
+                return None
             df = pd.concat(all_data)
-            
+
             logger.info(f"{len(df)} financial data entries")
             df.info(memory_usage='deep')
 
             return df
 
     def get_historical_prices(self, period="1d"):
-        local_batch_size = 2000
+        local_batch_size = 500
         local_ticker_batches = _get_ticker_batches(self.symbols, local_batch_size, self.retries, asynchronous=True)
         batch = 1
         for ticker_batch in local_ticker_batches:
@@ -153,7 +186,16 @@ class YahooQueryScraper:
                 try:
                     if len(self.symbols) > local_batch_size:
                         logger.info(f"Fetching Yahoo historical data for batch of up to {local_batch_size} symbols...")
-                    df = ticker_batch.history(period=period, interval='1d')
+                    # Historical prices for 26y can be very slow — use longer timeout
+                    hist_timeout = YAHOO_REQUEST_TIMEOUT * 3 if period != '1d' else YAHOO_REQUEST_TIMEOUT
+                    df = _call_with_timeout(
+                        lambda tb=ticker_batch, p=period: tb.history(period=p, interval='1d'),
+                        timeout_seconds=hist_timeout,
+                        description=f"history(period={period}) batch {batch-1}/{len(local_ticker_batches)}"
+                    )
+                    if df is None:
+                        logger.warning(f"Batch {batch-1} timed out — skipping")
+                        break  # timeout — skip this batch
                     if df is not None and not df.empty:
                         # symbol expiration_date and option-type from index to column
                         df = df.reset_index()

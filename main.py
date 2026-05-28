@@ -18,9 +18,7 @@ from config import *
 from src.historization import run_historization_pipeline
 from src.pipeline_monitor import PipelineMonitor
 
-setup_logging(component="data_collector", log_level=logging.DEBUG, console_output=True)
 logger = logging.getLogger(__name__)
-logger.info("data_collector")
 
 
 def main(args):
@@ -226,6 +224,19 @@ if __name__ == "__main__":
     parser.add_argument("--env", type=str, required=False, default=None,
                         help="Environment name (e.g. Staging, Prod)")
     args = parser.parse_args()
+
+    # Log component based on mode for separate log directories
+    MODE_COMPONENTS = {
+        "historization": "historization",
+        "historical_prices": "historical",
+        "historical_iv": "historical",
+        "historical_technical_indicators": "historical",
+        "historical_full": "historical",
+        "only_run_migrations": "migrations",
+    }
+    log_component = MODE_COMPONENTS.get(args.mode, "data_collector")
+    setup_logging(component=log_component, log_level=logging.DEBUG, console_output=True)
+    logger.info(f"Starting {log_component} (mode: {args.mode})")
 
     if args.env:
         os.environ['SKULD_ENV'] = args.env
