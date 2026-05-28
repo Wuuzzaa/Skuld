@@ -24,7 +24,9 @@ class OptionLeg:
     oi: Optional[int] = None
     volume: Optional[int] = None
     expected_move: Optional[float] = None
-    last_updated: Optional[Union[str, datetime]] = None
+    last_updated_massive: Optional[Union[str, datetime]] = None
+    last_updated_option_data: Optional[Union[str, datetime]] = None
+    last_updated_stock_data: Optional[Union[str, datetime]] = None
     bs_price: Optional[float] = None
 
 @dataclass

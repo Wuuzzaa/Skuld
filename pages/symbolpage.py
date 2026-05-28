@@ -40,3 +40,9 @@ sql_file_path_technical_indicators = PATH_DATABASE_QUERY_FOLDER / 'technical_ind
 df_technical_indicators = select_into_dataframe(sql_file_path=sql_file_path_technical_indicators, params=params)
 
 page_display_dataframe(df_technical_indicators, symbol_column='symbol')
+
+if selected_symbol == 'INTC':
+    st.subheader("Hourly Option History for INTC")
+    df_intc = select_into_dataframe('SELECT * FROM "OptionDataMassiveHistoryHourly" WHERE symbol = \'INTC\' AND day >= CURRENT_DATE - INTERVAL \'7 days\' ORDER BY option_osi, timestamp DESC')
+
+    page_display_dataframe(df_intc, symbol_column='symbol')

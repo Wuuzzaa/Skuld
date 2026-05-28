@@ -22,7 +22,9 @@ WITH FilteredOptions AS (
         company_sector,
         historical_volatility_30d,
         iv_rank,
-        iv_percentile
+        iv_percentile,
+        last_updated_option_data,
+        last_updated_stock_data
     FROM
         "OptionDataMerged"
     WHERE
@@ -81,7 +83,9 @@ SELECT
     buy.option_open_interest AS buy_open_interest,
     buy.expected_move AS buy_expected_move,
     buy.day_volume AS buy_day_volume,
-    buy.day_last_updated AS buy_last_updated
+    buy.day_last_updated AS buy_last_updated,
+    buy.last_updated_option_data,
+    buy.last_updated_stock_data
 FROM
     TargetOptions sell
 INNER JOIN
