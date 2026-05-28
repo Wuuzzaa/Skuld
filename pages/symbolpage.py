@@ -43,6 +43,6 @@ page_display_dataframe(df_technical_indicators, symbol_column='symbol')
 
 if selected_symbol == 'INTC':
     st.subheader("Hourly Option History for INTC")
-    df_intc = select_into_dataframe('SELECT * FROM "OptionDataMassiveHistoryHourly" WHERE symbol = \'INTC\' AND day >= CURRENT_DATE - INTERVAL \'7 days\' ORDER BY option_osi, timestamp DESC')
+    df_intc = select_into_dataframe('SELECT * FROM "OptionDataMassiveHistoryHourly" WHERE symbol = \'INTC\' AND timestamp >= CURRENT_DATE - INTERVAL \'2 days\' ORDER BY option_osi, timestamp DESC')
 
     page_display_dataframe(df_intc, symbol_column='symbol')

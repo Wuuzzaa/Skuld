@@ -256,7 +256,7 @@ def load_option_chains(symbols: List[str]):
         
         for i in range(0, len(symbols), batch_size):
             symbol_batch = symbols[i:i + batch_size]
-            logger.info(f"Fetching Massive API option data for batch {i//batch_size + 1}...")
+            logger.info(f"Fetching Massive API option data for batch {i//batch_size + 1} of {(len(symbols) + batch_size - 1) // batch_size} (symbols {i} to {i + len(symbol_batch) - 1})")
             
             df = get_option_chains_df(tickers=symbol_batch)
 

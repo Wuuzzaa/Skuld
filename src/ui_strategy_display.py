@@ -24,11 +24,14 @@ def display_strategy_details(
     legs_data = []
     for i, leg in enumerate(legs):
         # Format last_updated if it's a timestamp
-        updated_str = leg.last_updated
-        if isinstance(updated_str, (pd.Timestamp, datetime)):
-            updated_str = updated_str.strftime('%d.%m.%Y %H:%M')
-        elif pd.isna(updated_str):
-            updated_str = "N/A"
+        updated_str_massive = leg.last_updated_massive
+        updated_str_option_data = leg.last_updated_option_data.strftime('%d.%m.%Y %H:%M')
+        updated_str_stock_data = leg.last_updated_stock_data.strftime('%d.%m.%Y %H:%M')
+        if isinstance(updated_str_massive, (pd.Timestamp, datetime)):
+            updated_str_massive = updated_str_massive.strftime('%d.%m.%Y %H:%M')      
+        elif pd.isna(updated_str_massive):
+            updated_str_massive = "N/A"
+
 
         legs_data.append({
             "Leg": f"Leg {i+1}",
@@ -43,7 +46,9 @@ def display_strategy_details(
             "OI": leg.oi,
             "Volume": leg.volume,
             "Exp Move": leg.expected_move,
-            "Updated": updated_str
+            "Updated_Massive": updated_str_massive,
+            "Updated_OptionData": updated_str_option_data,
+            "Updated_StockData": updated_str_stock_data
         })
 
     details_df = pd.DataFrame(legs_data)
