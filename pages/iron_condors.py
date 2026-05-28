@@ -274,28 +274,36 @@ if not ic_df.empty:
                 strike=row['sell_strike_put'], premium=row['sell_last_option_price_put'], is_call=False, is_long=False,
                 delta=row['sell_delta_put'], iv=row['sell_iv_put'], theta=row['sell_theta_put'], oi=row['sell_open_interest_put'],
                 volume=row.get('sell_day_volume_put'), expected_move=row.get('sell_expected_move_put'),
-                last_updated=row.get('sell_last_updated_put'),
+                last_updated_massive=row.get('sell_last_updated_put'),
+                last_updated_option_data=row.get('sell_last_updated_option_data'),
+                last_updated_stock_data=row.get('sell_last_updated_stock_data'),
                 bs_price=row.get('sell_bs_price_put')
             ),
             OptionLeg(
                 strike=row['buy_strike_put'], premium=row['buy_last_option_price_put'], is_call=False, is_long=True,
                 delta=row['buy_delta_put'], iv=row['buy_iv_put'], theta=row['buy_theta_put'], oi=row['buy_open_interest_put'],
                 volume=row.get('buy_day_volume_put'), expected_move=row.get('buy_expected_move_put'),
-                last_updated=row.get('buy_last_updated_put'),
+                last_updated_massive=row.get('buy_last_updated_put'),
+                last_updated_option_data=row.get('last_updated_option_data'),
+                last_updated_stock_data=row.get('last_updated_stock_data'),
                 bs_price=row.get('buy_bs_price_put')
             ),
             OptionLeg(
                 strike=row['sell_strike_call'], premium=row['sell_last_option_price_call'], is_call=True, is_long=False,
                 delta=row['sell_delta_call'], iv=row['sell_iv_call'], theta=row['sell_theta_call'], oi=row['sell_open_interest_call'],
                 volume=row.get('sell_day_volume_call'), expected_move=row.get('sell_expected_move_call'),
-                last_updated=row.get('sell_last_updated_call'),
+                last_updated_massive=row.get('sell_last_updated_call'),
+                last_updated_option_data=row.get('last_updated_option_data'),
+                last_updated_stock_data=row.get('last_updated_stock_data'),
                 bs_price=row.get('sell_bs_price_call')
             ),
             OptionLeg(
                 strike=row['buy_strike_call'], premium=row['buy_last_option_price_call'], is_call=True, is_long=True,
                 delta=row['buy_delta_call'], iv=row['buy_iv_call'], theta=row['buy_theta_call'], oi=row['buy_open_interest_call'],
                 volume=row.get('buy_day_volume_call'), expected_move=row.get('buy_expected_move_call'),
-                last_updated=row.get('buy_last_updated_call'),
+                last_updated_massive=row.get('buy_last_updated_call'),
+                last_updated_option_data=row.get('last_updated_option_data'),
+                last_updated_stock_data=row.get('last_updated_stock_data'),
                 bs_price=row.get('buy_bs_price_call')
             )
         ]
