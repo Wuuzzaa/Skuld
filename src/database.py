@@ -88,11 +88,7 @@ def truncate_table(connection, table_name: str):
     - table_name (str): The name of the table to truncate.
     """
 
-    if hasattr(connection, 'cursor'):
-        with connection.cursor() as cur:
-            cur.execute(f'DELETE FROM "{table_name}"')
-    else:
-        execute_sql(connection, f'DELETE FROM "{table_name}"', table_name, "TRUNCATE")
+    execute_sql(connection, f'DELETE FROM "{table_name}"', table_name, "TRUNCATE")
 
 def log_data_change(connection, operation_type, table_name, affected_rows=None, additional_data=None):
     """
@@ -104,13 +100,31 @@ def log_data_change(connection, operation_type, table_name, affected_rows=None, 
             INSERT INTO "DataChangeLogs" (timestamp, operation_type, table_name, affected_rows, additional_data)
             VALUES (:timestamp, :operation_type, :table_name, :affected_rows, :additional_data)
         """)
-        connection.execute(query, {
-            "timestamp": timestamp,
-            "operation_type": operation_type,
-            "table_name": table_name,
-            "affected_rows": affected_rows,
-            "additional_data": additional_data
-        })
+        if hasattr(connection, 'cursor'):
+            # Konvertiert :param zu %(param)s für den nativen PostgreSQL-Cursor
+            import re
+            # Extrahiert den rohen String aus dem TextClause-Objekt
+            raw_sql_string = query.text if hasattr(query, 'text') else str(query)
+            
+            # Konvertiert :param zu %(param)s
+            query_native = re.sub(r':([a-zA-Z0-9_]+)', r'%(\1)s', raw_sql_string)
+            
+            with connection.cursor() as cur:
+                cur.execute(query_native, {
+                    "timestamp": timestamp,
+                    "operation_type": operation_type,
+                    "table_name": table_name,
+                    "affected_rows": affected_rows,
+                    "additional_data": additional_data
+                })
+        else:
+            connection.execute(query, {
+                "timestamp": timestamp,
+                "operation_type": operation_type,
+                "table_name": table_name,
+                "affected_rows": affected_rows,
+                "additional_data": additional_data
+            })
     except Exception as e:
         logger.error(f"Error logging data change: \n{e}")
         raise e
@@ -185,11 +199,13 @@ def insert_into_table_bulk(
                 null='',
                 columns=columns
             )
+        rows_saved = len(dataframe)
+
+        log_data_change(raw_connection, "INSERT", table_name, affected_rows=rows_saved)
+        logger.info(f"[PostgreSQL] Successfully saved {rows_saved} rows to {table_name} in {round(time.time() - start, 2)}s.")
     except Exception as e:
         logger.error(f"[PostgreSQL] Error executing SQL on {table_name}: \n{e}")
         raise e
-    rows_saved = len(dataframe)
-    logger.info(f"[PostgreSQL] Successfully saved {rows_saved} rows to {table_name} in {round(time.time() - start, 2)}s.")
     
 def execute_sql(connection, sql: str, table_name: str, operation_type: str = "INSERT", additional_data=None):
     """
@@ -202,20 +218,25 @@ def execute_sql(connection, sql: str, table_name: str, operation_type: str = "IN
     - operation_type (str): The type of operation (INSERT, UPDATE, DELETE).
     """
     logger.debug(f"SQL Statement for {additional_data}:\n{text(sql)}")
+
+    # Execute on PostgreSQL (Side-by-side test)
+    try:
+        start_pg = time.time()
         
-    if 'postgresql' in str(connection.engine.url):
-        # Execute on PostgreSQL (Side-by-side test)
-        try:
-            start_pg = time.time()
+        if hasattr(connection, 'cursor'):
+            with connection.cursor() as cur:
+                cur.execute(f'{sql}')
+                pg_affected = cur.rowcount
+        else:
             pg_result = connection.execute(text(sql))
             pg_affected = pg_result.rowcount
-            
-            logger.info(f"[PostgreSQL] Successfully executed {operation_type} SQL on {table_name} in {round(time.time() - start_pg, 2)}s. Rows affected: {pg_affected}")
-            log_data_change(connection, operation_type, table_name, affected_rows=pg_affected, additional_data=additional_data)
-            return pg_affected
-        except Exception as e:
-            logger.error(f"[PostgreSQL] Error executing SQL on {table_name}: \n{e}")
-            raise e
+        
+        logger.info(f"[PostgreSQL] Successfully executed {operation_type} SQL on {table_name} in {round(time.time() - start_pg, 2)}s. Rows affected: {pg_affected}")
+        log_data_change(connection, operation_type, table_name, affected_rows=pg_affected, additional_data=additional_data)
+        return pg_affected
+    except Exception as e:
+        logger.error(f"[PostgreSQL] Error executing SQL on {table_name}: \n{e}")
+        raise e
 
 @log_function
 def select_into_dataframe(query: str = None, sql_file_path: str = None, params: dict = None):

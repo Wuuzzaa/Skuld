@@ -544,7 +544,9 @@ SELECT
 
 	-- Additional calculated fields
 	ROUND((c.analyst_mean_target - a.close)::numeric,2) as "target-close$",
-	ROUND((ROUND((c.analyst_mean_target - a.close)::numeric,2) / a.close * 100.0)::numeric, 2) as "target-close%"
+	ROUND((ROUND((c.analyst_mean_target - a.close)::numeric,2) / a.close * 100.0)::numeric, 2) as "target-close%",
+
+	tlu.last_updated AS last_updated_stock_data
 FROM
 	"StockPricesYahoo" AS A
 	LEFT OUTER JOIN (
@@ -570,4 +572,6 @@ FROM
 	LEFT OUTER JOIN "FundamentalData" AS I
 	ON A.SYMBOL = I.SYMBOL
 	LEFT OUTER JOIN "TechnicalIndicatorsCalculated" AS J
-	ON A.SYMBOL = J.SYMBOL;
+	ON A.SYMBOL = J.SYMBOL
+	LEFT OUTER JOIN "TableLastUpdated" AS tlu
+	ON tlu.table_name = 'StockPricesYahoo';
