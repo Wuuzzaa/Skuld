@@ -25,12 +25,20 @@ def display_strategy_details(
     for i, leg in enumerate(legs):
         # Format last_updated if it's a timestamp
         updated_str_massive = leg.last_updated_massive
-        updated_str_option_data = leg.last_updated_option_data.strftime('%d.%m.%Y %H:%M')
-        updated_str_stock_data = leg.last_updated_stock_data.strftime('%d.%m.%Y %H:%M')
+        updated_str_option_data = leg.last_updated_option_data
+        updated_str_stock_data = leg.last_updated_stock_data
         if isinstance(updated_str_massive, (pd.Timestamp, datetime)):
             updated_str_massive = updated_str_massive.strftime('%d.%m.%Y %H:%M')      
         elif pd.isna(updated_str_massive):
             updated_str_massive = "N/A"
+        if isinstance(updated_str_option_data, (pd.Timestamp, datetime)):
+            updated_str_option_data = leg.last_updated_option_data.strftime('%d.%m.%Y %H:%M')
+        elif pd.isna(updated_str_option_data):
+            updated_str_option_data = "N/A"
+        if isinstance(updated_str_stock_data, (pd.Timestamp, datetime)):
+            updated_str_stock_data = leg.last_updated_stock_data.strftime('%d.%m.%Y %H:%M')
+        elif pd.isna(updated_str_stock_data):
+            updated_str_stock_data = "N/A"
 
 
         legs_data.append({
