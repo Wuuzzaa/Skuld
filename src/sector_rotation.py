@@ -57,14 +57,14 @@ def build_sector_rotation_query(symbols: list[str], lookback_days: int) -> str:
     quoted_symbols = ", ".join(f"'{symbol}'" for symbol in symbols)
     return f'''
         SELECT
-            date,
+            snapshot_date AS date,
             symbol,
             "close",
             adjclose
-        FROM "StockPricesYahooHistory"
+        FROM "StockPricesYahooHistoryDaily"
         WHERE symbol IN ({quoted_symbols})
-          AND date >= CURRENT_DATE - INTERVAL '{int(lookback_days)} day'
-        ORDER BY date ASC, symbol ASC
+          AND snapshot_date >= CURRENT_DATE - INTERVAL '{int(lookback_days)} day'
+        ORDER BY snapshot_date ASC, symbol ASC
     '''
 
 
