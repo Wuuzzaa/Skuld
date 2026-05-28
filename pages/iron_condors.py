@@ -275,8 +275,8 @@ if not ic_df.empty:
                 delta=row['sell_delta_put'], iv=row['sell_iv_put'], theta=row['sell_theta_put'], oi=row['sell_open_interest_put'],
                 volume=row.get('sell_day_volume_put'), expected_move=row.get('sell_expected_move_put'),
                 last_updated_massive=row.get('sell_last_updated_put'),
-                last_updated_option_data=row.get('sell_last_updated_option_data'),
-                last_updated_stock_data=row.get('sell_last_updated_stock_data'),
+                last_updated_option_data=row.get('last_updated_option_data'),
+                last_updated_stock_data=row.get('last_updated_stock_data'),
                 bs_price=row.get('sell_bs_price_put')
             ),
             OptionLeg(

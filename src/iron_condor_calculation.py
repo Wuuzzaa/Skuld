@@ -32,7 +32,9 @@ def _calculate_combined_metrics(row: pd.Series, iv_correction: str = 'auto') -> 
             oi=row.get('sell_open_interest_put'),
             volume=row.get('sell_day_volume_put'),
             expected_move=row.get('sell_expected_move_put'),
-            last_updated=row.get('sell_last_updated_put')
+            last_updated_massive=row.get('sell_last_updated_put'),
+            last_updated_option_data=row.get('last_updated_option_data'),
+            last_updated_stock_data=row.get('last_updated_stock_data')
         ),
         OptionLeg(
             strike=row['buy_strike_put'], 
@@ -43,7 +45,9 @@ def _calculate_combined_metrics(row: pd.Series, iv_correction: str = 'auto') -> 
             oi=row.get('buy_open_interest_put'),
             volume=row.get('buy_day_volume_put'),
             expected_move=row.get('buy_expected_move_put'),
-            last_updated=row.get('buy_last_updated_put')
+            last_updated_massive=row.get('buy_last_updated_put'),
+            last_updated_option_data=row.get('last_updated_option_data'),
+            last_updated_stock_data=row.get('last_updated_stock_data')
         ),
         # Call side
         OptionLeg(
@@ -55,7 +59,9 @@ def _calculate_combined_metrics(row: pd.Series, iv_correction: str = 'auto') -> 
             oi=row.get('sell_open_interest_call'),
             volume=row.get('sell_day_volume_call'),
             expected_move=row.get('sell_expected_move_call'),
-            last_updated=row.get('sell_last_updated_call')
+            last_updated_massive=row.get('sell_last_updated_call'),
+            last_updated_option_data=row.get('last_updated_option_data'),
+            last_updated_stock_data=row.get('last_updated_stock_data')
         ),
         OptionLeg(
             strike=row['buy_strike_call'], 
@@ -66,7 +72,9 @@ def _calculate_combined_metrics(row: pd.Series, iv_correction: str = 'auto') -> 
             oi=row.get('buy_open_interest_call'),
             volume=row.get('buy_day_volume_call'),
             expected_move=row.get('buy_expected_move_call'),
-            last_updated=row.get('buy_last_updated_call')
+            last_updated_massive=row.get('buy_last_updated_call'),
+            last_updated_option_data=row.get('last_updated_option_data'),
+            last_updated_stock_data=row.get('last_updated_stock_data')
         ),
     ]
 

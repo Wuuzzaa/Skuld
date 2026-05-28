@@ -427,8 +427,8 @@ if not filtered_df.empty:
                 theta=row.get('sell_theta'), oi=row.get('sell_open_interest'),
                 volume=row.get('sell_day_volume'), expected_move=row.get('sell_expected_move'),
                 last_updated_massive=row.get('sell_last_updated'),
-                last_updated_option_data=row.get('sell_last_updated_option_data'),
-                last_updated_stock_data=row.get('sell_last_updated_stock_data'),
+                last_updated_option_data=row.get('last_updated_option_data'),
+                last_updated_stock_data=row.get('last_updated_stock_data'),
                 bs_price=row.get('sell_bs_price')
             ),
             OptionLeg(
@@ -438,8 +438,8 @@ if not filtered_df.empty:
                 theta=row.get('buy_theta'), oi=row.get('buy_open_interest'),
                 volume=row.get('buy_day_volume'), expected_move=row.get('buy_expected_move'),
                 last_updated_massive=row.get('buy_last_updated'),
-                last_updated_option_data=row.get('buy_last_updated_option_data'),
-                last_updated_stock_data=row.get('buy_last_updated_stock_data'),
+                last_updated_option_data=row.get('last_updated_option_data'),
+                last_updated_stock_data=row.get('last_updated_stock_data'),
                 bs_price=row.get('buy_bs_price')
             )
         ]

@@ -2,7 +2,7 @@ CREATE
 OR REPLACE VIEW "TableLastUpdated" AS
 SELECT
     table_name,
-    MAX(timestamp) aS last_updated
+    MAX(timestamp) AS last_updated
 FROM
     "DataChangeLogs"
 WHERE
