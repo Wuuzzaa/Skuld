@@ -95,23 +95,18 @@ def main(args):
             "historical_technical_indicators": [
                 ("Technical Indicators History", calc_technical_indicators_history, (symbols["all"],)),
             ],
+            "historical_prices": [
+                ("Historical Prices", load_historical_prices, (symbols["all"],)),
+            ],
+            "historical_iv": [
+                ("Historical IV", calculate_and_store_stock_implied_volatility_history, (symbols["options"],)),
+            ],
         }
 
         parallel_tasks = task_map.get(args.mode)
 
-        if args.mode == "historical_prices":
-            parallel_tasks = []
-            task_name, result, error, mem_diff, peak_mem, duration = pipeline.run_task(
-                "Historical Prices", load_historical_prices, symbols["all"]
-            )
-            pipeline.record_result(task_name, result, error, mem_diff, peak_mem)
-        elif args.mode == "historical_iv":
-            parallel_tasks = []
-            task_name, result, error, mem_diff, peak_mem, duration = pipeline.run_task(
-                "Historical IV", calculate_and_store_stock_implied_volatility_history
-            )
-            pipeline.record_result(task_name, result, error, mem_diff, peak_mem)
-        elif args.mode == "historical_full":
+        
+        if args.mode == "historical_full":
             # Sequential: first historical prices, then technical indicators
             parallel_tasks = []
             task_name, result, error, mem_diff, peak_mem, duration = pipeline.run_task(
