@@ -4,9 +4,9 @@
         from_date DATE NOT NULL,
         to_date DATE NOT NULL,
         "option_osi" TEXT,
-        "symbol" TEXT,
-		"contract_type" TEXT,
-		"expiration_date" TEXT,
+			"symbol" TEXT,
+        "contract_type" TEXT,
+		"expiration_date" DATE,
 		"strike_price" DOUBLE PRECISION,
 		"open_interest" BIGINT,
 		"implied_volatility" DOUBLE PRECISION,
@@ -26,6 +26,6 @@
 		"day_volume" DOUBLE PRECISION,
 		"day_vwap" DOUBLE PRECISION,
 		"day_last_updated" TIMESTAMP WITHOUT TIME ZONE,
-        PRIMARY KEY("option_osi")
+        PRIMARY KEY("option_osi", "symbol")
     );
     
