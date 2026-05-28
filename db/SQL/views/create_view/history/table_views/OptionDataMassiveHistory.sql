@@ -10,11 +10,8 @@
         dates.isoyear,
         dates.week,
         master_data."option_osi",
+		master_data."symbol",
         coalesce(
-                daily."symbol",
-                master_data."symbol"
-            ) as "symbol",
-		coalesce(
                 daily."contract_type",
                 master_data."contract_type"
             ) as "contract_type",
@@ -104,6 +101,6 @@
         ON dates.date BETWEEN master_data.from_date AND master_data.to_date 
         LEFT JOIN "OptionDataMassiveHistoryDaily" as daily
         ON dates.date = daily.snapshot_date
-        AND master_data."option_osi" = daily."option_osi"
+        AND master_data."option_osi" = daily."option_osi" AND master_data."symbol" = daily."symbol"
     ;
     
