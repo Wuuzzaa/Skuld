@@ -33,9 +33,13 @@ SELECT
 	d.intrinsic_value,
 	d.extrinsic_value,
 	d.strike_stock_price_difference,
-    d.strike_stock_price_difference_ptc
+    d.strike_stock_price_difference_ptc,
+
+	tlu.last_updated AS last_updated_option_data
 FROM
 	"OptionDataMassive" AS a
 	LEFT OUTER JOIN "OptionPricingMetrics" as d 
 	ON a.option_osi = d.option_osi 
-	AND a.symbol = d.symbol;
+	AND a.symbol = d.symbol
+LEFT OUTER JOIN "TableLastUpdated" AS tlu
+ON tlu.table_name = 'OptionDataMassive'

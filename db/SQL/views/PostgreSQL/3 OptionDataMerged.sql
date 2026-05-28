@@ -26,6 +26,7 @@ SELECT
 	a."day_volume", 
 	a."day_vwap",
 	a."day_last_updated", 
+	a.last_updated_option_data,
 	-- OptionPricingMetrics
 	a.days_to_expiration,
 	a.premium_option_price,
@@ -39,6 +40,7 @@ SELECT
     b.earnings_date,
 	b.days_to_earnings,
     b.analyst_mean_target,
+	b.last_updated_stock_data,
 	-- StockImpliedVolatilityMassive
     b.iv,
     b.iv_low,
