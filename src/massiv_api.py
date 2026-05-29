@@ -9,6 +9,8 @@ from src.database import get_postgres_engine, truncate_table, insert_into_table,
 from src.decorator_log_function import log_function
 from src.logger_config import setup_logging
 from src.stock_volatility import calculate_and_store_stock_implied_volatility
+from src.technical_indicators import calc_technical_indicators_history
+from src.yahooquery_financials import load_historical_prices
 
 logger = logging.getLogger(__name__)
 
@@ -343,6 +345,11 @@ def load_symbols():
             if_exists="append"
         )
     logger.info(f"Loaded {len(df)} symbols with exchange and options into the database.")
+
+    # load history for new symbols
+    symbols = get_symbols()
+    load_historical_prices(symbols["all"])
+    calc_technical_indicators_history(symbols["all"])
 
 def _historize_data(symbol: str):
     select = f"""

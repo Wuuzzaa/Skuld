@@ -43,6 +43,14 @@ page_display_dataframe(df_technical_indicators, symbol_column='symbol')
 
 if selected_symbol == 'INTC':
     st.subheader("Hourly Option History for INTC")
-    df_intc = select_into_dataframe('SELECT * FROM "OptionDataMassiveHistoryHourly" WHERE symbol = \'INTC\' AND timestamp >= CURRENT_DATE - INTERVAL \'2 days\' ORDER BY option_osi, timestamp DESC')
+    df_intc = select_into_dataframe('SELECT * FROM "OptionDataMassiveHistoryHourly" WHERE symbol = \'INTC\' AND timestamp >= CURRENT_DATE - INTERVAL \'1 days\' ORDER BY option_osi, timestamp DESC')
 
-    page_display_dataframe(df_intc, symbol_column='symbol')
+    # page_display_dataframe(df_intc, symbol_column='symbol')
+
+    csv_data = df_intc.to_csv(index=False)
+    st.download_button(
+        label=f"⬇️ Option Data History ({len(df_intc)} Options) as CSV",
+        data=csv_data,
+        file_name=f"option_data_history_INTC.csv",
+        mime="text/csv",
+    )
