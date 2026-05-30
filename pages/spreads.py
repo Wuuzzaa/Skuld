@@ -280,12 +280,12 @@ with st.expander("Configuration and Filters", expanded=True):
     with col19:
         st.info("IV correction mode: 'auto' (Automatic), 0.0-1.0 (Manual reduction), 0.0 (No correction)")
 
-@st.cache_data
+@st.cache_data(ttl=300)  # 5 Minuten
 def _cached_select_into_dataframe(sql_file_path, params):
     return select_into_dataframe(sql_file_path=sql_file_path, params=params)
 
 
-@st.cache_data
+@st.cache_data(ttl=300)  # 5 Minuten
 def _cached_get_page_spreads(df, strategy_type, iv_correction, risk_free_rate):
     return get_page_spreads(df, strategy_type=strategy_type, iv_correction=iv_correction, risk_free_rate=risk_free_rate)
 
