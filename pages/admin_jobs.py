@@ -607,12 +607,21 @@ with tab_history:
                         content = log_path.read_text(encoding="utf-8", errors="replace")
                         lines = content.splitlines()
                         st.caption(f"{len(lines)} lines | {job.get('file_size_kb', 0):.0f} KB")
-                        # Show last 500 lines (configurable per job)
-                        max_show = st.slider(
-                            "Lines to display", 100, 2000, 500, step=100,
-                            key=f"hist_lines_{idx}"
+                        # Lines to show: default "All" so the user actually sees the
+                        # full log. Using a selectbox (not slider) avoids dragging
+                        # through intermediate values, each of which triggers a
+                        # Streamlit rerun and collapses this expander.
+                        line_options = ["All", 500, 1000, 2000, 5000, 10000]
+                        max_show = st.selectbox(
+                            "Lines to display",
+                            line_options,
+                            index=0,
+                            key=f"hist_lines_{idx}",
                         )
-                        display = lines[-max_show:] if len(lines) > max_show else lines
+                        if max_show == "All" or len(lines) <= max_show:
+                            display = lines
+                        else:
+                            display = lines[-max_show:]
                         st.code("\n".join(display), language="log")
                     except Exception as e:
                         st.warning(f"Error reading log: {e}")
