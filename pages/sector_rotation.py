@@ -314,7 +314,7 @@ snapshot_csv = snapshot_export.to_csv(index=False).encode("utf-8")
 parameter_json = json.dumps(parameter_export, indent=2, ensure_ascii=True).encode("utf-8")
 sql_query_bytes = (sql_query + "\n").encode("utf-8")
 
-metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
+metric_col1, metric_col2, metric_col3, metric_col4 = st.columns([2, 1, 1, 1])
 metric_col1.metric("Stand", format_date_value(latest_date))
 metric_col2.metric("Benchmark", parameters.benchmark_symbol)
 metric_col3.metric("Sektoren mit Signal", int(latest_snapshot["symbol"].nunique()))
