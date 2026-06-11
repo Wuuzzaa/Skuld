@@ -7,6 +7,8 @@ import pandas as pd
 
 from config import TABLE_FUNDAMENTAL_DATA_YAHOO, TABLE_STOCK_PRICES_YAHOO
 from src.database import get_postgres_engine, insert_into_table, insert_into_table_bulk, truncate_table
+from src.stock_volatility import calculate_and_store_stock_historical_volatility, calculate_and_store_stock_historical_volatility_history
+from src.technical_indicators import calc_technical_indicators_history
 from src.yahooquery_scraper import YahooQueryScraper
 
 # Add parent directory to path for imports
@@ -308,6 +310,8 @@ def load_stock_prices(symbols):
                         if_exists="append"
                     )
 
+    calculate_and_store_stock_historical_volatility()
+
 def load_historical_prices_(symbols):
     # replace symbol prefix I: with ^ for indices to match yahoo format
     symbols = [symbol.replace('I:', '^') for symbol in symbols]
@@ -361,6 +365,9 @@ def load_historical_prices(symbols):
     finally:
         conn.close()
     logger.info(f"Total historical price entries loaded: {total_rows}")
+
+    calculate_and_store_stock_historical_volatility_history()
+    calc_technical_indicators_history(symbols)
 
 if __name__ == "__main__":
 

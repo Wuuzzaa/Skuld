@@ -7,7 +7,7 @@ from src.logger_config import setup_logging
 from src.database import run_migrations
 from src.send_alert import send_telegram_message
 from src.massiv_api import load_option_chains
-from src.stock_volatility import calculate_and_store_stock_implied_volatility_history
+from src.stock_volatility import calculate_and_store_stock_historical_volatility_history, calculate_and_store_stock_implied_volatility_history
 from src.technical_indicators import calc_technical_indicators, calc_technical_indicators_history
 from src.yahoo_asset_profile import load_asset_profile
 from src.yahoo_dividens import calculate_dividend_classification
@@ -97,7 +97,10 @@ def main(args):
                 ("Historical Prices", load_historical_prices, (symbols["all"],)),
             ],
             "historical_iv": [
-                ("Historical IV", calculate_and_store_stock_implied_volatility_history, (symbols["options"],)),
+                ("Historical IV", calculate_and_store_stock_implied_volatility_history, ()),
+            ],
+            "historical_volatility": [
+                ("Historical Volatility", calculate_and_store_stock_historical_volatility_history, ()),
             ],
         }
 
@@ -114,9 +117,6 @@ def main(args):
             if error:
                 raise RuntimeError(f"Historical Prices failed: {error}")
 
-            task_name, result, error, mem_diff, peak_mem, duration = pipeline.run_task(
-                "Technical Indicators History", calc_technical_indicators_history, symbols["all"]
-            )
             pipeline.record_result(task_name, result, error, mem_diff, peak_mem)
         elif args.mode == "historization":
             parallel_tasks = []
@@ -215,6 +215,7 @@ if __name__ == "__main__":
                             "option_data",
                             "historical_prices",
                             "historical_iv",
+                            "historical_volatility",
                             "historical_technical_indicators",
                             "historical_full",
                             "historization",

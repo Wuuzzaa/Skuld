@@ -21,6 +21,6 @@ SELECT
 	DIVIDEND_GROWTH_YEARS,
 	ROUND("KeyStats_beta"::NUMERIC, 2) AS BETA
 FROM
-	"StockData"
+	"StockData" as StockData
 WHERE
 	SYMBOL = :symbol;

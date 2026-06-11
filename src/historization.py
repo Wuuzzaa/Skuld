@@ -2,8 +2,8 @@ import logging
 import os
 import pathlib
 import time
-from config import HISTORY_ENABLED_TABLES
-from src.database import get_columns, execute_sql, get_postgres_engine, get_table_key_and_data_columns, run_migrations, table_exists, view_exists
+from config import HISTORY_ENABLED_TABLES, HISTORY_ENABLED_VIEWS
+from src.database import get_columns, execute_sql, get_postgres_engine, get_table_key_and_data_columns, run_migrations, select_into_dataframe, table_exists, view_exists
 from src.decorator_log_function import log_function
 from src.data_aging import DataAgingService, get_history_select_statement, is_weekend, is_classified_for_master_data
 from src.util import executed_as_github_action
@@ -28,7 +28,11 @@ def run_historization_pipeline():
                 source_table=table
             )
             pass
-
+        
+        # create merge views in db/SQL/views/PostgreSQL/history
+        # the merge view combines the history view with the current table to provide a complete historical view of the data
+        _create_history_merge_views()
+        
         for table in HISTORY_ENABLED_TABLES:
             DataAgingService.run(source_table=table)
             pass
@@ -233,8 +237,7 @@ def _create_history_tables_and_view_if_not_exist(source_table: str):
             execute_sql(connection, f'DROP VIEW IF EXISTS "{history_view_name}" CASCADE;', history_view_name, "DROP VIEW")
             execute_sql(connection, create_view_sql, history_view_name, "CREATE VIEW")
     
-    logger.info(f"Ensured that {daily_history_table_name}, {weekly_history_table_name}, {monthly_history_table_name}, {master_data_table_name} tables exist.")
-            
+    logger.info(f"Ensured that {daily_history_table_name}, {weekly_history_table_name}, {monthly_history_table_name}, {master_data_table_name} tables exist.")        
 
 def _create_missing_columns_in_history_tables(source_table: str):
     """
@@ -378,21 +381,26 @@ def _get_history_view_create_statement(table_name: str):
     return create_statement_sql
 
 def _create_history_merge_views():
-    view_template_path = 'db/SQL/views/create_view/history/template'
-    if not os.path.exists(view_template_path):
-        logger.info(f"Views directory not found at {view_template_path}. Skipping view recreation.")
+    view_path = 'db/SQL/views/PostgreSQL/history'
+    if not os.path.exists(view_path):
+        logger.info(f"Views directory not found at {view_path}. Skipping view recreation.")
         return
 
-    view_files = [f for f in os.listdir(view_template_path) if f.endswith(".sql")]
+    view_files = [f for f in os.listdir(view_path) if f.endswith(".sql")]
+    view_files.sort()
       
-    for view_template_file in view_files:
-        with open(os.path.join(view_template_path, view_template_file), "r") as f:
-            sql = f.read()
-        for table in HISTORY_ENABLED_TABLES:
-           sql = sql.replace(f"<{table}HistorySelect>", get_history_select_statement(table, optimized=True))
+    for view_file in view_files:
+        with open(os.path.join(view_path, view_file), "r") as f:
+            sql_script = f.read()
         
-        with open(f"db/SQL/views/create_view/history/{view_template_file.replace('_template','')}", "w") as f:
-            f.write(sql)
+        history_view_name = view_file.replace(".sql", "").upper()
+
+        statements = [s.strip() for s in sql_script.split(';') if s.strip()]
+                
+        with get_postgres_engine().begin() as connection:
+            for statement in statements:
+                # execute_sql(connection, f'DROP VIEW IF EXISTS "{history_view_name}" CASCADE;', history_view_name, "DROP VIEW")
+                execute_sql(connection, statement, history_view_name, "CREATE VIEW", f"Recreate view {history_view_name}")
     # recreate_views()
 
 def _insert_date():
@@ -430,3 +438,26 @@ def _insert_date():
                     raise e
 
         logger.info(f"Inserted date to Dates History in {round(time.time() - start_time, 2)}s.")
+
+def select_timetravel_into_dataframe(date: str, sql_file_path: str, params: dict = None):
+    # get sql from file
+    with open(sql_file_path, "r") as f:
+        sql = f.read()
+    
+    # replace table names with their history view counterparts in the sql and filter on date only if selected date is not the current date, otherwise return the current table data without filtering on date
+    if date != str(time.strftime("%Y-%m-%d")):
+        # replace views with their history view counterparts in the sql and filter on date
+        for view in HISTORY_ENABLED_VIEWS:
+            history_view = f"{view}History"
+            # subqueries in Postgres need an alias -> original sql needs an alias already to be compatible with the replacement -> we use the original view name as alias for the subquery
+            subquery = f'(SELECT * FROM "{history_view}" WHERE date = \'{date}\')'
+            sql = sql.replace(f'"{view}"', subquery)
+
+        # replace occurences of CURRENT_DATE with the provided date
+        sql = sql.replace("CURRENT_DATE", f"DATE('{date}')")
+
+    pg_engine = get_postgres_engine()
+    if pg_engine:
+        with pg_engine.begin() as connection:
+            df = select_into_dataframe(sql, params=params)
+            return df

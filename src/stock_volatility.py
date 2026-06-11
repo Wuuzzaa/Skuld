@@ -5,7 +5,7 @@ import time
 import threading
 import pandas as pd
 from sqlalchemy import create_engine, text
-from config import TABLE_STOCK_IMPLIED_VOLATILITY_MASSIVE, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DB
+from config import TABLE_STOCK_HISTORICAL_VOLATILITY_YAHOO, TABLE_STOCK_IMPLIED_VOLATILITY_MASSIVE, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DB
 from src.database import execute_sql, get_postgres_engine, insert_into_table, select_into_dataframe, truncate_table
 
 logger = logging.getLogger(__name__)
@@ -113,6 +113,77 @@ def calculate_and_store_stock_implied_volatility_history():
                 monitor.join(timeout=5)
 
             logger.info(f"Successfully stored implied volatility history into {vola_history_table_name}.")
+
+    except Exception as e:
+        logger.error(f"[PostgreSQL] Error executing query: \n{e}")
+        logger.error(f"\n{str(sql)}")
+        raise e
+
+def calculate_and_store_stock_historical_volatility():
+    logger.info("Calculating and storing stock historical volatility...")
+
+    df = select_into_dataframe(sql_file_path = "db/SQL/query/calculate_historical_volatility.sql")
+
+    with get_postgres_engine().begin() as connection:
+        # Truncate the target table before inserting new data
+        truncate_table(connection, TABLE_STOCK_HISTORICAL_VOLATILITY_YAHOO)
+
+        # Insert the new data into the target table
+        insert_into_table(
+            connection, 
+            TABLE_STOCK_HISTORICAL_VOLATILITY_YAHOO, 
+            df, 
+            if_exists="append"
+        )
+
+def calculate_and_store_stock_historical_volatility_history():
+    sql_file_path = "db/SQL/query/calculate_historical_volatility_history.sql"
+    logger.info("Calculating and storing stock historical volatility history using SQL file: " + sql_file_path)
+    vola_history_table_name = f"{TABLE_STOCK_HISTORICAL_VOLATILITY_YAHOO}HistoryDaily"
+    try:
+        if sql_file_path is not None and os.path.isfile(sql_file_path):
+            with open(sql_file_path, 'r') as f:
+                select = f.read()
+        else:
+            msg = "'sql_file_path' must be provided."
+            logger.error(msg)
+            raise ValueError(msg)
+
+        # get history dates from "DatesHistory" table
+        history_dates = select_into_dataframe('SELECT date FROM "DatesHistory" ORDER BY date ASC')
+        
+        # loop through history dates and replace placeholder in SQL with actual date
+        with get_postgres_engine().begin() as connection:
+            logger.info(f"Truncating {vola_history_table_name}...")
+            truncate_table(connection, vola_history_table_name)
+
+            for date in history_dates['date']:
+                logger.info(f"Calculating historical volatility for date: {date}")
+                select_with_date = select.replace("HISTORY_DATE", f"'{date}'")
+
+                sql = f"""
+                    INSERT INTO "{vola_history_table_name}"
+                    (snapshot_date, symbol, historical_volatility_30d)
+                    WITH select_with_date AS (
+                        {select_with_date}
+                    )
+                    SELECT
+                    DATE('{date}') AS snapshot_date, 
+                    symbol,
+                    historical_volatility_30d
+                    FROM select_with_date AS subquery
+                """
+
+                # Start background monitor to confirm Postgres is still working
+                monitor = SQLProgressMonitor(vola_history_table_name, interval=60)
+                monitor.start()
+                try:
+                    execute_sql(connection, sql, vola_history_table_name, "INSERT", "Calculating and storing stock historical volatility history")
+                finally:
+                    monitor.stop()
+                    monitor.join(timeout=5)
+
+            logger.info(f"Successfully stored historical volatility history into {vola_history_table_name}.")
 
     except Exception as e:
         logger.error(f"[PostgreSQL] Error executing query: \n{e}")

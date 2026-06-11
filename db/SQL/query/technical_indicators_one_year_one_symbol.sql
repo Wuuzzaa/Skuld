@@ -43,9 +43,9 @@ SELECT
     ROUND("DMP_10"::numeric, 2) AS "DMP_10",
     ROUND("DMN_10"::numeric, 2) AS "DMN_10"
 FROM
-    "TechnicalIndicatorsCalculatedHistoryDaily"
+    "TechnicalIndicatorsCalculatedHistoryDaily" AS technical_indicators
 WHERE
     symbol = :symbol
-    AND snapshot_date >= CURRENT_DATE - INTERVAL '30 days'
+    AND snapshot_date BETWEEN CURRENT_DATE - INTERVAL '30 days' AND CURRENT_DATE
 ORDER BY
     snapshot_date DESC;
