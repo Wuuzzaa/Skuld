@@ -15,6 +15,7 @@ import streamlit as st
 import pandas as pd
 
 from src.database import select_into_dataframe
+from src.logger_config import get_log_level_from_db, set_log_level_in_db
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +146,7 @@ def _docker_exec_output(container: str, cmd: list[str]) -> str | None:
 
 st.subheader("Admin - Job Management")
 
-tab_logs, tab_jobs, tab_history, tab_activity = st.tabs(["Log Viewer", "Trigger Jobs", "Job History", "Recent Activity"])
+tab_logs, tab_jobs, tab_history, tab_activity, tab_settings = st.tabs(["Log Viewer", "Trigger Jobs", "Job History", "Recent Activity", "Settings"])
 
 # ==============================================================================
 # TAB 1: LOG VIEWER
@@ -675,3 +676,81 @@ with tab_activity:
             st.info(f"No data operations in the last {hours_back} hours.")
     except Exception as e:
         st.error(f"Error loading activity data: {e}")
+
+
+# ==============================================================================
+# TAB 5: SETTINGS (Log Level Configuration)
+# ==============================================================================
+with tab_settings:
+    st.markdown("#### System Settings")
+    
+    st.markdown("##### Log Level Configuration")
+    st.caption(
+        "Configure the logging level for the data collection pipeline. "
+        "Changes take effect on the next job execution."
+    )
+    
+    # Get current log level
+    try:
+        current_log_level = get_log_level_from_db()
+        
+        # Map integer level to string
+        level_map = {
+            10: "DEBUG",
+            20: "INFO",
+            30: "WARNING",
+            40: "ERROR",
+            50: "CRITICAL"
+        }
+        current_level_str = level_map.get(current_log_level, "INFO")
+    except Exception as e:
+        st.warning(f"Could not load current log level: {e}")
+        current_level_str = "INFO"
+    
+    # Level selection
+    col_level, col_desc = st.columns([1, 3])
+    
+    with col_level:
+        new_log_level = st.selectbox(
+            "Log Level",
+            ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+            index=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"].index(current_level_str),
+            key="log_level_selector"
+        )
+    
+    with col_desc:
+        descriptions = {
+            "DEBUG": "Verbose output for troubleshooting - shows all details",
+            "INFO": "Standard logging - shows important information (default)",
+            "WARNING": "Only warnings and errors",
+            "ERROR": "Only errors",
+            "CRITICAL": "Only critical failures"
+        }
+        st.caption(descriptions.get(new_log_level, ""))
+    
+    # Update button
+    col_btn1, col_btn2 = st.columns(2)
+    
+    with col_btn1:
+        if st.button("Save Log Level", type="primary", use_container_width=True):
+            if set_log_level_in_db(new_log_level):
+                st.success(f"✅ Log level updated to **{new_log_level}**")
+                st.info("Changes will apply to the next job execution.")
+            else:
+                st.error("Failed to update log level. Check database connection.")
+    
+    with col_btn2:
+        if st.button("Reset to Default (INFO)", use_container_width=True):
+            if set_log_level_in_db("INFO"):
+                st.success("✅ Log level reset to **INFO** (default)")
+                st.rerun()
+            else:
+                st.error("Failed to reset log level.")
+    
+    # Info box
+    st.markdown("---")
+    st.info(
+        "**Note:** The selected log level will be applied when a new job is triggered. "
+        "Currently running jobs will not be affected. This setting is persistent and "
+        "survives restarts."
+    )

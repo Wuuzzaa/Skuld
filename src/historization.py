@@ -29,9 +29,9 @@ def run_historization_pipeline():
             )
             pass
         
-        # create merge views in db/SQL/views/PostgreSQL/history
-        # the merge view combines the history view with the current table to provide a complete historical view of the data
-        _create_history_merge_views()
+        # # create merge views in db/SQL/views/PostgreSQL/history
+        # # the merge view combines the history view with the current table to provide a complete historical view of the data
+        # _create_history_merge_views()
         
         for table in HISTORY_ENABLED_TABLES:
             DataAgingService.run(source_table=table)
@@ -57,7 +57,7 @@ def run_daily_historization(source_table: str):
     history_table = f"{source_table}HistoryDaily"
 
     logger.info(f"Starting historization from {source_table} to {history_table}")
-    _create_history_tables_and_view_if_not_exist(source_table)
+    # _create_history_tables_and_view_if_not_exist(source_table)
 
     if is_weekend():
         logger.info("It's weekend, skipping daily historization.")
@@ -71,6 +71,14 @@ def run_daily_historization(source_table: str):
     duration = time.time() - start_time
     logger.info(f"Historization for {source_table} finished in {duration:.2f}s")
 
+def create_history_tables_and_views():
+    for table in HISTORY_ENABLED_TABLES:
+        _create_history_tables_and_view_if_not_exist(table)
+    
+    # create merge views in db/SQL/views/PostgreSQL/history
+    # the merge view combines the history view with the current table to provide a complete historical view of the data
+    _create_history_merge_views()
+    
 def insert_into_daily_history_table(source_table):
 
     history_table = f"{source_table}HistoryDaily"

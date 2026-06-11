@@ -23,6 +23,7 @@ Usage:
 import logging
 import sys
 from pathlib import Path
+from sqlalchemy import text
 
 
 def setup_logging(
@@ -93,6 +94,73 @@ def setup_logging(
 
 def get_logger(name: str) -> logging.Logger:
     return logging.getLogger(name)
+
+
+def get_log_level_from_db() -> int:
+    """
+    Retrieves the configured log level from the database.
+    Returns logging.INFO as default if not found or on error.
+    """
+    try:
+        # Import here to avoid circular imports
+        from src.database import select_into_dataframe
+        
+        df = select_into_dataframe(
+            'SELECT setting_value FROM "SystemSettings" WHERE setting_key = \'log_level\''
+        )
+        
+        if df is not None and not df.empty:
+            level_str = df.iloc[0, 0].upper()
+            level_map = {
+                'DEBUG': logging.DEBUG,
+                'INFO': logging.INFO,
+                'WARNING': logging.WARNING,
+                'ERROR': logging.ERROR,
+                'CRITICAL': logging.CRITICAL
+            }
+            return level_map.get(level_str, logging.INFO)
+    except Exception as e:
+        # Silently fall back to INFO if database is not available or query fails
+        pass
+    
+    return logging.INFO
+
+
+def set_log_level_in_db(level_str: str) -> bool:
+    """
+    Sets the log level in the database.
+    
+    Args:
+        level_str: One of 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'
+    
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    try:
+        level_str = level_str.upper()
+        valid_levels = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
+        
+        if level_str not in valid_levels:
+            return False
+        
+        # Import here to avoid circular imports
+        from src.database import get_postgres_engine
+        
+        engine = get_postgres_engine()
+        if not engine:
+            return False
+        
+        with engine.connect() as conn:
+            conn.execute(text(
+                'UPDATE "SystemSettings" SET setting_value = :level, updated_at = CURRENT_TIMESTAMP '
+                'WHERE setting_key = \'log_level\''
+            ), {"level": level_str})
+            conn.commit()
+        
+        return True
+    except Exception as e:
+        return False
+
 
 if __name__ == "__main__":
     # Example usage

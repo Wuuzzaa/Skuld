@@ -3,7 +3,7 @@ import logging
 import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from src.massiv_api import get_symbols
-from src.logger_config import setup_logging
+from src.logger_config import setup_logging, get_log_level_from_db
 from src.database import run_migrations
 from src.send_alert import send_telegram_message
 from src.massiv_api import load_option_chains
@@ -15,7 +15,7 @@ from src.yahooquery_earning_dates import scrape_earning_dates
 from src.yahooquery_financials import generate_fundamental_data, load_historical_prices, load_stock_prices
 from src.yfinance_analyst_price_targets import scrape_yahoo_finance_analyst_price_targets
 from config import *
-from src.historization import run_historization_pipeline
+from src.historization import create_history_tables_and_views, run_historization_pipeline
 from src.pipeline_monitor import PipelineMonitor
 
 logger = logging.getLogger(__name__)
@@ -31,6 +31,7 @@ def main(args):
         logger.info("#" * 80)
         try:
             run_migrations()
+            create_history_tables_and_views()
             logger.info("#" * 80)
             logger.info("Database migrations done. Exit main")
             logger.info("#" * 80)
@@ -55,6 +56,7 @@ def main(args):
         run_successful = False
 
         run_migrations()
+        create_history_tables_and_views()
 
         logger.info("#" * 80)
         logger.info(f"Starting Data Collection Pipeline")
@@ -236,7 +238,14 @@ if __name__ == "__main__":
         "only_run_migrations": "migrations",
     }
     log_component = MODE_COMPONENTS.get(args.mode, "data_collector")
-    setup_logging(component=log_component, log_level=logging.DEBUG, console_output=True)
+    
+    # Get log level from database if available, otherwise use INFO as default
+    try:
+        log_level = get_log_level_from_db()
+    except Exception:
+        log_level = logging.INFO
+    
+    setup_logging(component=log_component, log_level=log_level, console_output=True)
     logger.info(f"Starting {log_component} (mode: {args.mode})")
 
     if args.env:
