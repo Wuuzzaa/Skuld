@@ -439,10 +439,17 @@ def _insert_date():
 
         logger.info(f"Inserted date to Dates History in {round(time.time() - start_time, 2)}s.")
 
-def select_timetravel_into_dataframe(date: str, sql_file_path: str, params: dict = None):
-    # get sql from file
-    with open(sql_file_path, "r") as f:
-        sql = f.read()
+def select_timetravel_into_dataframe(date: str, query: str = None, sql_file_path: str = None, params: dict = None):
+    
+    if sql_file_path is not None and os.path.isfile(sql_file_path):
+        with open(sql_file_path, 'r') as f:
+            sql = f.read()
+    elif query is not None:
+        sql = query
+    else:
+        msg = "Either 'query' or 'sql_file_path' must be provided."
+        logger.error(msg)
+        raise ValueError(msg)
     
     # replace table names with their history view counterparts in the sql and filter on date only if selected date is not the current date, otherwise return the current table data without filtering on date
     if date != str(time.strftime("%Y-%m-%d")):
