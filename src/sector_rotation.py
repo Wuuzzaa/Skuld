@@ -6,6 +6,8 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
+from src.historization import select_timetravel_into_dataframe
+
 
 SECTOR_ETFS = {
     "XLC": "Kommunikation",
@@ -64,16 +66,17 @@ def build_sector_rotation_query(symbols: list[str], lookback_days: int) -> str:
         FROM "StockPricesYahooHistoryDaily"
         WHERE symbol IN ({quoted_symbols})
           AND snapshot_date >= CURRENT_DATE - INTERVAL '{int(lookback_days)} day'
+          AND snapshot_date <= CURRENT_DATE
         ORDER BY snapshot_date ASC, symbol ASC
     '''
 
 
-def load_sector_rotation_price_history(parameters: RotationParameters) -> pd.DataFrame:
+def load_sector_rotation_price_history(selected_date: str, parameters: RotationParameters) -> pd.DataFrame:
     from src.database import select_into_dataframe
 
     symbols = [parameters.benchmark_symbol, *SECTOR_ETFS.keys()]
     query = build_sector_rotation_query(symbols=symbols, lookback_days=parameters.lookback_days)
-    return select_into_dataframe(query=query)
+    return select_timetravel_into_dataframe(selected_date, query=query)
 
 
 def weighted_moving_average(values: np.ndarray) -> float:

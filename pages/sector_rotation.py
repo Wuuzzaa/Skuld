@@ -15,11 +15,12 @@ from src.sector_rotation import (
     load_sector_rotation_price_history,
     required_history_length,
 )
+from src.streamlit_helpers import render_date_filter
 
 
 @st.cache_data(ttl=3600)
-def load_rotation_dataset(parameters: RotationParameters):
-    price_history = load_sector_rotation_price_history(parameters)
+def load_rotation_dataset(selected_date: str, parameters: RotationParameters):
+    price_history = load_sector_rotation_price_history(selected_date, parameters)
     rotation_data = calculate_sector_rotation(price_history, parameters)
     return price_history, rotation_data
 
@@ -34,6 +35,9 @@ def format_date_value(date_value) -> str:
         return ""
     return parsed.strftime("%Y-%m-%d")
 
+selected_date = render_date_filter(
+    date_query='select date from (select date from "DatesHistory" union select current_date) as sub ORDER BY date DESC',
+)
 
 st.subheader("S&P 500 Sektorrotation")
 st.caption("Benchmark: SPY. Sektoren werden ueber die SPDR Sector ETFs abgebildet.")
@@ -131,7 +135,7 @@ if parameters.long_window <= parameters.short_window:
     st.stop()
 
 with st.spinner("Lade Kursdaten und berechne RS-Ratio / RS-Momentum..."):
-    price_history, rotation_data = load_rotation_dataset(parameters)
+    price_history, rotation_data = load_rotation_dataset(selected_date, parameters)
 
 available_symbols = set(price_history["symbol"].unique()) if not price_history.empty else set()
 missing_symbols = [symbol for symbol in SECTOR_ETFS if symbol not in available_symbols]

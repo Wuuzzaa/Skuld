@@ -3,36 +3,21 @@ from config import PATH_DATABASE_QUERY_FOLDER
 from src.database import select_into_dataframe
 from src.historization import select_timetravel_into_dataframe
 from src.page_display_dataframe import page_display_dataframe
+from src.streamlit_helpers import render_date_filter, render_symbol_filter
 
 # Titel
 st.subheader("Symbol Page")
 
-# get all dates of historization
-if 'date_list' not in st.session_state:
-    st.session_state.date_list = select_into_dataframe(query='select date from (select date from "DatesHistory" union select current_date) as sub ORDER BY date DESC')
-
-# select one date with completion default to the current date
-if 'selected_date' not in st.session_state:
-    st.session_state.selected_date = st.session_state.date_list.iloc[0]['date']
-
-selected_date = st.selectbox(
-    "Select a Date:",
-    options=st.session_state.date_list['date'],
-    index=0,
-    placeholder="Choose a date..."
+selected_date = render_date_filter(
+    date_query='select date from (select date from "DatesHistory" union select current_date) as sub ORDER BY date DESC',
+)
+selected_symbol = render_symbol_filter(
+    symbol_query='select distinct symbol from "OptionDataMerged" ORDER BY symbol ASC',
 )
 
-# get all symbols
-if 'symbol_list' not in st.session_state:
-    st.session_state.symbol_list = select_into_dataframe(query='select distinct symbol from "OptionDataMerged" ORDER BY symbol ASC')
-
-# select one symbol with completion
-selected_symbol = st.selectbox(
-    "Select a Symbol:",
-    options=st.session_state.symbol_list,
-    index=None,  # Keine Vorselektion
-    placeholder="Type to search... (e.g., MSFT, AAPL)",
-)
+if selected_symbol is None:
+    st.warning("Please select a symbol to display the symbol page content.")
+    st.stop()
 
 params = {'symbol': selected_symbol}
 
