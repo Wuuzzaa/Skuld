@@ -18,6 +18,17 @@ from src.database import select_into_dataframe
 
 logger = logging.getLogger(__name__)
 
+# Cached data loading function
+@st.cache_data(ttl=300)
+def get_married_put_data(selected_date, strike_multiplier):
+    """Fetch married put data from database with caching."""
+    sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'married_put.sql'
+    return select_timetravel_into_dataframe(
+        date=selected_date, 
+        sql_file_path=sql_file_path, 
+        params={"strike_multiplier": strike_multiplier}
+    )
+
 # Titel
 st.subheader("Married Put Analysis")
 
@@ -86,15 +97,14 @@ if not show_all:
 
 # Auto-load data on page load or when filters change
 # Using session state to track if data needs to be reloaded
-filter_key = f"{max_results}_{min_roi}_{max_roi}_{strike_multiplier}_{days_range}_{selected_statuses}_{show_all}"
+filter_key = f"{selected_date}_{max_results}_{min_roi}_{max_roi}_{strike_multiplier}_{days_range}_{selected_statuses}_{show_all}"
 if 'last_filter_key' not in st.session_state or st.session_state['last_filter_key'] != filter_key:
     st.session_state['last_filter_key'] = filter_key
     
     with st.spinner("Loading married put analysis..."):
         try:
-            # Execute SQL query
-            sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'married_put.sql'
-            df = select_timetravel_into_dataframe(date=selected_date, sql_file_path=sql_file_path, params={"strike_multiplier": strike_multiplier})
+            # Execute SQL query with caching
+            df = get_married_put_data(selected_date=selected_date, strike_multiplier=strike_multiplier)
             
             if df is not None and not df.empty:
                 # Apply ROI filters
@@ -167,7 +177,6 @@ if 'married_put_df' in st.session_state and not st.session_state['married_put_df
         width="stretch",
         height=min(800, 40 + 35 * len(display_df)),
         selection_mode="single-row",
-        on_select="rerun",
         key="married_put_table",
         column_config={
             "roi_annualized_pct": st.column_config.NumberColumn(
