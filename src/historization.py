@@ -460,7 +460,7 @@ def select_timetravel_into_dataframe(date: str, query: str = None, sql_file_path
         raise ValueError(msg)
     
     # replace table names with their history view counterparts in the sql and filter on date only if selected date is not the current date, otherwise return the current table data without filtering on date
-    if date != str(time.strftime("%Y-%m-%d")):
+    if str(date) != str(time.strftime("%Y-%m-%d")):
         # replace views with their history view counterparts in the sql and filter on date
         for view in HISTORY_ENABLED_VIEWS:
             history_view = f"{view}History"
