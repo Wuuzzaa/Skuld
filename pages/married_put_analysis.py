@@ -6,8 +6,10 @@ import sys
 import os
 
 from config import PATH_DATABASE_QUERY_FOLDER
+from src.historization import select_timetravel_into_dataframe
 from src.page_display_dataframe import page_display_dataframe
 from src.documentation_renderer import render_married_put_analysis_documentation
+from src.streamlit_helpers import render_date_filter
 
 # Add src directory to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
@@ -18,6 +20,10 @@ logger = logging.getLogger(__name__)
 
 # Titel
 st.subheader("Married Put Analysis")
+
+selected_date = render_date_filter(
+    date_query='select date from (select date from "DatesHistory" union select current_date) as sub ORDER BY date DESC',
+)
 
 # Filter Controls
 col1, col2, col3, col4, col5 = st.columns(5)
@@ -88,7 +94,7 @@ if 'last_filter_key' not in st.session_state or st.session_state['last_filter_ke
         try:
             # Execute SQL query
             sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'married_put.sql'
-            df = select_into_dataframe(sql_file_path=sql_file_path, params={"strike_multiplier": strike_multiplier})
+            df = select_timetravel_into_dataframe(date=selected_date, sql_file_path=sql_file_path, params={"strike_multiplier": strike_multiplier})
             
             if df is not None and not df.empty:
                 # Apply ROI filters

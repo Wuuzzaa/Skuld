@@ -28,7 +28,7 @@ WITH BaseData AS (
         "Summary_dividendRate" AS "Current-Div",
         CAST(FLOOR(days_to_expiration / NULLIF(365.0 / NULLIF(NO_DIVIDEND_PAYOUTS_LAST_YEAR, 0), 0)) AS INTEGER) AS dividends_to_expiration
     FROM
-        "OptionDataMerged"
+        "OptionDataMerged" AS option_data
     WHERE
         "Summary_dividendRate" > 0
         AND contract_type = 'put'
