@@ -9,7 +9,7 @@ st.subheader("Symbol Page")
 
 # get all dates of historization
 if 'date_list' not in st.session_state:
-    st.session_state.date_list = select_into_dataframe(query='select date from (select date from "DatesHistory" union select current_date) ORDER BY date DESC')
+    st.session_state.date_list = select_into_dataframe(query='select date from (select date from "DatesHistory" union select current_date) as sub ORDER BY date DESC')
 
 # select one date with completion default to the current date
 if 'selected_date' not in st.session_state:

@@ -24,16 +24,18 @@ LOGS_BASE = Path(__file__).resolve().parent.parent / "logs"
 # Available job modes
 JOB_MODES = [
     "all",
-    "option_data",
-    "stock_data_daily",
-    "market_start_mid_end",
     "saturday_night",
+    "market_start_mid_end",
+    "stock_data_daily",
+    "option_data",
     "historical_prices",
     "historical_iv",
+    "historical_volatility",
     "historical_technical_indicators",
     "historical_full",
     "historization",
     "only_run_migrations",
+
 ]
 
 JOB_DESCRIPTIONS = {
@@ -45,6 +47,7 @@ JOB_DESCRIPTIONS = {
     "historical_prices": "Backfill historical prices for all symbols",
     "historical_iv": "Backfill implied volatility history",
     "historical_technical_indicators": "Backfill technical indicators history",
+    "historical_volatility": "Backfill volatility history",
     "historical_full": "Full historical backfill (prices -> technicals -> IV, sequential)",
     "historization": "Archive/version current data",
     "only_run_migrations": "Run DB migrations only (no data collection)",
