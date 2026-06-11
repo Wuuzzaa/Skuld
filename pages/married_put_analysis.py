@@ -7,6 +7,7 @@ import os
 
 from config import PATH_DATABASE_QUERY_FOLDER
 from src.historization import select_timetravel_into_dataframe
+from src.logger_config import setup_logging
 from src.page_display_dataframe import page_display_dataframe
 from src.documentation_renderer import render_married_put_analysis_documentation
 from src.streamlit_helpers import render_date_filter
@@ -16,6 +17,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from src.database import select_into_dataframe
 
+setup_logging(component="streamlit", log_level=logging.DEBUG, console_output=True)
 logger = logging.getLogger(__name__)
 
 # Cached data loading function
@@ -104,7 +106,9 @@ if 'last_filter_key' not in st.session_state or st.session_state['last_filter_ke
     with st.spinner("Loading married put analysis..."):
         try:
             # Execute SQL query with caching
+            logger.info(f"Loading married put data for date={selected_date}, strike_multiplier={strike_multiplier}")
             df = get_married_put_data(selected_date=selected_date, strike_multiplier=strike_multiplier)
+            logger.info(f"Data loaded. Rows: {len(df) if df is not None else 0}")
             
             if df is not None and not df.empty:
                 # Apply ROI filters
@@ -177,6 +181,7 @@ if 'married_put_df' in st.session_state and not st.session_state['married_put_df
         width="stretch",
         height=min(800, 40 + 35 * len(display_df)),
         selection_mode="single-row",
+        on_select="rerun",
         key="married_put_table",
         column_config={
             "roi_annualized_pct": st.column_config.NumberColumn(
@@ -254,16 +259,20 @@ if 'married_put_df' in st.session_state and not st.session_state['married_put_df
     )
 
     # ── Inline Documentation on row click ──────────────────────────
-    selected_rows = event.selection.rows if hasattr(event, "selection") else []
-    if selected_rows and not display_df.empty:
-        selected_idx = selected_rows[0]
-        selected_row = display_df.iloc[selected_idx]
+    @st.fragment
+    def show_documentation():
+        selected_rows = event.selection.rows if hasattr(event, "selection") else []
+        if selected_rows and not display_df.empty:
+            selected_idx = selected_rows[0]
+            selected_row = display_df.iloc[selected_idx]
 
-        st.divider()
-        doc_md = render_married_put_analysis_documentation(row=selected_row)
-        st.markdown(doc_md)
-    else:
-        st.caption("💡 Klicke auf eine Zeile in der Tabelle, um die vollständige Berechnung für diese Option zu sehen.")
+            st.divider()
+            doc_md = render_married_put_analysis_documentation(row=selected_row)
+            st.markdown(doc_md)
+        else:
+            st.caption("💡 Klicke auf eine Zeile in der Tabelle, um die vollständige Berechnung für diese Option zu sehen.")
+    
+    show_documentation()
 
 else:
     st.info("No data available")
