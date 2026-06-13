@@ -21,21 +21,23 @@ services:
     command:
       - postgres
       - -c
-      - shared_buffers=1024MB
+      - track_activity_query_size=8192
       - -c
-      - effective_cache_size=3GB
+      - shared_buffers=2GB
       - -c
-      - work_mem=8MB
+      - effective_cache_size=5GB
       - -c
-      - maintenance_work_mem=256MB
+      - work_mem=32MB
       - -c
-      - max_connections=80
+      - maintenance_work_mem=512MB
       - -c
-      - max_worker_processes=4
+      - wal_buffers=16MB
       - -c
-      - max_parallel_workers=4
+      - random_page_cost=1.1
       - -c
-      - max_parallel_workers_per_gather=2
+      - effective_io_concurrency=200
+      - -c
+      - max_connections=100
     ports:
       - "${DB_PORT:-5432}:5432"
     volumes:
