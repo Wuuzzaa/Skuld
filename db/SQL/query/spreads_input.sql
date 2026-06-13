@@ -26,7 +26,7 @@ WITH FilteredOptions AS (
         last_updated_option_data,
         last_updated_stock_data
     FROM
-        "OptionDataMerged"
+        "OptionDataMerged" AS a
     WHERE
         open_interest >= :min_open_interest
         AND day_volume >= :min_day_volume

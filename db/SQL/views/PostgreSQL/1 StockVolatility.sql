@@ -1,5 +1,5 @@
 CREATE OR REPLACE VIEW "StockVolatility" AS
 SELECT
-    symbol,
-    historical_volatility_30d
-FROM "StockHistoricalVolatilityYahoo";
+    a.symbol,
+    a.historical_volatility_30d
+FROM "StockHistoricalVolatilityYahoo" AS a;

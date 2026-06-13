@@ -283,6 +283,8 @@ def select_into_dataframe_pg(query: str = None, sql_file_path: str = None, param
             logger.error(msg)
             raise ValueError(msg)
 
+        logger.debug(f"Executing query with params: {params}")
+        logger.debug(f"\n{sql}")
         pg_engine = get_postgres_engine()
         if pg_engine:
             start_pg = time.time()
@@ -385,7 +387,7 @@ def _run_migrations_for_engine(engine):
         migrations_path = "db/SQL/migrations/"
         if not os.path.exists(migrations_path):
             logger.info(f"[{label}] Migrations directory not found at {migrations_path}. Skipping migrations.")
-            _recreate_views_connection(connection)
+            # _recreate_views_connection(connection)
             connection.commit()  # Ensure any pending transactions are committed before
             return
             
@@ -396,11 +398,11 @@ def _run_migrations_for_engine(engine):
 
         if not pending_migrations:
             logger.info(f"[{label}] Database is up to date.")
-            _recreate_views_connection(connection)
+            # _recreate_views_connection(connection)
             connection.commit()  # Ensure any pending transactions are committed before
             return
 
-        drop_all_views(engine)
+        # drop_all_views(engine)
         # with connection.begin():
         #     for table in HISTORY_ENABLED_TABLES:
         #         pass
@@ -438,7 +440,7 @@ def _run_migrations_for_engine(engine):
                 logger.info(f"[{label}] Database version updated to {last_migration_version}.")
     
         # Recreate views after migrations
-        _recreate_views_connection(connection)
+        # _recreate_views_connection(connection)
     logger.info(f"[{label}] Migration completed in {round(time.time() - start,2)}s")
 
 
@@ -605,6 +607,32 @@ def view_exists(view_name: str) -> bool:
             exists_pg = view_name in insp_pg.get_view_names()
     except Exception as e:
         logger.error(f"[PostgreSQL] Error checking view existence {view_name}: \n{e}")
+        exists_pg = False
+
+    return exists_pg
+
+def table_function_exists(name: str) -> bool:
+    """
+    Checks if a table function exists in the database.
+    Returns True only if it exists in active databases.
+    """
+    # Check Postgres
+    exists_pg = True
+    try:
+        pg_engine = get_postgres_engine()
+        if pg_engine:
+            with pg_engine.connect() as connection:
+                result = connection.execute(text(f"""
+                    SELECT EXISTS (
+                        SELECT 1 
+                        FROM information_schema.routines 
+                        WHERE routine_type='FUNCTION' 
+                        AND routine_name='{name}'
+                    );
+                """)).fetchone()
+                exists_pg = result[0]
+    except Exception as e:
+        logger.error(f"[PostgreSQL] Error checking function existence {name}: \n{e}")
         exists_pg = False
 
     return exists_pg

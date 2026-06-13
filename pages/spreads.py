@@ -5,9 +5,11 @@ import pandas as pd
 from config import PATH_DATABASE_QUERY_FOLDER, IV_CORRECTION_MODE, RISK_FREE_RATE
 from pages.documentation_text.spreads_page_doc import get_spreads_documentation
 from src.database import select_into_dataframe
+from src.historization import select_timetravel_into_dataframe
 from src.logger_config import setup_logging
 from src.page_display_dataframe import page_display_dataframe, _create_claude_prompt_page_spreads
 from src.spreads_calculation import get_page_spreads
+from src.streamlit_helpers import render_date_filter
 from src.utils.option_utils import get_expiration_type
 from src.ui_utils import init_session_state, reset_to_defaults as ui_reset, filter_by_expiration_type
 from src.ui_strategy_display import display_strategy_details
@@ -92,6 +94,9 @@ def clear_all_filters():
     st.session_state.min_iv_rank = 0
     st.session_state.min_iv_percentile = 0
 
+selected_date = render_date_filter(
+    date_query='select date from (select date from "DatesHistory" union select current_date) as sub ORDER BY date DESC',
+)
 
 # Filter with expander section
 with st.expander("Configuration and Filters", expanded=True):
@@ -108,7 +113,7 @@ with st.expander("Configuration and Filters", expanded=True):
     with col1:
         # Load expiration dates
         sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'expiration_dte_asc.sql'
-        dates_df = select_into_dataframe(sql_file_path=sql_file_path)
+        dates_df = select_timetravel_into_dataframe(date=selected_date, sql_file_path=sql_file_path)
 
         # Filter dates_df based on checkbox states
         filtered_dates_df = filter_by_expiration_type(
@@ -281,8 +286,8 @@ with st.expander("Configuration and Filters", expanded=True):
         st.info("IV correction mode: 'auto' (Automatic), 0.0-1.0 (Manual reduction), 0.0 (No correction)")
 
 @st.cache_data(ttl=300)  # 5 Minuten
-def _cached_select_into_dataframe(sql_file_path, params):
-    return select_into_dataframe(sql_file_path=sql_file_path, params=params)
+def _cached_select_into_dataframe(date, sql_file_path, params):
+    return select_timetravel_into_dataframe(date=date, sql_file_path=sql_file_path, params=params)
 
 
 @st.cache_data(ttl=300)  # 5 Minuten
@@ -307,7 +312,7 @@ with st.spinner("Calculating spreads..."):
     logging.debug(f"Params for database query: {params}")
 
     sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'spreads_input.sql'
-    df = _cached_select_into_dataframe(sql_file_path=sql_file_path, params=params)
+    df = _cached_select_into_dataframe(date=selected_date, sql_file_path=sql_file_path, params=params)
     logging.debug(f"Input data head: {df.head()}")
 
     spreads_df = _cached_get_page_spreads(df, strategy_type=strategy_type, iv_correction=st.session_state.iv_correction, risk_free_rate=st.session_state.risk_free_rate / 100)

@@ -4,7 +4,7 @@ import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from src.massiv_api import get_symbols
 from src.logger_config import setup_logging, get_log_level_from_db
-from src.database import run_migrations
+from src.database import drop_all_views, get_postgres_engine, recreate_views, run_migrations
 from src.send_alert import send_telegram_message
 from src.massiv_api import load_option_chains
 from src.stock_volatility import calculate_and_store_stock_historical_volatility_history, calculate_and_store_stock_implied_volatility_history
@@ -15,11 +15,18 @@ from src.yahooquery_earning_dates import scrape_earning_dates
 from src.yahooquery_financials import generate_fundamental_data, load_historical_prices, load_stock_prices
 from src.yfinance_analyst_price_targets import scrape_yahoo_finance_analyst_price_targets
 from config import *
-from src.historization import create_history_tables_and_views, run_historization_pipeline
+from src.historization import create_history_tables_and_views, generate_table_functions_for_history_enabled_views, run_historization_pipeline
 from src.pipeline_monitor import PipelineMonitor
 
 logger = logging.getLogger(__name__)
 
+def db_setup():
+    """Set up the database with migrations and history tables/views."""
+    drop_all_views(get_postgres_engine())
+    run_migrations()
+    create_history_tables_and_views()
+    recreate_views()
+    generate_table_functions_for_history_enabled_views()
 
 def main(args):
     pipeline = None
@@ -30,8 +37,8 @@ def main(args):
         logger.info("Running database migrations only...")
         logger.info("#" * 80)
         try:
-            run_migrations()
-            create_history_tables_and_views()
+            db_setup()
+            
             logger.info("#" * 80)
             logger.info("Database migrations done. Exit main")
             logger.info("#" * 80)
@@ -55,8 +62,7 @@ def main(args):
         
         run_successful = False
 
-        run_migrations()
-        create_history_tables_and_views()
+        db_setup()
 
         logger.info("#" * 80)
         logger.info(f"Starting Data Collection Pipeline")

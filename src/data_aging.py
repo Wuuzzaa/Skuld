@@ -491,7 +491,7 @@ def get_history_select_statement(table_name: str, optimized: bool = True, needed
     """
     min_bucket =min_bucket.lower() if min_bucket is not None else None
     
-    optimized = False
+    # optimized = False
 
     logger.info(f"Building history select statement for {table_name} with optimized={optimized}, min_bucket={min_bucket}, needed_data_columns={needed_data_columns}")
 
@@ -536,6 +536,8 @@ def get_history_select_statement(table_name: str, optimized: bool = True, needed
         # OR if min_bucket is 'master', we only have one source anyway.
         if (is_classified_for_master_data(table_name, col["name"]) and optimized) or min_bucket == 'master':
              data_column_definitions.append(f'master_data."{col_name}" as "{col_name}"')
+        elif is_classified_for_daily(table_name, col["name"]) and optimized:
+             data_column_definitions.append(f'daily."{col_name}" as "{col_name}"')
         else:
             merge_tables = True
             # Build coalesce arguments dynamically based on active_buckets
@@ -596,36 +598,36 @@ def get_history_select_statement(table_name: str, optimized: bool = True, needed
     #     """    
     #     date_table = '(SELECT MIN(date) as date, year, month FROM "DatesHistory" GROUP BY year, month)'
 
-    if merge_tables == True:
+    # if merge_tables == True:
 
-        if 'daily' in active_buckets:
-            key_columns_on_condition_str_daily = " AND ".join([f'master_data."{col["name"]}" = daily."{col["name"]}"' for col in key_columns])
-            join_clauses.append(f'LEFT JOIN "{table_name}HistoryDaily" as daily')
-            join_clauses.append('ON dates.date = daily.snapshot_date')
-            join_clauses.append(f'AND {key_columns_on_condition_str_daily}')
-            if needed_data_columns is not None: # Optimization to reduce join size
-                not_null_clause = " AND ".join([f'daily."{col["name"]}" IS NOT NULL' for col in data_columns])
-                join_clauses.append(f"AND {not_null_clause}")  
-            
-        if 'weekly' in active_buckets:        
-            key_columns_on_condition_str_weekly = " AND ".join([f'master_data."{col["name"]}" = weekly."{col["name"]}"' for col in key_columns])
-            join_clauses.append(f'LEFT JOIN "{table_name}HistoryWeekly" as weekly')
-            join_clauses.append('ON dates.isoyear = weekly.isoyear')
-            join_clauses.append('AND dates.week = weekly.week')
-            join_clauses.append(f'AND {key_columns_on_condition_str_weekly}')
-            if needed_data_columns is not None: # Optimization to reduce join size
-                not_null_clause = " AND ".join([f'weekly."{col["name"]}" IS NOT NULL' for col in data_columns])
-                join_clauses.append(f"AND {not_null_clause}")  
-            
-        if 'monthly' in active_buckets:
-            key_columns_on_condition_str_monthly = " AND ".join([f'master_data."{col["name"]}" = monthly."{col["name"]}"' for col in key_columns])
-            join_clauses.append(f'LEFT JOIN "{table_name}HistoryMonthly" as monthly')
-            join_clauses.append('ON dates.year = monthly.year')
-            join_clauses.append('AND dates.month = monthly.month')
-            join_clauses.append(f'AND {key_columns_on_condition_str_monthly}')
-            if needed_data_columns is not None: # Optimization to reduce join size
-                not_null_clause = " AND ".join([f'monthly."{col["name"]}" IS NOT NULL' for col in data_columns])
-                join_clauses.append(f"AND {not_null_clause}")
+    if 'daily' in active_buckets:
+        key_columns_on_condition_str_daily = " AND ".join([f'master_data."{col["name"]}" = daily."{col["name"]}"' for col in key_columns])
+        join_clauses.append(f'LEFT JOIN "{table_name}HistoryDaily" as daily')
+        join_clauses.append('ON dates.date = daily.snapshot_date')
+        join_clauses.append(f'AND {key_columns_on_condition_str_daily}')
+        if needed_data_columns is not None: # Optimization to reduce join size
+            not_null_clause = " AND ".join([f'daily."{col["name"]}" IS NOT NULL' for col in data_columns])
+            join_clauses.append(f"AND {not_null_clause}")  
+        
+    if 'weekly' in active_buckets:        
+        key_columns_on_condition_str_weekly = " AND ".join([f'master_data."{col["name"]}" = weekly."{col["name"]}"' for col in key_columns])
+        join_clauses.append(f'LEFT JOIN "{table_name}HistoryWeekly" as weekly')
+        join_clauses.append('ON dates.isoyear = weekly.isoyear')
+        join_clauses.append('AND dates.week = weekly.week')
+        join_clauses.append(f'AND {key_columns_on_condition_str_weekly}')
+        if needed_data_columns is not None: # Optimization to reduce join size
+            not_null_clause = " AND ".join([f'weekly."{col["name"]}" IS NOT NULL' for col in data_columns])
+            join_clauses.append(f"AND {not_null_clause}")  
+        
+    if 'monthly' in active_buckets:
+        key_columns_on_condition_str_monthly = " AND ".join([f'master_data."{col["name"]}" = monthly."{col["name"]}"' for col in key_columns])
+        join_clauses.append(f'LEFT JOIN "{table_name}HistoryMonthly" as monthly')
+        join_clauses.append('ON dates.year = monthly.year')
+        join_clauses.append('AND dates.month = monthly.month')
+        join_clauses.append(f'AND {key_columns_on_condition_str_monthly}')
+        if needed_data_columns is not None: # Optimization to reduce join size
+            not_null_clause = " AND ".join([f'monthly."{col["name"]}" IS NOT NULL' for col in data_columns])
+            join_clauses.append(f"AND {not_null_clause}")
 
     join_str = "\n        ".join(join_clauses)
 

@@ -551,13 +551,13 @@ FROM
 	"StockPricesYahoo" AS A
 	LEFT OUTER JOIN (
 		SELECT
-			SYMBOL,
+			ed.SYMBOL,
 			CASE
-				WHEN EARNINGS_DATE LIKE '%.%.%' THEN SUBSTR(EARNINGS_DATE, 7, 4) || '-' || SUBSTR(EARNINGS_DATE, 4, 2) || '-' || SUBSTR(EARNINGS_DATE, 1, 2)
+				WHEN ed.EARNINGS_DATE LIKE '%.%.%' THEN SUBSTR(ed.EARNINGS_DATE, 7, 4) || '-' || SUBSTR(ed.EARNINGS_DATE, 4, 2) || '-' || SUBSTR(ed.EARNINGS_DATE, 1, 2)
 				ELSE NULL
 			END AS EARNINGS_DATE
 		FROM
-			"EarningDates"
+			"EarningDates" as ed
 	) AS B ON A.SYMBOL = B.SYMBOL
 	LEFT OUTER JOIN "AnalystPriceTargets" AS C ON A.SYMBOL = C.SYMBOL
 	LEFT OUTER JOIN "StockImpliedVolatilityMassive" AS d ON a.symbol = d.symbol
