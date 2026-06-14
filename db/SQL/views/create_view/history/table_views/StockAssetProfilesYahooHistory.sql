@@ -5,6 +5,8 @@
     
         SELECT
             daily.snapshot_date AS date,
+            master_data.from_date AS from_date,
+            master_data.to_date AS to_date,
             master_data."symbol",
         coalesce(
                 daily."name",
@@ -28,7 +30,7 @@
             ) as "long_business_summary"
         FROM
             "StockAssetProfilesYahooMasterData" as master_data
-            INNER JOIN "StockAssetProfilesYahooHistoryDaily" as daily
+            LEFT OUTER JOIN "StockAssetProfilesYahooHistoryDaily" as daily
         ON master_data."symbol" = daily."symbol"
         ;
     

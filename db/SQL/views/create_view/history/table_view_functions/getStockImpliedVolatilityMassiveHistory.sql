@@ -15,6 +15,8 @@
         FROM (
         SELECT
             daily.snapshot_date AS date,
+            master_data.from_date AS from_date,
+            master_data.to_date AS to_date,
             master_data."symbol",
         daily."iv" as "iv",
 		daily."iv_low" as "iv_low",
@@ -23,7 +25,7 @@
 		daily."iv_percentile" as "iv_percentile"
         FROM
             "StockImpliedVolatilityMassiveMasterData" as master_data
-            INNER JOIN "StockImpliedVolatilityMassiveHistoryDaily" as daily
+            LEFT OUTER JOIN "StockImpliedVolatilityMassiveHistoryDaily" as daily
         ON master_data."symbol" = daily."symbol"
         ) AS sub
         WHERE date = p_target_date

@@ -42,6 +42,8 @@
         FROM (
         SELECT
             daily.snapshot_date AS date,
+            master_data.from_date AS from_date,
+            master_data.to_date AS to_date,
             master_data."symbol",
         daily."EMA_5" as "EMA_5",
 		daily."EMA_10" as "EMA_10",
@@ -80,7 +82,7 @@
 		daily."RSL" as "RSL"
         FROM
             "TechnicalIndicatorsCalculatedMasterData" as master_data
-            INNER JOIN "TechnicalIndicatorsCalculatedHistoryDaily" as daily
+            LEFT OUTER JOIN "TechnicalIndicatorsCalculatedHistoryDaily" as daily
         ON master_data."symbol" = daily."symbol"
         ) AS sub
         WHERE date = p_target_date

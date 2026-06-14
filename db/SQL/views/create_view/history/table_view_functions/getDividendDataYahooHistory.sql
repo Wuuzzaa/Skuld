@@ -12,6 +12,8 @@
         FROM (
         SELECT
             daily.snapshot_date AS date,
+            master_data.from_date AS from_date,
+            master_data.to_date AS to_date,
             master_data."symbol",
         coalesce(
                 daily."years_of_growth",
@@ -23,7 +25,7 @@
             ) as "classification"
         FROM
             "DividendDataYahooMasterData" as master_data
-            INNER JOIN "DividendDataYahooHistoryDaily" as daily
+            LEFT OUTER JOIN "DividendDataYahooHistoryDaily" as daily
         ON master_data."symbol" = daily."symbol"
         ) AS sub
         WHERE date = p_target_date

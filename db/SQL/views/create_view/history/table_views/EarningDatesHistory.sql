@@ -5,6 +5,8 @@
     
         SELECT
             daily.snapshot_date AS date,
+            master_data.from_date AS from_date,
+            master_data.to_date AS to_date,
             master_data."symbol",
         coalesce(
                 daily."earnings_date",
@@ -12,7 +14,7 @@
             ) as "earnings_date"
         FROM
             "EarningDatesMasterData" as master_data
-            INNER JOIN "EarningDatesHistoryDaily" as daily
+            LEFT OUTER JOIN "EarningDatesHistoryDaily" as daily
         ON master_data."symbol" = daily."symbol"
         ;
     

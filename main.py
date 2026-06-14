@@ -15,7 +15,7 @@ from src.yahooquery_earning_dates import scrape_earning_dates
 from src.yahooquery_financials import generate_fundamental_data, load_historical_prices, load_stock_prices
 from src.yfinance_analyst_price_targets import scrape_yahoo_finance_analyst_price_targets
 from config import *
-from src.historization import create_history_tables_and_views, generate_table_functions_for_history_enabled_views, run_historization_pipeline
+from src.historization import create_history_tables_and_views, generate_table_functions_for_history_enabled_views, generate_time_travel_views_for_history_enabled_views, run_historization_pipeline
 from src.pipeline_monitor import PipelineMonitor
 
 logger = logging.getLogger(__name__)
@@ -33,6 +33,7 @@ def db_setup():
     create_history_tables_and_views()
     logger.info("###### Generating table functions for history-enabled views...")
     generate_table_functions_for_history_enabled_views()
+    generate_time_travel_views_for_history_enabled_views()
 
 def main(args):
     pipeline = None

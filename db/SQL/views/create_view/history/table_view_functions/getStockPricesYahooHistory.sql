@@ -18,6 +18,8 @@
         FROM (
         SELECT
             daily.snapshot_date AS date,
+            master_data.from_date AS from_date,
+            master_data.to_date AS to_date,
             master_data."symbol",
         daily."open" as "open",
 		daily."high" as "high",
@@ -35,7 +37,7 @@
             ) as "splits"
         FROM
             "StockPricesYahooMasterData" as master_data
-            INNER JOIN "StockPricesYahooHistoryDaily" as daily
+            LEFT OUTER JOIN "StockPricesYahooHistoryDaily" as daily
         ON master_data."symbol" = daily."symbol"
         ) AS sub
         WHERE date = p_target_date

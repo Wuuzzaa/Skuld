@@ -485,7 +485,7 @@ def is_classified(source_table: str, column_name: str) -> bool:
 
 
 
-def get_history_select_statement(table_name: str, optimized: bool = True, needed_data_columns: list[str] | None = None, min_bucket: str  | None = None) -> str:
+def get_history_select_statement(table_name: str, optimized: bool = True, needed_data_columns: list[str] | None = None, min_bucket: str  | None = None, time_travel: bool = False) -> str:
     """
     Select statement for history view of the specified table.
     """
@@ -565,9 +565,14 @@ def get_history_select_statement(table_name: str, optimized: bool = True, needed
 
     if len(active_buckets) == 2 and 'master' in active_buckets and 'daily' in active_buckets:
         optimize_date_join = True
-        date_cols = """
-        daily.snapshot_date AS date
-    """
+        if time_travel:
+            date_cols = "(current_setting('app.time_travel_date', true))::date AS date"
+        else:
+            date_cols = """
+            daily.snapshot_date AS date,
+            master_data.from_date AS from_date,
+            master_data.to_date AS to_date
+        """
     else:
         date_cols = """
         dates.date,
@@ -610,15 +615,19 @@ def get_history_select_statement(table_name: str, optimized: bool = True, needed
         if optimize_date_join:
             logger.info("Optimizing date join for Daily bucket by directly joining on snapshot_date and skipping DatesHistory.")   
             key_columns_on_condition_str_daily = " AND ".join([f'master_data."{col["name"]}" = daily."{col["name"]}"' for col in key_columns])
-            join_clauses.append(f'INNER JOIN "{table_name}HistoryDaily" as daily')
-            join_clauses.append(f'ON {key_columns_on_condition_str_daily}')
+            join_clauses.append(f'LEFT OUTER JOIN "{table_name}HistoryDaily" as daily')
+            if time_travel:
+                join_clauses.append(f"ON daily.snapshot_date = (current_setting('app.time_travel_date', true))::date")
+                join_clauses.append(f'AND {key_columns_on_condition_str_daily}')
+            else:
+                join_clauses.append(f'ON {key_columns_on_condition_str_daily}')        
             if needed_data_columns is not None: # Optimization to reduce join size
                 not_null_clause = " AND ".join([f'daily."{col["name"]}" IS NOT NULL' for col in data_columns])
                 join_clauses.append(f"AND {not_null_clause}")
         else:
             logger.info("Joining DatesHistory for Daily bucket.")
             key_columns_on_condition_str_daily = " AND ".join([f'master_data."{col["name"]}" = daily."{col["name"]}"' for col in key_columns])
-            join_clauses.append(f'LEFT JOIN "{table_name}HistoryDaily" as daily')
+            join_clauses.append(f'LEFT OUTER JOIN "{table_name}HistoryDaily" as daily')
             join_clauses.append('ON dates.date = daily.snapshot_date')
             join_clauses.append(f'AND {key_columns_on_condition_str_daily}')
             if needed_data_columns is not None: # Optimization to reduce join size
@@ -627,7 +636,7 @@ def get_history_select_statement(table_name: str, optimized: bool = True, needed
         
     if 'weekly' in active_buckets:        
         key_columns_on_condition_str_weekly = " AND ".join([f'master_data."{col["name"]}" = weekly."{col["name"]}"' for col in key_columns])
-        join_clauses.append(f'LEFT JOIN "{table_name}HistoryWeekly" as weekly')
+        join_clauses.append(f'LEFT OUTER JOIN "{table_name}HistoryWeekly" as weekly')
         join_clauses.append('ON dates.isoyear = weekly.isoyear')
         join_clauses.append('AND dates.week = weekly.week')
         join_clauses.append(f'AND {key_columns_on_condition_str_weekly}')
@@ -637,7 +646,7 @@ def get_history_select_statement(table_name: str, optimized: bool = True, needed
         
     if 'monthly' in active_buckets:
         key_columns_on_condition_str_monthly = " AND ".join([f'master_data."{col["name"]}" = monthly."{col["name"]}"' for col in key_columns])
-        join_clauses.append(f'LEFT JOIN "{table_name}HistoryMonthly" as monthly')
+        join_clauses.append(f'LEFT OUTER JOIN "{table_name}HistoryMonthly" as monthly')
         join_clauses.append('ON dates.year = monthly.year')
         join_clauses.append('AND dates.month = monthly.month')
         join_clauses.append(f'AND {key_columns_on_condition_str_monthly}')
@@ -656,6 +665,11 @@ def get_history_select_statement(table_name: str, optimized: bool = True, needed
         FROM
             "{table_name}MasterData" as master_data
             {join_str}
+        """
+        if time_travel:
+            select_statement_sql = f"""
+            {select_statement_sql}
+            WHERE (current_setting('app.time_travel_date', true))::date BETWEEN master_data.from_date AND master_data.to_date
         """
     else:
         # Always join master data (it's the base for dates/keys)

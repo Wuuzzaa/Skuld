@@ -239,7 +239,7 @@ def execute_sql(connection, sql: str, table_name: str, operation_type: str = "IN
         raise e
 
 @log_function
-def select_into_dataframe(query: str = None, sql_file_path: str = None, params: dict = None):
+def select_into_dataframe(query: str = None, sql_file_path: str = None, params: dict = None, session_variables: dict = {'jit': 'off', 'enable_nestloop': 'off'}) -> pd.DataFrame:
     """
     Executes a SQL query and returns the result as a DataFrame.
     You can provide either a SQL query string or a path to a .sql file.
@@ -248,6 +248,7 @@ def select_into_dataframe(query: str = None, sql_file_path: str = None, params: 
     - query (str, optional): SQL query string to execute.
     - sql_file_path (str, optional): Path to a .sql file containing the query.
     - params (dict, optional): Dictionary of parameters to bind to the query (e.g., {'expiration_date': '2026-08-21'})
+    - session_variables (dict, optional): Dictionary of session variables to set before executing the query.
 
     Returns:
     - pd.DataFrame: Result of the query.
@@ -265,14 +266,15 @@ def select_into_dataframe(query: str = None, sql_file_path: str = None, params: 
             logger.error(msg)
             raise ValueError(msg)
 
-        logger.debug(f"Executing query with params: {params}")
+        logger.debug(f"Executing query with params: {params} and session variables: {session_variables}")
         logger.debug(f"\n{sql}")
         pg_engine = get_postgres_engine()
         if pg_engine:
             start_pg = time.time()
             with pg_engine.connect() as conn:
-                conn.execute(text("SET jit = off;"))
-                conn.execute(text("SET enable_nestloop = off;"))
+                for var, value in session_variables.items():
+                    # Der Parameter 'true' bindet die Variable lokal an die Transaktion
+                    conn.execute(text(f"SELECT set_config('{var}', '{value}', true);"))
                 if params:
                     df = pd.read_sql(text(str(sql)), conn, params=params)
                 else:

@@ -28,7 +28,8 @@ SELECT
 	a."day_last_updated", 
 
 	-- OptionPricingMetrics
-	d.days_to_expiration,
+	CASE WHEN (A.EXPIRATION_DATE::DATE - CURRENT_DATE) >= 0 THEN (A.EXPIRATION_DATE::DATE - CURRENT_DATE) ELSE 0 END AS DAYS_TO_EXPIRATION,
+	--d.days_to_expiration,
 	d.premium_option_price,
 	d.intrinsic_value,
 	d.extrinsic_value,

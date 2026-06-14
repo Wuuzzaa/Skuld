@@ -5,6 +5,8 @@
     
         SELECT
             daily.snapshot_date AS date,
+            master_data.from_date AS from_date,
+            master_data.to_date AS to_date,
             master_data."symbol",
         coalesce(
                 daily."asOfDate",
@@ -1928,7 +1930,7 @@
             ) as "KeyStats_annualHoldingsTurnover"
         FROM
             "FundamentalDataYahooMasterData" as master_data
-            INNER JOIN "FundamentalDataYahooHistoryDaily" as daily
+            LEFT OUTER JOIN "FundamentalDataYahooHistoryDaily" as daily
         ON master_data."symbol" = daily."symbol"
         ;
     

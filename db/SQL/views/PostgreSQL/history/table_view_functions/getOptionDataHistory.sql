@@ -57,7 +57,10 @@
     a.day_volume,
     a.day_vwap,
     a.day_last_updated,
-    d.days_to_expiration,
+        CASE
+            WHEN ((a.expiration_date - p_target_date) >= 0) THEN (a.expiration_date - p_target_date)
+            ELSE 0
+        END AS days_to_expiration,
     d.premium_option_price,
     d.intrinsic_value,
     d.extrinsic_value,

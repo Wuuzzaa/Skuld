@@ -7,7 +7,7 @@ SELECT
 	a."option_osi",
 	a."symbol", 
 	a."contract_type", 
-	DATE(a."expiration_date") as expiration_date, 
+	a."expiration_date" as expiration_date, 
 	a."strike_price",  
 	a.open_interest, 
     a.implied_volatility, 
@@ -29,7 +29,8 @@ SELECT
 	a."day_last_updated", 
 
 	-- OptionPricingMetrics
-	d.days_to_expiration,
+	CASE WHEN (A.EXPIRATION_DATE::DATE - A.DATE) >= 0 THEN (A.EXPIRATION_DATE::DATE - A.DATE) ELSE 0 END AS DAYS_TO_EXPIRATION,
+	--d.days_to_expiration,
 	d.premium_option_price,
 	d.intrinsic_value,
 	d.extrinsic_value,

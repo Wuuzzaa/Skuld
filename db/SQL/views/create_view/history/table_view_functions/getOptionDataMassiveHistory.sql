@@ -32,6 +32,8 @@
         FROM (
         SELECT
             daily.snapshot_date AS date,
+            master_data.from_date AS from_date,
+            master_data.to_date AS to_date,
             master_data."option_osi",
 		master_data."symbol",
         master_data."contract_type" as "contract_type",
@@ -57,7 +59,7 @@
 		daily."day_last_updated" as "day_last_updated"
         FROM
             "OptionDataMassiveMasterData" as master_data
-            INNER JOIN "OptionDataMassiveHistoryDaily" as daily
+            LEFT OUTER JOIN "OptionDataMassiveHistoryDaily" as daily
         ON master_data."option_osi" = daily."option_osi" AND master_data."symbol" = daily."symbol"
         ) AS sub
         WHERE date = p_target_date
