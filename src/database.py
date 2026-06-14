@@ -252,24 +252,6 @@ def select_into_dataframe(query: str = None, sql_file_path: str = None, params: 
     Returns:
     - pd.DataFrame: Result of the query.
     """
-    df = select_into_dataframe_pg(query=query, sql_file_path=sql_file_path, params=params)
-
-    return df
-
-
-def select_into_dataframe_pg(query: str = None, sql_file_path: str = None, params: dict = None):
-    """
-    Executes a SQL query and returns the result as a DataFrame.
-    You can provide either a SQL query string or a path to a .sql file.
-
-    Parameters:
-    - query (str, optional): SQL query string to execute.
-    - sql_file_path (str, optional): Path to a .sql file containing the query.
-    - params (dict, optional): Dictionary of parameters to bind to the query (e.g., {'expiration_date': '2026-08-21'})
-
-    Returns:
-    - pd.DataFrame: Result of the query.
-    """
     df = None
   
     try:
@@ -300,6 +282,7 @@ def select_into_dataframe_pg(query: str = None, sql_file_path: str = None, param
         logger.error(f"[PostgreSQL] Error executing query: \n{e}")
         logger.error(f"\n{str(sql)}")
         raise e
+
     return df
 
 def get_table_key_and_data_columns(table_name):

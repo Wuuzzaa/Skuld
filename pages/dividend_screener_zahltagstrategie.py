@@ -11,18 +11,25 @@ import pandas as pd
 import os
 import urllib.parse
 
-from src.database import select_into_dataframe_pg
 from src.dividend_screener import calculate_dividend_scores, filter_dividend_screener
+from src.historization import select_timetravel_into_dataframe
+from src.streamlit_helpers import render_date_filter
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SQL_FILE = os.path.join(BASE_DIR, "db", "SQL", "query", "dividend_screener.sql")
 ZAHLTAG_PROMPT_FILE = os.path.join(BASE_DIR, "src", "prompts", "prompt_zahltagstrategie.txt")
 
+selected_date = render_date_filter(
+    date_query='select date from (select date from "DatesHistory" union select current_date) as sub ORDER BY date DESC',
+)
 
 @st.cache_data(ttl=600)
 def load_and_score():
     """Load dividend data and apply 11-point scoring matrix."""
-    df = select_into_dataframe_pg(sql_file_path=SQL_FILE)
+    df = select_timetravel_into_dataframe(
+        date=selected_date,
+        sql_file_path=SQL_FILE
+    )
     if df is None or df.empty:
         return pd.DataFrame()
     return calculate_dividend_scores(df)

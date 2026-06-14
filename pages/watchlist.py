@@ -6,7 +6,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 import datetime
 import urllib.parse
-from src.database import select_into_dataframe_pg
+from src.database import select_into_dataframe
 
 # Projekt-Basisverzeichnis ermitteln
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -227,7 +227,7 @@ def update_watchlist_prices(df_watchlist, df_market_data):
 def get_valid_symbols():
     try:
         # Versuche Symbole und Sektor aus der Datenbank zu laden
-        df_symbols = select_into_dataframe_pg('select distinct symbol, live_stock_price, company_name, company_sector as "Sektor" from "OptionDataMerged" ORDER BY symbol ASC')
+        df_symbols = select_into_dataframe('select distinct symbol, live_stock_price, company_name, company_sector as "Sektor" from "OptionDataMerged" ORDER BY symbol ASC')
         if df_symbols is not None and not df_symbols.empty:
             return df_symbols
     except Exception as e:
