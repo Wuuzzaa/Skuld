@@ -24,10 +24,10 @@ selected_date = render_date_filter(
 )
 
 @st.cache_data(ttl=600)
-def load_and_score():
+def load_and_score(date):
     """Load dividend data and apply 11-point scoring matrix."""
     df = select_timetravel_into_dataframe(
-        date=selected_date,
+        date=date,
         sql_file_path=SQL_FILE
     )
     if df is None or df.empty:
@@ -133,7 +133,7 @@ def main():
     st.caption("11-Punkte-Matrix (5 Fundamental + 5 Dividend + 1 Technik) | Max 33 Punkte")
 
     # Load data
-    df_scored = load_and_score()
+    df_scored = load_and_score(selected_date)
 
     if df_scored.empty:
         st.error("Keine Daten verfügbar. Prüfe die Datenbankverbindung.")

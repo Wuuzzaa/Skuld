@@ -31,12 +31,8 @@
         "contract_type", "expiration_date", "strike_price", "open_interest", "implied_volatility", "exercise_style", "shares_per_contract", "greeks_delta", "greeks_gamma", "greeks_theta", "greeks_vega", "day_change", "day_change_percent", "day_close", "day_high", "day_low", "day_open", "day_previous_close", "day_volume", "day_vwap", "day_last_updated" 
         FROM (
         SELECT
-        dates.date,
-        dates.year,
-        dates.month,
-        dates.isoyear,
-        dates.week,
-        master_data."option_osi",
+            daily.snapshot_date AS date,
+            master_data."option_osi",
 		master_data."symbol",
         master_data."contract_type" as "contract_type",
 		master_data."expiration_date" as "expiration_date",
@@ -59,13 +55,10 @@
 		daily."day_volume" as "day_volume",
 		daily."day_vwap" as "day_vwap",
 		daily."day_last_updated" as "day_last_updated"
-    FROM
-        "DatesHistory" as dates
-        INNER JOIN "OptionDataMassiveMasterData" as master_data
-        ON dates.date BETWEEN master_data.from_date AND master_data.to_date 
-        LEFT JOIN "OptionDataMassiveHistoryDaily" as daily
-        ON dates.date = daily.snapshot_date
-        AND master_data."option_osi" = daily."option_osi" AND master_data."symbol" = daily."symbol"
+        FROM
+            "OptionDataMassiveMasterData" as master_data
+            INNER JOIN "OptionDataMassiveHistoryDaily" as daily
+        ON master_data."option_osi" = daily."option_osi" AND master_data."symbol" = daily."symbol"
         ) AS sub
         WHERE date = p_target_date
     $$ LANGUAGE SQL STABLE;

@@ -3,13 +3,9 @@
     CREATE VIEW
         "StockPricesYahooHistory" AS
     
-    SELECT
-        dates.date,
-        dates.year,
-        dates.month,
-        dates.isoyear,
-        dates.week,
-        master_data."symbol",
+        SELECT
+            daily.snapshot_date AS date,
+            master_data."symbol",
         daily."open" as "open",
 		daily."high" as "high",
 		daily."low" as "low",
@@ -24,12 +20,9 @@
                 daily."splits",
                 master_data."splits"
             ) as "splits"
-    FROM
-        "DatesHistory" as dates
-        INNER JOIN "StockPricesYahooMasterData" as master_data
-        ON dates.date BETWEEN master_data.from_date AND master_data.to_date 
-        LEFT JOIN "StockPricesYahooHistoryDaily" as daily
-        ON dates.date = daily.snapshot_date
-        AND master_data."symbol" = daily."symbol"
-    ;
+        FROM
+            "StockPricesYahooMasterData" as master_data
+            INNER JOIN "StockPricesYahooHistoryDaily" as daily
+        ON master_data."symbol" = daily."symbol"
+        ;
     

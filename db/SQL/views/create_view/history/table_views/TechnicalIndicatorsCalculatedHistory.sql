@@ -3,13 +3,9 @@
     CREATE VIEW
         "TechnicalIndicatorsCalculatedHistory" AS
     
-    SELECT
-        dates.date,
-        dates.year,
-        dates.month,
-        dates.isoyear,
-        dates.week,
-        master_data."symbol",
+        SELECT
+            daily.snapshot_date AS date,
+            master_data."symbol",
         daily."EMA_5" as "EMA_5",
 		daily."EMA_10" as "EMA_10",
 		daily."EMA_20" as "EMA_20",
@@ -45,12 +41,9 @@
 		daily."STOCHh_14_3_1" as "STOCHh_14_3_1",
 		daily."RSI_14" as "RSI_14",
 		daily."RSL" as "RSL"
-    FROM
-        "DatesHistory" as dates
-        INNER JOIN "TechnicalIndicatorsCalculatedMasterData" as master_data
-        ON dates.date BETWEEN master_data.from_date AND master_data.to_date 
-        LEFT JOIN "TechnicalIndicatorsCalculatedHistoryDaily" as daily
-        ON dates.date = daily.snapshot_date
-        AND master_data."symbol" = daily."symbol"
-    ;
+        FROM
+            "TechnicalIndicatorsCalculatedMasterData" as master_data
+            INNER JOIN "TechnicalIndicatorsCalculatedHistoryDaily" as daily
+        ON master_data."symbol" = daily."symbol"
+        ;
     

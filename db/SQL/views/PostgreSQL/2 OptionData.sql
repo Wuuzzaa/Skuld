@@ -6,7 +6,7 @@ SELECT
 	a."option_osi",
 	a."symbol", 
 	a."contract_type", 
-	DATE(a."expiration_date") as expiration_date, 
+	a."expiration_date" as expiration_date, 
 	a."strike_price",  
 	a.open_interest, 
     a.implied_volatility, 

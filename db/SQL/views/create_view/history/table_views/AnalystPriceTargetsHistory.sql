@@ -3,23 +3,16 @@
     CREATE VIEW
         "AnalystPriceTargetsHistory" AS
     
-    SELECT
-        dates.date,
-        dates.year,
-        dates.month,
-        dates.isoyear,
-        dates.week,
-        master_data."symbol",
+        SELECT
+            daily.snapshot_date AS date,
+            master_data."symbol",
         coalesce(
                 daily."analyst_mean_target",
                 master_data."analyst_mean_target"
             ) as "analyst_mean_target"
-    FROM
-        "DatesHistory" as dates
-        INNER JOIN "AnalystPriceTargetsMasterData" as master_data
-        ON dates.date BETWEEN master_data.from_date AND master_data.to_date 
-        LEFT JOIN "AnalystPriceTargetsHistoryDaily" as daily
-        ON dates.date = daily.snapshot_date
-        AND master_data."symbol" = daily."symbol"
-    ;
+        FROM
+            "AnalystPriceTargetsMasterData" as master_data
+            INNER JOIN "AnalystPriceTargetsHistoryDaily" as daily
+        ON master_data."symbol" = daily."symbol"
+        ;
     

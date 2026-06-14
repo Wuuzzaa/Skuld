@@ -1,12 +1,15 @@
 import logging
 import os
 import streamlit as st
+import concurrent.futures
 from config import PATH_DATABASE_QUERY_FOLDER, IV_CORRECTION_MODE, RISK_FREE_RATE
 from pages.documentation_text.iron_condors_page_doc import get_iron_condor_documentation
 from src.database import select_into_dataframe
+from src.historization import select_timetravel_into_dataframe
 from src.logger_config import setup_logging
 from src.page_display_dataframe import page_display_dataframe, _create_claude_prompt_page_iron_condors
 from src.iron_condor_calculation import get_page_iron_condors, calc_iron_condors
+from src.streamlit_helpers import render_date_filter
 from src.utils.option_utils import get_expiration_type
 from src.ui_utils import init_session_state, reset_to_defaults as ui_reset, filter_by_expiration_type
 from src.ui_strategy_display import display_strategy_details
@@ -33,6 +36,10 @@ DEFAULT_MAX_SELL_IV = 0.9
 DEFAULT_MIN_MAX_PROFIT = 100.0
 
 st.title("Iron Condors")
+
+selected_date = render_date_filter(
+    date_query='select date from (select date from "DatesHistory" union select current_date) as sub ORDER BY date DESC',
+)
 
 # Default values mapping for UI utils
 DEFAULTS = {
@@ -84,7 +91,7 @@ with st.expander("Configuration and Filters", expanded=True):
     with col1:
         # Load expiration dates
         sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'expiration_dte_asc.sql'
-        dates_df = select_into_dataframe(sql_file_path=sql_file_path)
+        dates_df = select_timetravel_into_dataframe(date=selected_date, sql_file_path=sql_file_path)
         
         # Filter dates_df based on checkbox states
         filtered_dates_df = filter_by_expiration_type(
@@ -171,9 +178,9 @@ with st.expander("Configuration and Filters", expanded=True):
     with col17:
         st.info("IV correction mode: 'auto' (Automatic), 0.0-1.0 (Manual reduction), 0.0 (No correction)")
 
-@st.cache_data
-def _cached_select_into_dataframe(sql_file_path, params):
-    return select_into_dataframe(sql_file_path=sql_file_path, params=params)
+@st.cache_data(ttl=300)
+def _cached_select_into_dataframe(date, sql_file_path, params):
+    return select_timetravel_into_dataframe(date=date, sql_file_path=sql_file_path, params=params)
 
 @st.cache_data
 def _cached_calc_iron_condors(put_df, call_df, iv_correction, risk_free_rate):
@@ -194,13 +201,16 @@ with st.spinner("Calculating Iron Condors..."):
     
     sql_query_path = PATH_DATABASE_QUERY_FOLDER / 'iron_condor_input.sql'
     
-    # Get Put Spreads
+    # Prepare params for parallel execution
     put_params = {**common_params, "expiration_date": expiration_date_put, "option_type": "put", "delta_target": st.session_state.ic_delta_put, "spread_width": st.session_state.ic_width_put}
-    put_df = _cached_select_into_dataframe(sql_file_path=sql_query_path, params=put_params)
-    
-    # Get Call Spreads
     call_params = {**common_params, "expiration_date": expiration_date_call, "option_type": "call", "delta_target": st.session_state.ic_delta_call, "spread_width": st.session_state.ic_width_call}
-    call_df = _cached_select_into_dataframe(sql_file_path=sql_query_path, params=call_params)
+
+    # Execute both selects in parallel (I/O bound) to reduce wait time
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        future_put = executor.submit(_cached_select_into_dataframe, date=selected_date, sql_file_path=sql_query_path, params=put_params)
+        future_call = executor.submit(_cached_select_into_dataframe, date=selected_date, sql_file_path=sql_query_path, params=call_params)
+        put_df = future_put.result()
+        call_df = future_call.result()
     
     ic_df_raw = _cached_calc_iron_condors(put_df, call_df, st.session_state.ic_iv_correction, st.session_state.ic_risk_free_rate / 100)
     ic_df = _cached_get_page_iron_condors(ic_df_raw)

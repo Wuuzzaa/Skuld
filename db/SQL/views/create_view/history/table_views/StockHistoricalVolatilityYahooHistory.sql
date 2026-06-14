@@ -3,23 +3,16 @@
     CREATE VIEW
         "StockHistoricalVolatilityYahooHistory" AS
     
-    SELECT
-        dates.date,
-        dates.year,
-        dates.month,
-        dates.isoyear,
-        dates.week,
-        master_data."symbol",
+        SELECT
+            daily.snapshot_date AS date,
+            master_data."symbol",
         coalesce(
                 daily."historical_volatility_30d",
                 master_data."historical_volatility_30d"
             ) as "historical_volatility_30d"
-    FROM
-        "DatesHistory" as dates
-        INNER JOIN "StockHistoricalVolatilityYahooMasterData" as master_data
-        ON dates.date BETWEEN master_data.from_date AND master_data.to_date 
-        LEFT JOIN "StockHistoricalVolatilityYahooHistoryDaily" as daily
-        ON dates.date = daily.snapshot_date
-        AND master_data."symbol" = daily."symbol"
-    ;
+        FROM
+            "StockHistoricalVolatilityYahooMasterData" as master_data
+            INNER JOIN "StockHistoricalVolatilityYahooHistoryDaily" as daily
+        ON master_data."symbol" = daily."symbol"
+        ;
     
