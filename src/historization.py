@@ -548,6 +548,8 @@ def select_timetravel_into_dataframe(date: str, query: str = None, sql_file_path
             for table in HISTORY_ENABLED_TABLES:
                 history_time_travel_view = f"{table}HistoryTimeTravel"
                 sql = sql.replace(f'"{table}"', f'"{history_time_travel_view}"')
+            # replace occurences of CURRENT_DATE with the provided date
+            sql = sql.replace("CURRENT_DATE", f"current_setting('app.time_travel_date', true)::date")
         elif mode == 'HistoryViews':
             #replace views with their history view counterparts in the sql and filter on date
             for view in HISTORY_ENABLED_VIEWS:
@@ -559,6 +561,8 @@ def select_timetravel_into_dataframe(date: str, query: str = None, sql_file_path
                 history_view = f"{table}History"
                 subquery = f'(SELECT * FROM "{history_view}" WHERE date = DATE(\'{date}\'))'
                 sql = sql.replace(f'"{table}"', subquery)
+            # replace occurences of CURRENT_DATE with the provided date
+            sql = sql.replace("CURRENT_DATE", f"DATE('{date}')")
         elif mode == 'TableFunctions':
             for view in HISTORY_ENABLED_VIEWS:
                 history_view_table_function = f"get{view}History"
@@ -566,10 +570,8 @@ def select_timetravel_into_dataframe(date: str, query: str = None, sql_file_path
             for table in HISTORY_ENABLED_TABLES:
                 history_table_table_function = f"get{table}History"
                 sql = sql.replace(f'"{table}"', f'"{history_table_table_function}"(DATE(\'{date}\'))')
-
-
-        # replace occurences of CURRENT_DATE with the provided date
-        sql = sql.replace("CURRENT_DATE", f"DATE('{date}')")
+            # replace occurences of CURRENT_DATE with the provided date
+            sql = sql.replace("CURRENT_DATE", f"DATE('{date}')")
 
     pg_engine = get_postgres_engine()
     if pg_engine:
@@ -578,7 +580,17 @@ def select_timetravel_into_dataframe(date: str, query: str = None, sql_file_path
             if mode == 'TimeTravelViews':    
                 # Setze die Zeitreise-Datumskonfiguration für die aktuelle Verbindung
                 # Dieser wird in den Time Travel Views verwendet, um die Daten zum angegebenen Datum zurückzugeben
-                session_variables = {"jit": "off", "enable_nestloop": "off", "app.time_travel_date": date}
+                session_variables = {
+                    "jit": "off", 
+                    "enable_nestloop": "off", 
+                    "app.time_travel_date": date
+                }
+            else:
+                # disable JIT and nestloop for history views to improve performance
+                session_variables = {
+                    "jit": "off", 
+                    "enable_nestloop": "off"
+                }
             df = select_into_dataframe(sql, params=params, session_variables=session_variables)
             return df
         

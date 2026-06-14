@@ -1,4 +1,4 @@
-WITH BaseData AS (
+WITH BaseData AS MATERIALIZED (
     SELECT
         shares_per_contract as number_of_stocks,
         symbol,
