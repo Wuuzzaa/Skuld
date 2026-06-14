@@ -6,16 +6,12 @@ from src.sp500_constituents import SP500_SYMBOLS
 from src.rsl_momentum_strategy import calculate_rsl_momentum_ranking
 from src.streamlit_helpers import render_date_filter
 
-selected_date = render_date_filter(
-    date_query='select date from (select date from "DatesHistory" union select current_date) as sub ORDER BY date DESC',
-)
-
-query_path = "db/SQL/query/rsl_query.sql"
 @st.cache_data(ttl=300)
-def load_rsl_data():
+def load_rsl_data(date: str):
     """Load RSL data for S&P 500 symbols from database."""
+    query_path = "db/SQL/query/rsl_query.sql"
     df = select_timetravel_into_dataframe(
-        date=selected_date,
+        date=date,
         sql_file_path=query_path,
         params={"symbols": list(SP500_SYMBOLS)}
     )
@@ -24,6 +20,10 @@ def load_rsl_data():
 
 def main():
     st.title("RSL Momentum Rotation")
+
+    selected_date = render_date_filter(
+    date_query='select date from (select date from "DatesHistory" union select current_date) as sub ORDER BY date DESC',
+)
 
     # Parameters
     col1, col2, col3 = st.columns(3)
@@ -38,7 +38,7 @@ def main():
                                           help="Unter diesem Percentil wird verkauft")
 
     # Load data
-    df = load_rsl_data()
+    df = load_rsl_data(selected_date)
 
     if df is None or df.empty:
         st.error("Keine RSL-Daten verfügbar. Bitte prüfe die Datenbankverbindung.")
