@@ -35,11 +35,10 @@ def format_date_value(date_value) -> str:
         return ""
     return parsed.strftime("%Y-%m-%d")
 
+st.subheader("S&P 500 Sektorrotation")
 selected_date = render_date_filter(
     date_query='select date from (select date from "DatesHistory" union select current_date) as sub ORDER BY date DESC',
 )
-
-st.subheader("S&P 500 Sektorrotation")
 st.caption("Benchmark: SPY. Sektoren werden ueber die SPDR Sector ETFs abgebildet.")
 st.info(
     "Aktuell ist nur eine kurze Historie verfuegbar. Deshalb nutzt die Seite standardmaessig kuerzere Fenster "

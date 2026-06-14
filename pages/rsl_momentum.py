@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 
+from config import PATH_DATABASE_QUERY_FOLDER
 from src.historization import select_timetravel_into_dataframe
 from src.sp500_constituents import SP500_SYMBOLS
 from src.rsl_momentum_strategy import calculate_rsl_momentum_ranking
@@ -9,7 +10,7 @@ from src.streamlit_helpers import render_date_filter
 @st.cache_data(ttl=300)
 def load_rsl_data(date: str):
     """Load RSL data for S&P 500 symbols from database."""
-    query_path = "db/SQL/query/rsl_query.sql"
+    query_path = PATH_DATABASE_QUERY_FOLDER / "rsl_query.sql"
     df = select_timetravel_into_dataframe(
         date=date,
         sql_file_path=query_path,
@@ -22,8 +23,8 @@ def main():
     st.title("RSL Momentum Rotation")
 
     selected_date = render_date_filter(
-    date_query='select date from (select date from "DatesHistory" union select current_date) as sub ORDER BY date DESC',
-)
+        date_query='select date from (select date from "DatesHistory" union select current_date) as sub ORDER BY date DESC',
+    )
 
     # Parameters
     col1, col2, col3 = st.columns(3)
