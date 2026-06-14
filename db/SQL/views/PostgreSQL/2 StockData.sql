@@ -546,7 +546,8 @@ SELECT
 	ROUND((c.analyst_mean_target - a.close)::numeric,2) as "target-close$",
 	ROUND((ROUND((c.analyst_mean_target - a.close)::numeric,2) / a.close * 100.0)::numeric, 2) as "target-close%",
 
-	tlu.last_updated AS last_updated_stock_data
+	-- tlu.last_updated AS last_updated_stock_data
+	'' AS last_updated_stock_data
 FROM
 	"StockPricesYahoo" AS A
 	LEFT OUTER JOIN (
@@ -573,5 +574,5 @@ FROM
 	ON A.SYMBOL = I.SYMBOL
 	LEFT OUTER JOIN "TechnicalIndicatorsCalculated" AS J
 	ON A.SYMBOL = J.SYMBOL
-	LEFT OUTER JOIN "TableLastUpdated" AS tlu
-	ON tlu.table_name = 'StockPricesYahoo';
+	-- LEFT OUTER JOIN "TableLastUpdated" AS tlu
+	-- ON tlu.table_name = 'StockPricesYahoo';

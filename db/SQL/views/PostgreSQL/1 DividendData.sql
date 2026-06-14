@@ -29,7 +29,7 @@ FROM
 			SYMBOL,
 			COUNT(*) AS NO_DIVIDEND_PAYOUTS_LAST_YEAR
 		FROM
-			"StockPricesYahooHistoryDaily"
+			"StockPricesYahooHistoryDaily" AS sp
 		WHERE
 			DIVIDENDS > 0
 			AND SNAPSHOT_DATE > CURRENT_DATE - INTERVAL '1 year'

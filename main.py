@@ -22,10 +22,16 @@ logger = logging.getLogger(__name__)
 
 def db_setup():
     """Set up the database with migrations and history tables/views."""
+    logger.info("###### Dropping all views to avoid dependency issues during migrations...")
     drop_all_views(get_postgres_engine())
+    logger.info("###### Running database migrations...")
     run_migrations()
+    logger.info("###### Creating history tables and views...")
     create_history_tables_and_views()
+    logger.info("###### Recreating views...")
     recreate_views()
+    create_history_tables_and_views()
+    logger.info("###### Generating table functions for history-enabled views...")
     generate_table_functions_for_history_enabled_views()
 
 def main(args):
@@ -37,6 +43,7 @@ def main(args):
         logger.info("Running database migrations only...")
         logger.info("#" * 80)
         try:
+            logger.info("###### Setting up database...")
             db_setup()
             
             logger.info("#" * 80)

@@ -513,7 +513,7 @@ def _recreate_views_connection(connection):
                 
                 with connection.begin():
                     for statement in statements:
-                        connection.execute(text(statement))
+                        execute_sql(connection, statement, table_name=view_file, operation_type="CREATE VIEW", additional_data=f"Creating view {view_file}")
                 
                 progress_made = True
             except Exception as e:
