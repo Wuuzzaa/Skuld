@@ -36,11 +36,12 @@ SELECT
 	d.strike_stock_price_difference,
     d.strike_stock_price_difference_ptc,
 
-	tlu.last_updated AS last_updated_option_data
+	-- tlu.last_updated AS last_updated_option_data
+	'' AS last_updated_option_data
 FROM
 	"OptionDataMassiveHistory" AS a
 	LEFT OUTER JOIN "OptionPricingMetricsHistory" as d 
 	ON a.date = d.date AND a."option_osi" = d."option_osi" 
 	AND a.symbol = d.symbol
-LEFT OUTER JOIN "TableLastUpdatedHistory" AS tlu
-ON a.date = tlu.date AND tlu.table_name = 'OptionDataMassive'
+-- LEFT OUTER JOIN "TableLastUpdatedHistory" AS tlu
+-- ON a.date = tlu.date AND tlu.table_name = 'OptionDataMassive'

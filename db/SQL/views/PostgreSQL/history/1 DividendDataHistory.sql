@@ -18,7 +18,7 @@ FROM
             DIVIDENDS AS LAST_DIVIDEND,
             SNAPSHOT_DATE AS LAST_DIVIDEND_DATE
         FROM
-            "StockPricesYahooHistoryDaily"
+            "StockPricesYahooHistoryDaily" as sp
         WHERE
             SYMBOL = A.SYMBOL  -- Filterung direkt inside, da LATERAL das erlaubt
             AND DIVIDENDS > 0
