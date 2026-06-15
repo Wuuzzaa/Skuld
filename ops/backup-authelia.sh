@@ -31,8 +31,11 @@ DEST_DIR="${DEST_DIR:-/home/deploy/backups/authelia}"
 RETENTION_DAYS="${RETENTION_DAYS:-30}"
 
 # Telegram (matches backup_db.py — see SKULD audit notes about extracting these)
+# Ops alerts go to the dedicated ops chat when TELEGRAM_OPS_CHAT_ID is set;
+# fall back to the trading chat so the script keeps working on staging /
+# during rollouts that haven't propagated the new env var yet.
 TG_TOKEN="${TELEGRAM_BOT_TOKEN:-8245443180:AAG0x1FfKfu1CYtj3CmiTb5FzDVlOB224dc}"
-TG_CHAT="${TELEGRAM_CHAT_ID:--1003610692224}"
+TG_CHAT="${TELEGRAM_OPS_CHAT_ID:-${TELEGRAM_CHAT_ID:--1003610692224}}"
 
 # ── helpers ───────────────────────────────────────────────────────────────
 notify_tg() {

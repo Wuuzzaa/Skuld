@@ -19,6 +19,7 @@ production:
   domain: app.skuld-options.com
   auth_domain: auth.skuld-options.com
   telegram_chat_id: "-1003610692224"
+  telegram_chat_id_ops: "-1004370406507"
   db_container: postgres_setup-db-1
   compose_args: "-f docker-compose.yml"
   traefik_entrypoint: websecure
@@ -46,6 +47,8 @@ home:
   domain: test.skuld-options.com
   auth_domain: auth-test.skuld-options.com
   telegram_chat_id: "-5262458068"
+  # No separate ops channel for staging — alerts go to the same chat as trading.
+  telegram_chat_id_ops: "-5262458068"
   db_container: skuld_staging_db
   compose_args: "-f docker-compose.yml -f docker-compose.testing.yml"
   traefik_entrypoint: web

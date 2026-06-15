@@ -21,7 +21,9 @@ Quick start
     export KUMA_USER=admin
     export KUMA_PASS=<your kuma password>
     export TELEGRAM_BOT_TOKEN=<copy from server .env>
-    export TELEGRAM_CHAT_ID=-1003610692224
+    # Ops alerts go here. Falls back to TELEGRAM_CHAT_ID if not set, so the
+    # script keeps running on staging where there's no separate ops channel.
+    export TELEGRAM_OPS_CHAT_ID=-1004370406507
     python ops/setup-kuma-monitors.py
 
 If KUMA_URL is the public Authelia-protected URL, you also need
@@ -62,7 +64,12 @@ except ImportError:
 
 
 # ─── Configuration ──────────────────────────────────────────────────────────
-TELEGRAM_NAME = "Telegram (SKULD)"
+TELEGRAM_NAME = "Telegram (SKULD Ops)"
+
+# Older provisioning runs created a "Telegram (SKULD)" notification before
+# the dedicated ops channel existed. We delete it on first run with the new
+# script so monitors don't double-notify.
+LEGACY_TELEGRAM_NAMES = ("Telegram (SKULD)",)
 
 
 @dataclass
@@ -157,7 +164,21 @@ def _required_env(name: str) -> str:
 def _ensure_telegram(api: UptimeKumaApi, force: bool) -> int:
     """Create or update the Telegram notification. Returns its id."""
     bot_token = _required_env("TELEGRAM_BOT_TOKEN")
-    chat_id = _required_env("TELEGRAM_CHAT_ID")
+    # Prefer the dedicated ops chat; fall back to the trading chat so the
+    # script also works on staging or first-time setups before the new env
+    # variable has been propagated everywhere.
+    chat_id = os.environ.get("TELEGRAM_OPS_CHAT_ID") or os.environ.get("TELEGRAM_CHAT_ID")
+    if not chat_id:
+        sys.exit("ERROR: env var TELEGRAM_OPS_CHAT_ID (or TELEGRAM_CHAT_ID) is required.")
+
+    # Clean up any legacy notification names from earlier provisioning runs.
+    for legacy_name in LEGACY_TELEGRAM_NAMES:
+        legacy = next(
+            (n for n in api.get_notifications() if n["name"] == legacy_name), None
+        )
+        if legacy:
+            print(f"  ↻ Removing legacy notification '{legacy_name}' (id={legacy['id']})")
+            api.delete_notification(legacy["id"])
 
     existing = next(
         (n for n in api.get_notifications() if n["name"] == TELEGRAM_NAME), None
@@ -174,12 +195,12 @@ def _ensure_telegram(api: UptimeKumaApi, force: bool) -> int:
         name=TELEGRAM_NAME,
         type=NotificationType.TELEGRAM,
         isDefault=True,  # auto-attach to every new monitor
-        applyExisting=False,
+        applyExisting=True,  # also retro-attach to monitors that already exist
         telegramBotToken=bot_token,
         telegramChatID=chat_id,
     )
     nid = res["id"] if isinstance(res, dict) else res
-    print(f"  ✓ Created notification '{TELEGRAM_NAME}' (id={nid})")
+    print(f"  ✓ Created notification '{TELEGRAM_NAME}' (id={nid}, chat={chat_id})")
     return nid
 
 
@@ -191,7 +212,22 @@ def _ensure_monitor(
         (m for m in api.get_monitors() if m["name"] == spec.name), None
     )
     if existing and not force:
-        print(f"  ✓ Monitor '{spec.name}' already exists (id={existing['id']})")
+        # Even when not recreating, make sure the current Telegram notification
+        # is attached. Kuma's applyExisting=True at notification-creation time
+        # handles the first run, but on re-runs (e.g. after rotating the chat)
+        # this keeps things in sync.
+        if spec.notify_telegram:
+            current_ids = set(existing.get("notificationIDList") or [])
+            if telegram_id not in current_ids:
+                api.edit_monitor(
+                    existing["id"],
+                    notificationIDList=list(current_ids | {telegram_id}),
+                )
+                print(f"  ↻ Attached Telegram notification to '{spec.name}'")
+            else:
+                print(f"  ✓ Monitor '{spec.name}' already exists (id={existing['id']})")
+        else:
+            print(f"  ✓ Monitor '{spec.name}' already exists (id={existing['id']})")
         return
     if existing and force:
         print(f"  ↻ Deleting existing monitor '{spec.name}' for recreate")
@@ -248,6 +284,21 @@ def main() -> int:
     if cookie:
         headers["Cookie"] = f"authelia_session={cookie}"
     api = UptimeKumaApi(url, headers=headers, wait_events=0)
+
+    # If Kuma is fresh-installed (no admin user), the login below would 401
+    # forever. Run setup first; the call is no-op when an admin already exists.
+    try:
+        api.setup(user, password)
+        print(f"  ✓ initial setup performed (admin '{user}' created)")
+    except Exception as exc:
+        # Library raises on "already set up" — that's the happy path on re-run.
+        msg = str(exc).lower()
+        if "already" in msg or "setup" in msg:
+            print(f"  ✓ admin '{user}' already exists, skipping setup")
+        else:
+            # Unknown error: surface it but keep going so the login attempt
+            # below produces a clearer error if relevant.
+            print(f"  ! setup() raised: {exc}", file=sys.stderr)
 
     try:
         api.login(user, password)

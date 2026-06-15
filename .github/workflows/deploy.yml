@@ -101,6 +101,7 @@ jobs:
       domain: ${{ steps.parse.outputs.domain }}
       auth_domain: ${{ steps.parse.outputs.auth_domain }}
       telegram_chat_id: ${{ steps.parse.outputs.telegram_chat_id }}
+      telegram_chat_id_ops: ${{ steps.parse.outputs.telegram_chat_id_ops }}
       db_container: ${{ steps.parse.outputs.db_container }}
       compose_args: ${{ steps.parse.outputs.compose_args }}
       traefik_entrypoint: ${{ steps.parse.outputs.traefik_entrypoint }}
@@ -445,6 +446,7 @@ jobs:
           CFG_MONITORING_MIDDLEWARES: ${{ needs.load-config.outputs.monitoring_middlewares }}
           CFG_AUTH_SCHEME: ${{ needs.load-config.outputs.auth_scheme }}
           CFG_TELEGRAM_CHAT_ID: ${{ needs.load-config.outputs.telegram_chat_id }}
+          CFG_TELEGRAM_CHAT_ID_OPS: ${{ needs.load-config.outputs.telegram_chat_id_ops }}
           CFG_POSTGRES_HOST: ${{ needs.load-config.outputs.postgres_host }}
           CFG_POSTGRES_DB: ${{ needs.load-config.outputs.postgres_db }}
           CFG_POSTGRES_USER: ${{ needs.load-config.outputs.postgres_user }}
@@ -487,6 +489,7 @@ jobs:
           AUTH_SCHEME=${CFG_AUTH_SCHEME}
           TELEGRAM_BOT_TOKEN=${SECRET_TELEGRAM_BOT_TOKEN}
           TELEGRAM_CHAT_ID=${CFG_TELEGRAM_CHAT_ID}
+          TELEGRAM_OPS_CHAT_ID=${CFG_TELEGRAM_CHAT_ID_OPS}
           MASSIVE_API_KEY=${SECRET_MASSIVE_API_KEY}
           MASSIVE_API_KEY_FLAT_FILES=${SECRET_MASSIVE_API_KEY_FLAT_FILES}
           SKULD_VERSION=${SKULD_VERSION}
