@@ -1,5 +1,6 @@
 WITH BaseData AS MATERIALIZED (
     SELECT
+        option_osi,
         shares_per_contract as number_of_stocks,
         symbol,
         company_name AS "Company",
