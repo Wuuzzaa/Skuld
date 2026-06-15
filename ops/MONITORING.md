@@ -109,6 +109,51 @@ Die "Login-Daten weitergeben"-Idee aus der ursprünglichen Frage ist sogar besse
 
 Status-Page öffentlich? **Nein**, hinter Authelia. Falls später public erwünscht: Kuma kann eine `/status/foo` Seite ausstellen, die wir per zweitem Traefik-Router OHNE Middleware durchschalten.
 
+## Backups
+
+Drei Backup-Skripte, gestaffelt:
+
+| Skript | Was | Wann | Retention | Telegram |
+|---|---|---|---|---|
+| `/home/deploy/scripts/backup_db.py` | Postgres `pg_dump` | 03:00 | (im Skript) | ja |
+| `/opt/skuld/ops/backup-kuma.sh` | `uptime-kuma-data/` (SQLite + Konfig) | 03:30 | 7 d | per Log |
+| `/opt/skuld/ops/backup-authelia.sh` | `authelia/db.sqlite3` + Secrets + Users | 03:45 | 30 d | ja |
+
+### Authelia-Restore (komplett)
+
+Wenn das Authelia-Volume tot/korrupt ist:
+
+```bash
+ssh deploy@91.98.156.116
+cd /opt/skuld
+docker compose stop authelia
+
+# Backup aussuchen — neuestes:
+LATEST=$(ls -t /home/deploy/backups/authelia/authelia-*.tar.gz | head -1)
+
+# Volume frisch entpacken (überschreibt alles unter ./authelia/):
+mkdir -p /tmp/authelia-restore && cd /tmp/authelia-restore
+tar -xzf "$LATEST"
+
+# Sanity check:
+docker run --rm -v /tmp/authelia-restore:/check:ro alpine:3 \
+  sh -c "apk add --quiet sqlite >/dev/null && sqlite3 /check/db.sqlite3 'PRAGMA integrity_check;'"
+# → muss "ok" sagen
+
+# Reinkopieren + Permissions wiederherstellen:
+cd /opt/skuld
+cp /tmp/authelia-restore/* authelia/
+chmod 600 authelia/jwt_secret authelia/session_secret authelia/storage_encryption_key
+
+# Container hoch:
+docker compose up -d authelia
+
+# Aufräumen:
+rm -rf /tmp/authelia-restore
+```
+
+**Wichtig:** Nach Restore sind alle Sessions **invalid** — User müssen sich neu einloggen. Aber: TOTP-Secrets, Webauthn-Credentials und Banned-IP-Listen bleiben erhalten.
+
 ## Deploy auf Prod
 
 DNS ist gesetzt (`monitoring.skuld-options.com → 91.98.156.116`). Es bleibt:
