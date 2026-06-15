@@ -66,6 +66,18 @@ page = st.navigation(
 # Run the selected page
 page.run()
 
+# Sidebar: external monitoring link.
+# Authelia session cookie is scoped to *.skuld-options.com, so the user is
+# already logged in for monitoring.skuld-options.com — no second login needed.
+# See ops/MONITORING.md for the full setup.
+_monitoring_url = os.getenv("MONITORING_URL", "https://monitoring.skuld-options.com")
+with st.sidebar:
+    st.divider()
+    st.markdown(
+        f"[🩺 System Status]({_monitoring_url})",
+        help="Live health of all SKULD services. Login is reused via SSO.",
+    )
+
 # Footer for all pages
 st.divider()
 skuld_env = os.getenv('SKULD_ENV', '')

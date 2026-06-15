@@ -1,6 +1,18 @@
-# SKULD Monitoring – Konzept (Uptime Kuma + Authelia SSO)
+# SKULD Monitoring – Uptime Kuma + Authelia SSO
 
-Status: **Konzept**, Stand 2026-06-15. Ergänzt [`../README.md`](README.md) und das DevOps-Audit.
+Status: **Implementiert** auf Branch `feat/monitoring-kuma`. Stand 2026-06-15.
+
+## Was im Repo liegt
+
+| Datei | Zweck |
+|---|---|
+| `health/server.py` | Stdlib HTTP-Sidecar mit `/version`, `/health`, `/health/cron`. Reuses `skuld-app-image`, kein neuer Build. |
+| `health/test_server.py` | 9 Unit-Tests (DB/Disk/Cron-Checks + HTTP-Routing). |
+| `docker-compose.yml` (`skuld-health`) | Container für das Sidecar, Port 8800 intern, kein Traefik-Expose. |
+| `docker-compose.yml` (`uptime-kuma`) | Kuma hinter Traefik mit `authelia` ForwardAuth-Middleware. |
+| `app.py` (Sidebar-Block) | Markdown-Link "🩺 System Status" → `MONITORING_URL`. |
+| `ops/backup-kuma.sh` | tar.gz-Snapshot von `uptime-kuma-data/` mit 7-Tage-Retention. |
+| `.gitignore` | `uptime-kuma-data/` excluded. |
 
 ## Ziel
 
@@ -97,99 +109,67 @@ Die "Login-Daten weitergeben"-Idee aus der ursprünglichen Frage ist sogar besse
 
 Status-Page öffentlich? **Nein**, hinter Authelia. Falls später public erwünscht: Kuma kann eine `/status/foo` Seite ausstellen, die wir per zweitem Traefik-Router OHNE Middleware durchschalten.
 
-## Umsetzung – Schritte
+## Deploy auf Prod
 
-Aufwand: **~3-4 h end-to-end**, keine DB-Änderung, kein Secret-Rotate-Bedarf.
+DNS ist gesetzt (`monitoring.skuld-options.com → 91.98.156.116`). Es bleibt:
 
-### 1. Compose-Service ergänzen (~30 min)
+### 1. PR mergen
+Branch `feat/monitoring-kuma` → master. `deploy.yml` deployed automatisch.
 
-In `docker-compose.yml`:
-
-```yaml
-  uptime-kuma:
-    image: louislam/uptime-kuma:1
-    container_name: uptime-kuma
-    volumes:
-      - ./uptime-kuma-data:/app/data
-    networks:
-      - web
-      - postgres_setup_default        # für DB-Probe
-    restart: unless-stopped
-
-    deploy:
-      resources:
-        limits:
-          cpus: '0.25'
-          memory: 256M
-        reservations:
-          cpus: '0.05'
-          memory: 64M
-
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.kuma.rule=Host(`monitoring.${BASE_DOMAIN:-skuld-options.com}`)"
-      - "traefik.http.routers.kuma.entrypoints=${TRAEFIK_ENTRYPOINT}"
-      - "${TRAEFIK_CERTRESOLVER_LABEL_KUMA}"
-      - "traefik.http.routers.kuma.middlewares=authelia"
-      - "traefik.http.services.kuma.loadbalancer.server.port=3001"
-
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001"]
-      interval: 60s
-```
-
-In `.env.example` neu:
-```
-TRAEFIK_CERTRESOLVER_LABEL_KUMA=traefik.http.routers.kuma.tls.certresolver=letsencrypt
-```
-(Staging-Override in `docker-compose.testing.yml` analog zu skuld-frontend.)
-
-### 2. DNS A-Record (5 min)
-
-`monitoring.skuld-options.com → 91.98.156.116` beim Registrar setzen. Let's-Encrypt-Cert holt sich Traefik beim ersten Request automatisch.
-
-### 3. Erstinstallation (~20 min)
+### 2. (Einmalig) `.env` auf Server ergänzen
 
 ```bash
 ssh deploy@91.98.156.116
 cd /opt/skuld
-docker compose up -d uptime-kuma
-# einmal Browser auf https://monitoring.skuld-options.com → Authelia-Login → Kuma-Setup-Wizard
-# Dummy-Admin anlegen (Passwort egal, Authelia schützt davor),
-# 2FA in Kuma AUS (Authelia macht das),
-# Telegram-Notification anbinden mit existierendem TELEGRAM_BOT_TOKEN
+# Default reicht — diese Zeilen sind nur nötig wenn man overriden will:
+# echo 'MONITORING_DOMAIN=monitoring.skuld-options.com' >> .env
+# echo 'TRAEFIK_CERTRESOLVER_LABEL_KUMA=traefik.http.routers.kuma.tls.certresolver=letsencrypt' >> .env
+# echo 'MONITORING_URL=https://monitoring.skuld-options.com' >> .env
 ```
 
-### 4. Monitore anlegen (~1 h)
+Die Defaults im `docker-compose.yml` decken den Prod-Fall ab. Staging (testing.yml) müsste analog zu skuld-frontend `MONITORING_MIDDLEWARES=` (leer) setzen.
 
-Liste aus Tabelle oben durchklicken. Kuma erlaubt JSON-Export → in `ops/uptime-kuma-monitors.json` versionieren.
+### 3. `TRAEFIK_CERTRESOLVER_LABEL_KUMA` setzen
 
-### 5. Streamlit-Sidebar-Link (~10 min)
+Im Prod-`.env` auf dem Server – analog zu `TRAEFIK_CERTRESOLVER_LABEL_SKULD`. Ohne diese Zeile bleibt Kuma per HTTP erreichbar (Traefik holt kein Cert). Beispiel:
 
-In `app.py` (oder wo die Sidebar zentral lebt):
-
-```python
-with st.sidebar:
-    st.markdown(
-        "[🩺 System Status](https://monitoring.skuld-options.com)",
-        help="Live-Health aller SKULD-Services. Login wird automatisch übergeben.",
-    )
+```
+TRAEFIK_CERTRESOLVER_LABEL_KUMA=traefik.http.routers.kuma.tls.certresolver=letsencrypt
 ```
 
-Kein neuer Style, kein neuer State, kein neuer Auth-Code.
+### 4. Erstinstallation
 
-### 6. Backup (~10 min)
-
-`./uptime-kuma-data/` enthält die SQLite mit Konfig + History. Ergänzen in `ops/backup_db.py` (oder als zweites Cron-Snippet):
 ```bash
-0 3 * * *  tar czf /home/deploy/backups/kuma/kuma-$(date +\%F).tar.gz /opt/skuld/uptime-kuma-data
+docker compose up -d skuld-health uptime-kuma
+# Browser: https://monitoring.skuld-options.com
+# → Authelia-Login (oder bereits gültige Session) → Kuma Setup-Wizard
+# Dummy-Admin anlegen (Authelia schützt davor, Passwort egal)
+# 2FA in Kuma AUS, Telegram-Notification mit existierendem TELEGRAM_BOT_TOKEN
 ```
-Retention: 7 Tage (kleine Files, ~5 MB).
 
-### 7. README-Eintrag + Memo
+### 5. Monitore anlegen
 
-`ops/README.md` Block "Monitoring" mit Link auf dieses Dokument.
-Memory-Eintrag aktualisieren.
+| Probe | URL/Target | Intervall |
+|---|---|---|
+| Streamlit Frontend | `http://skuld-frontend:8501/_stcore/health` | 60s |
+| Health-Sidecar `/version` | `http://skuld-health:8800/version` | 60s |
+| Health-Sidecar `/health` | `http://skuld-health:8800/health` (200/503) | 60s |
+| Health-Sidecar `/health/cron` | `http://skuld-health:8800/health/cron` | 30 min |
+| Postgres TCP | `db:5432` | 60s |
+| Authelia | `http://authelia:9091/api/health` | 5 min |
+| Traefik | `http://traefik:8080/ping` | 5 min |
+| massive.com (extern) | `https://api.unusualwhales.com/...` | 10 min |
+| SSL-Cert | `https://skuld-options.com` (cert expiry) | 1×/Tag |
+
+Nach dem Anlegen: in Kuma "Settings → Backup → Export" ziehen, in `ops/uptime-kuma-monitors.json` versionieren.
+
+### 6. Cron für Backup
+
+```bash
+crontab -e
+# einfügen:
+30 3 * * * /opt/skuld/ops/backup-kuma.sh >> /home/deploy/backups/kuma.log 2>&1
+```
 
 ## Was es NICHT ersetzt
 
