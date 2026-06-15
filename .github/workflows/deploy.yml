@@ -106,6 +106,10 @@ jobs:
       traefik_entrypoint: ${{ steps.parse.outputs.traefik_entrypoint }}
       certresolver_skuld: ${{ steps.parse.outputs.certresolver_skuld }}
       certresolver_authelia: ${{ steps.parse.outputs.certresolver_authelia }}
+      certresolver_kuma: ${{ steps.parse.outputs.certresolver_kuma }}
+      monitoring_domain: ${{ steps.parse.outputs.monitoring_domain }}
+      monitoring_url: ${{ steps.parse.outputs.monitoring_url }}
+      monitoring_middlewares: ${{ steps.parse.outputs.monitoring_middlewares }}
       auth_scheme: ${{ steps.parse.outputs.auth_scheme }}
       authelia: ${{ steps.parse.outputs.authelia }}
       skuld_env: ${{ steps.parse.outputs.skuld_env }}
@@ -435,6 +439,10 @@ jobs:
           CFG_TRAEFIK_ENTRYPOINT: ${{ needs.load-config.outputs.traefik_entrypoint }}
           CFG_CERTRESOLVER_SKULD: ${{ needs.load-config.outputs.certresolver_skuld }}
           CFG_CERTRESOLVER_AUTHELIA: ${{ needs.load-config.outputs.certresolver_authelia }}
+          CFG_CERTRESOLVER_KUMA: ${{ needs.load-config.outputs.certresolver_kuma }}
+          CFG_MONITORING_DOMAIN: ${{ needs.load-config.outputs.monitoring_domain }}
+          CFG_MONITORING_URL: ${{ needs.load-config.outputs.monitoring_url }}
+          CFG_MONITORING_MIDDLEWARES: ${{ needs.load-config.outputs.monitoring_middlewares }}
           CFG_AUTH_SCHEME: ${{ needs.load-config.outputs.auth_scheme }}
           CFG_TELEGRAM_CHAT_ID: ${{ needs.load-config.outputs.telegram_chat_id }}
           CFG_POSTGRES_HOST: ${{ needs.load-config.outputs.postgres_host }}
@@ -472,6 +480,10 @@ jobs:
           TRAEFIK_ENTRYPOINT=${CFG_TRAEFIK_ENTRYPOINT}
           TRAEFIK_CERTRESOLVER_LABEL_SKULD=${CFG_CERTRESOLVER_SKULD}
           TRAEFIK_CERTRESOLVER_LABEL_AUTHELIA=${CFG_CERTRESOLVER_AUTHELIA}
+          TRAEFIK_CERTRESOLVER_LABEL_KUMA=${CFG_CERTRESOLVER_KUMA}
+          MONITORING_DOMAIN=${CFG_MONITORING_DOMAIN}
+          MONITORING_URL=${CFG_MONITORING_URL}
+          MONITORING_MIDDLEWARES=${CFG_MONITORING_MIDDLEWARES}
           AUTH_SCHEME=${CFG_AUTH_SCHEME}
           TELEGRAM_BOT_TOKEN=${SECRET_TELEGRAM_BOT_TOKEN}
           TELEGRAM_CHAT_ID=${CFG_TELEGRAM_CHAT_ID}

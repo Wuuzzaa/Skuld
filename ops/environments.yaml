@@ -24,6 +24,10 @@ production:
   traefik_entrypoint: websecure
   certresolver_skuld: "traefik.http.routers.skuld.tls.certresolver=letsencrypt"
   certresolver_authelia: "traefik.http.routers.authelia.tls.certresolver=letsencrypt"
+  certresolver_kuma: "traefik.http.routers.kuma.tls.certresolver=letsencrypt"
+  monitoring_domain: monitoring.skuld-options.com
+  monitoring_url: https://monitoring.skuld-options.com
+  monitoring_middlewares: "authelia"
   auth_scheme: https
   authelia: "true"
   skuld_middlewares: "authelia"
@@ -47,6 +51,10 @@ home:
   traefik_entrypoint: web
   certresolver_skuld: "traefik.enable=true"
   certresolver_authelia: "traefik.enable=true"
+  certresolver_kuma: "traefik.enable=true"
+  monitoring_domain: monitoring-test.skuld-options.com
+  monitoring_url: http://monitoring-test.skuld-options.com
+  monitoring_middlewares: ""
   auth_scheme: http
   authelia: "true"
   skuld_middlewares: "force-https,authelia"
