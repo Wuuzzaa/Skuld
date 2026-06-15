@@ -82,9 +82,16 @@ fi
 
 # ── snapshot the secrets + user db + config ───────────────────────────────
 # notification.txt is *not* secret but useful for forensic context.
+# It can be unreadable when the authelia container has just written to it
+# (root-owned, mode 600); skip it silently in that case rather than failing
+# the whole backup.
 for f in jwt_secret session_secret storage_encryption_key users_database.yml configuration.yml notification.txt; do
     if [[ -f "$AUTHELIA_DIR/$f" ]]; then
-        cp -a "$AUTHELIA_DIR/$f" "$work/$f"
+        if [[ -r "$AUTHELIA_DIR/$f" ]]; then
+            cp -a "$AUTHELIA_DIR/$f" "$work/$f"
+        else
+            echo "[$(date -Iseconds)] WARN: skipping unreadable file $f" >&2
+        fi
     fi
 done
 
