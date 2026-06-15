@@ -25,7 +25,10 @@ production:
   traefik_entrypoint: websecure
   certresolver_skuld: "traefik.http.routers.skuld.tls.certresolver=letsencrypt"
   certresolver_authelia: "traefik.http.routers.authelia.tls.certresolver=letsencrypt"
-  certresolver_kuma: "traefik.http.routers.kuma.tls.certresolver=letsencrypt"
+  # Kuma uses the Cloudflare Origin Cert from /opt/traefik/dynamic/tls.yml
+  # (default cert store), not Let's Encrypt — CF intercepts ACME HTTP-01
+  # for proxied subdomains. So no certresolver, just plain tls=true.
+  certresolver_kuma: "traefik.http.routers.kuma.tls=true"
   monitoring_domain: monitoring.skuld-options.com
   monitoring_url: https://monitoring.skuld-options.com
   monitoring_middlewares: "authelia"

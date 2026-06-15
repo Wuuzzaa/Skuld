@@ -420,6 +420,9 @@ jobs:
             --exclude 'authelia/session_secret' \
             --exclude 'authelia/jwt_secret' \
             --exclude 'authelia/storage_encryption_key' \
+            --exclude 'secrets/' \
+            --exclude 'uptime-kuma-data/' \
+            --exclude '.env.bak.*' \
             "$SOURCE_DIR"/ ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }}:/opt/skuld/
 
       - name: Get version
