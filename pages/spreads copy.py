@@ -574,34 +574,52 @@ if not filtered_df.empty:
             if sell_exit_df is None or buy_exit_df is None or sell_exit_df.empty or buy_exit_df.empty:
                 st.warning("Die Option konnte für das Vergleichsdatum nicht geladen werden.")
             else:
-                # [DEIN BESTEHENDER CODE: 1. Daten auslesen und 2. Mathematische Berechnungen bleiben exakt gleich]
-                exit_sell_price = float(sell_exit_df.iloc[0]['premium_option_price'])
-                exit_buy_price = float(buy_exit_df.iloc[0]['premium_option_price'])   
-                exit_stock_price = float(buy_exit_df.iloc[0]['close'])        
+                # 1. Daten sauber auslesen
+                exit_sell_price = float(sell_exit_df.iloc[0]['premium_option_price'])  # Preis um den Short Put zurückzukaufen
+                exit_buy_price = float(buy_exit_df.iloc[0]['premium_option_price'])   # Preis um den Long Put zu verkaufen
+                exit_stock_price = float(buy_exit_df.iloc[0]['close'])        # Preis der Aktie
+                
 
                 entry_sell_price = float(row['sell_last_option_price'])
                 entry_buy_price = float(row['buy_last_option_price'])
                 entry_stock_price = float(row['close'])
 
+                # Strikes auslesen, um die Spread-Breite zu berechnen (Wichtig für das Risiko!)
+                # Pass die Spaltennamen an, falls sie in deinem 'row' Objekt anders heißen
                 strike_sell = float(row['sell_strike'])
                 strike_buy = float(row['buy_strike'])
                 spread_width = abs(strike_sell - strike_buy)
 
+                # 2. Mathematische Berechnungen (Geldfluss-Perspektive)
+                # Einstieg: Du kriegst Geld für den Sell, zahlst Geld für den Buy
                 initial_cash_flow = entry_sell_price - entry_buy_price 
+
+                # Schließen der Position: Du ZAHLST um den Sell zurückzukaufen (-), du ERHÄLTST Geld für den Buy (+)
+                # Rechnerisch: exit_buy_price - exit_sell_price
                 close_cash_flow = exit_buy_price - exit_sell_price
+
+                # Der finale Gewinn/Verlust
                 profit = initial_cash_flow + close_cash_flow
 
-                if initial_cash_flow > 0:
+                # KORREKTUR: Das echte initiale Investment (Buying Power Reduction / Margin)
+                # Bei Credit Spreads: Spread-Breite minus erhaltene Prämie
+                # Bei Debit Spreads: Die gezahlte Prämie selbst
+                if initial_cash_flow > 0:  # Credit Spread
                     bpr_capital = spread_width - initial_cash_flow
-                else:
+                else:                      # Debit Spread
                     bpr_capital = abs(initial_cash_flow)
 
+                # Multiplikator für 100 Aktien pro Kontrakt (für die reale Depot-Anzeige)
                 bpr_capital_total = bpr_capital * 100
                 profit_total = profit * 100
+
+                # KORREKTUR: Echter ROI bezogen auf das riskierte Kapital
                 roi_pct = (profit / bpr_capital * 100) if bpr_capital > 0 else None
 
-                # [DEIN BESTEHENDER CODE: 3. Visuelle Darstellung (KPIs und Spalten) bleibt unverändert]
+
+                # 3. VISUELLE DARSTELLUNG (Streamlit)
                 st.markdown("### 📊 Trade-Analyse & Performance")
+
                 # Oberste Reihe: Die wichtigsten harten Fakten als Key Performance Indicators (KPIs)
                 kpi_cols = st.columns(4)
                 with kpi_cols[0]:
@@ -655,119 +673,119 @@ if not filtered_df.empty:
                         st.metric("Annualisierter ROI", f"{roi_annualized_pct:.2f}%")
                     else:
                         st.write("Annualisierter ROI: n/a")
-                        
-                # Breakeven berechnen
+
+                # Breakeven berechnen (Short Strike minus eingenommene Prämie)
                 breakeven_price = strike_sell - initial_cash_flow
 
-                st.markdown("---")
-                st.markdown("### 📈 Kursverlauf & Positions-Wertentwicklung")
 
-                # --- NEU: HISTORISCHE DATEN ZUSAMMENFÜHREN & BERECHNEN ---
-                # Sicherstellen, dass das Datum überall denselben Datentyp (String oder Date) hat
-                stock_df = stock_date_range_df.copy()
-                sell_opt_df = sell_option_date_range_df.copy()
-                buy_opt_df = buy_option_date_range_df.copy()
-                
-                stock_df['date'] = stock_df['date'].astype(str)
-                sell_opt_df['date'] = sell_opt_df['date'].astype(str)
-                buy_opt_df['date'] = buy_opt_df['date'].astype(str)
+                # --- SEKTION IN STREAMLIT ANLEGEN ---
+                st.markdown("### 📈 Kursverlauf & Gewinnzonen-Analyse")
 
-                # Umbenennen der Spalten vor dem Zusammenführen, um Namenskonflikte zu vermeiden
-                stock_df = stock_df.rename(columns={'close': 'stock_close'})
-                sell_opt_df = sell_opt_df.rename(columns={'premium_option_price': 'price_sell_opt'})
-                buy_opt_df = buy_opt_df.rename(columns={'premium_option_price': 'price_buy_opt'})
+                # 1. Schnelle Text-Übersicht (Wo steht die Aktie?)
+                zone_cols = st.columns(3)
+                with zone_cols[0]:
+                    st.metric("Aktienkurs beim Einstieg", f"${entry_stock_price:.2f}")
+                with zone_cols[1]:
+                    st.metric("Aktienkurs beim Ausstieg", f"${exit_stock_price:.2f}", 
+                            delta=f"{((exit_stock_price - entry_stock_price)/entry_stock_price)*100:+.2f}%")
+                with zone_cols[2]:
+                    st.metric("Gewinnschwelle (Breakeven)", f"${breakeven_price:.2f}", 
+                            help="Ab diesem Kurs am Verfallstag macht der Trade Gewinn.")
 
-                # Schrittweiser Merge über das Datum
-                merged_history = stock_df[['date', 'stock_close']].merge(
-                    sell_opt_df[['date', 'price_sell_opt']], on='date', how='inner'
-                ).merge(
-                    buy_opt_df[['date', 'price_buy_opt']], on='date', how='inner'
+                # Erkennung, in welcher Zone der aktuelle Schlusskurs liegt
+                st.markdown("**Aktueller Zonen-Status:**")
+                if exit_stock_price >= strike_sell:
+                    st.success(f"🟢 Maximaler Gewinnbereich! Der Kurs (${exit_stock_price:.2f}) steht über deinem Short-Strike (${strike_sell:.2f}).")
+                elif breakeven_price < exit_stock_price < strike_sell:
+                    st.info(f"🟡 Teilgewinn-Bereich! Der Kurs (${exit_stock_price:.2f}) hat den Short-Strike leicht unterschritten, liegt aber über dem Breakeven (${breakeven_price:.2f}).")
+                else:
+                    st.error(f"🔴 Verlustbereich. Der Kurs (${exit_stock_price:.2f}) ist unter den Breakeven (${breakeven_price:.2f}) gefallen.")
+
+
+                # 2. VISUELLES DIAGRAMM (Kurs vs. Strikes & Breakeven)
+                # Hinweis: Idealerweise übergibst du hier eine historische Liste von Kursen. 
+                # Wenn du nur Einstieg und Ausstieg hast, zeichnen wir eine direkte Verbindungslinie.
+                dates = [str(selected_date), str(compare_date)]
+                stock_prices = [entry_stock_price, exit_stock_price]
+
+                fig = go.Figure()
+
+                # Linie für den Aktienkurs
+                fig.add_trace(go.Scatter(
+                    x=dates, y=stock_prices, 
+                    mode='lines+markers', 
+                    name='Aktienkurs',
+                    line=dict(color='blue', width=4),
+                    marker=dict(size=10)
+                ))
+
+                # Horizontale Linie: Short Strike (Gewinngrenze für Maximum)
+                fig.add_hline(y=strike_sell, line_dash="dash", line_color="green", 
+                            annotation_text=f"Short Strike Put (${strike_sell:.2f}) - Voller Gewinn darüber", 
+                            annotation_position="top left")
+
+                # Horizontale Linie: Breakeven (Die echte Nulllinie)
+                fig.add_hline(y=breakeven_price, line_dash="dot", line_color="orange", 
+                            annotation_text=f"Breakeven (${breakeven_price:.2f})", 
+                            annotation_position="bottom left")
+
+                # Horizontale Linie: Long Strike (Maximaler Verlust gedeckelt ab hier)
+                fig.add_hline(y=strike_buy, line_dash="dash", line_color="red", 
+                            annotation_text=f"Long Strike Put (${strike_buy:.2f}) - Max. Verlust darunter", 
+                            annotation_position="bottom left")
+
+                # Layout-Anpassungen für ein sauberes Dashboard-Design
+                fig.update_layout(
+                    title="Aktienkurs im Verhältnis zu den Options-Strikes",
+                    xaxis_title="Datum / Verlauf",
+                    yaxis_title="Aktienkurs in $",
+                    legend_title="Legende",
+                    margin=dict(l=20, r=20, t=40, b=20),
+                    paper_bgcolor="rgba(0,0,0,0)", # Transparent für Streamlit Dark/Light Mode
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    yaxis=dict(gridcolor='rgba(128,128,128,0.2)') # Leichte Gridlines
                 )
 
-                # Sortieren, damit die Zeitlinie stimmt
-                merged_history = merged_history.sort_values('date')
+                # Chart in Streamlit anzeigen
+                st.plotly_chart(fig, use_container_width=True)
+                # exit_sell_price = float(sell_exit_df.iloc[0]['premium_option_price'])
+                # exit_buy_price = float(buy_exit_df.iloc[0]['premium_option_price'])
 
-                if merged_history.empty:
-                    st.warning("Keine übereinstimmenden historischen Tagesdaten für den Chart-Verlauf gefunden.")
-                else:
-                    # TAGESGENAUE BERECHNUNG DES SPREAD-WERTES (Geldfluss-Sicht / "Buchwert")
-                    # Formel: Initialer Credit (+) - (Aktueller Rückkaufpreis des Short Puts (-) + Aktueller Verkaufswert des Long Puts (+))
-                    # Rechnerisch: initial_cash_flow + (price_buy_opt - price_sell_opt)
-                    # Für die Gesamtdepot-Sicht multiplizieren wir direkt mit 100
-                    merged_history['position_value_total'] = (
-                        initial_cash_flow + (merged_history['price_buy_opt'] - merged_history['price_sell_opt'])
-                    ) * 100
+                # entry_sell_price = float(row['sell_last_option_price'])
+                # entry_buy_price = float(row['buy_last_option_price'])
+                # initial_cash_flow = entry_sell_price - entry_buy_price
+                # current_close_cashflow = exit_buy_price - exit_sell_price
+                # profit = initial_cash_flow + current_close_cashflow
+                # initial_investment = abs(initial_cash_flow)
+                # roi_pct = (
+                #     profit / initial_investment * 100
+                #     if initial_investment != 0
+                #     else None
+                # )
 
-                    # --- PLOTLY CHART MIT ZWEI Y-ACHSEN (MAKE_SUBPLOTS) ---
-                    from plotly.subplots import make_subplots
+                # comparison_cols = st.columns(3)
+                # with comparison_cols[0]:
+                #     st.metric("Einstiegsdatum", str(selected_date))
+                #     st.metric(
+                #         "Initiale Prämie",
+                #         f"{initial_cash_flow:+.2f} $",
+                #         help="Positiv = Prämie erhalten, Negativ = Prämie bezahlt"
+                #     )
+                #     st.metric("Einstieg Sell", f"${entry_sell_price:.2f}")
+                #     st.metric("Einstieg Buy", f"${entry_buy_price:.2f}")
 
-                    # Erstelle Subplot-Gerüst mit dualer Y-Achse
-                    fig = make_subplots(specs=[[{"secondary_y": True}]])
+                # with comparison_cols[1]:
+                #     st.metric("Vergleichsdatum", str(compare_date))
+                #     st.metric("Schluss Sell", f"${exit_sell_price:.2f}")
+                #     st.metric("Schluss Buy", f"${exit_buy_price:.2f}")
+                #     st.metric("Aktueller Spreadwert", f"${current_close_cashflow:.2f}")
 
-                    # 1. TRACE: Aktienkurs (Tagesgenau auf Primär-Achse links)
-                    fig.add_trace(
-                        go.Scatter(
-                            x=merged_history['date'], 
-                            y=merged_history['stock_close'], 
-                            mode='lines', 
-                            name='Aktienkurs (links)',
-                            line=dict(color='#1f77b4', width=3) # Klassisches Blau
-                        ),
-                        secondary_y=False,
-                    )
-
-                    # 2. TRACE: Positions-Wertentwicklung (Tagesgenau auf Sekundär-Achse rechts)
-                    fig.add_trace(
-                        go.Scatter(
-                            x=merged_history['date'], 
-                            y=merged_history['position_value_total'], 
-                            mode='lines+markers', 
-                            name='Positions-Wert in $ (rechts)',
-                            line=dict(color='#9467bd', width=2.5, dash='solid'), # Lila Linie
-                            marker=dict(size=5)
-                        ),
-                        secondary_y=True,
-                    )
-
-                    # HORIZONTALE ZONEN-LINIEN (Beziehen sich auf den Aktienkurs -> secondary_y=False)
-                    # Short Strike Put
-                    fig.add_hline(y=strike_sell, line_dash="dash", line_color="green", 
-                                  annotation_text=f"Short Strike (${strike_sell:.2f})", 
-                                  annotation_position="top left")
-
-                    # Breakeven
-                    fig.add_hline(y=breakeven_price, line_dash="dot", line_color="orange", 
-                                  annotation_text=f"Breakeven (${breakeven_price:.2f})", 
-                                  annotation_position="bottom left")
-
-                    # Long Strike Put
-                    fig.add_hline(y=strike_buy, line_dash="dash", line_color="red", 
-                                  annotation_text=f"Long Strike (${strike_buy:.2f})", 
-                                  annotation_position="bottom left")
-
-                    # LAYOUT & ACHSEN-STYLING
-                    fig.update_layout(
-                        title="Tagesgenauer Verlauf: Aktienkurs vs. G&V Wertentwicklung",
-                        xaxis_title="Datum",
-                        paper_bgcolor="rgba(0,0,0,0)",
-                        plot_bgcolor="rgba(0,0,0,0)",
-                        legend=dict(x=0.01, y=0.99, bgcolor="rgba(255,255,255,0.2)"),
-                        margin=dict(l=20, r=20, t=50, b=20)
-                    )
-
-                    # Achsen-Titel vergeben
-                    fig.update_yaxes(title_text="Aktienkurs in $", gridcolor='rgba(128,128,128,0.15)', secondary_y=False)
-                    fig.update_yaxes(title_text="Positions-Wert (GuV) in $", gridcolor='rgba(148,103,189,0.1)', secondary_y=True)
-
-                    # Horizontale Nulllinie für den Positions-Wert (Rechte Achse), damit man sofort sieht, wann man im Minus war
-                    fig.add_shape(
-                        type="line", x0=merged_history['date'].iloc[0], x1=merged_history['date'].iloc[-1],
-                        y0=0, y1=0, line=dict(color="rgba(128,128,128,0.5)", width=1, dash="solid"),
-                        yref="y2" # Wichtig: Bezieht sich auf die rechte Y-Achse!
-                    )
-
-                    # Chart anzeigen
-                    st.plotly_chart(fig, use_container_width=True)
+                # with comparison_cols[2]:
+                #     st.metric("P/L bei Schließung", f"${profit:.2f}")
+                #     if roi_pct is not None:
+                #         st.metric("ROI", f"{roi_pct:.2f}%")
+                #     else:
+                #         st.write("ROI: n/a")
     else:
         st.caption("💡 Klicke auf eine Zeile in der Tabelle, um die Details der einzelnen Legs zu sehen.")
 

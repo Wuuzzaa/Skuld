@@ -193,10 +193,10 @@ def get_page_spreads(df: pd.DataFrame, strategy_type: str = 'credit', iv_correct
         'historical_volatility_30d', 'iv_rank', 'iv_percentile',
         'spread_width', 'max_profit', 'bpr', 'profit_to_bpr', 'spread_theta', 
         'expected_value', 'iv_correction_factor', 'APDI', 'APDI_EV', 'optionstrat_url',
-        'sell_strike', 'sell_last_option_price', 'sell_delta', 'sell_iv', '%_otm',
+        'sell_strike', 'sell_option_osi', 'sell_last_option_price', 'sell_delta', 'sell_iv', '%_otm',
         'sell_theta', 'sell_open_interest', 'sell_expected_move', 'sell_day_volume',
         'sell_last_updated', 'sell_bs_price',
-        'buy_strike', 'buy_last_option_price', 'buy_delta', 'buy_iv', 'buy_theta',
+        'buy_strike', 'buy_option_osi', 'buy_last_option_price', 'buy_delta', 'buy_iv', 'buy_theta',
         'buy_open_interest', 'buy_expected_move', 'buy_day_volume',
         'buy_last_updated', 'last_updated_option_data', 'last_updated_stock_data', 'buy_bs_price',
         'option_type', 'expiration_date', 'days_to_expiration', 'days_to_earnings'

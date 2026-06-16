@@ -266,8 +266,12 @@ def select_into_dataframe(query: str = None, sql_file_path: str = None, params: 
             logger.error(msg)
             raise ValueError(msg)
 
+        session_variables_str = ""
+        for var, value in session_variables.items():
+            session_variables_str = session_variables_str + f"SELECT set_config('{var}', '{value}', true);\n"
+        
         logger.debug(f"Executing query with params: {params} and session variables: {session_variables}")
-        logger.debug(f"\n{sql}")
+        logger.debug(f"\n{session_variables_str}\n{sql}")
         pg_engine = get_postgres_engine()
         if pg_engine:
             start_pg = time.time()
