@@ -574,6 +574,7 @@ def get_history_select_statement(table_name: str, optimized: bool = True, needed
             master_data.to_date AS to_date
         """
     else:
+        optimize_date_join = False
         date_cols = """
         dates.date,
         dates.year,
