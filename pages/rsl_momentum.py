@@ -23,7 +23,7 @@ def main():
     st.title("RSL Momentum Rotation")
 
     selected_date = render_date_filter(
-        date_query='select date from (select date from "DatesHistory" union select current_date) as sub ORDER BY date DESC',
+        date_query='select date from (select distinct snapshot_date as date from "StockPricesYahooHistoryDaily" union select current_date as date) as sub ORDER BY date DESC',
     )
 
     # Parameters

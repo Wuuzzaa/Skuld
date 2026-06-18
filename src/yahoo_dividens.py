@@ -36,7 +36,7 @@ def calculate_dividend_classification_history():
     else:
         min_date = '2099-01-01'
 
-    history_dates = select_into_dataframe('SELECT date from "DatesHistory" WHERE date < :min_date  ORDER BY date desc LIMIT 10', params={"min_date": min_date})
+    history_dates = select_into_dataframe('SELECT date from "DatesHistory" WHERE date < :min_date  ORDER BY date desc', params={"min_date": min_date})
 
     for time_travel_date in history_dates["date"]:
         dividend_data = select_timetravel_into_dataframe(time_travel_date, sql_file_path = "db/SQL/query/dividend_classification.sql")

@@ -107,7 +107,7 @@ def main(args):
                 ("Massive Option Chains", load_option_chains, (symbols["options"],)),
             ],
             "historical_technical_indicators": [
-                ("Technical Indicators History", calc_technical_indicators_history, (symbols["all"],)),
+                # ("Technical Indicators History", calc_technical_indicators_history, (symbols["all"],)),
             ],
             "historical_prices": [
                 ("Historical Prices", load_historical_prices, (symbols["all"],)),
@@ -137,6 +137,8 @@ def main(args):
                 raise RuntimeError(f"Historical Prices failed: {error}")
 
             pipeline.record_result(task_name, result, error, mem_diff, peak_mem)
+        elif args.mode == "historical_technical_indicators":
+            calc_technical_indicators_history(symbols["all"])
         elif args.mode == "historization":
             parallel_tasks = []
         elif args.mode not in task_map:

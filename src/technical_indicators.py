@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 
 # enable logging
-setup_logging(component="technical_indicators", log_level=logging.DEBUG, console_output=True) #todo component in production anpassen
+# setup_logging(component="technical_indicators", log_level=logging.DEBUG, console_output=True) #todo component in production anpassen
 logger = logging.getLogger(__name__)
 logger.debug(f"Start: {os.path.basename(__file__)}")
 
@@ -50,11 +50,18 @@ SKULD_INDICATORS = ta.Study(
 
 
 def __calc_symbol_technical_indicators(df: pd.DataFrame, verbose: bool = False) -> pd.DataFrame:
-    if df.empty:
-        return df
+    # Falls das DataFrame leer ist oder weniger als 200 Zeilen hat (wegen EMA 200 / RSL 130)
+    if df.empty or len(df) < 200:
+        logger.warning(f"Skipping symbol: Not enough data points ({len(df)} rows). Min required: 200")
+        return pd.DataFrame()  # Leeres DataFrame zurückgeben
 
     df = df.sort_values("snapshot_date", ascending=True, kind="stable")
-    df.ta.study(SKULD_INDICATORS, verbose=verbose)
+    
+    try:
+        df.ta.study(SKULD_INDICATORS, verbose=verbose)
+    except Exception as e:
+        logger.error(f"Error calculating pandas_ta study: {e}")
+        return pd.DataFrame()
 
     # RSL
     df['RSL'] = df['close'] / df['close'].rolling(window=130).mean()
@@ -84,6 +91,11 @@ def calc_technical_indicators(symbols, verbose: bool = False, symbol_batch_size:
             for symbol, df_symbol in df_batch.groupby("symbol", sort=False):
                 logger.debug(f"{symbol}: rows={len(df_symbol)}")
                 df_out = __calc_symbol_technical_indicators(df=df_symbol, verbose=verbose)
+
+                # PRÜFUNG EINFÜGEN: Nur fortfahren, wenn df_out nicht leer ist
+                if df_out.empty:
+                    continue
+                
                 df_out = df_out.drop(columns=['snapshot_date', 'open', 'high', 'low', 'close', 'volume'])
                 
                 latest_row = df_out.tail(1)
@@ -121,6 +133,11 @@ def calc_technical_indicators_history(symbols, verbose: bool = False, symbol_bat
             for symbol, df_symbol in df_batch.groupby("symbol", sort=False):
                 logger.debug(f"{symbol}: rows={len(df_symbol)}")
                 df_out = __calc_symbol_technical_indicators(df=df_symbol, verbose=verbose)
+
+                # PRÜFUNG EINFÜGEN: Nur fortfahren, wenn df_out nicht leer ist
+                if df_out.empty:
+                    continue
+
                 df_out = df_out.drop(columns=['open', 'high', 'low', 'close', 'volume'])
                 
                 batch_results_list.append(df_out)

@@ -6,7 +6,7 @@ SELECT DISTINCT
     ROUND("RSL"::numeric, 4) AS rsl,
     live_stock_price AS price
 FROM
-    "OptionDataMerged"
+    "StockData"
 WHERE
     symbol = ANY(:symbols)
     AND "RSL" IS NOT NULL;
