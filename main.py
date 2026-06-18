@@ -10,7 +10,7 @@ from src.massiv_api import load_option_chains
 from src.stock_volatility import calculate_and_store_stock_historical_volatility_history, calculate_and_store_stock_implied_volatility_history
 from src.technical_indicators import calc_technical_indicators, calc_technical_indicators_history
 from src.yahoo_asset_profile import load_asset_profile
-from src.yahoo_dividens import calculate_dividend_classification
+from src.yahoo_dividens import calculate_dividend_classification, calculate_dividend_classification_history
 from src.yahooquery_earning_dates import scrape_earning_dates
 from src.yahooquery_financials import generate_fundamental_data, load_historical_prices, load_stock_prices
 from src.yfinance_analyst_price_targets import scrape_yahoo_finance_analyst_price_targets
@@ -117,6 +117,9 @@ def main(args):
             ],
             "historical_volatility": [
                 ("Historical Volatility", calculate_and_store_stock_historical_volatility_history, ()),
+            ],
+            "historical_dividend_classification": [
+                ("Historical Volatility", calculate_dividend_classification_history, ()),
             ],
         }
 
@@ -233,6 +236,7 @@ if __name__ == "__main__":
                             "historical_iv",
                             "historical_volatility",
                             "historical_technical_indicators",
+                            "historical_dividend_classification",
                             "historical_full",
                             "historization",
                             "only_run_migrations",

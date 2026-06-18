@@ -20,7 +20,7 @@ pd.set_option('display.max_columns', None)
 pd.set_option('display.width', None)
 
 # Setup logging
-setup_logging(component="streamlit", log_level=logging.DEBUG, console_output=True)
+setup_logging(component="streamlit", sub_component="spreads", log_level=logging.DEBUG, console_output=True)
 logger = logging.getLogger(os.path.basename(__file__))
 logger.debug(f"Start Page: {os.path.basename(__file__)}")
 

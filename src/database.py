@@ -238,7 +238,6 @@ def execute_sql(connection, sql: str, table_name: str, operation_type: str = "IN
         logger.error(f"[PostgreSQL] Error executing SQL on {table_name}: \n{e}")
         raise e
 
-@log_function
 def select_into_dataframe(query: str = None, sql_file_path: str = None, params: dict = None, session_variables: dict = {'jit': 'off', 'enable_nestloop': 'off'}) -> pd.DataFrame:
     """
     Executes a SQL query and returns the result as a DataFrame.
@@ -266,8 +265,24 @@ def select_into_dataframe(query: str = None, sql_file_path: str = None, params: 
             logger.error(msg)
             raise ValueError(msg)
 
+        if params:
+            sql_without_parameter = sql
+            for var, value in params.items():
+                sql_without_parameter = sql_without_parameter.replace(f":{var}", f"'{value}'")
+            log_str_parameters = f"\n-- select with parameters replaced by literals\n{sql_without_parameter}\n\n-- original select\n"
+        else:
+            log_str_parameters = ""
+
+        if session_variables:
+            session_variables_str = ""
+            for var, value in session_variables.items():
+                session_variables_str = session_variables_str + f"SELECT set_config('{var}', '{value}', true);\n"
+            log_str_session_vaiables = f"\n-- session variables set for execution\n{session_variables_str}\n"
+        else:
+            log_str_session_vaiables = ""
+
         logger.debug(f"Executing query with params: {params} and session variables: {session_variables}")
-        logger.debug(f"\n{sql}")
+        logger.debug(f"\n{log_str_session_vaiables}{log_str_parameters}{sql}\n")
         pg_engine = get_postgres_engine()
         if pg_engine:
             start_pg = time.time()
@@ -279,7 +294,7 @@ def select_into_dataframe(query: str = None, sql_file_path: str = None, params: 
                     df = pd.read_sql(text(str(sql)), conn, params=params)
                 else:
                     df = pd.read_sql(text(str(sql)), conn)
-            logger.debug(f"[PostgreSQL] Rows: {len(df)} - Runtime: {round(time.time() - start_pg, 2)}s.")
+            logger.info(f"[PostgreSQL] Rows: {len(df)} - Runtime: {round(time.time() - start_pg, 2)}s.")
     except Exception as e:
         logger.error(f"[PostgreSQL] Error executing query: \n{e}")
         logger.error(f"\n{str(sql)}")

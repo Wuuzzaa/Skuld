@@ -670,7 +670,6 @@ def get_history_select_statement(table_name: str, optimized: bool = True, needed
         if time_travel:
             select_statement_sql = f"""
             {select_statement_sql}
-            WHERE (current_setting('app.time_travel_date', true))::date BETWEEN master_data.from_date AND master_data.to_date
         """
     else:
         # Always join master data (it's the base for dates/keys)

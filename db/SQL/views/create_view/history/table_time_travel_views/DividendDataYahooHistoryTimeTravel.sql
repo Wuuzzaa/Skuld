@@ -21,6 +21,5 @@
         ON daily.snapshot_date = (current_setting('app.time_travel_date', true))::date
         AND master_data."symbol" = daily."symbol"
         
-            WHERE (current_setting('app.time_travel_date', true))::date BETWEEN master_data.from_date AND master_data.to_date
         
     

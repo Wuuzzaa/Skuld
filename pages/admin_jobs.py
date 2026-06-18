@@ -33,6 +33,7 @@ JOB_MODES = [
     "historical_iv",
     "historical_volatility",
     "historical_technical_indicators",
+    "historical_dividend_classification",
     "historical_full",
     "historization",
     "only_run_migrations",
@@ -49,6 +50,7 @@ JOB_DESCRIPTIONS = {
     "historical_iv": "Backfill implied volatility history",
     "historical_technical_indicators": "Backfill technical indicators history",
     "historical_volatility": "Backfill volatility history",
+    "historical_dividend_classification": "Backfill Dividend Classification",
     "historical_full": "Full historical backfill (prices -> technicals -> IV, sequential)",
     "historization": "Archive/version current data",
     "only_run_migrations": "Run DB migrations only (no data collection)",
@@ -200,7 +202,7 @@ with tab_logs:
                     log_level_filter = st.multiselect(
                         "Filter by Level",
                         ["ERROR", "WARNING", "INFO", "DEBUG"],
-                        default=["ERROR", "WARNING", "INFO"]
+                        default=["ERROR", "WARNING", "INFO", "DEBUG"]
                     )
                 with col_filter2:
                     search_term = st.text_input("Search in logs", placeholder="e.g. timeout, OOM, failed")

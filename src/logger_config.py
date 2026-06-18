@@ -29,6 +29,7 @@ from sqlalchemy import text
 def setup_logging(
     log_level: int = logging.INFO,
     component: str = "default",
+    sub_component: str = "",
     console_output: bool = True
 ) -> logging.Logger:
     """
@@ -81,7 +82,7 @@ def setup_logging(
 
         # Log filename: {YYYYMMDD_HHMMSS}_{component}.log
         timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-        log_filename = f"{timestamp_str}_{component}.log"
+        log_filename = f"{timestamp_str}_{component}_{sub_component}.log"
         log_file_path = log_dir / log_filename
 
         file_handler = logging.FileHandler(str(log_file_path))
