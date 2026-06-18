@@ -605,7 +605,7 @@ if not filtered_df.empty:
                 # Oberste Reihe: Die wichtigsten harten Fakten als Key Performance Indicators (KPIs)
                 kpi_cols = st.columns(4)
                 with kpi_cols[0]:
-                    st.metric("P/L Ergebnis", f"${profit_total:+.2f}", delta=f"${profit_total:+.2f}")
+                    st.metric("P/L Ergebnis", f"${profit_total:+.2f}", delta=f"{profit_total:+.2f}$")
                 with kpi_cols[1]:
                     if roi_pct is not None:
                         st.metric("Echter ROI (on Risk)", f"{roi_pct:.2f}%", delta=f"{roi_pct:.2f}%")
