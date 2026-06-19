@@ -58,7 +58,7 @@ SELECT
     expiration_date,
     dte,
     ROUND(delta::numeric, 3)                                                    AS delta,
-    ROUND(iv * 100::numeric, 1)                                                 AS iv_pct,
+    ROUND((iv * 100)::numeric, 1)                                                 AS iv_pct,
     open_interest,
     volume,
     -- Core PowerOptions metrics
@@ -70,7 +70,7 @@ SELECT
     days_to_earnings,
     ROUND(iv_rank::numeric, 1)                                                  AS iv_rank,
     ROUND(iv_percentile::numeric, 1)                                            AS iv_percentile,
-    ROUND(hv_30d * 100::numeric, 1)                                             AS hv_30d_pct,
+    ROUND((hv_30d * 100)::numeric, 1)                                             AS hv_30d_pct,
     ROUND(market_cap::numeric / 1e9, 1)                                         AS market_cap_b,
     ROUND(trailing_pe::numeric, 1)                                              AS trailing_pe,
     avg_volume
