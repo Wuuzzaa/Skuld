@@ -141,19 +141,45 @@ with col4:
         key="cc_min_ann",
     )
 with col5:
+    max_annualized = st.number_input(
+        "Max Annualized Return %",
+        min_value=10, max_value=1000,
+        value=100, step=10,
+        key="cc_max_ann",
+        help="Cap utopian values. Anything above ~100% is usually a data artefact or illiquid option.",
+    )
+with col6:
+    max_delta = st.slider(
+        "Max Delta",
+        min_value=0.70, max_value=0.99,
+        value=0.90, step=0.01,
+        key="cc_max_delta",
+        help="Exclude extremely deep ITM calls. Above 0.90 the assigned return becomes unstable.",
+    )
+
+col7, col8, col9 = st.columns(3)
+with col7:
     min_oi = st.number_input(
         "Min Open Interest",
         min_value=0, max_value=1000,
         value=50, step=25,
         key="cc_min_oi",
     )
-with col6:
+with col8:
     min_market_cap_b = st.number_input(
         "Min Market Cap ($B)",
         min_value=0.0, max_value=50.0,
         value=1.0, step=0.5,
         format="%.1f",
         key="cc_min_cap",
+    )
+with col9:
+    min_downside = st.slider(
+        "Min Downside Protection %",
+        min_value=0, max_value=40,
+        value=10, step=1,
+        key="cc_min_downside",
+        help="Filter out positions with insufficient downside buffer.",
     )
 
 scan_btn = st.button("Scan for Covered Calls", type="primary")
@@ -191,7 +217,9 @@ if scan_btn:
                 # Apply post-filters
                 df = raw_df[
                     (raw_df["annualized_return_pct"] >= min_annualized) &
-                    (raw_df["downside_protection_pct"] >= min_downside)
+                    (raw_df["annualized_return_pct"] <= max_annualized) &
+                    (raw_df["downside_protection_pct"] >= min_downside) &
+                    (raw_df["delta"] <= max_delta)
                 ].copy()
 
                 if df.empty:
