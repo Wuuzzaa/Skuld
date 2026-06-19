@@ -124,12 +124,12 @@ with col2:
         help="0.8 = deep ITM, more protection. 0.6 = slightly ITM, more upside.",
     )
 with col3:
-    min_downside = st.slider(
-        "Min Downside Protection %",
-        min_value=0, max_value=40,
-        value=10, step=1,
-        key="cc_min_downside",
-        help="Filter out positions with insufficient downside buffer.",
+    delta_target_max = st.slider(
+        "Max Delta",
+        min_value=0.70, max_value=0.99,
+        value=0.90, step=0.01,
+        key="cc_max_delta_top",
+        help="Exclude extremely deep ITM calls. Above 0.90 the assigned return becomes unstable.",
     )
 
 col4, col5, col6 = st.columns(3)
@@ -149,12 +149,12 @@ with col5:
         help="Cap utopian values. Anything above ~100% is usually a data artefact or illiquid option.",
     )
 with col6:
-    max_delta = st.slider(
-        "Max Delta",
-        min_value=0.70, max_value=0.99,
-        value=0.90, step=0.01,
-        key="cc_max_delta",
-        help="Exclude extremely deep ITM calls. Above 0.90 the assigned return becomes unstable.",
+    min_market_cap_b = st.number_input(
+        "Min Market Cap ($B)",
+        min_value=0.0, max_value=50.0,
+        value=1.0, step=0.5,
+        format="%.1f",
+        key="cc_min_cap",
     )
 
 col7, col8, col9 = st.columns(3)
@@ -166,14 +166,6 @@ with col7:
         key="cc_min_oi",
     )
 with col8:
-    min_market_cap_b = st.number_input(
-        "Min Market Cap ($B)",
-        min_value=0.0, max_value=50.0,
-        value=1.0, step=0.5,
-        format="%.1f",
-        key="cc_min_cap",
-    )
-with col9:
     min_downside = st.slider(
         "Min Downside Protection %",
         min_value=0, max_value=40,
@@ -181,6 +173,8 @@ with col9:
         key="cc_min_downside",
         help="Filter out positions with insufficient downside buffer.",
     )
+with col9:
+    max_annualized_2 = None  # placeholder — layout symmetry
 
 scan_btn = st.button("Scan for Covered Calls", type="primary")
 
@@ -219,7 +213,7 @@ if scan_btn:
                     (raw_df["annualized_return_pct"] >= min_annualized) &
                     (raw_df["annualized_return_pct"] <= max_annualized) &
                     (raw_df["downside_protection_pct"] >= min_downside) &
-                    (raw_df["delta"] <= max_delta)
+                    (raw_df["delta"] <= delta_target_max)
                 ].copy()
 
                 if df.empty:
