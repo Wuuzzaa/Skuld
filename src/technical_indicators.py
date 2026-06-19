@@ -112,7 +112,7 @@ def calc_technical_indicators(symbols, verbose: bool = False, symbol_batch_size:
                     if_exists="append"
                 )
 
-def calc_technical_indicators_history(symbols, verbose: bool = False, symbol_batch_size: int = 500):
+def calc_technical_indicators_history(symbols, verbose: bool = False, symbol_batch_size: int = 100):
     table_name = f"{TABLE_TECHNICAL_INDICATORS}HistoryDaily"
     # batchweise OHLCV laden (weniger DB-Roundtrips) und danach pro Symbol berechnen
     sql_file_path = PATH_DATABASE_QUERY_FOLDER / "technical_indicators_symbol_ohlcv_history.sql"

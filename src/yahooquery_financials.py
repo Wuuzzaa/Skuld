@@ -294,23 +294,48 @@ def load_stock_prices(symbols):
     # replace symbol prefix I: with ^ for indices to match yahoo format
     symbols = [symbol.replace('I:', '^') for symbol in symbols]
     yahoo_query = YahooQueryScraper.instance(symbols)
+    
     with get_postgres_engine().begin() as connection:
         truncate_table(connection, TABLE_STOCK_PRICES_YAHOO)
+        
         for df in yahoo_query.get_historical_prices(period='4d'):
             if df is not None and not df.empty:
-                df.sort_values(by=["symbol"], ascending=False)
-                print(df.head)
-                df['date'] = pd.to_datetime(df['date'])
-                # Nur Zeilen behalten, die dem neuesten Datum im aktuellen Dataframe entsprechen
-                latest_date = df['date'].max()
-                df = df[df['date'] == latest_date]
-                # --------------------------------------------
+                # 1. Index flachklopfen
+                df = df.reset_index()
 
-                # drop date column
+                # 2. Fehlerresistente Konvertierung zu reinen Datums-Strings via Python-Standard
+                def clean_date_to_str(x):
+                    if pd.isna(x):
+                        return None
+                    
+                    # Egal ob String, Timestamp oder Datetime: In String konvertieren
+                    # Ein String sieht dann z.B. so aus: "2026-06-19 00:00:00+00:00" oder "2026-06-19"
+                    str_val = str(x).strip()
+                    
+                    # Die ersten 10 Zeichen extrahieren (das ist immer YYYY-MM-DD)
+                    return str_val[:10]
+
+                # Die Funktion auf jede Zeile anwenden
+                df['date_str'] = df['date'].apply(clean_date_to_str)
+
+                # 3. Den neuesten Tag ermitteln (als String, z.B. '2026-06-19')
+                latest_date_str = df['date_str'].max()
+
+                # 4. Filtern
+                df = df[df['date_str'] == latest_date_str]
+
+                # 5. Spalten aufräumen
+                df = df.drop(columns=['date_str'])
                 if 'date' in df.columns:
                     df = df.drop(columns=['date'])
-                    # replace symbol prefix ^ with :I for indices to match symbols table
-                    df['symbol'] = df['symbol'].str.replace('^', 'I:')
+                
+                # Sortierung (optional, falls benötigt, aber nach dem Filtern performanter)
+                df = df.sort_values(by=["symbol"], ascending=False)
+
+                # replace symbol prefix ^ with I: for indices to match symbols table
+                if 'symbol' in df.columns:
+                    df['symbol'] = df['symbol'].str.replace('^', 'I:', regex=False)
+                    
                     insert_into_table(
                         connection,
                         TABLE_STOCK_PRICES_YAHOO,
