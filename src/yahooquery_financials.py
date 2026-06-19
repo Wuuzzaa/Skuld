@@ -296,8 +296,16 @@ def load_stock_prices(symbols):
     yahoo_query = YahooQueryScraper.instance(symbols)
     with get_postgres_engine().begin() as connection:
         truncate_table(connection, TABLE_STOCK_PRICES_YAHOO)
-        for df in yahoo_query.get_historical_prices(period='1d'):
+        for df in yahoo_query.get_historical_prices(period='4d'):
             if df is not None and not df.empty:
+                df.sort_values(by=["symbol"], ascending=False)
+                print(df.head)
+                df['date'] = pd.to_datetime(df['date'])
+                # Nur Zeilen behalten, die dem neuesten Datum im aktuellen Dataframe entsprechen
+                latest_date = df['date'].max()
+                df = df[df['date'] == latest_date]
+                # --------------------------------------------
+
                 # drop date column
                 if 'date' in df.columns:
                     df = df.drop(columns=['date'])
@@ -366,7 +374,7 @@ def load_historical_prices(symbols):
         conn.close()
     logger.info(f"Total historical price entries loaded: {total_rows}")
 
-    calculate_and_store_stock_historical_volatility_history()
+    # calculate_and_store_stock_historical_volatility_history()
     calc_technical_indicators_history(symbols)
 
 if __name__ == "__main__":
