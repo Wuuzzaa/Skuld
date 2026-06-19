@@ -37,6 +37,7 @@ dividend_scanner = st.Page("pages/dividend_scanner.py", title="Dividend Scanner"
 zahltagstrategie = st.Page("pages/dividend_screener_zahltagstrategie.py", title="Zahltagstrategie")
 data_logs = st.Page("pages/data_change_logs.py", title="Data Logs")
 iron_condors = st.Page("pages/iron_condors.py", title="Iron Condors")
+earnings_put_scanner = st.Page("pages/earnings_put_scanner.py", title="Earnings Put Scanner")
 symbolpage = st.Page("pages/symbolpage.py", title="Symbol Page")
 admin_jobs = st.Page("pages/admin_jobs.py", title="Admin - Jobs")
 
@@ -47,6 +48,7 @@ page = st.navigation(
         watchlist,
         spreads,
         iron_condors,
+        earnings_put_scanner,
         marrieds,
         position_insurance,
         multifactor_swingtrading,
