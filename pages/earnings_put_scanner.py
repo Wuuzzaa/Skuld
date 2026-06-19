@@ -44,13 +44,13 @@ logger = logging.getLogger(os.path.basename(__file__))
 logger.debug(f"Start Page: {os.path.basename(__file__)}")
 
 # ── Page header ──────────────────────────────────────────────────────────────
-st.title("📅 Earnings Put Scanner")
+st.title("Earnings Put Scanner")
 st.caption(
     "Sell weekly puts below the expected move range before earnings — "
     "profit from IV crush the next morning."
 )
 
-with st.expander("📖 How this strategy works", expanded=False):
+with st.expander("How this strategy works", expanded=False):
     st.markdown("""
     **Setup (once per earnings season)**
     - Earnings seasons: Q1 mid-April, Q2 mid-July, Q3 mid-October, Q4 mid-January
@@ -69,9 +69,9 @@ with st.expander("📖 How this strategy works", expanded=False):
     | 7 | If 90% not possible: close 60 min after open at any small gain |
 
     **Exit rules**
-    - ✅ Close at 90% profit → e.g. sold for $1.30, buy back at $0.13
-    - ✅ Close 60 min after open at breakeven if target not reached
-    - ❌ Never hold through expiry unless you accept assignment
+    - Close at 90% profit → e.g. sold for $1.30, buy back at $0.13
+    - Close 60 min after open at breakeven if target not reached
+    - Never hold through expiry unless you accept assignment
 
     **Worst case — Assignment**
     Stock gaps below your strike. You buy 100 shares at strike price.
@@ -95,7 +95,7 @@ col1, col2, col3, col4 = st.columns([1.5, 1.5, 1.5, 1])
 with col1:
     days_ahead = st.selectbox(
         "Earnings within",
-        options=[3, 5, 7, 10, 14],
+        options=[3, 5, 7, 10, 14, 21, 30, 45, 60],
         index=2,
         format_func=lambda x: f"{x} days",
         key="eps_days_ahead",
@@ -126,7 +126,7 @@ with col4:
         key="eps_min_iv_rank",
     )
 
-scan_btn = st.button("🔍 Scan for Candidates", type="primary")
+scan_btn = st.button("Scan for Candidates", type="primary")
 
 # ── Load candidates ───────────────────────────────────────────────────────────
 if scan_btn:
@@ -200,10 +200,10 @@ if st.session_state["eps_candidates_df"] is not None:
         if pd.isna(iv):
             return "—"
         if iv >= 60:
-            return f"✅ {iv:.0f}%"
+            return f"High {iv:.0f}%"
         if iv >= 40:
-            return f"🟡 {iv:.0f}%"
-        return f"❌ {iv:.0f}%"
+            return f"Mid {iv:.0f}%"
+        return f"Low {iv:.0f}%"
 
     display_df = pd.DataFrame({
         "Symbol":        df["symbol"],
@@ -345,7 +345,7 @@ if st.session_state.get("eps_selected_symbol"):
                 "DTE":           df_puts["days_to_expiration"].astype("Int64"),
                 "Strike ($)":    df_puts["strike_price"].apply(lambda v: f"{v:.1f}"),
                 "Below Thresh.": df_puts["below_threshold"].apply(
-                                     lambda v: "✅ Safe" if v else "⚠️ Inside"),
+                                     lambda v: "Safe" if v else "Inside"),
                 "Premium ($)":   df_puts["premium_option_price"].apply(
                                      lambda v: f"{v:.2f}" if pd.notna(v) else "—"),
                 "Premium %":     df_puts["premium_pct"].apply(
@@ -362,7 +362,7 @@ if st.session_state.get("eps_selected_symbol"):
 
             # Highlight safe rows (below expected move)
             def _highlight_rows(row):
-                if row["Below Thresh."] == "✅ Safe":
+                if row["Below Thresh."] == "Safe":
                     return ["background-color: rgba(20, 83, 45, 0.25)"] * len(row)
                 return [""] * len(row)
 
@@ -375,7 +375,7 @@ if st.session_state.get("eps_selected_symbol"):
             # Quick reference box
             st.info(
                 f"**Trade checklist for {symbol}:**  \n"
-                f"1. Choose a ✅ Safe row with Premium % ≥ {min_premium_pct:.1f}%  \n"
+                f"1. Choose a Safe row with Premium % >= {min_premium_pct:.1f}%  \n"
                 f"2. Sell the put — collect premium  \n"
                 f"3. Next morning: buy back at **Close @ 90%** value  \n"
                 f"4. If not filled within 60 min of open → close at market"
