@@ -1,22 +1,24 @@
 -- Earnings Put Scanner — Put candidates for a single symbol
--- Finds weekly puts expiring in the same week as earnings,
+-- Finds weekly puts expiring within 10 days,
 -- with strike below (live_stock_price - expected_move)
+-- Stock price from StockData for reliability
 SELECT
-    expiration_date,
-    days_to_expiration,
-    strike_price,
-    premium_option_price,
-    ROUND(CAST(premium_option_price AS NUMERIC) / NULLIF(CAST(strike_price AS NUMERIC), 0) * 100, 2) AS premium_pct,
-    open_interest,
-    implied_volatility,
-    greeks_delta,
-    live_stock_price,
-    expected_move
-FROM "OptionDataMerged"
+    o.expiration_date,
+    o.days_to_expiration,
+    o.strike_price,
+    o.premium_option_price,
+    ROUND(CAST(o.premium_option_price AS NUMERIC) / NULLIF(CAST(o.strike_price AS NUMERIC), 0) * 100, 2) AS premium_pct,
+    o.open_interest,
+    o.implied_volatility,
+    o.greeks_delta,
+    s."FinData_currentPrice"  AS live_stock_price,
+    o.expected_move
+FROM "OptionDataMerged" o
+JOIN "StockData" s ON s.symbol = o.symbol
 WHERE
-    symbol          = :symbol
-    AND contract_type = 'put'
-    AND days_to_expiration BETWEEN 1 AND 10
-    AND open_interest > :min_oi
-    AND premium_option_price > 0
-ORDER BY expiration_date ASC, strike_price DESC
+    o.symbol        = :symbol
+    AND o.contract_type = 'put'
+    AND o.days_to_expiration BETWEEN 1 AND 10
+    AND o.open_interest > :min_oi
+    AND o.premium_option_price > 0
+ORDER BY o.expiration_date ASC, o.strike_price DESC
