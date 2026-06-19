@@ -33,10 +33,10 @@ def render_date_filter(
     if st is None:
         raise ImportError("streamlit is required to render Streamlit helpers")
 
-    if date_list_session_key not in st.session_state:
-        st.session_state[date_list_session_key] = select_into_dataframe(query=date_query)
+    if date_list_session_key + date_query not in st.session_state:
+        st.session_state[date_list_session_key + date_query] = select_into_dataframe(query=date_query)
 
-    date_options = _extract_first_column_values(st.session_state[date_list_session_key])
+    date_options = _extract_first_column_values(st.session_state[date_list_session_key + date_query])
     if not date_options:
         raise ValueError("No dates returned for time travel filter.")
 
