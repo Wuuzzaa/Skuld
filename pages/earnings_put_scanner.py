@@ -236,6 +236,75 @@ if st.session_state["eps_candidates_df"] is not None:
         selected_idx = selected_rows[0]
         selected_symbol = df.iloc[selected_idx]["symbol"]
 
+        # ── Inline documentation for selected candidate ───────────────────────
+        row = df.iloc[selected_idx]
+        price       = float(row["live_stock_price"]) if pd.notna(row.get("live_stock_price")) else None
+        exp_move    = float(row["expected_move"])     if pd.notna(row.get("expected_move"))    else None
+        exp_pct     = float(row["expected_move_pct"]) if pd.notna(row.get("expected_move_pct")) else None
+        iv_rank     = float(row["iv_rank"])           if pd.notna(row.get("iv_rank"))           else None
+        hv          = float(row["historical_volatility_30d"]) if pd.notna(row.get("historical_volatility_30d")) else None
+        straddle_expiry = str(row.get("straddle_expiry", ""))
+        atm_strike  = float(row["atm_strike"]) if pd.notna(row.get("atm_strike")) else None
+
+        st.divider()
+        st.subheader(f"Analysis — {selected_symbol}")
+
+        if price and exp_move:
+            safe_strike = price - exp_move
+            upper_range = price + exp_move
+
+            # IV Rank interpretation
+            if iv_rank is not None:
+                if iv_rank >= 60:
+                    iv_text = f"**High at {iv_rank:.0f}%** — options are expensive. Good time to sell premium."
+                elif iv_rank >= 40:
+                    iv_text = f"**Medium at {iv_rank:.0f}%** — options are fairly priced."
+                else:
+                    iv_text = f"**Low at {iv_rank:.0f}%** — options are cheap. IV crush effect may be limited."
+            else:
+                iv_text = "not available"
+
+            # IV vs HV
+            if hv is not None and exp_pct is not None:
+                hv_pct = hv * 100
+                iv_vs_hv = (
+                    f"The implied move of **{exp_pct:.1f}%** is "
+                    + (f"**higher** than the 30-day historical volatility of {hv_pct:.1f}%** — "
+                       f"the market is paying a premium for uncertainty around earnings. This is typical and favorable for selling puts."
+                       if exp_pct > hv_pct else
+                       f"**in line with** the 30-day historical volatility ({hv_pct:.1f}%). "
+                       f"Options may not be significantly overpriced.")
+                )
+            else:
+                iv_vs_hv = ""
+
+            st.markdown(f"""
+**Expected Move — How it is calculated**
+
+The expected move of **±${exp_move:.2f} ({exp_pct:.1f}%)** comes from the **ATM Straddle price**
+(Call + Put at strike ${atm_strike:.1f}, expiry {straddle_expiry}).
+
+This is the most accurate market-based method:
+> Expected Move = ATM Call price + ATM Put price
+
+The market is saying: *"There is approximately a 68% chance the stock stays within
+${safe_strike:.2f} and ${upper_range:.2f} after earnings."*
+
+---
+
+**What this means for the strategy**
+
+| Zone | Range | What to do |
+|------|-------|------------|
+| Safe zone (below move) | below **${safe_strike:.2f}** | Sell puts HERE — stock would need to drop more than expected |
+| Expected range | ${safe_strike:.2f} – ${upper_range:.2f} | Avoid selling puts here — assignment risk too high |
+| Above market | above ${upper_range:.2f} | Irrelevant for put selling |
+
+**IV Rank:** {iv_text}
+
+{iv_vs_hv}
+""")
+
         if selected_symbol != st.session_state.get("eps_selected_symbol"):
             st.session_state["eps_selected_symbol"] = selected_symbol
             st.session_state["eps_puts_df"] = None
@@ -369,8 +438,97 @@ if st.session_state.get("eps_selected_symbol"):
             styled = disp.style.apply(_highlight_rows, axis=1).hide(axis="index")
 
             st.markdown(f"**{len(disp)} puts found** — green rows are safely below expected move")
-            st.dataframe(styled, use_container_width=True,
-                         height=min(600, 40 + 35 * len(disp)))
+
+            put_event = st.dataframe(
+                styled,
+                use_container_width=True,
+                height=min(600, 40 + 35 * len(disp)),
+                selection_mode="single-row",
+                on_select="rerun",
+                key="eps_put_table",
+            )
+
+            # ── Inline documentation for selected put ─────────────────────────
+            put_selected = put_event.selection.rows if hasattr(put_event, "selection") else []
+            if put_selected:
+                pr = df_puts.iloc[put_selected[0]]
+                p_strike   = float(pr["strike_price"])
+                p_premium  = float(pr["premium_option_price"])
+                p_pct      = float(pr["premium_pct"])
+                p_dte      = int(pr["days_to_expiration"])
+                p_delta    = float(pr["greeks_delta"]) if pd.notna(pr.get("greeks_delta")) else None
+                p_below    = bool(pr["below_threshold"])
+                p_close90  = round(p_premium * 0.10, 2)
+                p_max_gain = round(p_premium * 100, 2)
+                p_breakeven = round(p_strike - p_premium, 2)
+
+                # Assignment probability from delta
+                if p_delta is not None:
+                    assign_prob = abs(p_delta) * 100
+                    assign_text = f"~{assign_prob:.0f}% (based on Delta {p_delta:.3f})"
+                else:
+                    assign_text = "not available"
+
+                # Distance from current price
+                if price:
+                    distance = price - p_strike
+                    distance_pct = distance / price * 100
+                    distance_text = f"${distance:.2f} ({distance_pct:.1f}%) below current price"
+                else:
+                    distance_text = "—"
+
+                # Safe or not
+                if p_below:
+                    safety_text = (
+                        f"This strike is **below the expected move** (safe zone). "
+                        f"The stock would need to drop more than the market expects before you get assigned."
+                    )
+                else:
+                    safety_text = (
+                        f"This strike is **inside the expected move range**. "
+                        f"There is a realistic chance the stock reaches this strike after earnings. Higher risk."
+                    )
+
+                st.divider()
+                st.markdown(f"### Put Details — {symbol} ${p_strike:.1f} Put ({p_dte} DTE)")
+                st.markdown(f"""
+**Position summary**
+
+| | |
+|---|---|
+| Strike | ${p_strike:.2f} |
+| Premium received | ${p_premium:.2f} per share → **${p_max_gain:.2f} per contract** (100 shares) |
+| Breakeven at expiry | **${p_breakeven:.2f}** — stock must stay above this |
+| Distance from current price | {distance_text} |
+| Assignment probability | {assign_text} |
+
+---
+
+**Safety assessment**
+
+{safety_text}
+
+---
+
+**Profit & Loss scenarios**
+
+| Scenario | Stock price at expiry | Result |
+|---|---|---|
+| Best case | Stays above ${p_strike:.2f} | Put expires worthless → keep full ${p_premium:.2f} premium |
+| Target (90%) | Rapid IV crush after earnings | Buy back at **${p_close90:.2f}** → profit **${p_premium - p_close90:.2f}** per share |
+| Breakeven | Stock at ${p_breakeven:.2f} | Zero gain, zero loss |
+| Assignment | Stock falls below ${p_strike:.2f} | You buy 100 shares at ${p_strike:.2f} — loss offset by ${p_premium:.2f} premium |
+
+---
+
+**Exit plan**
+
+1. **Next morning after earnings:** place a buy-to-close order at **${p_close90:.2f}** (90% profit target)
+2. **60 min after open:** if not filled, close at market for any small gain
+3. **If assigned:** sell a covered call on the 100 shares to recover cost basis
+""")
+            else:
+                st.caption("Click a row in the put table to see a detailed analysis for that option.")
 
             # Quick reference box
             st.info(
