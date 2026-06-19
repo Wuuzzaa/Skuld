@@ -7,7 +7,7 @@ WITH earnings AS (
 post_earnings_expiry AS (
     SELECT MIN(o.expiration_date) AS target_expiry
     FROM "OptionDataMerged" o
-    JOIN earnings e ON o.expiration_date > e.earnings_date
+    JOIN earnings e ON o.expiration_date > e.earnings_date::date
     WHERE o.symbol = :symbol
       AND o.contract_type = 'put'
       AND o.days_to_expiration BETWEEN 1 AND 21
