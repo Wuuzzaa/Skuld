@@ -10,7 +10,7 @@ from src.massiv_api import load_option_chains
 from src.stock_volatility import calculate_and_store_stock_historical_volatility_history, calculate_and_store_stock_implied_volatility_history
 from src.technical_indicators import calc_technical_indicators, calc_technical_indicators_history
 from src.yahoo_asset_profile import load_asset_profile
-from src.yahoo_dividens import calculate_dividend_classification, calculate_dividend_classification_history
+from src.yahoo_dividens import calculate_dividend_classification, calculate_dividend_classification_history, calculate_dividend_classification_history_full
 from src.yahooquery_earning_dates import scrape_earning_dates
 from src.yahooquery_financials import generate_fundamental_data, load_historical_prices, load_stock_prices
 from src.yfinance_analyst_price_targets import scrape_yahoo_finance_analyst_price_targets
@@ -119,7 +119,7 @@ def main(args):
                 ("Historical Volatility", calculate_and_store_stock_historical_volatility_history, ()),
             ],
             "historical_dividend_classification": [
-                ("Historical Volatility", calculate_dividend_classification_history, ()),
+                ("Historical Volatility", calculate_dividend_classification_history_full, ()),
             ],
         }
 
@@ -127,16 +127,10 @@ def main(args):
 
         
         if args.mode == "historical_full":
-            # Sequential: first historical prices, then technical indicators
-            parallel_tasks = []
-            task_name, result, error, mem_diff, peak_mem, duration = pipeline.run_task(
-                "Historical Prices", load_historical_prices, symbols["all"]
-            )
-            pipeline.record_result(task_name, result, error, mem_diff, peak_mem)
-            if error:
-                raise RuntimeError(f"Historical Prices failed: {error}")
-
-            pipeline.record_result(task_name, result, error, mem_diff, peak_mem)
+            load_historical_prices(symbols["all"])
+            calculate_and_store_stock_historical_volatility_history()
+            calc_technical_indicators_history(symbols)
+            calculate_dividend_classification_history_full()
         elif args.mode == "historical_technical_indicators":
             calc_technical_indicators_history(symbols["all"])
         elif args.mode == "historization":
