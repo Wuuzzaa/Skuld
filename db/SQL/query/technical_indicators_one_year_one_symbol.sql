@@ -1,5 +1,5 @@
 SELECT
-    snapshot_date AS date,
+    date AS date,
     symbol,
     -- EMA
     ROUND("EMA_5"::numeric, 2) AS "EMA_5",
@@ -43,9 +43,9 @@ SELECT
     ROUND("DMP_10"::numeric, 2) AS "DMP_10",
     ROUND("DMN_10"::numeric, 2) AS "DMN_10"
 FROM
-    "TechnicalIndicatorsCalculatedHistoryDaily" AS technical_indicators
+    "TechnicalIndicatorsCalculatedHistory" AS technical_indicators
 WHERE
     symbol = :symbol
-    AND snapshot_date BETWEEN CURRENT_DATE - INTERVAL '30 days' AND CURRENT_DATE
+    AND date BETWEEN CURRENT_DATE - INTERVAL '30 days' AND CURRENT_DATE
 ORDER BY
-    snapshot_date DESC;
+    date DESC;

@@ -52,3 +52,23 @@ def calculate_dividend_classification_history():
                 if_exists="append"
             )
         logger.info(f"Saved dividend classification data to database - rows: {len(dividend_data)}")
+
+def calculate_dividend_classification_history_full():
+    logger.info("Calculation Yahoo Dividend Classification")
+
+    history_dates = select_into_dataframe('SELECT date from "DatesHistory" ORDER BY date desc')
+
+    for time_travel_date in history_dates["date"]:
+        dividend_data = select_timetravel_into_dataframe(time_travel_date, sql_file_path = "db/SQL/query/dividend_classification.sql")
+        dividend_data["snapshot_date"] = time_travel_date
+    
+        # --- Database Persistence ---
+        with get_postgres_engine().begin() as connection:
+            truncate_table(connection, TABLE_DIVIDEND_DATA_YAHOO)
+            insert_into_table(
+                connection,
+                table_name=f"{TABLE_DIVIDEND_DATA_YAHOO}HistoryDaily",
+                dataframe=dividend_data,
+                if_exists="append"
+            )
+        logger.info(f"Saved dividend classification data to database - rows: {len(dividend_data)}")

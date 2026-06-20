@@ -1,12 +1,12 @@
 WITH earnings AS (
     SELECT DISTINCT ON (symbol) earnings_date
-    FROM "OptionDataMerged"
+    FROM "StockData"
     WHERE symbol = :symbol
     ORDER BY symbol, days_to_earnings ASC
 ),
 post_earnings_expiry AS (
     SELECT MIN(o.expiration_date) AS target_expiry
-    FROM "OptionDataMerged" o
+    FROM "OptionData" o
     JOIN earnings e ON o.expiration_date > e.earnings_date::date
     WHERE o.symbol = :symbol
       AND o.contract_type = 'put'
@@ -23,14 +23,14 @@ SELECT
     o.open_interest,
     o.implied_volatility,
     o.greeks_delta,
-    s."FinData_currentPrice"  AS live_stock_price,
+    o."FinData_currentPrice"  AS live_stock_price,
     o.expected_move
 FROM "OptionDataMerged" o
-JOIN "StockData" s ON s.symbol = o.symbol
 JOIN post_earnings_expiry pe ON o.expiration_date = pe.target_expiry
 WHERE
     o.symbol        = :symbol
     AND o.contract_type = 'put'
     AND o.open_interest > :min_oi
     AND o.premium_option_price > 0
+    AND o."FinData_currentPrice" IS NOT NULL
 ORDER BY o.strike_price DESC

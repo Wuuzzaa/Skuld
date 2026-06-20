@@ -399,10 +399,6 @@ def load_historical_prices(symbols):
         conn.close()
     logger.info(f"Total historical price entries loaded: {total_rows}")
 
-    calculate_and_store_stock_historical_volatility_history()
-    calc_technical_indicators_history(symbols)
-    calc_technical_indicators_history(symbols)
-
 if __name__ == "__main__":
 
     start = time.time()

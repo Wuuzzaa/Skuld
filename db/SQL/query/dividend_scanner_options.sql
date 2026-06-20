@@ -6,7 +6,7 @@ SELECT
 	open_interest,
 	day_volume,
 	day_last_updated
-FROM "OptionDataMerged"
+FROM "OptionData"
 WHERE symbol = :symbol 
   AND contract_type = 'put'
   AND expiration_date BETWEEN CURRENT_DATE + INTERVAL '30 days' AND CURRENT_DATE + INTERVAL '60 days'
