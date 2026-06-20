@@ -196,15 +196,25 @@ with st.expander("Configuration and Filters", expanded=True):
             "Show only positive expected value",
             key="show_only_positiv_expected_value"
         )
-    
+
     with col10:
+        st.checkbox(
+            "No Earnings Till Expiration",
+            key="show_only_spreads_with_no_earnings_till_expiration",
+            help="Filters out spreads where an earnings date falls between today and expiration"
+        )
+
+    with col11:
         st.checkbox(
             "Earnings Warning Filter",
             key="show_only_spreads_with_no_earnings_warning",
             help="Filters out spreads with an earnings warning (earnings shortly before expiration)"
         )
 
-    with col11:
+    # Fourth row
+    col13, col14, col15, col16 = st.columns(4)
+
+    with col13:
         min_day_volume = st.number_input(
             "Min dayvolume",
             min_value=0,
@@ -212,7 +222,7 @@ with st.expander("Configuration and Filters", expanded=True):
             key="min_day_volume"
         )
 
-    with col12:
+    with col14:
         min_open_interest = st.number_input(
             "Min Open Interest",
             min_value=0,
@@ -220,7 +230,7 @@ with st.expander("Configuration and Filters", expanded=True):
             key="min_open_interest"
         )
 
-    with col12:
+    with col15:
         min_sell_iv = st.number_input(
             "Min sell iv",
             min_value=0.0,
@@ -229,10 +239,10 @@ with st.expander("Configuration and Filters", expanded=True):
             key="min_sell_iv"
         )
 
-    # Fourth row
-    col13, col14, col15, col16 = st.columns(4)
+    # Fifth row
+    col17, col18, col19, col20 = st.columns(4)
 
-    with col13:
+    with col17:
         max_sell_iv = st.number_input(
             "Max sell iv",
             min_value=0.0,
@@ -241,7 +251,7 @@ with st.expander("Configuration and Filters", expanded=True):
             key="max_sell_iv"
         )
 
-    with col14:
+    with col18:
         min_max_profit = st.number_input(
             "Min Max Profit",
             min_value=0.0,
@@ -250,7 +260,7 @@ with st.expander("Configuration and Filters", expanded=True):
             key="min_max_profit"
         )
 
-    with col15:
+    with col19:
         min_iv_rank = st.number_input(
             "Min iv rank",
             min_value=0,
@@ -259,7 +269,7 @@ with st.expander("Configuration and Filters", expanded=True):
             key="min_iv_rank"
         )
 
-    with col16:
+    with col20:
         min_iv_percentile = st.number_input(
             "Min iv percentile",
             min_value=0,
@@ -269,8 +279,8 @@ with st.expander("Configuration and Filters", expanded=True):
         )
 
     st.divider()
-    col17, col18, col19 = st.columns(3)
-    with col17:
+    col_iv1, col_iv2, col_iv3 = st.columns(3)
+    with col_iv1:
         iv_corr_input = st.text_input("IV Correction (auto, 0.0-1.0)", value=str(st.session_state.iv_correction), key="iv_correction_input")
         if iv_corr_input.lower() == "auto":
             st.session_state.iv_correction = "auto"
@@ -280,9 +290,9 @@ with st.expander("Configuration and Filters", expanded=True):
             except ValueError:
                 st.error("Invalid IV Correction. Use 'auto' or a number.")
                 st.session_state.iv_correction = 0.0
-    with col18:
+    with col_iv2:
         st.number_input("Risk-Free Rate %", min_value=0.0, max_value=20.0, step=0.1, format="%.1f", key="risk_free_rate")
-    with col19:
+    with col_iv3:
         st.info("IV correction mode: 'auto' (Automatic), 0.0-1.0 (Manual reduction), 0.0 (No correction)")
 
 @st.cache_data(ttl=300)  # 5 Minuten
