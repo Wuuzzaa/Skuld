@@ -298,34 +298,34 @@ def load_stock_prices(symbols):
     with get_postgres_engine().begin() as connection:
         truncate_table(connection, TABLE_STOCK_PRICES_YAHOO)
         
-        for df in yahoo_query.get_historical_prices(period='4d'):
+        for df in yahoo_query.get_historical_prices(period='1d'):
             if df is not None and not df.empty:
-                # 1. Index flachklopfen
-                df = df.reset_index()
+                # # 1. Index flachklopfen
+                # df = df.reset_index()
 
-                # 2. Fehlerresistente Konvertierung zu reinen Datums-Strings via Python-Standard
-                def clean_date_to_str(x):
-                    if pd.isna(x):
-                        return None
+                # # 2. Fehlerresistente Konvertierung zu reinen Datums-Strings via Python-Standard
+                # def clean_date_to_str(x):
+                #     if pd.isna(x):
+                #         return None
                     
-                    # Egal ob String, Timestamp oder Datetime: In String konvertieren
-                    # Ein String sieht dann z.B. so aus: "2026-06-19 00:00:00+00:00" oder "2026-06-19"
-                    str_val = str(x).strip()
+                #     # Egal ob String, Timestamp oder Datetime: In String konvertieren
+                #     # Ein String sieht dann z.B. so aus: "2026-06-19 00:00:00+00:00" oder "2026-06-19"
+                #     str_val = str(x).strip()
                     
-                    # Die ersten 10 Zeichen extrahieren (das ist immer YYYY-MM-DD)
-                    return str_val[:10]
+                #     # Die ersten 10 Zeichen extrahieren (das ist immer YYYY-MM-DD)
+                #     return str_val[:10]
 
-                # Die Funktion auf jede Zeile anwenden
-                df['date_str'] = df['date'].apply(clean_date_to_str)
+                # # Die Funktion auf jede Zeile anwenden
+                # df['date_str'] = df['date'].apply(clean_date_to_str)
 
-                # 3. Den neuesten Tag ermitteln (als String, z.B. '2026-06-19')
-                latest_date_str = df['date_str'].max()
+                # # 3. Den neuesten Tag ermitteln (als String, z.B. '2026-06-19')
+                # latest_date_str = df['date_str'].max()
 
-                # 4. Filtern
-                df = df[df['date_str'] == latest_date_str]
+                # # 4. Filtern
+                # df = df[df['date_str'] == latest_date_str]
 
-                # 5. Spalten aufräumen
-                df = df.drop(columns=['date_str'])
+                # # 5. Spalten aufräumen
+                # df = df.drop(columns=['date_str'])
                 if 'date' in df.columns:
                     df = df.drop(columns=['date'])
                 
@@ -399,7 +399,8 @@ def load_historical_prices(symbols):
         conn.close()
     logger.info(f"Total historical price entries loaded: {total_rows}")
 
-    # calculate_and_store_stock_historical_volatility_history()
+    calculate_and_store_stock_historical_volatility_history()
+    calc_technical_indicators_history(symbols)
     calc_technical_indicators_history(symbols)
 
 if __name__ == "__main__":
