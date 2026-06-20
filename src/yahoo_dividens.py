@@ -64,7 +64,7 @@ def calculate_dividend_classification_history_full():
     
         # --- Database Persistence ---
         with get_postgres_engine().begin() as connection:
-            truncate_table(connection, TABLE_DIVIDEND_DATA_YAHOO)
+            truncate_table(connection, f"{TABLE_DIVIDEND_DATA_YAHOO}HistoryDaily")
             insert_into_table(
                 connection,
                 table_name=f"{TABLE_DIVIDEND_DATA_YAHOO}HistoryDaily",
