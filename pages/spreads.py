@@ -320,41 +320,65 @@ with st.spinner("Calculating spreads..."):
 
 # Apply spread filters
 filtered_df = spreads_df.copy()
+filter_log: list[tuple[str, int, list[str]]] = []  # (filter_name, removed_count, removed_symbols)
+
+def _apply_filter(df: pd.DataFrame, mask: pd.Series, label: str) -> pd.DataFrame:
+    removed = df[~mask]
+    if not removed.empty:
+        symbols = sorted(removed['symbol'].unique().tolist()) if 'symbol' in removed.columns else []
+        filter_log.append((label, len(removed), symbols))
+    return df[mask]
 
 # Min max profit
-filtered_df = filtered_df[filtered_df['max_profit'] >= min_max_profit]
+filtered_df = _apply_filter(
+    filtered_df,
+    filtered_df['max_profit'] >= min_max_profit,
+    f"Min Max Profit ≥ {min_max_profit}"
+)
 
 # Only positive expected value
 if st.session_state.show_only_positiv_expected_value:
-    filtered_df = filtered_df[filtered_df['expected_value'] >= 0]
+    filtered_df = _apply_filter(
+        filtered_df,
+        filtered_df['expected_value'] >= 0,
+        "Positive Expected Value"
+    )
 
 # Only spreads with no earnings till expiration
 today = pd.Timestamp.now().normalize()
 expiration_date_ts = pd.Timestamp(expiration_date).normalize()
 
 if st.session_state.show_only_spreads_with_no_earnings_till_expiration:
-    filtered_df = filtered_df[
-        ~(
-                (pd.to_datetime(filtered_df['earnings_date']).dt.normalize() >= today) &
-                (pd.to_datetime(filtered_df['earnings_date']).dt.normalize() < expiration_date_ts)
-        )
-    ]
+    earnings_mask = ~(
+        (pd.to_datetime(filtered_df['earnings_date']).dt.normalize() >= today) &
+        (pd.to_datetime(filtered_df['earnings_date']).dt.normalize() < expiration_date_ts)
+    )
+    filtered_df = _apply_filter(filtered_df, earnings_mask, "No Earnings Till Expiration")
 
 # Earnings Warning Filter
 if st.session_state.show_only_spreads_with_no_earnings_warning:
     if 'earnings_warning' in filtered_df.columns:
-        filtered_df = filtered_df[
+        earnings_warning_mask = (
             (filtered_df['earnings_warning'] == '') | (filtered_df['earnings_warning'].isna())
-        ]
+        )
+        filtered_df = _apply_filter(filtered_df, earnings_warning_mask, "Earnings Warning Filter")
 
 # Reset index to ensure the zebra style works on the dataframe
 filtered_df.reset_index(drop=True, inplace=True)
 
 # Min sell IV
-filtered_df = filtered_df[filtered_df['sell_iv'] >= min_sell_iv]
+filtered_df = _apply_filter(
+    filtered_df,
+    filtered_df['sell_iv'] >= min_sell_iv,
+    f"Min Sell IV ≥ {min_sell_iv:.2f}"
+)
 
 # Max sell IV
-filtered_df = filtered_df[filtered_df['sell_iv'] <= max_sell_iv]
+filtered_df = _apply_filter(
+    filtered_df,
+    filtered_df['sell_iv'] <= max_sell_iv,
+    f"Max Sell IV ≤ {max_sell_iv:.2f}"
+)
 
 # Re-reset index after all filters are applied
 filtered_df.reset_index(drop=True, inplace=True)
@@ -366,7 +390,11 @@ filtered_df['earnings_date'] = pd.to_datetime(filtered_df['earnings_date']).dt.s
 # This ensures they are available in 'row' even after page_display_dataframe might have dropped them from display
 # Actually page_display_dataframe creates a copy for display, so filtered_df remains intact.
 
-st.markdown(f"### {len(filtered_df)} Results")
+total_before = len(spreads_df)
+total_after = len(filtered_df)
+total_removed = total_before - total_after
+
+st.markdown(f"### {total_after} Results")
 
 # Export All button - downloads all filtered spreads with full details as CSV
 if not filtered_df.empty:
@@ -477,6 +505,14 @@ if not filtered_df.empty:
 
     else:
         st.caption("💡 Klicke auf eine Zeile in der Tabelle, um die Details der einzelnen Legs zu sehen.")
+
+if filter_log:
+    _total_removed_syms = sum(len(syms) for _, _, syms in filter_log)
+    with st.expander(f"Filter Log — {total_removed} removed ({_total_removed_syms} symbols)", expanded=False):
+        for filter_name, removed_count, symbols in filter_log:
+            st.markdown(f"**{filter_name}** — {removed_count} spreads removed")
+            if symbols:
+                st.caption(", ".join(symbols))
 
 # Show documentation
 with st.expander("📖 Documentation - Fields Overview", expanded=False):
