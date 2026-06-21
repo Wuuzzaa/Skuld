@@ -137,7 +137,7 @@ with col4:
     min_annualized = st.number_input(
         "Min Annualized Return %",
         min_value=0, max_value=200,
-        value=10, step=5,
+        value=30, step=5,
         key="cc_min_ann",
     )
 with col5:
@@ -251,6 +251,7 @@ if st.session_state["cc_df"] is not None:
         "Stock ($)":     df["stock_price"].apply(lambda v: f"{v:.2f}"),
         "Strike ($)":    df["strike_price"].apply(lambda v: f"{v:.2f}"),
         "Premium ($)":   df["premium"].apply(lambda v: f"{v:.2f}"),
+        "Investment ($)": df["stock_price"].apply(lambda v: f"{v * 100:,.0f}"),
         "DTE":           df["dte"].astype("Int64"),
         "Expiry":        df["expiration_date"].astype(str),
         "Net Debit ($)": df["net_debit"].apply(lambda v: f"{v:.2f}"),
