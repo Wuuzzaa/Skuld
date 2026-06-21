@@ -144,7 +144,7 @@ with col5:
     max_annualized = st.number_input(
         "Max Annualized Return %",
         min_value=10, max_value=1000,
-        value=100, step=10,
+        value=30, step=10,
         key="cc_max_ann",
         help="Cap utopian values. Anything above ~100% is usually a data artefact or illiquid option.",
     )
