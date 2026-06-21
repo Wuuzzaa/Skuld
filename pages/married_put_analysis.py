@@ -17,6 +17,11 @@ from src.streamlit_helpers import render_date_filter
 # Add src directory to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
+st.set_page_config(
+    page_title="Married Put Analysis",
+    layout="wide"  # Das schaltet den Fullscreen/Wide-Modus frei
+)
+
 setup_logging(component="streamlit", sub_component="marriedput", log_level=logging.DEBUG, console_output=True)
 logger = logging.getLogger(__name__)
 
