@@ -176,6 +176,27 @@ with col8:
 with col9:
     max_annualized_2 = None  # placeholder — layout symmetry
 
+col10, col11, col12 = st.columns(3)
+with col10:
+    min_iv_rank = st.number_input(
+        "Min IV Rank",
+        min_value=0, max_value=100,
+        value=50, step=5,
+        key="cc_min_iv_rank",
+        help="PowerOptions uses IV Rank >= 50 to ensure options are expensive enough to sell.",
+    )
+with col11:
+    min_premium = st.number_input(
+        "Min Option Bid ($)",
+        min_value=0.0, max_value=10.0,
+        value=0.20, step=0.10,
+        format="%.2f",
+        key="cc_min_premium",
+        help="Minimum option bid price. Avoids illiquid penny options.",
+    )
+with col12:
+    pass
+
 scan_btn = st.button("Scan for Covered Calls", type="primary")
 
 # ── Load data ─────────────────────────────────────────────────────────────────
@@ -215,6 +236,14 @@ if scan_btn:
                     (raw_df["downside_protection_pct"] >= min_downside) &
                     (raw_df["delta"] <= delta_target_max)
                 ].copy()
+
+                # IV Rank filter (skip rows where iv_rank is NaN)
+                if min_iv_rank > 0:
+                    df = df[df["iv_rank"].isna() | (df["iv_rank"] >= min_iv_rank)]
+
+                # Min option bid/premium filter
+                if min_premium > 0:
+                    df = df[df["premium"] >= min_premium]
 
                 if df.empty:
                     st.warning("All results filtered out. Try lowering Min Annualized Return or Min Downside Protection.")
