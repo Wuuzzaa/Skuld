@@ -3,6 +3,7 @@ import os
 import streamlit as st
 import pandas as pd
 from config import PATH_DATABASE_QUERY_FOLDER, IV_CORRECTION_MODE, RISK_FREE_RATE
+from pages.backtesting.spreads_backtesting import display_spreads_backtesting
 from pages.documentation_text.spreads_page_doc import get_spreads_documentation
 from src.database import select_into_dataframe
 from src.historization import select_timetravel_into_dataframe
@@ -512,7 +513,7 @@ if not filtered_df.empty:
         }
 
         display_strategy_details(row['symbol'], row.get('Company', 'N/A'), legs, metrics, extra_info)
-
+        display_spreads_backtesting(selected_date, row)
     else:
         st.caption("💡 Klicke auf eine Zeile in der Tabelle, um die Details der einzelnen Legs zu sehen.")
 

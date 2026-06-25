@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
 
 import streamlit as st
 import pandas as pd
@@ -103,7 +104,7 @@ def parse_date(value):
         return datetime.strptime(value, "%Y-%m-%d").date()
     return value
 
-def married_put_backtesting(selected_date, selected_row):  
+def display_married_put_backtesting(selected_date, selected_row):  
     # Simulate hold and exit performance if the user chooses a comparison date
             
 
@@ -117,6 +118,9 @@ def married_put_backtesting(selected_date, selected_row):
         date_index=0,
     )
 
+    if not compare_date:
+        return
+
     selected_row = selected_row.copy()
     initial_stock_price = float(selected_row["live_stock_price"])
     initial_option_price = float(selected_row["premium_option_price"])
@@ -126,90 +130,92 @@ def married_put_backtesting(selected_date, selected_row):
     expiration_date = parse_date(selected_row["expiration_date"])
 
     option_exit_df = None
-    if option_osi:
-        option_exit_df = get_option_data_at_date(option_osi, compare_date)
-
-    stock_exit_df = get_stock_data_at_date(selected_row["symbol"], compare_date)
-    dividends_paid_total = get_dividends_between_dates(
-        selected_row["symbol"],
-        selected_date,
-        compare_date,
-    ) * number_of_stocks
-
-    if stock_exit_df is None or stock_exit_df.empty:
-        st.warning("Kein Kursverlauf für das Vergleichsdatum verfügbar.")
-    else:
-        stock_exit_price = float(stock_exit_df.iloc[0]["close_price"])
-        if option_exit_df is not None and not option_exit_df.empty:
-            option_exit_price = float(option_exit_df.iloc[0]["premium_option_price"])
+    
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        option_exit_future = executor.submit(get_option_data_at_date, option_osi, compare_date)
+        stock_exit_future = executor.submit(get_stock_data_at_date, selected_row["symbol"], compare_date)
+        dividends_future = executor.submit(get_dividends_between_dates, selected_row["symbol"], selected_date, compare_date)
+        stock_range_future = executor.submit(get_married_put_stock_range, selected_row["symbol"], selected_date, compare_date)
+        option_range_future = executor.submit(get_married_put_option_range, option_osi, selected_date, compare_date)
+        
+        option_exit_df = option_exit_future.result()
+        stock_exit_df = stock_exit_future.result()
+        dividends_paid_total = dividends_future.result() * number_of_stocks
+        
+        if stock_exit_df is None or stock_exit_df.empty:
+            st.warning("Kein Kursverlauf für das Vergleichsdatum verfügbar.")
         else:
-            option_exit_price = None
-
-        if parse_date(compare_date) <= expiration_date and option_exit_price is not None:
-            option_value_end = option_exit_price * number_of_stocks
-            option_exit_label = f"Option-Prämie bei Exit"
-            option_exit_value = f"${option_exit_price:.2f}"
-        else:
-            option_intrinsic = max(0.0, strike_price - stock_exit_price)
-            option_value_end = option_intrinsic * number_of_stocks
-            option_exit_label = (
-                f"Option-Intrinsischer Wert bei Exit"
-                + (" (nach Ablauf)" if parse_date(compare_date) > expiration_date else "")
-            )
-            option_exit_value = f" ${option_intrinsic:.2f}"
-
-        investment_start = number_of_stocks * (initial_stock_price + initial_option_price) + 3.5
-        closing_stock_value = stock_exit_price * number_of_stocks
-        total_end_value = closing_stock_value + option_value_end + dividends_paid_total
-        profit = total_end_value - investment_start
-        days_held = (parse_date(compare_date) - parse_date(selected_date)).days
-        roi_pct = profit / investment_start * 100 if investment_start else 0.0
-        roi_annualized_pct = (
-            profit / investment_start * 365.0 / days_held * 100
-            if investment_start and days_held > 0
-            else None
-        )
-
-        comparison_cols = st.columns(3)
-        with comparison_cols[0]:
-            st.metric("Einstiegsdatum", str(selected_date))
-            st.metric("Einstiegspreis Aktie", f"${initial_stock_price:.2f}")
-            st.metric("Einstiegspreis Put", f"${initial_option_price:.2f}")
-            st.metric("Investition gesamt", f"${investment_start:.2f}")
-
-        with comparison_cols[1]:
-            st.metric("Vergleichsdatum", str(compare_date))
-            st.metric("Schlusskurs Aktie", f"${stock_exit_price:.2f}")
-            st.metric(option_exit_label, option_exit_value)
-            st.metric("Endwert Position", f"${total_end_value:.2f}")
-            st.metric("Dividenden erhalten", f"${dividends_paid_total:.2f}")
-            
-
-        with comparison_cols[2]:
-            st.metric("Tage gehalten", f"{days_held}")
-            stock_change_pct = (stock_exit_price / initial_stock_price - 1) * 100 if initial_stock_price else 0.0
-            st.metric(f"Aktie-Preisänderung", f"{stock_change_pct:+.2f}%")
-            if option_exit_price is not None and parse_date(compare_date) <= expiration_date:
-                option_change_pct = (option_exit_price / initial_option_price - 1) * 100 if initial_option_price else 0.0
-                st.metric(f"Option-Preisänderung", f"{option_change_pct:+.2f}%")
-            elif parse_date(compare_date) > expiration_date:
-                st.write("Der Vergleichszeitpunkt liegt nach dem Verfallsdatum; der Wert wird über den intrinsischen Wert berechnet.")
-            st.metric("Gewinn/Verlust", f"${profit:.2f}")
-            st.metric("ROI", f"{roi_pct:.2f}%")
-            if roi_annualized_pct is not None:
-                st.metric("Annualisierter ROI", f"{roi_annualized_pct:.2f}%")
+            stock_exit_price = float(stock_exit_df.iloc[0]["close_price"])
+            if option_exit_df is not None and not option_exit_df.empty:
+                option_exit_price = float(option_exit_df.iloc[0]["premium_option_price"])
             else:
-                st.write("Annualisierter ROI: n/a")
+                option_exit_price = None
 
-        import plotly.graph_objects as go
-        from plotly.subplots import make_subplots
+            if parse_date(compare_date) <= expiration_date and option_exit_price is not None:
+                option_value_end = option_exit_price * number_of_stocks
+                option_exit_label = f"Option-Prämie bei Exit"
+                option_exit_value = f"${option_exit_price:.2f}"
+            else:
+                option_intrinsic = max(0.0, strike_price - stock_exit_price)
+                option_value_end = option_intrinsic * number_of_stocks
+                option_exit_label = (
+                    f"Option-Intrinsischer Wert bei Exit"
+                    + (" (nach Ablauf)" if parse_date(compare_date) > expiration_date else "")
+                )
+                option_exit_value = f" ${option_intrinsic:.2f}"
 
-        st.markdown("---")
-        st.markdown("### 📈 Tagesgenauer Performance- & Absicherungsverlauf")
+            investment_start = number_of_stocks * (initial_stock_price + initial_option_price) + 3.5
+            closing_stock_value = stock_exit_price * number_of_stocks
+            total_end_value = closing_stock_value + option_value_end + dividends_paid_total
+            profit = total_end_value - investment_start
+            days_held = (parse_date(compare_date) - parse_date(selected_date)).days
+            roi_pct = profit / investment_start * 100 if investment_start else 0.0
+            roi_annualized_pct = (
+                profit / investment_start * 365.0 / days_held * 100
+                if investment_start and days_held > 0
+                else None
+            )
 
-        # Historische Datenbereiche abfragen
-        hist_stock_df = get_married_put_stock_range(selected_row["symbol"], selected_date, compare_date)
-        hist_option_df = get_married_put_option_range(option_osi, selected_date, compare_date)
+            comparison_cols = st.columns(3)
+            with comparison_cols[0]:
+                st.metric("Einstiegsdatum", str(selected_date))
+                st.metric("Einstiegspreis Aktie", f"${initial_stock_price:.2f}")
+                st.metric("Einstiegspreis Put", f"${initial_option_price:.2f}")
+                st.metric("Investition gesamt", f"${investment_start:.2f}")
+
+            with comparison_cols[1]:
+                st.metric("Vergleichsdatum", str(compare_date))
+                st.metric("Schlusskurs Aktie", f"${stock_exit_price:.2f}")
+                st.metric(option_exit_label, option_exit_value)
+                st.metric("Endwert Position", f"${total_end_value:.2f}")
+                st.metric("Dividenden erhalten", f"${dividends_paid_total:.2f}")
+                
+
+            with comparison_cols[2]:
+                st.metric("Tage gehalten", f"{days_held}")
+                stock_change_pct = (stock_exit_price / initial_stock_price - 1) * 100 if initial_stock_price else 0.0
+                st.metric(f"Aktie-Preisänderung", f"{stock_change_pct:+.2f}%")
+                if option_exit_price is not None and parse_date(compare_date) <= expiration_date:
+                    option_change_pct = (option_exit_price / initial_option_price - 1) * 100 if initial_option_price else 0.0
+                    st.metric(f"Option-Preisänderung", f"{option_change_pct:+.2f}%")
+                elif parse_date(compare_date) > expiration_date:
+                    st.write("Der Vergleichszeitpunkt liegt nach dem Verfallsdatum; der Wert wird über den intrinsischen Wert berechnet.")
+                st.metric("Gewinn/Verlust", f"${profit:.2f}")
+                st.metric("ROI", f"{roi_pct:.2f}%")
+                if roi_annualized_pct is not None:
+                    st.metric("Annualisierter ROI", f"{roi_annualized_pct:.2f}%")
+                else:
+                    st.write("Annualisierter ROI: n/a")
+
+            import plotly.graph_objects as go
+            from plotly.subplots import make_subplots
+
+            st.markdown("---")
+            st.markdown("### 📈 Tagesgenauer Performance- & Absicherungsverlauf")
+
+            # Historische Datenbereiche abfragen
+            hist_stock_df = stock_range_future.result()
+            hist_option_df = option_range_future.result()
 
         if hist_stock_df is None or hist_option_df is None or hist_stock_df.empty or hist_option_df.empty:
             st.info("💡 Keine ausreichenden historischen Tagesdaten für eine detaillierte Verlaufskurve gefunden.")

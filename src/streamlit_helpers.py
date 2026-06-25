@@ -38,7 +38,9 @@ def render_date_filter(
 
     date_options = _extract_first_column_values(st.session_state[date_list_session_key + date_query])
     if not date_options:
-        raise ValueError("No dates returned for time travel filter.")
+        st.caption("No dates returned for time travel filter.")
+        return
+        # raise ValueError("No dates returned for time travel filter.")
 
     if date_session_key not in st.session_state:
         st.session_state[date_session_key] = date_options[date_index]

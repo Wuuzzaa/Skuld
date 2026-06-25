@@ -537,10 +537,10 @@ def select_timetravel_into_dataframe(date: str, query: str = None, sql_file_path
         logger.error(msg)
         raise ValueError(msg)
     
-    mode = 'TimeTravelViews' # Modes: 'TimeTravelViews', 'HistoryViews', 'TableFunctions'
     
     # replace table names with their history view counterparts in the sql and filter on date only if selected date is not the current date, otherwise return the current table data without filtering on date
     if str(date) != str(time.strftime("%Y-%m-%d", time.gmtime())):
+        mode = 'TimeTravelViews' # Modes: 'TimeTravelViews', 'HistoryViews', 'TableFunctions'
         if mode == 'TimeTravelViews':
             for view in HISTORY_ENABLED_VIEWS:
                 history_time_travel_view = f"{view}HistoryTimeTravel"
@@ -572,7 +572,9 @@ def select_timetravel_into_dataframe(date: str, query: str = None, sql_file_path
                 sql = sql.replace(f'"{table}"', f'"{history_table_table_function}"(DATE(\'{date}\'))')
             # replace occurences of CURRENT_DATE with the provided date
             sql = sql.replace("CURRENT_DATE", f"DATE('{date}')")
-
+    else:
+        mode = None
+        
     pg_engine = get_postgres_engine()
     if pg_engine:
         with pg_engine.begin() as connection:

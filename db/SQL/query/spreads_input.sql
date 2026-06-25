@@ -1,5 +1,6 @@
 WITH FilteredOptions AS (
     SELECT
+        option_osi,
         symbol,
         expiration_date,
         contract_type AS option_type,
@@ -65,6 +66,7 @@ SELECT
     sell.iv_rank,
     sell.iv_percentile,
     -- sell option
+    sell.option_osi AS sell_option_osi,
     sell.strike AS sell_strike,
     sell.last_option_price AS sell_last_option_price,
     sell.delta AS sell_delta,
@@ -75,6 +77,7 @@ SELECT
     sell.day_volume AS sell_day_volume,
     sell.day_last_updated AS sell_last_updated,
     -- buy option
+    buy.option_osi AS buy_option_osi,
     buy.strike AS buy_strike,
     buy.last_option_price AS buy_last_option_price,
     buy.delta AS buy_delta,

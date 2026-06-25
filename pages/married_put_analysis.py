@@ -7,7 +7,7 @@ import sys
 import os
 
 from config import PATH_DATABASE_QUERY_FOLDER
-from pages.backtesting.married_put_backtesting import married_put_backtesting
+from pages.backtesting.married_put_backtesting import display_married_put_backtesting
 from src.historization import select_timetravel_into_dataframe
 from src.logger_config import setup_logging
 from src.page_display_dataframe import page_display_dataframe
@@ -275,7 +275,7 @@ if 'married_put_df' in st.session_state and not st.session_state['married_put_df
         selected_idx = selected_rows[0]
         selected_row = display_df.iloc[selected_idx]
 
-        married_put_backtesting(selected_date, selected_row)
+        display_married_put_backtesting(selected_date, selected_row)
         show_documentation(selected_row)
     else:
         st.caption("💡 Klicke auf eine Zeile in der Tabelle, um die vollständige Berechnung für diese Option zu sehen.")
