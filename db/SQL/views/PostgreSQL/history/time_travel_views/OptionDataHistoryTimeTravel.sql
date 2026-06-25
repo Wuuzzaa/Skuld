@@ -29,12 +29,7 @@
             WHEN ((a.expiration_date - current_setting('app.time_travel_date', true)::date) >= 0) THEN (a.expiration_date - current_setting('app.time_travel_date', true)::date)
             ELSE 0
         END AS days_to_expiration,
-    d.premium_option_price,
-    d.intrinsic_value,
-    d.extrinsic_value,
-    d.strike_stock_price_difference,
-    d.strike_stock_price_difference_ptc,
+    round((a.day_close)::numeric, 2) AS premium_option_price,
     ''::text AS last_updated_option_data
-   FROM ("OptionDataMassiveHistoryTimeTravel" a
-     LEFT JOIN "OptionPricingMetricsHistoryTimeTravel" d ON (((a.option_osi = d.option_osi) AND (a.symbol = d.symbol))));;
+   FROM "OptionDataMassiveHistoryTimeTravel" a;;
                 

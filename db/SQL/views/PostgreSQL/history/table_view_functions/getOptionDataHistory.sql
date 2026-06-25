@@ -27,10 +27,6 @@
 		"day_last_updated" TIMESTAMP WITHOUT TIME ZONE,
 		"days_to_expiration" INTEGER,
 		"premium_option_price" NUMERIC,
-		"intrinsic_value" NUMERIC,
-		"extrinsic_value" NUMERIC,
-		"strike_stock_price_difference" NUMERIC,
-		"strike_stock_price_difference_ptc" NUMERIC,
 		"last_updated_option_data" TEXT)
         AS
         $$
@@ -61,14 +57,9 @@
             WHEN ((a.expiration_date - p_target_date) >= 0) THEN (a.expiration_date - p_target_date)
             ELSE 0
         END AS days_to_expiration,
-    d.premium_option_price,
-    d.intrinsic_value,
-    d.extrinsic_value,
-    d.strike_stock_price_difference,
-    d.strike_stock_price_difference_ptc,
+    round((a.day_close)::numeric, 2) AS premium_option_price,
     ''::text AS last_updated_option_data
-   FROM ("getOptionDataMassiveHistory"(p_target_date) a
-     LEFT JOIN "getOptionPricingMetricsHistory"(p_target_date) d ON (((a.option_osi = d.option_osi) AND (a.symbol = d.symbol))));
+   FROM "getOptionDataMassiveHistory"(p_target_date) a;
         $$
         LANGUAGE sql STABLE;
                 

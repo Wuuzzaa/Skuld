@@ -29,19 +29,20 @@ SELECT
 
 	-- OptionPricingMetrics
 	CASE WHEN (A.EXPIRATION_DATE::DATE - CURRENT_DATE) >= 0 THEN (A.EXPIRATION_DATE::DATE - CURRENT_DATE) ELSE 0 END AS DAYS_TO_EXPIRATION,
+	ROUND(a.day_close::NUMERIC, 2) AS PREMIUM_OPTION_PRICE,
 	--d.days_to_expiration,
-	d.premium_option_price,
-	d.intrinsic_value,
-	d.extrinsic_value,
-	d.strike_stock_price_difference,
-    d.strike_stock_price_difference_ptc,
+	-- d.premium_option_price,
+	-- d.intrinsic_value,
+	-- d.extrinsic_value,
+	-- d.strike_stock_price_difference,
+    -- d.strike_stock_price_difference_ptc,
 
 	-- tlu.last_updated AS last_updated_option_data
 	'' AS last_updated_option_data
 FROM
 	"OptionDataMassive" AS a
-	LEFT OUTER JOIN "OptionPricingMetrics" as d 
-	ON a.option_osi = d.option_osi 
-	AND a.symbol = d.symbol
+	-- LEFT OUTER JOIN "OptionPricingMetrics" as d 
+	-- ON a.option_osi = d.option_osi 
+	-- AND a.symbol = d.symbol
 	-- LEFT OUTER JOIN "TableLastUpdated" AS tlu
 	-- ON tlu.table_name = 'OptionDataMassive'

@@ -186,13 +186,14 @@ class YahooQueryScraper:
                 try:
                     if len(self.symbols) > local_batch_size:
                         logger.info(f"Fetching Yahoo historical data for batch of up to {local_batch_size} symbols...")
-                    # Historical prices for 26y can be very slow — use longer timeout
+                    # # Historical prices for 26y can be very slow — use longer timeout
                     hist_timeout = YAHOO_REQUEST_TIMEOUT * 3 if period != '1d' else YAHOO_REQUEST_TIMEOUT
-                    df = _call_with_timeout(
-                        lambda tb=ticker_batch, p=period: tb.history(period=p, interval='1d'),
-                        timeout_seconds=hist_timeout,
-                        description=f"history(period={period}) batch {batch-1}/{len(local_ticker_batches)}"
-                    )
+                    # df = _call_with_timeout(
+                    #     lambda tb=ticker_batch, p=period: tb.history(period=p, interval='1d'),
+                    #     timeout_seconds=hist_timeout,
+                    #     description=f"history(period={period}) batch {batch-1}/{len(local_ticker_batches)}"
+                    # )
+                    df = ticker_batch.history(period=period, interval='1d')
                     if df is None:
                         logger.warning(f"Batch {batch-1} timed out — skipping")
                         break  # timeout — skip this batch

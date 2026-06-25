@@ -28,10 +28,6 @@
     a.last_updated_option_data,
     a.days_to_expiration,
     a.premium_option_price,
-    a.intrinsic_value,
-    a.extrinsic_value,
-    a.strike_stock_price_difference,
-    a.strike_stock_price_difference_ptc,
     b.live_stock_price,
     b.earnings_date,
     b.days_to_earnings,
@@ -562,7 +558,21 @@
         CASE
             WHEN (a.days_to_expiration >= 0) THEN round((((b.live_stock_price * a.implied_volatility) * (sqrt(((a.days_to_expiration)::numeric / 365.0)))::double precision))::numeric, 2)
             ELSE NULL::numeric
-        END AS expected_move
+        END AS expected_move,
+    round((
+        CASE
+            WHEN (a.contract_type = 'call'::text) THEN GREATEST((b.live_stock_price - a.strike_price), (0)::double precision)
+            WHEN (a.contract_type = 'put'::text) THEN GREATEST((a.strike_price - b.live_stock_price), (0)::double precision)
+            ELSE NULL::double precision
+        END)::numeric, 2) AS intrinsic_value,
+    round((a.premium_option_price - (
+        CASE
+            WHEN (a.contract_type = 'call'::text) THEN GREATEST((b.live_stock_price - a.strike_price), (0)::double precision)
+            WHEN (a.contract_type = 'put'::text) THEN GREATEST((a.strike_price - b.live_stock_price), (0)::double precision)
+            ELSE NULL::double precision
+        END)::numeric), 2) AS extrinsic_value,
+    round(((a.strike_price - b.live_stock_price))::numeric, 2) AS strike_stock_price_difference,
+    round(((((a.strike_price - b.live_stock_price) / NULLIF(b.live_stock_price, (0)::double precision)) * (100)::double precision))::numeric, 2) AS strike_stock_price_difference_ptc
    FROM ("OptionDataHistoryTimeTravel" a
      LEFT JOIN "StockDataHistoryTimeTravel" b ON ((a.symbol = b.symbol)));;
                 

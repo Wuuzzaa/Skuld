@@ -30,10 +30,10 @@ SELECT
 	-- OptionPricingMetrics
 	a.days_to_expiration,
 	a.premium_option_price,
-	a.intrinsic_value,
-	a.extrinsic_value,
-	a.strike_stock_price_difference,
-    a.strike_stock_price_difference_ptc,
+	-- a.intrinsic_value,
+	-- a.extrinsic_value,
+	-- a.strike_stock_price_difference,
+    -- a.strike_stock_price_difference_ptc,
 
     -- Stock Data
 	b.live_stock_price,
@@ -577,7 +577,32 @@ SELECT
 		WHEN a.days_to_expiration >= 0 THEN
 			ROUND((b.live_stock_price * a.implied_volatility * sqrt(a.days_to_expiration / 365.0))::numeric, 2)
 		ELSE NULL
-	END as expected_move
+	END as expected_move,
+	ROUND(
+		CASE
+			WHEN a."contract_type" = 'call' THEN GREATEST(b.live_stock_price - a."strike_price", 0)
+			WHEN a."contract_type" = 'put' THEN GREATEST(a."strike_price" - b.live_stock_price, 0)
+			ELSE NULL
+		END::NUMERIC, 2) AS INTRINSIC_VALUE,
+	ROUND(
+		(PREMIUM_OPTION_PRICE - 
+		CASE
+			WHEN a."contract_type" = 'call' THEN GREATEST(b.live_stock_price - a."strike_price", 0)
+			WHEN a."contract_type" = 'put' THEN GREATEST(a."strike_price" - b.live_stock_price, 0)
+			ELSE NULL
+		END::NUMERIC)::NUMERIC,
+		2
+	) AS EXTRINSIC_VALUE,
+	ROUND(
+		(A."strike_price" - b.live_stock_price)::NUMERIC,
+		2
+	) AS STRIKE_STOCK_PRICE_DIFFERENCE,
+	ROUND(
+		(
+			(A."strike_price" - b.live_stock_price) / NULLIF(b.live_stock_price, 0) * 100
+		)::NUMERIC,
+		2
+	) AS STRIKE_STOCK_PRICE_DIFFERENCE_PTC
 FROM 
    "OptionData" AS a
 LEFT OUTER JOIN 
