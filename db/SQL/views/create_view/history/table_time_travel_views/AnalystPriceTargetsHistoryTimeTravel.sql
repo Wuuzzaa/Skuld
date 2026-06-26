@@ -3,19 +3,23 @@
     CREATE VIEW
         "AnalystPriceTargetsHistoryTimeTravel" AS
     
-            
         SELECT
-            (current_setting('app.time_travel_date', true))::date AS date,
+            dates.date,
+            dates.year,
+            dates.month,
+            dates.isoyear,
+            dates.week,
             master_data."symbol",
         coalesce(
                 daily."analyst_mean_target",
                 master_data."analyst_mean_target"
             ) as "analyst_mean_target"
         FROM
-            "AnalystPriceTargetsMasterData" as master_data
+            "DatesHistory" as dates
+            INNER JOIN "AnalystPriceTargetsMasterData" as master_data
+            ON dates.date BETWEEN master_data.from_date AND master_data.to_date 
             LEFT OUTER JOIN "AnalystPriceTargetsHistoryDaily" as daily
-        ON daily.snapshot_date = (current_setting('app.time_travel_date', true))::date
+        ON dates.date = daily.snapshot_date
         AND master_data."symbol" = daily."symbol"
-        
         
     

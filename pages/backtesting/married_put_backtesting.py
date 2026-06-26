@@ -15,23 +15,14 @@ from src.documentation_renderer import render_married_put_analysis_documentation
 from src.streamlit_helpers import render_date_filter
 from src.database import select_into_dataframe
 
+logger = logging.getLogger(os.path.basename(__file__))
+
 @st.cache_data(ttl=300)
 def get_option_data_at_date(option_osi, selected_date):
     sql = """
         SELECT
-            option_osi,
-            symbol,
-            contract_type,
-            expiration_date,
-            strike_price,
-            premium_option_price,
-            intrinsic_value,
-            extrinsic_value,
-            shares_per_contract,
-            live_stock_price,
-            open_interest,
-            days_to_expiration
-        FROM "OptionDataMerged"
+            premium_option_price
+        FROM "OptionData"
         WHERE option_osi = :option_osi
     """
     return select_timetravel_into_dataframe(
@@ -44,10 +35,7 @@ def get_option_data_at_date(option_osi, selected_date):
 def get_stock_data_at_date(symbol, selected_date):
     sql = """
         SELECT
-            symbol,
-            close AS close_price,
-            adjclose AS adjclose,
-            dividends
+            close AS close_price
         FROM "StockPricesYahoo"
         WHERE symbol = :symbol
     """
@@ -61,10 +49,10 @@ def get_stock_data_at_date(symbol, selected_date):
 def get_dividends_between_dates(symbol, from_date, to_date):
     sql = """
         SELECT COALESCE(SUM(dividends), 0) AS dividend_sum
-        FROM "StockPricesYahooHistoryDaily"
+        FROM "StockPricesYahooHistory"
         WHERE symbol = :symbol
-          AND snapshot_date > :from_date
-          AND snapshot_date <= :to_date
+          AND date > :from_date
+          AND date <= :to_date
     """
     df = select_into_dataframe(query=sql, params={
         "symbol": symbol,
@@ -97,6 +85,17 @@ def get_married_put_option_range(option_osi, from_date, to_date):
     """
     return select_into_dataframe(query=sql, params={"option_osi": option_osi, "from_date": from_date, "to_date": to_date})
 
+@st.cache_data(ttl=300)
+def get_married_put_earnings_date_range(symbol, from_date, to_date):
+    """Holt die Earningsdates für den Chart"""
+    sql = """
+        SELECT DISTINCT 
+        FROM "StockPricesYahooHistory"
+        WHERE symbol = :symbol
+        AND date BETWEEN :from_date AND :to_date
+    """
+    return select_into_dataframe(query=sql, params={"symbol": symbol, "from_date": from_date, "to_date": to_date})
+
 def parse_date(value):
     if isinstance(value, datetime):
         return value.date()
@@ -109,7 +108,7 @@ def display_married_put_backtesting(selected_date, selected_row):
             
 
     st.divider()
-    st.subheader("📈 Simulierter Exit zum Vergleichsdatum")
+    st.subheader(f"📈 Simulierter Exit zum Vergleichsdatum für {selected_row["symbol"]} {selected_row["Company"]}")
     compare_date = render_date_filter(
         date_query=f'select date from (select date from "DatesHistory" union select current_date) as sub WHERE date > \'{selected_date}\' AND date <= \'{selected_row["expiration_date"]}\' ORDER BY date DESC',
         date_label="Vergleichsdatum für Verkauf:",
@@ -139,8 +138,11 @@ def display_married_put_backtesting(selected_date, selected_row):
         option_range_future = executor.submit(get_married_put_option_range, option_osi, selected_date, compare_date)
         
         option_exit_df = option_exit_future.result()
+        logger.info(f"Option exit data points {len(option_exit_df)}")
         stock_exit_df = stock_exit_future.result()
+        logger.info(f"Stock exit data points {len(stock_exit_df)}")
         dividends_paid_total = dividends_future.result() * number_of_stocks
+        logger.info(f"Dividends paid {dividends_paid_total}")
         
         if stock_exit_df is None or stock_exit_df.empty:
             st.warning("Kein Kursverlauf für das Vergleichsdatum verfügbar.")
@@ -176,7 +178,10 @@ def display_married_put_backtesting(selected_date, selected_row):
                 else None
             )
 
-            comparison_cols = st.columns(3)
+            stock_change_pct = (stock_exit_price / initial_stock_price - 1) * 100 if initial_stock_price else 0.0
+            option_change_pct = (option_exit_price / initial_option_price - 1) * 100 if initial_option_price else 0.0
+                       
+            comparison_cols = st.columns(4)
             with comparison_cols[0]:
                 st.metric("Einstiegsdatum", str(selected_date))
                 st.metric("Einstiegspreis Aktie", f"${initial_stock_price:.2f}")
@@ -185,9 +190,9 @@ def display_married_put_backtesting(selected_date, selected_row):
 
             with comparison_cols[1]:
                 st.metric("Vergleichsdatum", str(compare_date))
-                st.metric("Schlusskurs Aktie", f"${stock_exit_price:.2f}")
-                st.metric(option_exit_label, option_exit_value)
-                st.metric("Endwert Position", f"${total_end_value:.2f}")
+                st.metric("Schlusskurs Aktie", f"${stock_exit_price:.2f}") #, delta=f"{stock_change_pct:.2f}%")
+                st.metric(option_exit_label, option_exit_value) #, delta=f"{option_change_pct:.2f}%")
+                st.metric("Endwert Position", f"${total_end_value:.2f}") #, delta=f"{roi_pct:.2f}%")
                 st.metric("Dividenden erhalten", f"${dividends_paid_total:.2f}")
                 
 
@@ -206,7 +211,8 @@ def display_married_put_backtesting(selected_date, selected_row):
                     st.metric("Annualisierter ROI", f"{roi_annualized_pct:.2f}%")
                 else:
                     st.write("Annualisierter ROI: n/a")
-
+            with comparison_cols[3]:
+                st.metric("Expiration Date", f"{selected_row["expiration_date"]}")
             import plotly.graph_objects as go
             from plotly.subplots import make_subplots
 
@@ -215,7 +221,9 @@ def display_married_put_backtesting(selected_date, selected_row):
 
             # Historische Datenbereiche abfragen
             hist_stock_df = stock_range_future.result()
+            logger.info(f"History Stock data points {len(hist_stock_df)}")
             hist_option_df = option_range_future.result()
+            logger.info(f"History Option data points {len(hist_option_df)}")
 
         if hist_stock_df is None or hist_option_df is None or hist_stock_df.empty or hist_option_df.empty:
             st.info("💡 Keine ausreichenden historischen Tagesdaten für eine detaillierte Verlaufskurve gefunden.")
@@ -256,14 +264,14 @@ def display_married_put_backtesting(selected_date, selected_row):
                     ), secondary_y=False
                 )
 
-                # 2. TRACE: Der Gesamtwert des "Married Put"-Pakets (Linke Achse - Solide)
-                fig.add_trace(
-                    go.Scatter(
-                        x=merged_hist['date'], y=merged_hist['combined_value'],
-                        mode='lines', name='Kombinierter Wert (Aktie + Put) (links)',
-                        line=dict(color='#2ca02c', width=3)
-                    ), secondary_y=False
-                )
+                # # 2. TRACE: Der Gesamtwert des "Married Put"-Pakets (Linke Achse - Solide)
+                # fig.add_trace(
+                #     go.Scatter(
+                #         x=merged_hist['date'], y=merged_hist['combined_value'],
+                #         mode='lines', name='Kombinierter Wert (Aktie + Put) (links)',
+                #         line=dict(color='#2ca02c', width=3)
+                #     ), secondary_y=False
+                # )
 
                 # 3. TRACE: Echter Gewinn/Verlust in USD auf deinem Konto (Rechte Achse)
                 fig.add_trace(

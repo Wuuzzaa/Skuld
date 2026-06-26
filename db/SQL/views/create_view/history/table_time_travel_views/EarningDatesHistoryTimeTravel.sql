@@ -3,19 +3,23 @@
     CREATE VIEW
         "EarningDatesHistoryTimeTravel" AS
     
-            
         SELECT
-            (current_setting('app.time_travel_date', true))::date AS date,
+            dates.date,
+            dates.year,
+            dates.month,
+            dates.isoyear,
+            dates.week,
             master_data."symbol",
         coalesce(
                 daily."earnings_date",
                 master_data."earnings_date"
             ) as "earnings_date"
         FROM
-            "EarningDatesMasterData" as master_data
+            "DatesHistory" as dates
+            INNER JOIN "EarningDatesMasterData" as master_data
+            ON dates.date BETWEEN master_data.from_date AND master_data.to_date 
             LEFT OUTER JOIN "EarningDatesHistoryDaily" as daily
-        ON daily.snapshot_date = (current_setting('app.time_travel_date', true))::date
+        ON dates.date = daily.snapshot_date
         AND master_data."symbol" = daily."symbol"
-        
         
     

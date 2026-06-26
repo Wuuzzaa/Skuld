@@ -3,9 +3,12 @@
     CREATE VIEW
         "StockAssetProfilesYahooHistoryTimeTravel" AS
     
-            
         SELECT
-            (current_setting('app.time_travel_date', true))::date AS date,
+            dates.date,
+            dates.year,
+            dates.month,
+            dates.isoyear,
+            dates.week,
             master_data."symbol",
         coalesce(
                 daily."name",
@@ -28,10 +31,11 @@
                 master_data."long_business_summary"
             ) as "long_business_summary"
         FROM
-            "StockAssetProfilesYahooMasterData" as master_data
+            "DatesHistory" as dates
+            INNER JOIN "StockAssetProfilesYahooMasterData" as master_data
+            ON dates.date BETWEEN master_data.from_date AND master_data.to_date 
             LEFT OUTER JOIN "StockAssetProfilesYahooHistoryDaily" as daily
-        ON daily.snapshot_date = (current_setting('app.time_travel_date', true))::date
+        ON dates.date = daily.snapshot_date
         AND master_data."symbol" = daily."symbol"
-        
         
     

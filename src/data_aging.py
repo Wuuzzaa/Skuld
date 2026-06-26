@@ -384,7 +384,7 @@ class DataAgingService:
                 """
 
             history_select = get_history_select_statement(source_table, optimized=True, min_bucket=min_bucket, needed_data_columns=data_column_names)
-            update_columns = ", ".join([f'"{col}" = CASE WHEN higher_bucket_data."{col}" IS NOT NULL THEN NULL ELSE original."{col}" END' for col in data_column_names])
+            update_columns = ", ".join([f'"{col}" = CASE WHEN higher_bucket_data."{col}" IS NOT NULL AND original."{col}" = higher_bucket_data."{col}" THEN NULL ELSE original."{col}" END' for col in data_column_names])
             null_sql = f"""
                 UPDATE "{table}" AS original
                 SET {update_columns}
@@ -563,7 +563,7 @@ def get_history_select_statement(table_name: str, optimized: bool = True, needed
     
     join_clauses = []
 
-    if len(active_buckets) == 2 and 'master' in active_buckets and 'daily' in active_buckets:
+    if len(active_buckets) == 2 and 'master' in active_buckets and 'daily' in active_buckets and merge_tables == False:
         optimize_date_join = True
         if time_travel:
             date_cols = "(current_setting('app.time_travel_date', true))::date AS date"
@@ -576,11 +576,11 @@ def get_history_select_statement(table_name: str, optimized: bool = True, needed
     else:
         optimize_date_join = False
         date_cols = """
-        dates.date,
-        dates.year,
-        dates.month,
-        dates.isoyear,
-        dates.week
+            dates.date,
+            dates.year,
+            dates.month,
+            dates.isoyear,
+            dates.week
     """
     date_table = '"DatesHistory"'
     

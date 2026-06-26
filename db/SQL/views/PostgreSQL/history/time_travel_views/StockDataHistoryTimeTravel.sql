@@ -5,7 +5,7 @@
          SELECT a.symbol,
     a.close AS live_stock_price,
     b.earnings_date,
-    ((b.earnings_date)::date - current_setting('app.time_travel_date', true)::date) AS days_to_earnings,
+    (b.earnings_date - current_setting('app.time_travel_date', true)::date) AS days_to_earnings,
     c.analyst_mean_target,
     d.iv,
     d.iv_low,
@@ -532,10 +532,11 @@
     ''::text AS last_updated_stock_data
    FROM ((((((((("StockPricesYahooHistoryTimeTravel" a
      LEFT JOIN ( SELECT ed.symbol,
+            (
                 CASE
                     WHEN (ed.earnings_date ~~ '%.%.%'::text) THEN ((((substr(ed.earnings_date, 7, 4) || '-'::text) || substr(ed.earnings_date, 4, 2)) || '-'::text) || substr(ed.earnings_date, 1, 2))
                     ELSE NULL::text
-                END AS earnings_date
+                END)::date AS earnings_date
            FROM "EarningDatesHistoryTimeTravel" ed) b ON ((a.symbol = b.symbol)))
      LEFT JOIN "AnalystPriceTargetsHistoryTimeTravel" c ON ((a.symbol = c.symbol)))
      LEFT JOIN "StockImpliedVolatilityMassiveHistoryTimeTravel" d ON ((a.symbol = d.symbol)))

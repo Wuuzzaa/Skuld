@@ -3,19 +3,23 @@
     CREATE VIEW
         "StockHistoricalVolatilityYahooHistoryTimeTravel" AS
     
-            
         SELECT
-            (current_setting('app.time_travel_date', true))::date AS date,
+            dates.date,
+            dates.year,
+            dates.month,
+            dates.isoyear,
+            dates.week,
             master_data."symbol",
         coalesce(
                 daily."historical_volatility_30d",
                 master_data."historical_volatility_30d"
             ) as "historical_volatility_30d"
         FROM
-            "StockHistoricalVolatilityYahooMasterData" as master_data
+            "DatesHistory" as dates
+            INNER JOIN "StockHistoricalVolatilityYahooMasterData" as master_data
+            ON dates.date BETWEEN master_data.from_date AND master_data.to_date 
             LEFT OUTER JOIN "StockHistoricalVolatilityYahooHistoryDaily" as daily
-        ON daily.snapshot_date = (current_setting('app.time_travel_date', true))::date
+        ON dates.date = daily.snapshot_date
         AND master_data."symbol" = daily."symbol"
-        
         
     

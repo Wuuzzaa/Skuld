@@ -4,7 +4,7 @@
             "getStockDataHistory"(p_target_date date)
         RETURNS TABLE ("symbol" TEXT,
 		"live_stock_price" DOUBLE PRECISION,
-		"earnings_date" TEXT,
+		"earnings_date" DATE,
 		"days_to_earnings" INTEGER,
 		"analyst_mean_target" DOUBLE PRECISION,
 		"iv" DOUBLE PRECISION,
@@ -535,7 +535,7 @@
              SELECT a.symbol,
     a.close AS live_stock_price,
     b.earnings_date,
-    ((b.earnings_date)::date - p_target_date) AS days_to_earnings,
+    (b.earnings_date - p_target_date) AS days_to_earnings,
     c.analyst_mean_target,
     d.iv,
     d.iv_low,
@@ -1062,10 +1062,11 @@
     ''::text AS last_updated_stock_data
    FROM ((((((((("getStockPricesYahooHistory"(p_target_date) a
      LEFT JOIN ( SELECT ed.symbol,
+            (
                 CASE
                     WHEN (ed.earnings_date ~~ '%.%.%'::text) THEN ((((substr(ed.earnings_date, 7, 4) || '-'::text) || substr(ed.earnings_date, 4, 2)) || '-'::text) || substr(ed.earnings_date, 1, 2))
                     ELSE NULL::text
-                END AS earnings_date
+                END)::date AS earnings_date
            FROM "getEarningDatesHistory"(p_target_date) ed) b ON ((a.symbol = b.symbol)))
      LEFT JOIN "getAnalystPriceTargetsHistory"(p_target_date) c ON ((a.symbol = c.symbol)))
      LEFT JOIN "getStockImpliedVolatilityMassiveHistory"(p_target_date) d ON ((a.symbol = d.symbol)))

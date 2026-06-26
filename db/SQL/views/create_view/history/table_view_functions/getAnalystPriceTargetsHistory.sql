@@ -10,18 +10,23 @@
         "analyst_mean_target" 
         FROM (
         SELECT
-            daily.snapshot_date AS date,
-            master_data.from_date AS from_date,
-            master_data.to_date AS to_date,
+            dates.date,
+            dates.year,
+            dates.month,
+            dates.isoyear,
+            dates.week,
             master_data."symbol",
         coalesce(
                 daily."analyst_mean_target",
                 master_data."analyst_mean_target"
             ) as "analyst_mean_target"
         FROM
-            "AnalystPriceTargetsMasterData" as master_data
+            "DatesHistory" as dates
+            INNER JOIN "AnalystPriceTargetsMasterData" as master_data
+            ON dates.date BETWEEN master_data.from_date AND master_data.to_date 
             LEFT OUTER JOIN "AnalystPriceTargetsHistoryDaily" as daily
-        ON master_data."symbol" = daily."symbol"
+        ON dates.date = daily.snapshot_date
+        AND master_data."symbol" = daily."symbol"
         ) AS sub
         WHERE date = p_target_date
     $$ LANGUAGE SQL STABLE;

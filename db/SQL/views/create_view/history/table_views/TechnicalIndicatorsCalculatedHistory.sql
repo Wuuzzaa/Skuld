@@ -4,9 +4,11 @@
         "TechnicalIndicatorsCalculatedHistory" AS
     
         SELECT
-            daily.snapshot_date AS date,
-            master_data.from_date AS from_date,
-            master_data.to_date AS to_date,
+            dates.date,
+            dates.year,
+            dates.month,
+            dates.isoyear,
+            dates.week,
             master_data."symbol",
         daily."EMA_5" as "EMA_5",
 		daily."EMA_10" as "EMA_10",
@@ -44,8 +46,11 @@
 		daily."RSI_14" as "RSI_14",
 		daily."RSL" as "RSL"
         FROM
-            "TechnicalIndicatorsCalculatedMasterData" as master_data
+            "DatesHistory" as dates
+            INNER JOIN "TechnicalIndicatorsCalculatedMasterData" as master_data
+            ON dates.date BETWEEN master_data.from_date AND master_data.to_date 
             LEFT OUTER JOIN "TechnicalIndicatorsCalculatedHistoryDaily" as daily
-        ON master_data."symbol" = daily."symbol"
+        ON dates.date = daily.snapshot_date
+        AND master_data."symbol" = daily."symbol"
         ;
     

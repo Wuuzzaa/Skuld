@@ -141,21 +141,28 @@ def display_spreads_backtesting(selected_date, selected_row):
                 bpr_capital_total = bpr_capital * 100
                 profit_total = profit * 100
                 roi_pct = (profit / bpr_capital * 100) if bpr_capital > 0 else None
+                max_profit_pct = profit / initial_cash_flow * 100
+                # roi_pct = (profit / initial_cash_flow * 100) if initial_cash_flow > 0 else None
 
                 # [DEIN BESTEHENDER CODE: 3. Visuelle Darstellung (KPIs und Spalten) bleibt unverändert]
                 st.markdown("### 📊 Trade-Analyse & Performance")
                 # Oberste Reihe: Die wichtigsten harten Fakten als Key Performance Indicators (KPIs)
-                kpi_cols = st.columns(4)
+                kpi_cols = st.columns(5)
                 with kpi_cols[0]:
                     st.metric("P/L Ergebnis", f"${profit_total:+.2f}", delta=f"{profit_total:+.2f}$")
                 with kpi_cols[1]:
+                    if max_profit_pct is not None:
+                        st.metric("Unrealized Profit", f"{max_profit_pct:.2f}%", delta=f"{max_profit_pct:.2f}%")
+                    else:
+                        st.metric("Profit", "n/a")
+                with kpi_cols[2]:
                     if roi_pct is not None:
                         st.metric("Echter ROI (on Risk)", f"{roi_pct:.2f}%", delta=f"{roi_pct:.2f}%")
                     else:
                         st.metric("Echter ROI", "n/a")
-                with kpi_cols[2]:
-                    st.metric("Riskiertes Kapital (BPR)", f"${bpr_capital_total:.2f}", help="Das gebundene Kapital auf dem Konto")
                 with kpi_cols[3]:
+                    st.metric("Riskiertes Kapital (BPR)", f"${bpr_capital_total:.2f}", help="Das gebundene Kapital auf dem Konto")
+                with kpi_cols[4]:
                     st.metric("Spread-Breite", f"${spread_width:.2f}")
 
                 st.markdown("---")
@@ -174,7 +181,7 @@ def display_spreads_backtesting(selected_date, selected_row):
                     st.subheader("🛬 2. Ausstieg")
                     st.caption(f"Datum: {compare_date}")
                     # Zeigt an, wie viel der Spread beim Schließen wert war (z.B. 0.01 $)
-                    st.metric("Restwert Spread", f"${abs(close_cash_flow):.2f}", help="Idealerweise nahe 0$ bei Credit Spreads")
+                    st.metric("Restwert Spread", f"${close_cash_flow:.2f}", help="Idealerweise nahe 0$ bei Credit Spreads")
                     st.text(f"Short-Rückkauf: ${exit_sell_price:.2f}")
                     st.text(f"Long-Verkauf:  ${exit_buy_price:.2f}")
 

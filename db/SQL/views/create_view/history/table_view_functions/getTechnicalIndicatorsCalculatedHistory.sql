@@ -41,9 +41,11 @@
         "EMA_5", "EMA_10", "EMA_20", "EMA_30", "EMA_50", "EMA_100", "EMA_200", "SMA_5", "SMA_10", "SMA_20", "SMA_30", "SMA_50", "SMA_100", "SMA_200", "MACD_12_26_9", "MACDh_12_26_9", "MACDs_12_26_9", "BBL_20_2.0_2.0", "BBM_20_2.0_2.0", "BBU_20_2.0_2.0", "BBB_20_2.0_2.0", "BBP_20_2.0_2.0", "ATRr_14", "ADX_10", "ADXR_10_2", "DMP_10", "DMN_10", "STOCHk_14_3_1", "STOCHd_14_3_1", "STOCHh_14_3_1", "RSI_14", "RSL" 
         FROM (
         SELECT
-            daily.snapshot_date AS date,
-            master_data.from_date AS from_date,
-            master_data.to_date AS to_date,
+            dates.date,
+            dates.year,
+            dates.month,
+            dates.isoyear,
+            dates.week,
             master_data."symbol",
         daily."EMA_5" as "EMA_5",
 		daily."EMA_10" as "EMA_10",
@@ -81,9 +83,12 @@
 		daily."RSI_14" as "RSI_14",
 		daily."RSL" as "RSL"
         FROM
-            "TechnicalIndicatorsCalculatedMasterData" as master_data
+            "DatesHistory" as dates
+            INNER JOIN "TechnicalIndicatorsCalculatedMasterData" as master_data
+            ON dates.date BETWEEN master_data.from_date AND master_data.to_date 
             LEFT OUTER JOIN "TechnicalIndicatorsCalculatedHistoryDaily" as daily
-        ON master_data."symbol" = daily."symbol"
+        ON dates.date = daily.snapshot_date
+        AND master_data."symbol" = daily."symbol"
         ) AS sub
         WHERE date = p_target_date
     $$ LANGUAGE SQL STABLE;

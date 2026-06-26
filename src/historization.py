@@ -549,7 +549,8 @@ def select_timetravel_into_dataframe(date: str, query: str = None, sql_file_path
                 history_time_travel_view = f"{table}HistoryTimeTravel"
                 sql = sql.replace(f'"{table}"', f'"{history_time_travel_view}"')
             # replace occurences of CURRENT_DATE with the provided date
-            sql = sql.replace("CURRENT_DATE", f"current_setting('app.time_travel_date', true)::date")
+            # sql = sql.replace("CURRENT_DATE", f"current_setting('app.time_travel_date', true)::date")
+            sql = sql.replace("CURRENT_DATE", f"'{date}'::date")
         elif mode == 'HistoryViews':
             #replace views with their history view counterparts in the sql and filter on date
             for view in HISTORY_ENABLED_VIEWS:

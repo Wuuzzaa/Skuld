@@ -29,7 +29,7 @@
 		"days_to_expiration" INTEGER,
 		"premium_option_price" NUMERIC,
 		"live_stock_price" DOUBLE PRECISION,
-		"earnings_date" TEXT,
+		"earnings_date" DATE,
 		"days_to_earnings" INTEGER,
 		"analyst_mean_target" DOUBLE PRECISION,
 		"last_updated_stock_data" TEXT,
