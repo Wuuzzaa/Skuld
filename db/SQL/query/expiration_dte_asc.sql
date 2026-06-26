@@ -4,6 +4,6 @@ SELECT DISTINCT
 FROM
     "OptionData" AS a
 WHERE
-    days_to_expiration > 0
+    expiration_date > CURRENT_DATE
 ORDER BY
-    days_to_expiration;
+    expiration_date;
