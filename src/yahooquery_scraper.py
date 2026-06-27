@@ -6,6 +6,7 @@ import time
 import threading
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 import pandas as pd
+import numpy as np
 from yahooquery import Ticker
 from config import MAX_WORKERS
 from src.util import Singleton, log_memory_usage
@@ -200,6 +201,8 @@ class YahooQueryScraper:
                     if df is not None and not df.empty:
                         # symbol expiration_date and option-type from index to column
                         df = df.reset_index()
+                        df['dividends'] = df['dividends'].replace(0, np.nan)
+                        df['splits'] = df['splits'].replace(0, np.nan)
                         found_data = True
                         logger.info(f"SUCCESS: {len(df)} historical prices found")
                         yield df

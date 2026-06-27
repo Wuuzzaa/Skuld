@@ -42,7 +42,7 @@
         FROM (
         SELECT
                 daily.snapshot_date AS date,
-                master_data."symbol",
+                daily."symbol",
             daily."EMA_5" as "EMA_5",
 			daily."EMA_10" as "EMA_10",
 			daily."EMA_20" as "EMA_20",
@@ -61,10 +61,7 @@
 			daily."MACDh_12_26_9" as "MACDh_12_26_9",
 			daily."MACDs_12_26_9" as "MACDs_12_26_9",
 			daily."BBL_20_2.0_2.0" as "BBL_20_2.0_2.0",
-			coalesce(
-                daily."BBM_20_2.0_2.0",
-                master_data."BBM_20_2.0_2.0"
-            ) as "BBM_20_2.0_2.0",
+			daily."BBM_20_2.0_2.0" as "BBM_20_2.0_2.0",
 			daily."BBU_20_2.0_2.0" as "BBU_20_2.0_2.0",
 			daily."BBB_20_2.0_2.0" as "BBB_20_2.0_2.0",
 			daily."BBP_20_2.0_2.0" as "BBP_20_2.0_2.0",
@@ -80,8 +77,6 @@
 			daily."RSL" as "RSL"
             FROM
                 "TechnicalIndicatorsCalculatedHistoryDaily" as daily
-                LEFT OUTER JOIN "TechnicalIndicatorsCalculatedMasterData" as master_data
-                ON master_data."symbol" = daily."symbol"
         ) AS sub
         WHERE date = p_target_date
     $$ LANGUAGE SQL STABLE;

@@ -5,24 +5,16 @@
     
             SELECT
                 daily.snapshot_date AS date,
-                master_data."symbol",
+                daily."symbol",
             daily."open" as "open",
 			daily."high" as "high",
 			daily."low" as "low",
 			daily."close" as "close",
 			daily."volume" as "volume",
 			daily."adjclose" as "adjclose",
-			coalesce(
-                daily."dividends",
-                master_data."dividends"
-            ) as "dividends",
-			coalesce(
-                daily."splits",
-                master_data."splits"
-            ) as "splits"
+			daily."dividends" as "dividends",
+			daily."splits" as "splits"
             FROM
                 "StockPricesYahooHistoryDaily" as daily
-                LEFT OUTER JOIN "StockPricesYahooMasterData" as master_data
-                ON master_data."symbol" = daily."symbol"
             ;
     

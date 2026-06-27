@@ -4,7 +4,7 @@
         from_date DATE NOT NULL,
         to_date DATE NOT NULL,
         "symbol" TEXT,
-        "earnings_date" TEXT,
+        "earnings_date" DATE,
         PRIMARY KEY("symbol")
     );
     

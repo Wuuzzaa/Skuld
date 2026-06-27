@@ -20,8 +20,8 @@ def scrape_earning_dates(symbols):
         try:
             raw_date = calendar_data['earnings']['earningsDate'][0][:10]  # e.g. '2025-07-30'
             date_obj = datetime.strptime(raw_date, "%Y-%m-%d")
-            formatted_date = date_obj.strftime("%d.%m.%Y")
-            earnings_dates[symbol] = formatted_date
+            # formatted_date = date_obj.strftime("%d.%m.%Y")
+            earnings_dates[symbol] = date_obj
         except (TypeError, IndexError) as e:
             earnings_dates[symbol] = None
 

@@ -3,7 +3,7 @@
     CREATE OR REPLACE FUNCTION
         "getEarningDatesHistory"(p_target_date date)
     RETURNS TABLE ("symbol" TEXT,
-        "earnings_date" TEXT)
+        "earnings_date" DATE)
     AS $$
         SELECT 
         "symbol", 

@@ -6,7 +6,7 @@ SELECT
 	A.SYMBOL,
 	A.close as LIVE_STOCK_PRICE,
 	B.EARNINGS_DATE,
-	CAST(B.EARNINGS_DATE::DATE - CURRENT_DATE AS INTEGER) AS days_to_earnings,
+	CAST(B.EARNINGS_DATE - CURRENT_DATE AS INTEGER) AS days_to_earnings,
 	C.ANALYST_MEAN_TARGET,
 
 	-- StockImpliedVolatilityMassive
@@ -550,16 +550,7 @@ SELECT
 	'' AS last_updated_stock_data
 FROM
 	"StockPricesYahoo" AS A
-	LEFT OUTER JOIN (
-		SELECT
-			ed.SYMBOL,
-			CASE
-				WHEN ed.EARNINGS_DATE LIKE '%.%.%' THEN SUBSTR(ed.EARNINGS_DATE, 7, 4) || '-' || SUBSTR(ed.EARNINGS_DATE, 4, 2) || '-' || SUBSTR(ed.EARNINGS_DATE, 1, 2)
-				ELSE NULL
-			END::date AS EARNINGS_DATE
-		FROM
-			"EarningDates" as ed
-	) AS B ON A.SYMBOL = B.SYMBOL
+	LEFT OUTER JOIN "EarningDates" AS B ON A.SYMBOL = B.SYMBOL
 	LEFT OUTER JOIN "AnalystPriceTargets" AS C ON A.SYMBOL = C.SYMBOL
 	LEFT OUTER JOIN "StockImpliedVolatilityMassive" AS d ON a.symbol = d.symbol
 	LEFT OUTER JOIN "StockVolatility" AS E ON A.SYMBOL = E.SYMBOL

@@ -531,13 +531,7 @@
     round(((((round(((c.analyst_mean_target - a.close))::numeric, 2))::double precision / a.close) * (100.0)::double precision))::numeric, 2) AS "target-close%",
     ''::text AS last_updated_stock_data
    FROM ((((((((("StockPricesYahooHistoryTimeTravel" a
-     LEFT JOIN ( SELECT ed.symbol,
-            (
-                CASE
-                    WHEN (ed.earnings_date ~~ '%.%.%'::text) THEN ((((substr(ed.earnings_date, 7, 4) || '-'::text) || substr(ed.earnings_date, 4, 2)) || '-'::text) || substr(ed.earnings_date, 1, 2))
-                    ELSE NULL::text
-                END)::date AS earnings_date
-           FROM "EarningDatesHistoryTimeTravel" ed) b ON ((a.symbol = b.symbol)))
+     LEFT JOIN "EarningDatesHistoryTimeTravel" b ON ((a.symbol = b.symbol)))
      LEFT JOIN "AnalystPriceTargetsHistoryTimeTravel" c ON ((a.symbol = c.symbol)))
      LEFT JOIN "StockImpliedVolatilityMassiveHistoryTimeTravel" d ON ((a.symbol = d.symbol)))
      LEFT JOIN "StockVolatilityHistoryTimeTravel" e ON ((a.symbol = e.symbol)))
