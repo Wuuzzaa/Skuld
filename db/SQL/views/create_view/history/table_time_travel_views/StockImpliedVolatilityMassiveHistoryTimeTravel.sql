@@ -4,19 +4,17 @@
         "StockImpliedVolatilityMassiveHistoryTimeTravel" AS
     
             
-        SELECT
-            (current_setting('app.time_travel_date', true))::date AS date,
-            master_data."symbol",
-        daily."iv" as "iv",
-		daily."iv_low" as "iv_low",
-		daily."iv_high" as "iv_high",
-		daily."iv_rank" as "iv_rank",
-		daily."iv_percentile" as "iv_percentile"
-        FROM
-            "StockImpliedVolatilityMassiveMasterData" as master_data
-            LEFT OUTER JOIN "StockImpliedVolatilityMassiveHistoryDaily" as daily
-        ON daily.snapshot_date = (current_setting('app.time_travel_date', true))::date
-        AND master_data."symbol" = daily."symbol"
-        
+            SELECT
+                daily.snapshot_date AS date,
+                daily."symbol",
+            daily."iv" as "iv",
+			daily."iv_low" as "iv_low",
+			daily."iv_high" as "iv_high",
+			daily."iv_rank" as "iv_rank",
+			daily."iv_percentile" as "iv_percentile"
+            FROM
+                "StockImpliedVolatilityMassiveHistoryDaily" as daily
+               
+            WHERE daily.snapshot_date = (current_setting('app.time_travel_date', true))::date
         
     

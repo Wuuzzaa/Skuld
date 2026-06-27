@@ -41,54 +41,47 @@
         "EMA_5", "EMA_10", "EMA_20", "EMA_30", "EMA_50", "EMA_100", "EMA_200", "SMA_5", "SMA_10", "SMA_20", "SMA_30", "SMA_50", "SMA_100", "SMA_200", "MACD_12_26_9", "MACDh_12_26_9", "MACDs_12_26_9", "BBL_20_2.0_2.0", "BBM_20_2.0_2.0", "BBU_20_2.0_2.0", "BBB_20_2.0_2.0", "BBP_20_2.0_2.0", "ATRr_14", "ADX_10", "ADXR_10_2", "DMP_10", "DMN_10", "STOCHk_14_3_1", "STOCHd_14_3_1", "STOCHh_14_3_1", "RSI_14", "RSL" 
         FROM (
         SELECT
-            dates.date,
-            dates.year,
-            dates.month,
-            dates.isoyear,
-            dates.week,
-            master_data."symbol",
-        daily."EMA_5" as "EMA_5",
-		daily."EMA_10" as "EMA_10",
-		daily."EMA_20" as "EMA_20",
-		daily."EMA_30" as "EMA_30",
-		daily."EMA_50" as "EMA_50",
-		daily."EMA_100" as "EMA_100",
-		daily."EMA_200" as "EMA_200",
-		daily."SMA_5" as "SMA_5",
-		daily."SMA_10" as "SMA_10",
-		daily."SMA_20" as "SMA_20",
-		daily."SMA_30" as "SMA_30",
-		daily."SMA_50" as "SMA_50",
-		daily."SMA_100" as "SMA_100",
-		daily."SMA_200" as "SMA_200",
-		daily."MACD_12_26_9" as "MACD_12_26_9",
-		daily."MACDh_12_26_9" as "MACDh_12_26_9",
-		daily."MACDs_12_26_9" as "MACDs_12_26_9",
-		daily."BBL_20_2.0_2.0" as "BBL_20_2.0_2.0",
-		coalesce(
+                daily.snapshot_date AS date,
+                master_data."symbol",
+            daily."EMA_5" as "EMA_5",
+			daily."EMA_10" as "EMA_10",
+			daily."EMA_20" as "EMA_20",
+			daily."EMA_30" as "EMA_30",
+			daily."EMA_50" as "EMA_50",
+			daily."EMA_100" as "EMA_100",
+			daily."EMA_200" as "EMA_200",
+			daily."SMA_5" as "SMA_5",
+			daily."SMA_10" as "SMA_10",
+			daily."SMA_20" as "SMA_20",
+			daily."SMA_30" as "SMA_30",
+			daily."SMA_50" as "SMA_50",
+			daily."SMA_100" as "SMA_100",
+			daily."SMA_200" as "SMA_200",
+			daily."MACD_12_26_9" as "MACD_12_26_9",
+			daily."MACDh_12_26_9" as "MACDh_12_26_9",
+			daily."MACDs_12_26_9" as "MACDs_12_26_9",
+			daily."BBL_20_2.0_2.0" as "BBL_20_2.0_2.0",
+			coalesce(
                 daily."BBM_20_2.0_2.0",
                 master_data."BBM_20_2.0_2.0"
             ) as "BBM_20_2.0_2.0",
-		daily."BBU_20_2.0_2.0" as "BBU_20_2.0_2.0",
-		daily."BBB_20_2.0_2.0" as "BBB_20_2.0_2.0",
-		daily."BBP_20_2.0_2.0" as "BBP_20_2.0_2.0",
-		daily."ATRr_14" as "ATRr_14",
-		daily."ADX_10" as "ADX_10",
-		daily."ADXR_10_2" as "ADXR_10_2",
-		daily."DMP_10" as "DMP_10",
-		daily."DMN_10" as "DMN_10",
-		daily."STOCHk_14_3_1" as "STOCHk_14_3_1",
-		daily."STOCHd_14_3_1" as "STOCHd_14_3_1",
-		daily."STOCHh_14_3_1" as "STOCHh_14_3_1",
-		daily."RSI_14" as "RSI_14",
-		daily."RSL" as "RSL"
-        FROM
-            "DatesHistory" as dates
-            INNER JOIN "TechnicalIndicatorsCalculatedMasterData" as master_data
-            ON dates.date BETWEEN master_data.from_date AND master_data.to_date 
-            LEFT OUTER JOIN "TechnicalIndicatorsCalculatedHistoryDaily" as daily
-        ON dates.date = daily.snapshot_date
-        AND master_data."symbol" = daily."symbol"
+			daily."BBU_20_2.0_2.0" as "BBU_20_2.0_2.0",
+			daily."BBB_20_2.0_2.0" as "BBB_20_2.0_2.0",
+			daily."BBP_20_2.0_2.0" as "BBP_20_2.0_2.0",
+			daily."ATRr_14" as "ATRr_14",
+			daily."ADX_10" as "ADX_10",
+			daily."ADXR_10_2" as "ADXR_10_2",
+			daily."DMP_10" as "DMP_10",
+			daily."DMN_10" as "DMN_10",
+			daily."STOCHk_14_3_1" as "STOCHk_14_3_1",
+			daily."STOCHd_14_3_1" as "STOCHd_14_3_1",
+			daily."STOCHh_14_3_1" as "STOCHh_14_3_1",
+			daily."RSI_14" as "RSI_14",
+			daily."RSL" as "RSL"
+            FROM
+                "TechnicalIndicatorsCalculatedHistoryDaily" as daily
+                LEFT OUTER JOIN "TechnicalIndicatorsCalculatedMasterData" as master_data
+                ON master_data."symbol" = daily."symbol"
         ) AS sub
         WHERE date = p_target_date
     $$ LANGUAGE SQL STABLE;

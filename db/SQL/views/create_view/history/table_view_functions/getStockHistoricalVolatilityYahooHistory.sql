@@ -10,23 +10,11 @@
         "historical_volatility_30d" 
         FROM (
         SELECT
-            dates.date,
-            dates.year,
-            dates.month,
-            dates.isoyear,
-            dates.week,
-            master_data."symbol",
-        coalesce(
-                daily."historical_volatility_30d",
-                master_data."historical_volatility_30d"
-            ) as "historical_volatility_30d"
-        FROM
-            "DatesHistory" as dates
-            INNER JOIN "StockHistoricalVolatilityYahooMasterData" as master_data
-            ON dates.date BETWEEN master_data.from_date AND master_data.to_date 
-            LEFT OUTER JOIN "StockHistoricalVolatilityYahooHistoryDaily" as daily
-        ON dates.date = daily.snapshot_date
-        AND master_data."symbol" = daily."symbol"
+                daily.snapshot_date AS date,
+                daily."symbol",
+            daily."historical_volatility_30d" as "historical_volatility_30d"
+            FROM
+                "StockHistoricalVolatilityYahooHistoryDaily" as daily
         ) AS sub
         WHERE date = p_target_date
     $$ LANGUAGE SQL STABLE;

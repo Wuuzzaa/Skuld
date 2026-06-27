@@ -3,27 +3,15 @@
     CREATE VIEW
         "DividendDataYahooHistoryTimeTravel" AS
     
-        SELECT
-            dates.date,
-            dates.year,
-            dates.month,
-            dates.isoyear,
-            dates.week,
-            master_data."symbol",
-        coalesce(
-                daily."years_of_growth",
-                master_data."years_of_growth"
-            ) as "years_of_growth",
-		coalesce(
-                daily."classification",
-                master_data."classification"
-            ) as "classification"
-        FROM
-            "DatesHistory" as dates
-            INNER JOIN "DividendDataYahooMasterData" as master_data
-            ON dates.date BETWEEN master_data.from_date AND master_data.to_date 
-            LEFT OUTER JOIN "DividendDataYahooHistoryDaily" as daily
-        ON dates.date = daily.snapshot_date
-        AND master_data."symbol" = daily."symbol"
+            
+            SELECT
+                daily.snapshot_date AS date,
+                daily."symbol",
+            daily."years_of_growth" as "years_of_growth",
+			daily."classification" as "classification"
+            FROM
+                "DividendDataYahooHistoryDaily" as daily
+               
+            WHERE daily.snapshot_date = (current_setting('app.time_travel_date', true))::date
         
     

@@ -525,21 +525,29 @@ def get_history_select_statement(table_name: str, optimized: bool = True, needed
     key_columns, data_columns = get_table_key_and_data_columns(table_name)
     if needed_data_columns is not None:
         data_columns = [col for col in data_columns if col["name"] in needed_data_columns]
-    key_column_definitions_str = ",\n\t\t".join([f'master_data."{col["name"]}"' for col in key_columns])
+    
     data_column_definitions = []
     
     merge_tables = False
+    only_daily_cols = True
+    only_master_cols = True
+    min_one_date_col = False
     for col in data_columns:
         col_name = col["name"]
         
         # If optimization is on and it's classified as master data, we just take it from master_data
         # OR if min_bucket is 'master', we only have one source anyway.
         if (is_classified_for_master_data(table_name, col["name"]) and optimized) or min_bucket == 'master':
-             data_column_definitions.append(f'master_data."{col_name}" as "{col_name}"')
+            data_column_definitions.append(f'master_data."{col_name}" as "{col_name}"')
+            only_daily_cols = False
         elif is_classified_for_daily(table_name, col["name"]) and optimized:
-             data_column_definitions.append(f'daily."{col_name}" as "{col_name}"')
+            data_column_definitions.append(f'daily."{col_name}" as "{col_name}"')
+            only_master_cols = False
+            min_one_date_col = True
         else:
             merge_tables = True
+            only_daily_cols = False
+            only_master_cols = False
             # Build coalesce arguments dynamically based on active_buckets
             coalesce_args = []
             for b in active_buckets:
@@ -554,24 +562,28 @@ def get_history_select_statement(table_name: str, optimized: bool = True, needed
             ) as "{col_name}"                            
             """.strip()                               
             )
-    data_column_definitions_str = ",\n\t\t".join(data_column_definitions)
+    data_column_definitions_str = ",\n\t\t\t".join(data_column_definitions)
     
+    if only_daily_cols == True:
+        key_column_definitions_str = ",\n\t\t".join([f'daily."{col["name"]}"' for col in key_columns])
+    else:
+        key_column_definitions_str = ",\n\t\t".join([f'master_data."{col["name"]}"' for col in key_columns])
+
     column_definitions_str = f"""
-        {key_column_definitions_str},
-        {data_column_definitions_str}
+            {key_column_definitions_str},
+            {data_column_definitions_str}
     """.strip()
     
     join_clauses = []
 
-    if len(active_buckets) == 2 and 'master' in active_buckets and 'daily' in active_buckets and merge_tables == False:
+    # if len(active_buckets) == 2 and 'master' in active_buckets and 'daily' in active_buckets: #and merge_tables == False:
+    if len(active_buckets) == 2 and 'master' in active_buckets and 'daily' in active_buckets and min_one_date_col:
         optimize_date_join = True
-        if time_travel:
+        if time_travel and True == False:
             date_cols = "(current_setting('app.time_travel_date', true))::date AS date"
         else:
             date_cols = """
-            daily.snapshot_date AS date,
-            master_data.from_date AS from_date,
-            master_data.to_date AS to_date
+            daily.snapshot_date AS date
         """
     else:
         optimize_date_join = False
@@ -612,15 +624,16 @@ def get_history_select_statement(table_name: str, optimized: bool = True, needed
 
     # if merge_tables == True:
 
-    if 'daily' in active_buckets:
+    if 'daily' in active_buckets and not only_master_cols:
         if optimize_date_join:
             logger.info("Optimizing date join for Daily bucket by directly joining on snapshot_date and skipping DatesHistory.")   
             key_columns_on_condition_str_daily = " AND ".join([f'master_data."{col["name"]}" = daily."{col["name"]}"' for col in key_columns])
-            join_clauses.append(f'LEFT OUTER JOIN "{table_name}HistoryDaily" as daily')
             if time_travel:
-                join_clauses.append(f"ON daily.snapshot_date = (current_setting('app.time_travel_date', true))::date")
-                join_clauses.append(f'AND {key_columns_on_condition_str_daily}')
+                # join_clauses.append(f"ON daily.snapshot_date = (current_setting('app.time_travel_date', true))::date")
+                # join_clauses.append(f'AND {key_columns_on_condition_str_daily}')
+                join_clauses.append(f'ON {key_columns_on_condition_str_daily}')
             else:
+                # join_clauses.append(f'LEFT OUTER JOIN "{table_name}HistoryDaily" as daily')
                 join_clauses.append(f'ON {key_columns_on_condition_str_daily}')        
             if needed_data_columns is not None: # Optimization to reduce join size
                 not_null_clause = " AND ".join([f'daily."{col["name"]}" IS NOT NULL' for col in data_columns])
@@ -659,17 +672,29 @@ def get_history_select_statement(table_name: str, optimized: bool = True, needed
 
     if optimize_date_join:
         # If we only join daily and master, we can optimize by directly joining on snapshot_date and skipping the DatesHistory table
-        select_statement_sql =  f"""
-        SELECT
-            {date_cols.strip()},
-            {column_definitions_str}
-        FROM
-            "{table_name}MasterData" as master_data
-            {join_str}
-        """
+        if only_daily_cols == True:
+            select_statement_sql =  f"""
+            SELECT
+                {date_cols.strip()},
+                {column_definitions_str}
+            FROM
+                "{table_name}HistoryDaily" as daily
+            """
+
+        else:
+                select_statement_sql =  f"""
+            SELECT
+                {date_cols.strip()},
+                {column_definitions_str}
+            FROM
+                "{table_name}HistoryDaily" as daily
+                LEFT OUTER JOIN "{table_name}MasterData" as master_data
+                {join_str}
+            """
         if time_travel:
             select_statement_sql = f"""
-            {select_statement_sql}
+            {select_statement_sql}   
+            WHERE daily.snapshot_date = (current_setting('app.time_travel_date', true))::date
         """
     else:
         # Always join master data (it's the base for dates/keys)
@@ -682,6 +707,11 @@ def get_history_select_statement(table_name: str, optimized: bool = True, needed
             INNER JOIN "{table_name}MasterData" as master_data
             ON dates.date BETWEEN master_data.from_date AND master_data.to_date 
             {join_str}
+        """
+        if time_travel:
+            select_statement_sql = f"""
+            {select_statement_sql}
+            WHERE dates.date = (current_setting('app.time_travel_date', true))::date 
         """
     # WHERE EXTRACT(ISODOW FROM dates.date) NOT IN (6, 7)
     return select_statement_sql

@@ -3,36 +3,34 @@
     CREATE VIEW
         "OptionDataMassiveHistory" AS
     
-        SELECT
-            daily.snapshot_date AS date,
-            master_data.from_date AS from_date,
-            master_data.to_date AS to_date,
-            master_data."option_osi",
+            SELECT
+                daily.snapshot_date AS date,
+                master_data."option_osi",
 		master_data."symbol",
-        master_data."contract_type" as "contract_type",
-		master_data."expiration_date" as "expiration_date",
-		master_data."strike_price" as "strike_price",
-		daily."open_interest" as "open_interest",
-		daily."implied_volatility" as "implied_volatility",
-		master_data."exercise_style" as "exercise_style",
-		master_data."shares_per_contract" as "shares_per_contract",
-		daily."greeks_delta" as "greeks_delta",
-		daily."greeks_gamma" as "greeks_gamma",
-		daily."greeks_theta" as "greeks_theta",
-		daily."greeks_vega" as "greeks_vega",
-		daily."day_change" as "day_change",
-		daily."day_change_percent" as "day_change_percent",
-		daily."day_close" as "day_close",
-		daily."day_high" as "day_high",
-		daily."day_low" as "day_low",
-		daily."day_open" as "day_open",
-		daily."day_previous_close" as "day_previous_close",
-		daily."day_volume" as "day_volume",
-		daily."day_vwap" as "day_vwap",
-		daily."day_last_updated" as "day_last_updated"
-        FROM
-            "OptionDataMassiveMasterData" as master_data
-            LEFT OUTER JOIN "OptionDataMassiveHistoryDaily" as daily
-        ON master_data."option_osi" = daily."option_osi" AND master_data."symbol" = daily."symbol"
-        ;
+            master_data."contract_type" as "contract_type",
+			master_data."expiration_date" as "expiration_date",
+			master_data."strike_price" as "strike_price",
+			daily."open_interest" as "open_interest",
+			daily."implied_volatility" as "implied_volatility",
+			master_data."exercise_style" as "exercise_style",
+			master_data."shares_per_contract" as "shares_per_contract",
+			daily."greeks_delta" as "greeks_delta",
+			daily."greeks_gamma" as "greeks_gamma",
+			daily."greeks_theta" as "greeks_theta",
+			daily."greeks_vega" as "greeks_vega",
+			daily."day_change" as "day_change",
+			daily."day_change_percent" as "day_change_percent",
+			daily."day_close" as "day_close",
+			daily."day_high" as "day_high",
+			daily."day_low" as "day_low",
+			daily."day_open" as "day_open",
+			daily."day_previous_close" as "day_previous_close",
+			daily."day_volume" as "day_volume",
+			daily."day_vwap" as "day_vwap",
+			daily."day_last_updated" as "day_last_updated"
+            FROM
+                "OptionDataMassiveHistoryDaily" as daily
+                LEFT OUTER JOIN "OptionDataMassiveMasterData" as master_data
+                ON master_data."option_osi" = daily."option_osi" AND master_data."symbol" = daily."symbol"
+            ;
     

@@ -3,19 +3,15 @@
     CREATE VIEW
         "StockImpliedVolatilityMassiveHistory" AS
     
-        SELECT
-            daily.snapshot_date AS date,
-            master_data.from_date AS from_date,
-            master_data.to_date AS to_date,
-            master_data."symbol",
-        daily."iv" as "iv",
-		daily."iv_low" as "iv_low",
-		daily."iv_high" as "iv_high",
-		daily."iv_rank" as "iv_rank",
-		daily."iv_percentile" as "iv_percentile"
-        FROM
-            "StockImpliedVolatilityMassiveMasterData" as master_data
-            LEFT OUTER JOIN "StockImpliedVolatilityMassiveHistoryDaily" as daily
-        ON master_data."symbol" = daily."symbol"
-        ;
+            SELECT
+                daily.snapshot_date AS date,
+                daily."symbol",
+            daily."iv" as "iv",
+			daily."iv_low" as "iv_low",
+			daily."iv_high" as "iv_high",
+			daily."iv_rank" as "iv_rank",
+			daily."iv_percentile" as "iv_percentile"
+            FROM
+                "StockImpliedVolatilityMassiveHistoryDaily" as daily
+            ;
     

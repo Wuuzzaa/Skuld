@@ -10,23 +10,11 @@
         "earnings_date" 
         FROM (
         SELECT
-            dates.date,
-            dates.year,
-            dates.month,
-            dates.isoyear,
-            dates.week,
-            master_data."symbol",
-        coalesce(
-                daily."earnings_date",
-                master_data."earnings_date"
-            ) as "earnings_date"
-        FROM
-            "DatesHistory" as dates
-            INNER JOIN "EarningDatesMasterData" as master_data
-            ON dates.date BETWEEN master_data.from_date AND master_data.to_date 
-            LEFT OUTER JOIN "EarningDatesHistoryDaily" as daily
-        ON dates.date = daily.snapshot_date
-        AND master_data."symbol" = daily."symbol"
+                daily.snapshot_date AS date,
+                daily."symbol",
+            daily."earnings_date" as "earnings_date"
+            FROM
+                "EarningDatesHistoryDaily" as daily
         ) AS sub
         WHERE date = p_target_date
     $$ LANGUAGE SQL STABLE;

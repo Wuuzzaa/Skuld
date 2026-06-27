@@ -3,33 +3,29 @@
     CREATE VIEW
         "StockPricesYahooHistoryTimeTravel" AS
     
-        SELECT
-            dates.date,
-            dates.year,
-            dates.month,
-            dates.isoyear,
-            dates.week,
-            master_data."symbol",
-        daily."open" as "open",
-		daily."high" as "high",
-		daily."low" as "low",
-		daily."close" as "close",
-		daily."volume" as "volume",
-		daily."adjclose" as "adjclose",
-		coalesce(
+            
+            SELECT
+                daily.snapshot_date AS date,
+                master_data."symbol",
+            daily."open" as "open",
+			daily."high" as "high",
+			daily."low" as "low",
+			daily."close" as "close",
+			daily."volume" as "volume",
+			daily."adjclose" as "adjclose",
+			coalesce(
                 daily."dividends",
                 master_data."dividends"
             ) as "dividends",
-		coalesce(
+			coalesce(
                 daily."splits",
                 master_data."splits"
             ) as "splits"
-        FROM
-            "DatesHistory" as dates
-            INNER JOIN "StockPricesYahooMasterData" as master_data
-            ON dates.date BETWEEN master_data.from_date AND master_data.to_date 
-            LEFT OUTER JOIN "StockPricesYahooHistoryDaily" as daily
-        ON dates.date = daily.snapshot_date
-        AND master_data."symbol" = daily."symbol"
+            FROM
+                "StockPricesYahooHistoryDaily" as daily
+                LEFT OUTER JOIN "StockPricesYahooMasterData" as master_data
+                ON master_data."symbol" = daily."symbol"
+               
+            WHERE daily.snapshot_date = (current_setting('app.time_travel_date', true))::date
         
     

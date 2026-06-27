@@ -495,1923 +495,1923 @@
             dates.isoyear,
             dates.week,
             master_data."symbol",
-        coalesce(
+            coalesce(
                 daily."asOfDate",
                 master_data."asOfDate"
             ) as "asOfDate",
-		coalesce(
+			coalesce(
                 daily."periodType",
                 master_data."periodType"
             ) as "periodType",
-		coalesce(
+			coalesce(
                 daily."currencyCode",
                 master_data."currencyCode"
             ) as "currencyCode",
-		coalesce(
+			coalesce(
                 daily."AccountsPayable",
                 master_data."AccountsPayable"
             ) as "AccountsPayable",
-		coalesce(
+			coalesce(
                 daily."AccountsReceivable",
                 master_data."AccountsReceivable"
             ) as "AccountsReceivable",
-		coalesce(
+			coalesce(
                 daily."AccruedInterestReceivable",
                 master_data."AccruedInterestReceivable"
             ) as "AccruedInterestReceivable",
-		coalesce(
+			coalesce(
                 daily."AccumulatedDepreciation",
                 master_data."AccumulatedDepreciation"
             ) as "AccumulatedDepreciation",
-		coalesce(
+			coalesce(
                 daily."AdditionalPaidInCapital",
                 master_data."AdditionalPaidInCapital"
             ) as "AdditionalPaidInCapital",
-		coalesce(
+			coalesce(
                 daily."AllowanceForDoubtfulAccountsReceivable",
                 master_data."AllowanceForDoubtfulAccountsReceivable"
             ) as "AllowanceForDoubtfulAccountsReceivable",
-		coalesce(
+			coalesce(
                 daily."Amortization",
                 master_data."Amortization"
             ) as "Amortization",
-		coalesce(
+			coalesce(
                 daily."AmortizationCashFlow",
                 master_data."AmortizationCashFlow"
             ) as "AmortizationCashFlow",
-		coalesce(
+			coalesce(
                 daily."AmortizationOfIntangibles",
                 master_data."AmortizationOfIntangibles"
             ) as "AmortizationOfIntangibles",
-		coalesce(
+			coalesce(
                 daily."AmortizationOfIntangiblesIncomeStatement",
                 master_data."AmortizationOfIntangiblesIncomeStatement"
             ) as "AmortizationOfIntangiblesIncomeStatement",
-		coalesce(
+			coalesce(
                 daily."AmortizationOfSecurities",
                 master_data."AmortizationOfSecurities"
             ) as "AmortizationOfSecurities",
-		coalesce(
+			coalesce(
                 daily."AssetImpairmentCharge",
                 master_data."AssetImpairmentCharge"
             ) as "AssetImpairmentCharge",
-		coalesce(
+			coalesce(
                 daily."AssetsHeldForSaleCurrent",
                 master_data."AssetsHeldForSaleCurrent"
             ) as "AssetsHeldForSaleCurrent",
-		coalesce(
+			coalesce(
                 daily."AvailableForSaleSecurities",
                 master_data."AvailableForSaleSecurities"
             ) as "AvailableForSaleSecurities",
-		coalesce(
+			coalesce(
                 daily."AverageDilutionEarnings",
                 master_data."AverageDilutionEarnings"
             ) as "AverageDilutionEarnings",
-		coalesce(
+			coalesce(
                 daily."BasicAverageShares",
                 master_data."BasicAverageShares"
             ) as "BasicAverageShares",
-		coalesce(
+			coalesce(
                 daily."BasicEPS",
                 master_data."BasicEPS"
             ) as "BasicEPS",
-		coalesce(
+			coalesce(
                 daily."BeginningCashPosition",
                 master_data."BeginningCashPosition"
             ) as "BeginningCashPosition",
-		coalesce(
+			coalesce(
                 daily."BuildingsAndImprovements",
                 master_data."BuildingsAndImprovements"
             ) as "BuildingsAndImprovements",
-		coalesce(
+			coalesce(
                 daily."CapitalExpenditure",
                 master_data."CapitalExpenditure"
             ) as "CapitalExpenditure",
-		coalesce(
+			coalesce(
                 daily."CapitalExpenditureReported",
                 master_data."CapitalExpenditureReported"
             ) as "CapitalExpenditureReported",
-		coalesce(
+			coalesce(
                 daily."CapitalLeaseObligations",
                 master_data."CapitalLeaseObligations"
             ) as "CapitalLeaseObligations",
-		coalesce(
+			coalesce(
                 daily."CapitalStock",
                 master_data."CapitalStock"
             ) as "CapitalStock",
-		coalesce(
+			coalesce(
                 daily."CashAndCashEquivalents",
                 master_data."CashAndCashEquivalents"
             ) as "CashAndCashEquivalents",
-		coalesce(
+			coalesce(
                 daily."CashCashEquivalentsAndShortTermInvestments",
                 master_data."CashCashEquivalentsAndShortTermInvestments"
             ) as "CashCashEquivalentsAndShortTermInvestments",
-		coalesce(
+			coalesce(
                 daily."CashDividendsPaid",
                 master_data."CashDividendsPaid"
             ) as "CashDividendsPaid",
-		coalesce(
+			coalesce(
                 daily."CashEquivalents",
                 master_data."CashEquivalents"
             ) as "CashEquivalents",
-		coalesce(
+			coalesce(
                 daily."CashFinancial",
                 master_data."CashFinancial"
             ) as "CashFinancial",
-		coalesce(
+			coalesce(
                 daily."CashFlowFromContinuingFinancingActivities",
                 master_data."CashFlowFromContinuingFinancingActivities"
             ) as "CashFlowFromContinuingFinancingActivities",
-		coalesce(
+			coalesce(
                 daily."CashFlowFromContinuingInvestingActivities",
                 master_data."CashFlowFromContinuingInvestingActivities"
             ) as "CashFlowFromContinuingInvestingActivities",
-		coalesce(
+			coalesce(
                 daily."CashFlowFromContinuingOperatingActivities",
                 master_data."CashFlowFromContinuingOperatingActivities"
             ) as "CashFlowFromContinuingOperatingActivities",
-		coalesce(
+			coalesce(
                 daily."CashFlowFromDiscontinuedOperation",
                 master_data."CashFlowFromDiscontinuedOperation"
             ) as "CashFlowFromDiscontinuedOperation",
-		coalesce(
+			coalesce(
                 daily."CashFlowsfromusedinOperatingActivitiesDirect",
                 master_data."CashFlowsfromusedinOperatingActivitiesDirect"
             ) as "CashFlowsfromusedinOperatingActivitiesDirect",
-		coalesce(
+			coalesce(
                 daily."CashFromDiscontinuedFinancingActivities",
                 master_data."CashFromDiscontinuedFinancingActivities"
             ) as "CashFromDiscontinuedFinancingActivities",
-		coalesce(
+			coalesce(
                 daily."CashFromDiscontinuedInvestingActivities",
                 master_data."CashFromDiscontinuedInvestingActivities"
             ) as "CashFromDiscontinuedInvestingActivities",
-		coalesce(
+			coalesce(
                 daily."CashFromDiscontinuedOperatingActivities",
                 master_data."CashFromDiscontinuedOperatingActivities"
             ) as "CashFromDiscontinuedOperatingActivities",
-		coalesce(
+			coalesce(
                 daily."ChangeInAccountPayable",
                 master_data."ChangeInAccountPayable"
             ) as "ChangeInAccountPayable",
-		coalesce(
+			coalesce(
                 daily."ChangeInAccruedExpense",
                 master_data."ChangeInAccruedExpense"
             ) as "ChangeInAccruedExpense",
-		coalesce(
+			coalesce(
                 daily."ChangeInCashSupplementalAsReported",
                 master_data."ChangeInCashSupplementalAsReported"
             ) as "ChangeInCashSupplementalAsReported",
-		coalesce(
+			coalesce(
                 daily."ChangeInDividendPayable",
                 master_data."ChangeInDividendPayable"
             ) as "ChangeInDividendPayable",
-		coalesce(
+			coalesce(
                 daily."ChangeInIncomeTaxPayable",
                 master_data."ChangeInIncomeTaxPayable"
             ) as "ChangeInIncomeTaxPayable",
-		coalesce(
+			coalesce(
                 daily."ChangeInInterestPayable",
                 master_data."ChangeInInterestPayable"
             ) as "ChangeInInterestPayable",
-		coalesce(
+			coalesce(
                 daily."ChangeInInventory",
                 master_data."ChangeInInventory"
             ) as "ChangeInInventory",
-		coalesce(
+			coalesce(
                 daily."ChangeInOtherCurrentAssets",
                 master_data."ChangeInOtherCurrentAssets"
             ) as "ChangeInOtherCurrentAssets",
-		coalesce(
+			coalesce(
                 daily."ChangeInOtherCurrentLiabilities",
                 master_data."ChangeInOtherCurrentLiabilities"
             ) as "ChangeInOtherCurrentLiabilities",
-		coalesce(
+			coalesce(
                 daily."ChangeInOtherWorkingCapital",
                 master_data."ChangeInOtherWorkingCapital"
             ) as "ChangeInOtherWorkingCapital",
-		coalesce(
+			coalesce(
                 daily."ChangeInPayable",
                 master_data."ChangeInPayable"
             ) as "ChangeInPayable",
-		coalesce(
+			coalesce(
                 daily."ChangeInPayablesAndAccruedExpense",
                 master_data."ChangeInPayablesAndAccruedExpense"
             ) as "ChangeInPayablesAndAccruedExpense",
-		coalesce(
+			coalesce(
                 daily."ChangeInPrepaidAssets",
                 master_data."ChangeInPrepaidAssets"
             ) as "ChangeInPrepaidAssets",
-		coalesce(
+			coalesce(
                 daily."ChangeInReceivables",
                 master_data."ChangeInReceivables"
             ) as "ChangeInReceivables",
-		coalesce(
+			coalesce(
                 daily."ChangeInTaxPayable",
                 master_data."ChangeInTaxPayable"
             ) as "ChangeInTaxPayable",
-		coalesce(
+			coalesce(
                 daily."ChangeInWorkingCapital",
                 master_data."ChangeInWorkingCapital"
             ) as "ChangeInWorkingCapital",
-		coalesce(
+			coalesce(
                 daily."ChangesInAccountReceivables",
                 master_data."ChangesInAccountReceivables"
             ) as "ChangesInAccountReceivables",
-		coalesce(
+			coalesce(
                 daily."ChangesInCash",
                 master_data."ChangesInCash"
             ) as "ChangesInCash",
-		coalesce(
+			coalesce(
                 daily."ClassesofCashPayments",
                 master_data."ClassesofCashPayments"
             ) as "ClassesofCashPayments",
-		coalesce(
+			coalesce(
                 daily."ClassesofCashReceiptsfromOperatingActivities",
                 master_data."ClassesofCashReceiptsfromOperatingActivities"
             ) as "ClassesofCashReceiptsfromOperatingActivities",
-		coalesce(
+			coalesce(
                 daily."CommercialPaper",
                 master_data."CommercialPaper"
             ) as "CommercialPaper",
-		coalesce(
+			coalesce(
                 daily."CommonStock",
                 master_data."CommonStock"
             ) as "CommonStock",
-		coalesce(
+			coalesce(
                 daily."CommonStockDividendPaid",
                 master_data."CommonStockDividendPaid"
             ) as "CommonStockDividendPaid",
-		coalesce(
+			coalesce(
                 daily."CommonStockEquity",
                 master_data."CommonStockEquity"
             ) as "CommonStockEquity",
-		coalesce(
+			coalesce(
                 daily."CommonStockIssuance",
                 master_data."CommonStockIssuance"
             ) as "CommonStockIssuance",
-		coalesce(
+			coalesce(
                 daily."CommonStockPayments",
                 master_data."CommonStockPayments"
             ) as "CommonStockPayments",
-		coalesce(
+			coalesce(
                 daily."ConstructionInProgress",
                 master_data."ConstructionInProgress"
             ) as "ConstructionInProgress",
-		coalesce(
+			coalesce(
                 daily."CostOfRevenue",
                 master_data."CostOfRevenue"
             ) as "CostOfRevenue",
-		coalesce(
+			coalesce(
                 daily."CurrentAccruedExpenses",
                 master_data."CurrentAccruedExpenses"
             ) as "CurrentAccruedExpenses",
-		coalesce(
+			coalesce(
                 daily."CurrentAssets",
                 master_data."CurrentAssets"
             ) as "CurrentAssets",
-		coalesce(
+			coalesce(
                 daily."CurrentCapitalLeaseObligation",
                 master_data."CurrentCapitalLeaseObligation"
             ) as "CurrentCapitalLeaseObligation",
-		coalesce(
+			coalesce(
                 daily."CurrentDebt",
                 master_data."CurrentDebt"
             ) as "CurrentDebt",
-		coalesce(
+			coalesce(
                 daily."CurrentDebtAndCapitalLeaseObligation",
                 master_data."CurrentDebtAndCapitalLeaseObligation"
             ) as "CurrentDebtAndCapitalLeaseObligation",
-		coalesce(
+			coalesce(
                 daily."CurrentDeferredAssets",
                 master_data."CurrentDeferredAssets"
             ) as "CurrentDeferredAssets",
-		coalesce(
+			coalesce(
                 daily."CurrentDeferredLiabilities",
                 master_data."CurrentDeferredLiabilities"
             ) as "CurrentDeferredLiabilities",
-		coalesce(
+			coalesce(
                 daily."CurrentDeferredRevenue",
                 master_data."CurrentDeferredRevenue"
             ) as "CurrentDeferredRevenue",
-		coalesce(
+			coalesce(
                 daily."CurrentDeferredTaxesAssets",
                 master_data."CurrentDeferredTaxesAssets"
             ) as "CurrentDeferredTaxesAssets",
-		coalesce(
+			coalesce(
                 daily."CurrentDeferredTaxesLiabilities",
                 master_data."CurrentDeferredTaxesLiabilities"
             ) as "CurrentDeferredTaxesLiabilities",
-		coalesce(
+			coalesce(
                 daily."CurrentLiabilities",
                 master_data."CurrentLiabilities"
             ) as "CurrentLiabilities",
-		coalesce(
+			coalesce(
                 daily."CurrentNotesPayable",
                 master_data."CurrentNotesPayable"
             ) as "CurrentNotesPayable",
-		coalesce(
+			coalesce(
                 daily."CurrentProvisions",
                 master_data."CurrentProvisions"
             ) as "CurrentProvisions",
-		coalesce(
+			coalesce(
                 daily."DeferredIncomeTax",
                 master_data."DeferredIncomeTax"
             ) as "DeferredIncomeTax",
-		coalesce(
+			coalesce(
                 daily."DeferredTax",
                 master_data."DeferredTax"
             ) as "DeferredTax",
-		coalesce(
+			coalesce(
                 daily."DefinedPensionBenefit",
                 master_data."DefinedPensionBenefit"
             ) as "DefinedPensionBenefit",
-		coalesce(
+			coalesce(
                 daily."Depletion",
                 master_data."Depletion"
             ) as "Depletion",
-		coalesce(
+			coalesce(
                 daily."DepletionIncomeStatement",
                 master_data."DepletionIncomeStatement"
             ) as "DepletionIncomeStatement",
-		coalesce(
+			coalesce(
                 daily."Depreciation",
                 master_data."Depreciation"
             ) as "Depreciation",
-		coalesce(
+			coalesce(
                 daily."DepreciationAmortizationDepletion",
                 master_data."DepreciationAmortizationDepletion"
             ) as "DepreciationAmortizationDepletion",
-		coalesce(
+			coalesce(
                 daily."DepreciationAmortizationDepletionIncomeStatement",
                 master_data."DepreciationAmortizationDepletionIncomeStatement"
             ) as "DepreciationAmortizationDepletionIncomeStatement",
-		coalesce(
+			coalesce(
                 daily."DepreciationAndAmortization",
                 master_data."DepreciationAndAmortization"
             ) as "DepreciationAndAmortization",
-		coalesce(
+			coalesce(
                 daily."DepreciationAndAmortizationInIncomeStatement",
                 master_data."DepreciationAndAmortizationInIncomeStatement"
             ) as "DepreciationAndAmortizationInIncomeStatement",
-		coalesce(
+			coalesce(
                 daily."DepreciationIncomeStatement",
                 master_data."DepreciationIncomeStatement"
             ) as "DepreciationIncomeStatement",
-		coalesce(
+			coalesce(
                 daily."DerivativeProductLiabilities",
                 master_data."DerivativeProductLiabilities"
             ) as "DerivativeProductLiabilities",
-		coalesce(
+			coalesce(
                 daily."DilutedAverageShares",
                 master_data."DilutedAverageShares"
             ) as "DilutedAverageShares",
-		coalesce(
+			coalesce(
                 daily."DilutedEPS",
                 master_data."DilutedEPS"
             ) as "DilutedEPS",
-		coalesce(
+			coalesce(
                 daily."DilutedNIAvailtoComStockholders",
                 master_data."DilutedNIAvailtoComStockholders"
             ) as "DilutedNIAvailtoComStockholders",
-		coalesce(
+			coalesce(
                 daily."DividendPaidCFO",
                 master_data."DividendPaidCFO"
             ) as "DividendPaidCFO",
-		coalesce(
+			coalesce(
                 daily."DividendReceivedCFO",
                 master_data."DividendReceivedCFO"
             ) as "DividendReceivedCFO",
-		coalesce(
+			coalesce(
                 daily."DividendsPayable",
                 master_data."DividendsPayable"
             ) as "DividendsPayable",
-		coalesce(
+			coalesce(
                 daily."DividendsReceivedCFI",
                 master_data."DividendsReceivedCFI"
             ) as "DividendsReceivedCFI",
-		coalesce(
+			coalesce(
                 daily."DuefromRelatedPartiesCurrent",
                 master_data."DuefromRelatedPartiesCurrent"
             ) as "DuefromRelatedPartiesCurrent",
-		coalesce(
+			coalesce(
                 daily."DuefromRelatedPartiesNonCurrent",
                 master_data."DuefromRelatedPartiesNonCurrent"
             ) as "DuefromRelatedPartiesNonCurrent",
-		coalesce(
+			coalesce(
                 daily."DuetoRelatedPartiesCurrent",
                 master_data."DuetoRelatedPartiesCurrent"
             ) as "DuetoRelatedPartiesCurrent",
-		coalesce(
+			coalesce(
                 daily."DuetoRelatedPartiesNonCurrent",
                 master_data."DuetoRelatedPartiesNonCurrent"
             ) as "DuetoRelatedPartiesNonCurrent",
-		coalesce(
+			coalesce(
                 daily."EBIT",
                 master_data."EBIT"
             ) as "EBIT",
-		coalesce(
+			coalesce(
                 daily."EBITDA",
                 master_data."EBITDA"
             ) as "EBITDA",
-		coalesce(
+			coalesce(
                 daily."EarningsFromEquityInterest",
                 master_data."EarningsFromEquityInterest"
             ) as "EarningsFromEquityInterest",
-		coalesce(
+			coalesce(
                 daily."EarningsFromEquityInterestNetOfTax",
                 master_data."EarningsFromEquityInterestNetOfTax"
             ) as "EarningsFromEquityInterestNetOfTax",
-		coalesce(
+			coalesce(
                 daily."EarningsLossesFromEquityInvestments",
                 master_data."EarningsLossesFromEquityInvestments"
             ) as "EarningsLossesFromEquityInvestments",
-		coalesce(
+			coalesce(
                 daily."EffectOfExchangeRateChanges",
                 master_data."EffectOfExchangeRateChanges"
             ) as "EffectOfExchangeRateChanges",
-		coalesce(
+			coalesce(
                 daily."EmployeeBenefits",
                 master_data."EmployeeBenefits"
             ) as "EmployeeBenefits",
-		coalesce(
+			coalesce(
                 daily."EndCashPosition",
                 master_data."EndCashPosition"
             ) as "EndCashPosition",
-		coalesce(
+			coalesce(
                 daily."EnterpriseValue",
                 master_data."EnterpriseValue"
             ) as "EnterpriseValue",
-		coalesce(
+			coalesce(
                 daily."EnterprisesValueEBITDARatio",
                 master_data."EnterprisesValueEBITDARatio"
             ) as "EnterprisesValueEBITDARatio",
-		coalesce(
+			coalesce(
                 daily."EnterprisesValueRevenueRatio",
                 master_data."EnterprisesValueRevenueRatio"
             ) as "EnterprisesValueRevenueRatio",
-		coalesce(
+			coalesce(
                 daily."ExcessTaxBenefitFromStockBasedCompensation",
                 master_data."ExcessTaxBenefitFromStockBasedCompensation"
             ) as "ExcessTaxBenefitFromStockBasedCompensation",
-		coalesce(
+			coalesce(
                 daily."ExciseTaxes",
                 master_data."ExciseTaxes"
             ) as "ExciseTaxes",
-		coalesce(
+			coalesce(
                 daily."FinancialAssets",
                 master_data."FinancialAssets"
             ) as "FinancialAssets",
-		coalesce(
+			coalesce(
                 daily."FinancialAssetsDesignatedasFairValueThroughProfitorLossTotal",
                 master_data."FinancialAssetsDesignatedasFairValueThroughProfitorLossTotal"
             ) as "FinancialAssetsDesignatedasFairValueThroughProfitorLossTotal",
-		coalesce(
+			coalesce(
                 daily."FinancingCashFlow",
                 master_data."FinancingCashFlow"
             ) as "FinancingCashFlow",
-		coalesce(
+			coalesce(
                 daily."FinishedGoods",
                 master_data."FinishedGoods"
             ) as "FinishedGoods",
-		coalesce(
+			coalesce(
                 daily."FixedAssetsRevaluationReserve",
                 master_data."FixedAssetsRevaluationReserve"
             ) as "FixedAssetsRevaluationReserve",
-		coalesce(
+			coalesce(
                 daily."ForeignCurrencyTranslationAdjustments",
                 master_data."ForeignCurrencyTranslationAdjustments"
             ) as "ForeignCurrencyTranslationAdjustments",
-		coalesce(
+			coalesce(
                 daily."FreeCashFlow",
                 master_data."FreeCashFlow"
             ) as "FreeCashFlow",
-		coalesce(
+			coalesce(
                 daily."GainLossOnInvestmentSecurities",
                 master_data."GainLossOnInvestmentSecurities"
             ) as "GainLossOnInvestmentSecurities",
-		coalesce(
+			coalesce(
                 daily."GainLossOnSaleOfBusiness",
                 master_data."GainLossOnSaleOfBusiness"
             ) as "GainLossOnSaleOfBusiness",
-		coalesce(
+			coalesce(
                 daily."GainLossOnSaleOfPPE",
                 master_data."GainLossOnSaleOfPPE"
             ) as "GainLossOnSaleOfPPE",
-		coalesce(
+			coalesce(
                 daily."GainOnSaleOfBusiness",
                 master_data."GainOnSaleOfBusiness"
             ) as "GainOnSaleOfBusiness",
-		coalesce(
+			coalesce(
                 daily."GainOnSaleOfPPE",
                 master_data."GainOnSaleOfPPE"
             ) as "GainOnSaleOfPPE",
-		coalesce(
+			coalesce(
                 daily."GainOnSaleOfSecurity",
                 master_data."GainOnSaleOfSecurity"
             ) as "GainOnSaleOfSecurity",
-		coalesce(
+			coalesce(
                 daily."GainsLossesNotAffectingRetainedEarnings",
                 master_data."GainsLossesNotAffectingRetainedEarnings"
             ) as "GainsLossesNotAffectingRetainedEarnings",
-		coalesce(
+			coalesce(
                 daily."GeneralAndAdministrativeExpense",
                 master_data."GeneralAndAdministrativeExpense"
             ) as "GeneralAndAdministrativeExpense",
-		coalesce(
+			coalesce(
                 daily."GeneralPartnershipCapital",
                 master_data."GeneralPartnershipCapital"
             ) as "GeneralPartnershipCapital",
-		coalesce(
+			coalesce(
                 daily."Goodwill",
                 master_data."Goodwill"
             ) as "Goodwill",
-		coalesce(
+			coalesce(
                 daily."GoodwillAndOtherIntangibleAssets",
                 master_data."GoodwillAndOtherIntangibleAssets"
             ) as "GoodwillAndOtherIntangibleAssets",
-		coalesce(
+			coalesce(
                 daily."GrossAccountsReceivable",
                 master_data."GrossAccountsReceivable"
             ) as "GrossAccountsReceivable",
-		coalesce(
+			coalesce(
                 daily."GrossPPE",
                 master_data."GrossPPE"
             ) as "GrossPPE",
-		coalesce(
+			coalesce(
                 daily."GrossProfit",
                 master_data."GrossProfit"
             ) as "GrossProfit",
-		coalesce(
+			coalesce(
                 daily."HedgingAssetsCurrent",
                 master_data."HedgingAssetsCurrent"
             ) as "HedgingAssetsCurrent",
-		coalesce(
+			coalesce(
                 daily."HeldToMaturitySecurities",
                 master_data."HeldToMaturitySecurities"
             ) as "HeldToMaturitySecurities",
-		coalesce(
+			coalesce(
                 daily."ImpairmentOfCapitalAssets",
                 master_data."ImpairmentOfCapitalAssets"
             ) as "ImpairmentOfCapitalAssets",
-		coalesce(
+			coalesce(
                 daily."IncomeTaxPaidSupplementalData",
                 master_data."IncomeTaxPaidSupplementalData"
             ) as "IncomeTaxPaidSupplementalData",
-		coalesce(
+			coalesce(
                 daily."IncomeTaxPayable",
                 master_data."IncomeTaxPayable"
             ) as "IncomeTaxPayable",
-		coalesce(
+			coalesce(
                 daily."InsuranceAndClaims",
                 master_data."InsuranceAndClaims"
             ) as "InsuranceAndClaims",
-		coalesce(
+			coalesce(
                 daily."InterestExpense",
                 master_data."InterestExpense"
             ) as "InterestExpense",
-		coalesce(
+			coalesce(
                 daily."InterestExpenseNonOperating",
                 master_data."InterestExpenseNonOperating"
             ) as "InterestExpenseNonOperating",
-		coalesce(
+			coalesce(
                 daily."InterestIncome",
                 master_data."InterestIncome"
             ) as "InterestIncome",
-		coalesce(
+			coalesce(
                 daily."InterestIncomeNonOperating",
                 master_data."InterestIncomeNonOperating"
             ) as "InterestIncomeNonOperating",
-		coalesce(
+			coalesce(
                 daily."InterestPaidCFF",
                 master_data."InterestPaidCFF"
             ) as "InterestPaidCFF",
-		coalesce(
+			coalesce(
                 daily."InterestPaidCFO",
                 master_data."InterestPaidCFO"
             ) as "InterestPaidCFO",
-		coalesce(
+			coalesce(
                 daily."InterestPaidSupplementalData",
                 master_data."InterestPaidSupplementalData"
             ) as "InterestPaidSupplementalData",
-		coalesce(
+			coalesce(
                 daily."InterestPayable",
                 master_data."InterestPayable"
             ) as "InterestPayable",
-		coalesce(
+			coalesce(
                 daily."InterestReceivedCFI",
                 master_data."InterestReceivedCFI"
             ) as "InterestReceivedCFI",
-		coalesce(
+			coalesce(
                 daily."InterestReceivedCFO",
                 master_data."InterestReceivedCFO"
             ) as "InterestReceivedCFO",
-		coalesce(
+			coalesce(
                 daily."InventoriesAdjustmentsAllowances",
                 master_data."InventoriesAdjustmentsAllowances"
             ) as "InventoriesAdjustmentsAllowances",
-		coalesce(
+			coalesce(
                 daily."Inventory",
                 master_data."Inventory"
             ) as "Inventory",
-		coalesce(
+			coalesce(
                 daily."InvestedCapital",
                 master_data."InvestedCapital"
             ) as "InvestedCapital",
-		coalesce(
+			coalesce(
                 daily."InvestingCashFlow",
                 master_data."InvestingCashFlow"
             ) as "InvestingCashFlow",
-		coalesce(
+			coalesce(
                 daily."InvestmentProperties",
                 master_data."InvestmentProperties"
             ) as "InvestmentProperties",
-		coalesce(
+			coalesce(
                 daily."InvestmentinFinancialAssets",
                 master_data."InvestmentinFinancialAssets"
             ) as "InvestmentinFinancialAssets",
-		coalesce(
+			coalesce(
                 daily."InvestmentsAndAdvances",
                 master_data."InvestmentsAndAdvances"
             ) as "InvestmentsAndAdvances",
-		coalesce(
+			coalesce(
                 daily."InvestmentsInOtherVenturesUnderEquityMethod",
                 master_data."InvestmentsInOtherVenturesUnderEquityMethod"
             ) as "InvestmentsInOtherVenturesUnderEquityMethod",
-		coalesce(
+			coalesce(
                 daily."InvestmentsinAssociatesatCost",
                 master_data."InvestmentsinAssociatesatCost"
             ) as "InvestmentsinAssociatesatCost",
-		coalesce(
+			coalesce(
                 daily."InvestmentsinJointVenturesatCost",
                 master_data."InvestmentsinJointVenturesatCost"
             ) as "InvestmentsinJointVenturesatCost",
-		coalesce(
+			coalesce(
                 daily."InvestmentsinSubsidiariesatCost",
                 master_data."InvestmentsinSubsidiariesatCost"
             ) as "InvestmentsinSubsidiariesatCost",
-		coalesce(
+			coalesce(
                 daily."IssuanceOfCapitalStock",
                 master_data."IssuanceOfCapitalStock"
             ) as "IssuanceOfCapitalStock",
-		coalesce(
+			coalesce(
                 daily."IssuanceOfDebt",
                 master_data."IssuanceOfDebt"
             ) as "IssuanceOfDebt",
-		coalesce(
+			coalesce(
                 daily."LandAndImprovements",
                 master_data."LandAndImprovements"
             ) as "LandAndImprovements",
-		coalesce(
+			coalesce(
                 daily."Leases",
                 master_data."Leases"
             ) as "Leases",
-		coalesce(
+			coalesce(
                 daily."LiabilitiesHeldforSaleNonCurrent",
                 master_data."LiabilitiesHeldforSaleNonCurrent"
             ) as "LiabilitiesHeldforSaleNonCurrent",
-		coalesce(
+			coalesce(
                 daily."LimitedPartnershipCapital",
                 master_data."LimitedPartnershipCapital"
             ) as "LimitedPartnershipCapital",
-		coalesce(
+			coalesce(
                 daily."LineOfCredit",
                 master_data."LineOfCredit"
             ) as "LineOfCredit",
-		coalesce(
+			coalesce(
                 daily."LoansReceivable",
                 master_data."LoansReceivable"
             ) as "LoansReceivable",
-		coalesce(
+			coalesce(
                 daily."LongTermCapitalLeaseObligation",
                 master_data."LongTermCapitalLeaseObligation"
             ) as "LongTermCapitalLeaseObligation",
-		coalesce(
+			coalesce(
                 daily."LongTermDebt",
                 master_data."LongTermDebt"
             ) as "LongTermDebt",
-		coalesce(
+			coalesce(
                 daily."LongTermDebtAndCapitalLeaseObligation",
                 master_data."LongTermDebtAndCapitalLeaseObligation"
             ) as "LongTermDebtAndCapitalLeaseObligation",
-		coalesce(
+			coalesce(
                 daily."LongTermDebtIssuance",
                 master_data."LongTermDebtIssuance"
             ) as "LongTermDebtIssuance",
-		coalesce(
+			coalesce(
                 daily."LongTermDebtPayments",
                 master_data."LongTermDebtPayments"
             ) as "LongTermDebtPayments",
-		coalesce(
+			coalesce(
                 daily."LongTermEquityInvestment",
                 master_data."LongTermEquityInvestment"
             ) as "LongTermEquityInvestment",
-		coalesce(
+			coalesce(
                 daily."LongTermProvisions",
                 master_data."LongTermProvisions"
             ) as "LongTermProvisions",
-		coalesce(
+			coalesce(
                 daily."MachineryFurnitureEquipment",
                 master_data."MachineryFurnitureEquipment"
             ) as "MachineryFurnitureEquipment",
-		coalesce(
+			coalesce(
                 daily."MarketCap",
                 master_data."MarketCap"
             ) as "MarketCap",
-		coalesce(
+			coalesce(
                 daily."MinimumPensionLiabilities",
                 master_data."MinimumPensionLiabilities"
             ) as "MinimumPensionLiabilities",
-		coalesce(
+			coalesce(
                 daily."MinorityInterest",
                 master_data."MinorityInterest"
             ) as "MinorityInterest",
-		coalesce(
+			coalesce(
                 daily."MinorityInterests",
                 master_data."MinorityInterests"
             ) as "MinorityInterests",
-		coalesce(
+			coalesce(
                 daily."NetBusinessPurchaseAndSale",
                 master_data."NetBusinessPurchaseAndSale"
             ) as "NetBusinessPurchaseAndSale",
-		coalesce(
+			coalesce(
                 daily."NetCommonStockIssuance",
                 master_data."NetCommonStockIssuance"
             ) as "NetCommonStockIssuance",
-		coalesce(
+			coalesce(
                 daily."NetDebt",
                 master_data."NetDebt"
             ) as "NetDebt",
-		coalesce(
+			coalesce(
                 daily."NetForeignCurrencyExchangeGainLoss",
                 master_data."NetForeignCurrencyExchangeGainLoss"
             ) as "NetForeignCurrencyExchangeGainLoss",
-		coalesce(
+			coalesce(
                 daily."NetIncome",
                 master_data."NetIncome"
             ) as "NetIncome",
-		coalesce(
+			coalesce(
                 daily."NetIncomeCommonStockholders",
                 master_data."NetIncomeCommonStockholders"
             ) as "NetIncomeCommonStockholders",
-		coalesce(
+			coalesce(
                 daily."NetIncomeContinuousOperations",
                 master_data."NetIncomeContinuousOperations"
             ) as "NetIncomeContinuousOperations",
-		coalesce(
+			coalesce(
                 daily."NetIncomeDiscontinuousOperations",
                 master_data."NetIncomeDiscontinuousOperations"
             ) as "NetIncomeDiscontinuousOperations",
-		coalesce(
+			coalesce(
                 daily."NetIncomeExtraordinary",
                 master_data."NetIncomeExtraordinary"
             ) as "NetIncomeExtraordinary",
-		coalesce(
+			coalesce(
                 daily."NetIncomeFromContinuingAndDiscontinuedOperation",
                 master_data."NetIncomeFromContinuingAndDiscontinuedOperation"
             ) as "NetIncomeFromContinuingAndDiscontinuedOperation",
-		coalesce(
+			coalesce(
                 daily."NetIncomeFromContinuingOperationNetMinorityInterest",
                 master_data."NetIncomeFromContinuingOperationNetMinorityInterest"
             ) as "NetIncomeFromContinuingOperationNetMinorityInterest",
-		coalesce(
+			coalesce(
                 daily."NetIncomeFromContinuingOperations",
                 master_data."NetIncomeFromContinuingOperations"
             ) as "NetIncomeFromContinuingOperations",
-		coalesce(
+			coalesce(
                 daily."NetIncomeFromTaxLossCarryforward",
                 master_data."NetIncomeFromTaxLossCarryforward"
             ) as "NetIncomeFromTaxLossCarryforward",
-		coalesce(
+			coalesce(
                 daily."NetIncomeIncludingNoncontrollingInterests",
                 master_data."NetIncomeIncludingNoncontrollingInterests"
             ) as "NetIncomeIncludingNoncontrollingInterests",
-		coalesce(
+			coalesce(
                 daily."NetIntangiblesPurchaseAndSale",
                 master_data."NetIntangiblesPurchaseAndSale"
             ) as "NetIntangiblesPurchaseAndSale",
-		coalesce(
+			coalesce(
                 daily."NetInterestIncome",
                 master_data."NetInterestIncome"
             ) as "NetInterestIncome",
-		coalesce(
+			coalesce(
                 daily."NetInvestmentPropertiesPurchaseAndSale",
                 master_data."NetInvestmentPropertiesPurchaseAndSale"
             ) as "NetInvestmentPropertiesPurchaseAndSale",
-		coalesce(
+			coalesce(
                 daily."NetInvestmentPurchaseAndSale",
                 master_data."NetInvestmentPurchaseAndSale"
             ) as "NetInvestmentPurchaseAndSale",
-		coalesce(
+			coalesce(
                 daily."NetIssuancePaymentsOfDebt",
                 master_data."NetIssuancePaymentsOfDebt"
             ) as "NetIssuancePaymentsOfDebt",
-		coalesce(
+			coalesce(
                 daily."NetLongTermDebtIssuance",
                 master_data."NetLongTermDebtIssuance"
             ) as "NetLongTermDebtIssuance",
-		coalesce(
+			coalesce(
                 daily."NetNonOperatingInterestIncomeExpense",
                 master_data."NetNonOperatingInterestIncomeExpense"
             ) as "NetNonOperatingInterestIncomeExpense",
-		coalesce(
+			coalesce(
                 daily."NetOtherFinancingCharges",
                 master_data."NetOtherFinancingCharges"
             ) as "NetOtherFinancingCharges",
-		coalesce(
+			coalesce(
                 daily."NetOtherInvestingChanges",
                 master_data."NetOtherInvestingChanges"
             ) as "NetOtherInvestingChanges",
-		coalesce(
+			coalesce(
                 daily."NetPPE",
                 master_data."NetPPE"
             ) as "NetPPE",
-		coalesce(
+			coalesce(
                 daily."NetPPEPurchaseAndSale",
                 master_data."NetPPEPurchaseAndSale"
             ) as "NetPPEPurchaseAndSale",
-		coalesce(
+			coalesce(
                 daily."NetPreferredStockIssuance",
                 master_data."NetPreferredStockIssuance"
             ) as "NetPreferredStockIssuance",
-		coalesce(
+			coalesce(
                 daily."NetShortTermDebtIssuance",
                 master_data."NetShortTermDebtIssuance"
             ) as "NetShortTermDebtIssuance",
-		coalesce(
+			coalesce(
                 daily."NetTangibleAssets",
                 master_data."NetTangibleAssets"
             ) as "NetTangibleAssets",
-		coalesce(
+			coalesce(
                 daily."NonCurrentAccountsReceivable",
                 master_data."NonCurrentAccountsReceivable"
             ) as "NonCurrentAccountsReceivable",
-		coalesce(
+			coalesce(
                 daily."NonCurrentAccruedExpenses",
                 master_data."NonCurrentAccruedExpenses"
             ) as "NonCurrentAccruedExpenses",
-		coalesce(
+			coalesce(
                 daily."NonCurrentDeferredAssets",
                 master_data."NonCurrentDeferredAssets"
             ) as "NonCurrentDeferredAssets",
-		coalesce(
+			coalesce(
                 daily."NonCurrentDeferredLiabilities",
                 master_data."NonCurrentDeferredLiabilities"
             ) as "NonCurrentDeferredLiabilities",
-		coalesce(
+			coalesce(
                 daily."NonCurrentDeferredRevenue",
                 master_data."NonCurrentDeferredRevenue"
             ) as "NonCurrentDeferredRevenue",
-		coalesce(
+			coalesce(
                 daily."NonCurrentDeferredTaxesAssets",
                 master_data."NonCurrentDeferredTaxesAssets"
             ) as "NonCurrentDeferredTaxesAssets",
-		coalesce(
+			coalesce(
                 daily."NonCurrentDeferredTaxesLiabilities",
                 master_data."NonCurrentDeferredTaxesLiabilities"
             ) as "NonCurrentDeferredTaxesLiabilities",
-		coalesce(
+			coalesce(
                 daily."NonCurrentNoteReceivables",
                 master_data."NonCurrentNoteReceivables"
             ) as "NonCurrentNoteReceivables",
-		coalesce(
+			coalesce(
                 daily."NonCurrentPensionAndOtherPostretirementBenefitPlans",
                 master_data."NonCurrentPensionAndOtherPostretirementBenefitPlans"
             ) as "NonCurrentPensionAndOtherPostretirementBenefitPlans",
-		coalesce(
+			coalesce(
                 daily."NonCurrentPrepaidAssets",
                 master_data."NonCurrentPrepaidAssets"
             ) as "NonCurrentPrepaidAssets",
-		coalesce(
+			coalesce(
                 daily."NormalizedEBITDA",
                 master_data."NormalizedEBITDA"
             ) as "NormalizedEBITDA",
-		coalesce(
+			coalesce(
                 daily."NormalizedIncome",
                 master_data."NormalizedIncome"
             ) as "NormalizedIncome",
-		coalesce(
+			coalesce(
                 daily."NotesReceivable",
                 master_data."NotesReceivable"
             ) as "NotesReceivable",
-		coalesce(
+			coalesce(
                 daily."OperatingCashFlow",
                 master_data."OperatingCashFlow"
             ) as "OperatingCashFlow",
-		coalesce(
+			coalesce(
                 daily."OperatingExpense",
                 master_data."OperatingExpense"
             ) as "OperatingExpense",
-		coalesce(
+			coalesce(
                 daily."OperatingGainsLosses",
                 master_data."OperatingGainsLosses"
             ) as "OperatingGainsLosses",
-		coalesce(
+			coalesce(
                 daily."OperatingIncome",
                 master_data."OperatingIncome"
             ) as "OperatingIncome",
-		coalesce(
+			coalesce(
                 daily."OperatingRevenue",
                 master_data."OperatingRevenue"
             ) as "OperatingRevenue",
-		coalesce(
+			coalesce(
                 daily."OrdinarySharesNumber",
                 master_data."OrdinarySharesNumber"
             ) as "OrdinarySharesNumber",
-		coalesce(
+			coalesce(
                 daily."OtherCashAdjustmentInsideChangeinCash",
                 master_data."OtherCashAdjustmentInsideChangeinCash"
             ) as "OtherCashAdjustmentInsideChangeinCash",
-		coalesce(
+			coalesce(
                 daily."OtherCashAdjustmentOutsideChangeinCash",
                 master_data."OtherCashAdjustmentOutsideChangeinCash"
             ) as "OtherCashAdjustmentOutsideChangeinCash",
-		coalesce(
+			coalesce(
                 daily."OtherCashPaymentsfromOperatingActivities",
                 master_data."OtherCashPaymentsfromOperatingActivities"
             ) as "OtherCashPaymentsfromOperatingActivities",
-		coalesce(
+			coalesce(
                 daily."OtherCashReceiptsfromOperatingActivities",
                 master_data."OtherCashReceiptsfromOperatingActivities"
             ) as "OtherCashReceiptsfromOperatingActivities",
-		coalesce(
+			coalesce(
                 daily."OtherCurrentAssets",
                 master_data."OtherCurrentAssets"
             ) as "OtherCurrentAssets",
-		coalesce(
+			coalesce(
                 daily."OtherCurrentBorrowings",
                 master_data."OtherCurrentBorrowings"
             ) as "OtherCurrentBorrowings",
-		coalesce(
+			coalesce(
                 daily."OtherCurrentLiabilities",
                 master_data."OtherCurrentLiabilities"
             ) as "OtherCurrentLiabilities",
-		coalesce(
+			coalesce(
                 daily."OtherEquityAdjustments",
                 master_data."OtherEquityAdjustments"
             ) as "OtherEquityAdjustments",
-		coalesce(
+			coalesce(
                 daily."OtherEquityInterest",
                 master_data."OtherEquityInterest"
             ) as "OtherEquityInterest",
-		coalesce(
+			coalesce(
                 daily."OtherGandA",
                 master_data."OtherGandA"
             ) as "OtherGandA",
-		coalesce(
+			coalesce(
                 daily."OtherIncomeExpense",
                 master_data."OtherIncomeExpense"
             ) as "OtherIncomeExpense",
-		coalesce(
+			coalesce(
                 daily."OtherIntangibleAssets",
                 master_data."OtherIntangibleAssets"
             ) as "OtherIntangibleAssets",
-		coalesce(
+			coalesce(
                 daily."OtherInventories",
                 master_data."OtherInventories"
             ) as "OtherInventories",
-		coalesce(
+			coalesce(
                 daily."OtherInvestments",
                 master_data."OtherInvestments"
             ) as "OtherInvestments",
-		coalesce(
+			coalesce(
                 daily."OtherNonCashItems",
                 master_data."OtherNonCashItems"
             ) as "OtherNonCashItems",
-		coalesce(
+			coalesce(
                 daily."OtherNonCurrentAssets",
                 master_data."OtherNonCurrentAssets"
             ) as "OtherNonCurrentAssets",
-		coalesce(
+			coalesce(
                 daily."OtherNonCurrentLiabilities",
                 master_data."OtherNonCurrentLiabilities"
             ) as "OtherNonCurrentLiabilities",
-		coalesce(
+			coalesce(
                 daily."OtherNonOperatingIncomeExpenses",
                 master_data."OtherNonOperatingIncomeExpenses"
             ) as "OtherNonOperatingIncomeExpenses",
-		coalesce(
+			coalesce(
                 daily."OtherOperatingExpenses",
                 master_data."OtherOperatingExpenses"
             ) as "OtherOperatingExpenses",
-		coalesce(
+			coalesce(
                 daily."OtherPayable",
                 master_data."OtherPayable"
             ) as "OtherPayable",
-		coalesce(
+			coalesce(
                 daily."OtherProperties",
                 master_data."OtherProperties"
             ) as "OtherProperties",
-		coalesce(
+			coalesce(
                 daily."OtherReceivables",
                 master_data."OtherReceivables"
             ) as "OtherReceivables",
-		coalesce(
+			coalesce(
                 daily."OtherShortTermInvestments",
                 master_data."OtherShortTermInvestments"
             ) as "OtherShortTermInvestments",
-		coalesce(
+			coalesce(
                 daily."OtherSpecialCharges",
                 master_data."OtherSpecialCharges"
             ) as "OtherSpecialCharges",
-		coalesce(
+			coalesce(
                 daily."OtherTaxes",
                 master_data."OtherTaxes"
             ) as "OtherTaxes",
-		coalesce(
+			coalesce(
                 daily."OtherunderPreferredStockDividend",
                 master_data."OtherunderPreferredStockDividend"
             ) as "OtherunderPreferredStockDividend",
-		coalesce(
+			coalesce(
                 daily."Payables",
                 master_data."Payables"
             ) as "Payables",
-		coalesce(
+			coalesce(
                 daily."PayablesAndAccruedExpenses",
                 master_data."PayablesAndAccruedExpenses"
             ) as "PayablesAndAccruedExpenses",
-		coalesce(
+			coalesce(
                 daily."PaymentsonBehalfofEmployees",
                 master_data."PaymentsonBehalfofEmployees"
             ) as "PaymentsonBehalfofEmployees",
-		coalesce(
+			coalesce(
                 daily."PensionAndEmployeeBenefitExpense",
                 master_data."PensionAndEmployeeBenefitExpense"
             ) as "PensionAndEmployeeBenefitExpense",
-		coalesce(
+			coalesce(
                 daily."PensionandOtherPostRetirementBenefitPlansCurrent",
                 master_data."PensionandOtherPostRetirementBenefitPlansCurrent"
             ) as "PensionandOtherPostRetirementBenefitPlansCurrent",
-		coalesce(
+			coalesce(
                 daily."PreferredSecuritiesOutsideStockEquity",
                 master_data."PreferredSecuritiesOutsideStockEquity"
             ) as "PreferredSecuritiesOutsideStockEquity",
-		coalesce(
+			coalesce(
                 daily."PreferredSharesNumber",
                 master_data."PreferredSharesNumber"
             ) as "PreferredSharesNumber",
-		coalesce(
+			coalesce(
                 daily."PreferredStock",
                 master_data."PreferredStock"
             ) as "PreferredStock",
-		coalesce(
+			coalesce(
                 daily."PreferredStockDividendPaid",
                 master_data."PreferredStockDividendPaid"
             ) as "PreferredStockDividendPaid",
-		coalesce(
+			coalesce(
                 daily."PreferredStockDividends",
                 master_data."PreferredStockDividends"
             ) as "PreferredStockDividends",
-		coalesce(
+			coalesce(
                 daily."PreferredStockEquity",
                 master_data."PreferredStockEquity"
             ) as "PreferredStockEquity",
-		coalesce(
+			coalesce(
                 daily."PreferredStockIssuance",
                 master_data."PreferredStockIssuance"
             ) as "PreferredStockIssuance",
-		coalesce(
+			coalesce(
                 daily."PreferredStockPayments",
                 master_data."PreferredStockPayments"
             ) as "PreferredStockPayments",
-		coalesce(
+			coalesce(
                 daily."PrepaidAssets",
                 master_data."PrepaidAssets"
             ) as "PrepaidAssets",
-		coalesce(
+			coalesce(
                 daily."PretaxIncome",
                 master_data."PretaxIncome"
             ) as "PretaxIncome",
-		coalesce(
+			coalesce(
                 daily."ProceedsFromStockOptionExercised",
                 master_data."ProceedsFromStockOptionExercised"
             ) as "ProceedsFromStockOptionExercised",
-		coalesce(
+			coalesce(
                 daily."Properties",
                 master_data."Properties"
             ) as "Properties",
-		coalesce(
+			coalesce(
                 daily."ProvisionForDoubtfulAccounts",
                 master_data."ProvisionForDoubtfulAccounts"
             ) as "ProvisionForDoubtfulAccounts",
-		coalesce(
+			coalesce(
                 daily."ProvisionandWriteOffofAssets",
                 master_data."ProvisionandWriteOffofAssets"
             ) as "ProvisionandWriteOffofAssets",
-		coalesce(
+			coalesce(
                 daily."PurchaseOfBusiness",
                 master_data."PurchaseOfBusiness"
             ) as "PurchaseOfBusiness",
-		coalesce(
+			coalesce(
                 daily."PurchaseOfIntangibles",
                 master_data."PurchaseOfIntangibles"
             ) as "PurchaseOfIntangibles",
-		coalesce(
+			coalesce(
                 daily."PurchaseOfInvestment",
                 master_data."PurchaseOfInvestment"
             ) as "PurchaseOfInvestment",
-		coalesce(
+			coalesce(
                 daily."PurchaseOfInvestmentProperties",
                 master_data."PurchaseOfInvestmentProperties"
             ) as "PurchaseOfInvestmentProperties",
-		coalesce(
+			coalesce(
                 daily."PurchaseOfPPE",
                 master_data."PurchaseOfPPE"
             ) as "PurchaseOfPPE",
-		coalesce(
+			coalesce(
                 daily."RawMaterials",
                 master_data."RawMaterials"
             ) as "RawMaterials",
-		coalesce(
+			coalesce(
                 daily."Receivables",
                 master_data."Receivables"
             ) as "Receivables",
-		coalesce(
+			coalesce(
                 daily."ReceivablesAdjustmentsAllowances",
                 master_data."ReceivablesAdjustmentsAllowances"
             ) as "ReceivablesAdjustmentsAllowances",
-		coalesce(
+			coalesce(
                 daily."ReconciledCostOfRevenue",
                 master_data."ReconciledCostOfRevenue"
             ) as "ReconciledCostOfRevenue",
-		coalesce(
+			coalesce(
                 daily."ReconciledDepreciation",
                 master_data."ReconciledDepreciation"
             ) as "ReconciledDepreciation",
-		coalesce(
+			coalesce(
                 daily."RentAndLandingFees",
                 master_data."RentAndLandingFees"
             ) as "RentAndLandingFees",
-		coalesce(
+			coalesce(
                 daily."RentExpenseSupplemental",
                 master_data."RentExpenseSupplemental"
             ) as "RentExpenseSupplemental",
-		coalesce(
+			coalesce(
                 daily."RepaymentOfDebt",
                 master_data."RepaymentOfDebt"
             ) as "RepaymentOfDebt",
-		coalesce(
+			coalesce(
                 daily."RepurchaseOfCapitalStock",
                 master_data."RepurchaseOfCapitalStock"
             ) as "RepurchaseOfCapitalStock",
-		coalesce(
+			coalesce(
                 daily."ResearchAndDevelopment",
                 master_data."ResearchAndDevelopment"
             ) as "ResearchAndDevelopment",
-		coalesce(
+			coalesce(
                 daily."RestrictedCash",
                 master_data."RestrictedCash"
             ) as "RestrictedCash",
-		coalesce(
+			coalesce(
                 daily."RestructuringAndMergernAcquisition",
                 master_data."RestructuringAndMergernAcquisition"
             ) as "RestructuringAndMergernAcquisition",
-		coalesce(
+			coalesce(
                 daily."RetainedEarnings",
                 master_data."RetainedEarnings"
             ) as "RetainedEarnings",
-		coalesce(
+			coalesce(
                 daily."SalariesAndWages",
                 master_data."SalariesAndWages"
             ) as "SalariesAndWages",
-		coalesce(
+			coalesce(
                 daily."SaleOfBusiness",
                 master_data."SaleOfBusiness"
             ) as "SaleOfBusiness",
-		coalesce(
+			coalesce(
                 daily."SaleOfIntangibles",
                 master_data."SaleOfIntangibles"
             ) as "SaleOfIntangibles",
-		coalesce(
+			coalesce(
                 daily."SaleOfInvestment",
                 master_data."SaleOfInvestment"
             ) as "SaleOfInvestment",
-		coalesce(
+			coalesce(
                 daily."SaleOfInvestmentProperties",
                 master_data."SaleOfInvestmentProperties"
             ) as "SaleOfInvestmentProperties",
-		coalesce(
+			coalesce(
                 daily."SaleOfPPE",
                 master_data."SaleOfPPE"
             ) as "SaleOfPPE",
-		coalesce(
+			coalesce(
                 daily."SecuritiesAmortization",
                 master_data."SecuritiesAmortization"
             ) as "SecuritiesAmortization",
-		coalesce(
+			coalesce(
                 daily."SellingAndMarketingExpense",
                 master_data."SellingAndMarketingExpense"
             ) as "SellingAndMarketingExpense",
-		coalesce(
+			coalesce(
                 daily."SellingGeneralAndAdministration",
                 master_data."SellingGeneralAndAdministration"
             ) as "SellingGeneralAndAdministration",
-		coalesce(
+			coalesce(
                 daily."ShareIssued",
                 master_data."ShareIssued"
             ) as "ShareIssued",
-		coalesce(
+			coalesce(
                 daily."ShortTermDebtIssuance",
                 master_data."ShortTermDebtIssuance"
             ) as "ShortTermDebtIssuance",
-		coalesce(
+			coalesce(
                 daily."ShortTermDebtPayments",
                 master_data."ShortTermDebtPayments"
             ) as "ShortTermDebtPayments",
-		coalesce(
+			coalesce(
                 daily."SpecialIncomeCharges",
                 master_data."SpecialIncomeCharges"
             ) as "SpecialIncomeCharges",
-		coalesce(
+			coalesce(
                 daily."StockBasedCompensation",
                 master_data."StockBasedCompensation"
             ) as "StockBasedCompensation",
-		coalesce(
+			coalesce(
                 daily."StockholdersEquity",
                 master_data."StockholdersEquity"
             ) as "StockholdersEquity",
-		coalesce(
+			coalesce(
                 daily."TangibleBookValue",
                 master_data."TangibleBookValue"
             ) as "TangibleBookValue",
-		coalesce(
+			coalesce(
                 daily."TaxEffectOfUnusualItems",
                 master_data."TaxEffectOfUnusualItems"
             ) as "TaxEffectOfUnusualItems",
-		coalesce(
+			coalesce(
                 daily."TaxProvision",
                 master_data."TaxProvision"
             ) as "TaxProvision",
-		coalesce(
+			coalesce(
                 daily."TaxRateForCalcs",
                 master_data."TaxRateForCalcs"
             ) as "TaxRateForCalcs",
-		coalesce(
+			coalesce(
                 daily."TaxesReceivable",
                 master_data."TaxesReceivable"
             ) as "TaxesReceivable",
-		coalesce(
+			coalesce(
                 daily."TaxesRefundPaid",
                 master_data."TaxesRefundPaid"
             ) as "TaxesRefundPaid",
-		coalesce(
+			coalesce(
                 daily."TotalAssets",
                 master_data."TotalAssets"
             ) as "TotalAssets",
-		coalesce(
+			coalesce(
                 daily."TotalCapitalization",
                 master_data."TotalCapitalization"
             ) as "TotalCapitalization",
-		coalesce(
+			coalesce(
                 daily."TotalDebt",
                 master_data."TotalDebt"
             ) as "TotalDebt",
-		coalesce(
+			coalesce(
                 daily."TotalEquityGrossMinorityInterest",
                 master_data."TotalEquityGrossMinorityInterest"
             ) as "TotalEquityGrossMinorityInterest",
-		coalesce(
+			coalesce(
                 daily."TotalExpenses",
                 master_data."TotalExpenses"
             ) as "TotalExpenses",
-		coalesce(
+			coalesce(
                 daily."TotalLiabilitiesNetMinorityInterest",
                 master_data."TotalLiabilitiesNetMinorityInterest"
             ) as "TotalLiabilitiesNetMinorityInterest",
-		coalesce(
+			coalesce(
                 daily."TotalNonCurrentAssets",
                 master_data."TotalNonCurrentAssets"
             ) as "TotalNonCurrentAssets",
-		coalesce(
+			coalesce(
                 daily."TotalNonCurrentLiabilitiesNetMinorityInterest",
                 master_data."TotalNonCurrentLiabilitiesNetMinorityInterest"
             ) as "TotalNonCurrentLiabilitiesNetMinorityInterest",
-		coalesce(
+			coalesce(
                 daily."TotalOperatingIncomeAsReported",
                 master_data."TotalOperatingIncomeAsReported"
             ) as "TotalOperatingIncomeAsReported",
-		coalesce(
+			coalesce(
                 daily."TotalOtherFinanceCost",
                 master_data."TotalOtherFinanceCost"
             ) as "TotalOtherFinanceCost",
-		coalesce(
+			coalesce(
                 daily."TotalPartnershipCapital",
                 master_data."TotalPartnershipCapital"
             ) as "TotalPartnershipCapital",
-		coalesce(
+			coalesce(
                 daily."TotalRevenue",
                 master_data."TotalRevenue"
             ) as "TotalRevenue",
-		coalesce(
+			coalesce(
                 daily."TotalTaxPayable",
                 master_data."TotalTaxPayable"
             ) as "TotalTaxPayable",
-		coalesce(
+			coalesce(
                 daily."TotalUnusualItems",
                 master_data."TotalUnusualItems"
             ) as "TotalUnusualItems",
-		coalesce(
+			coalesce(
                 daily."TotalUnusualItemsExcludingGoodwill",
                 master_data."TotalUnusualItemsExcludingGoodwill"
             ) as "TotalUnusualItemsExcludingGoodwill",
-		coalesce(
+			coalesce(
                 daily."TradeandOtherPayablesNonCurrent",
                 master_data."TradeandOtherPayablesNonCurrent"
             ) as "TradeandOtherPayablesNonCurrent",
-		coalesce(
+			coalesce(
                 daily."TradingSecurities",
                 master_data."TradingSecurities"
             ) as "TradingSecurities",
-		coalesce(
+			coalesce(
                 daily."TreasurySharesNumber",
                 master_data."TreasurySharesNumber"
             ) as "TreasurySharesNumber",
-		coalesce(
+			coalesce(
                 daily."TreasuryStock",
                 master_data."TreasuryStock"
             ) as "TreasuryStock",
-		coalesce(
+			coalesce(
                 daily."UnrealizedGainLoss",
                 master_data."UnrealizedGainLoss"
             ) as "UnrealizedGainLoss",
-		coalesce(
+			coalesce(
                 daily."UnrealizedGainLossOnInvestmentSecurities",
                 master_data."UnrealizedGainLossOnInvestmentSecurities"
             ) as "UnrealizedGainLossOnInvestmentSecurities",
-		coalesce(
+			coalesce(
                 daily."WorkInProcess",
                 master_data."WorkInProcess"
             ) as "WorkInProcess",
-		coalesce(
+			coalesce(
                 daily."WorkingCapital",
                 master_data."WorkingCapital"
             ) as "WorkingCapital",
-		coalesce(
+			coalesce(
                 daily."WriteOff",
                 master_data."WriteOff"
             ) as "WriteOff",
-		coalesce(
+			coalesce(
                 daily."InterestPaidDirect",
                 master_data."InterestPaidDirect"
             ) as "InterestPaidDirect",
-		coalesce(
+			coalesce(
                 daily."InterestReceivedDirect",
                 master_data."InterestReceivedDirect"
             ) as "InterestReceivedDirect",
-		coalesce(
+			coalesce(
                 daily."PaymentstoSuppliersforGoodsandServices",
                 master_data."PaymentstoSuppliersforGoodsandServices"
             ) as "PaymentstoSuppliersforGoodsandServices",
-		coalesce(
+			coalesce(
                 daily."ReceiptsfromCustomers",
                 master_data."ReceiptsfromCustomers"
             ) as "ReceiptsfromCustomers",
-		coalesce(
+			coalesce(
                 daily."RestrictedCommonStock",
                 master_data."RestrictedCommonStock"
             ) as "RestrictedCommonStock",
-		coalesce(
+			coalesce(
                 daily."TaxesRefundPaidDirect",
                 master_data."TaxesRefundPaidDirect"
             ) as "TaxesRefundPaidDirect",
-		coalesce(
+			coalesce(
                 daily."KeyStats_maxAge",
                 master_data."KeyStats_maxAge"
             ) as "KeyStats_maxAge",
-		coalesce(
+			coalesce(
                 daily."KeyStats_priceHint",
                 master_data."KeyStats_priceHint"
             ) as "KeyStats_priceHint",
-		coalesce(
+			coalesce(
                 daily."KeyStats_enterpriseValue",
                 master_data."KeyStats_enterpriseValue"
             ) as "KeyStats_enterpriseValue",
-		coalesce(
+			coalesce(
                 daily."KeyStats_forwardPE",
                 master_data."KeyStats_forwardPE"
             ) as "KeyStats_forwardPE",
-		coalesce(
+			coalesce(
                 daily."KeyStats_profitMargins",
                 master_data."KeyStats_profitMargins"
             ) as "KeyStats_profitMargins",
-		coalesce(
+			coalesce(
                 daily."KeyStats_floatShares",
                 master_data."KeyStats_floatShares"
             ) as "KeyStats_floatShares",
-		coalesce(
+			coalesce(
                 daily."KeyStats_sharesOutstanding",
                 master_data."KeyStats_sharesOutstanding"
             ) as "KeyStats_sharesOutstanding",
-		coalesce(
+			coalesce(
                 daily."KeyStats_sharesShort",
                 master_data."KeyStats_sharesShort"
             ) as "KeyStats_sharesShort",
-		coalesce(
+			coalesce(
                 daily."KeyStats_sharesShortPriorMonth",
                 master_data."KeyStats_sharesShortPriorMonth"
             ) as "KeyStats_sharesShortPriorMonth",
-		coalesce(
+			coalesce(
                 daily."KeyStats_sharesShortPreviousMonthDate",
                 master_data."KeyStats_sharesShortPreviousMonthDate"
             ) as "KeyStats_sharesShortPreviousMonthDate",
-		coalesce(
+			coalesce(
                 daily."KeyStats_dateShortInterest",
                 master_data."KeyStats_dateShortInterest"
             ) as "KeyStats_dateShortInterest",
-		coalesce(
+			coalesce(
                 daily."KeyStats_sharesPercentSharesOut",
                 master_data."KeyStats_sharesPercentSharesOut"
             ) as "KeyStats_sharesPercentSharesOut",
-		coalesce(
+			coalesce(
                 daily."KeyStats_heldPercentInsiders",
                 master_data."KeyStats_heldPercentInsiders"
             ) as "KeyStats_heldPercentInsiders",
-		coalesce(
+			coalesce(
                 daily."KeyStats_heldPercentInstitutions",
                 master_data."KeyStats_heldPercentInstitutions"
             ) as "KeyStats_heldPercentInstitutions",
-		coalesce(
+			coalesce(
                 daily."KeyStats_shortRatio",
                 master_data."KeyStats_shortRatio"
             ) as "KeyStats_shortRatio",
-		coalesce(
+			coalesce(
                 daily."KeyStats_shortPercentOfFloat",
                 master_data."KeyStats_shortPercentOfFloat"
             ) as "KeyStats_shortPercentOfFloat",
-		coalesce(
+			coalesce(
                 daily."KeyStats_beta",
                 master_data."KeyStats_beta"
             ) as "KeyStats_beta",
-		coalesce(
+			coalesce(
                 daily."KeyStats_impliedSharesOutstanding",
                 master_data."KeyStats_impliedSharesOutstanding"
             ) as "KeyStats_impliedSharesOutstanding",
-		coalesce(
+			coalesce(
                 daily."KeyStats_category",
                 master_data."KeyStats_category"
             ) as "KeyStats_category",
-		coalesce(
+			coalesce(
                 daily."KeyStats_bookValue",
                 master_data."KeyStats_bookValue"
             ) as "KeyStats_bookValue",
-		coalesce(
+			coalesce(
                 daily."KeyStats_priceToBook",
                 master_data."KeyStats_priceToBook"
             ) as "KeyStats_priceToBook",
-		coalesce(
+			coalesce(
                 daily."KeyStats_fundFamily",
                 master_data."KeyStats_fundFamily"
             ) as "KeyStats_fundFamily",
-		coalesce(
+			coalesce(
                 daily."KeyStats_legalType",
                 master_data."KeyStats_legalType"
             ) as "KeyStats_legalType",
-		coalesce(
+			coalesce(
                 daily."KeyStats_lastFiscalYearEnd",
                 master_data."KeyStats_lastFiscalYearEnd"
             ) as "KeyStats_lastFiscalYearEnd",
-		coalesce(
+			coalesce(
                 daily."KeyStats_nextFiscalYearEnd",
                 master_data."KeyStats_nextFiscalYearEnd"
             ) as "KeyStats_nextFiscalYearEnd",
-		coalesce(
+			coalesce(
                 daily."KeyStats_mostRecentQuarter",
                 master_data."KeyStats_mostRecentQuarter"
             ) as "KeyStats_mostRecentQuarter",
-		coalesce(
+			coalesce(
                 daily."KeyStats_earningsQuarterlyGrowth",
                 master_data."KeyStats_earningsQuarterlyGrowth"
             ) as "KeyStats_earningsQuarterlyGrowth",
-		coalesce(
+			coalesce(
                 daily."KeyStats_netIncomeToCommon",
                 master_data."KeyStats_netIncomeToCommon"
             ) as "KeyStats_netIncomeToCommon",
-		coalesce(
+			coalesce(
                 daily."KeyStats_trailingEps",
                 master_data."KeyStats_trailingEps"
             ) as "KeyStats_trailingEps",
-		coalesce(
+			coalesce(
                 daily."KeyStats_forwardEps",
                 master_data."KeyStats_forwardEps"
             ) as "KeyStats_forwardEps",
-		coalesce(
+			coalesce(
                 daily."KeyStats_lastSplitFactor",
                 master_data."KeyStats_lastSplitFactor"
             ) as "KeyStats_lastSplitFactor",
-		coalesce(
+			coalesce(
                 daily."KeyStats_lastSplitDate",
                 master_data."KeyStats_lastSplitDate"
             ) as "KeyStats_lastSplitDate",
-		coalesce(
+			coalesce(
                 daily."KeyStats_enterpriseToRevenue",
                 master_data."KeyStats_enterpriseToRevenue"
             ) as "KeyStats_enterpriseToRevenue",
-		coalesce(
+			coalesce(
                 daily."KeyStats_enterpriseToEbitda",
                 master_data."KeyStats_enterpriseToEbitda"
             ) as "KeyStats_enterpriseToEbitda",
-		coalesce(
+			coalesce(
                 daily."KeyStats_52WeekChange",
                 master_data."KeyStats_52WeekChange"
             ) as "KeyStats_52WeekChange",
-		coalesce(
+			coalesce(
                 daily."KeyStats_SandP52WeekChange",
                 master_data."KeyStats_SandP52WeekChange"
             ) as "KeyStats_SandP52WeekChange",
-		coalesce(
+			coalesce(
                 daily."KeyStats_lastDividendValue",
                 master_data."KeyStats_lastDividendValue"
             ) as "KeyStats_lastDividendValue",
-		coalesce(
+			coalesce(
                 daily."KeyStats_lastDividendDate",
                 master_data."KeyStats_lastDividendDate"
             ) as "KeyStats_lastDividendDate",
-		coalesce(
+			coalesce(
                 daily."KeyStats_latestShareClass",
                 master_data."KeyStats_latestShareClass"
             ) as "KeyStats_latestShareClass",
-		coalesce(
+			coalesce(
                 daily."KeyStats_leadInvestor",
                 master_data."KeyStats_leadInvestor"
             ) as "KeyStats_leadInvestor",
-		coalesce(
+			coalesce(
                 daily."Forward_EPS_Growth_Percent",
                 master_data."Forward_EPS_Growth_Percent"
             ) as "Forward_EPS_Growth_Percent",
-		coalesce(
+			coalesce(
                 daily."Summary_maxAge",
                 master_data."Summary_maxAge"
             ) as "Summary_maxAge",
-		coalesce(
+			coalesce(
                 daily."Summary_priceHint",
                 master_data."Summary_priceHint"
             ) as "Summary_priceHint",
-		coalesce(
+			coalesce(
                 daily."Summary_previousClose",
                 master_data."Summary_previousClose"
             ) as "Summary_previousClose",
-		coalesce(
+			coalesce(
                 daily."Summary_open",
                 master_data."Summary_open"
             ) as "Summary_open",
-		coalesce(
+			coalesce(
                 daily."Summary_dayLow",
                 master_data."Summary_dayLow"
             ) as "Summary_dayLow",
-		coalesce(
+			coalesce(
                 daily."Summary_dayHigh",
                 master_data."Summary_dayHigh"
             ) as "Summary_dayHigh",
-		coalesce(
+			coalesce(
                 daily."Summary_regularMarketPreviousClose",
                 master_data."Summary_regularMarketPreviousClose"
             ) as "Summary_regularMarketPreviousClose",
-		coalesce(
+			coalesce(
                 daily."Summary_regularMarketOpen",
                 master_data."Summary_regularMarketOpen"
             ) as "Summary_regularMarketOpen",
-		coalesce(
+			coalesce(
                 daily."Summary_regularMarketDayLow",
                 master_data."Summary_regularMarketDayLow"
             ) as "Summary_regularMarketDayLow",
-		coalesce(
+			coalesce(
                 daily."Summary_regularMarketDayHigh",
                 master_data."Summary_regularMarketDayHigh"
             ) as "Summary_regularMarketDayHigh",
-		coalesce(
+			coalesce(
                 daily."Summary_dividendRate",
                 master_data."Summary_dividendRate"
             ) as "Summary_dividendRate",
-		coalesce(
+			coalesce(
                 daily."Summary_dividendYield",
                 master_data."Summary_dividendYield"
             ) as "Summary_dividendYield",
-		coalesce(
+			coalesce(
                 daily."Summary_exDividendDate",
                 master_data."Summary_exDividendDate"
             ) as "Summary_exDividendDate",
-		coalesce(
+			coalesce(
                 daily."Summary_payoutRatio",
                 master_data."Summary_payoutRatio"
             ) as "Summary_payoutRatio",
-		coalesce(
+			coalesce(
                 daily."Summary_fiveYearAvgDividendYield",
                 master_data."Summary_fiveYearAvgDividendYield"
             ) as "Summary_fiveYearAvgDividendYield",
-		coalesce(
+			coalesce(
                 daily."Summary_beta",
                 master_data."Summary_beta"
             ) as "Summary_beta",
-		coalesce(
+			coalesce(
                 daily."Summary_trailingPE",
                 master_data."Summary_trailingPE"
             ) as "Summary_trailingPE",
-		coalesce(
+			coalesce(
                 daily."Summary_forwardPE",
                 master_data."Summary_forwardPE"
             ) as "Summary_forwardPE",
-		coalesce(
+			coalesce(
                 daily."Summary_volume",
                 master_data."Summary_volume"
             ) as "Summary_volume",
-		coalesce(
+			coalesce(
                 daily."Summary_regularMarketVolume",
                 master_data."Summary_regularMarketVolume"
             ) as "Summary_regularMarketVolume",
-		coalesce(
+			coalesce(
                 daily."Summary_averageVolume",
                 master_data."Summary_averageVolume"
             ) as "Summary_averageVolume",
-		coalesce(
+			coalesce(
                 daily."Summary_averageVolume10days",
                 master_data."Summary_averageVolume10days"
             ) as "Summary_averageVolume10days",
-		coalesce(
+			coalesce(
                 daily."Summary_averageDailyVolume10Day",
                 master_data."Summary_averageDailyVolume10Day"
             ) as "Summary_averageDailyVolume10Day",
-		coalesce(
+			coalesce(
                 daily."Summary_bid",
                 master_data."Summary_bid"
             ) as "Summary_bid",
-		coalesce(
+			coalesce(
                 daily."Summary_ask",
                 master_data."Summary_ask"
             ) as "Summary_ask",
-		coalesce(
+			coalesce(
                 daily."Summary_bidSize",
                 master_data."Summary_bidSize"
             ) as "Summary_bidSize",
-		coalesce(
+			coalesce(
                 daily."Summary_askSize",
                 master_data."Summary_askSize"
             ) as "Summary_askSize",
-		coalesce(
+			coalesce(
                 daily."Summary_marketCap",
                 master_data."Summary_marketCap"
             ) as "Summary_marketCap",
-		coalesce(
+			coalesce(
                 daily."Summary_fiftyTwoWeekLow",
                 master_data."Summary_fiftyTwoWeekLow"
             ) as "Summary_fiftyTwoWeekLow",
-		coalesce(
+			coalesce(
                 daily."Summary_fiftyTwoWeekHigh",
                 master_data."Summary_fiftyTwoWeekHigh"
             ) as "Summary_fiftyTwoWeekHigh",
-		coalesce(
+			coalesce(
                 daily."Summary_allTimeHigh",
                 master_data."Summary_allTimeHigh"
             ) as "Summary_allTimeHigh",
-		coalesce(
+			coalesce(
                 daily."Summary_allTimeLow",
                 master_data."Summary_allTimeLow"
             ) as "Summary_allTimeLow",
-		coalesce(
+			coalesce(
                 daily."Summary_priceToSalesTrailing12Months",
                 master_data."Summary_priceToSalesTrailing12Months"
             ) as "Summary_priceToSalesTrailing12Months",
-		coalesce(
+			coalesce(
                 daily."Summary_fiftyDayAverage",
                 master_data."Summary_fiftyDayAverage"
             ) as "Summary_fiftyDayAverage",
-		coalesce(
+			coalesce(
                 daily."Summary_twoHundredDayAverage",
                 master_data."Summary_twoHundredDayAverage"
             ) as "Summary_twoHundredDayAverage",
-		coalesce(
+			coalesce(
                 daily."Summary_trailingAnnualDividendRate",
                 master_data."Summary_trailingAnnualDividendRate"
             ) as "Summary_trailingAnnualDividendRate",
-		coalesce(
+			coalesce(
                 daily."Summary_trailingAnnualDividendYield",
                 master_data."Summary_trailingAnnualDividendYield"
             ) as "Summary_trailingAnnualDividendYield",
-		coalesce(
+			coalesce(
                 daily."Summary_currency",
                 master_data."Summary_currency"
             ) as "Summary_currency",
-		coalesce(
+			coalesce(
                 daily."Summary_fromCurrency",
                 master_data."Summary_fromCurrency"
             ) as "Summary_fromCurrency",
-		coalesce(
+			coalesce(
                 daily."Summary_toCurrency",
                 master_data."Summary_toCurrency"
             ) as "Summary_toCurrency",
-		coalesce(
+			coalesce(
                 daily."Summary_lastMarket",
                 master_data."Summary_lastMarket"
             ) as "Summary_lastMarket",
-		coalesce(
+			coalesce(
                 daily."Summary_coinMarketCapLink",
                 master_data."Summary_coinMarketCapLink"
             ) as "Summary_coinMarketCapLink",
-		coalesce(
+			coalesce(
                 daily."Summary_algorithm",
                 master_data."Summary_algorithm"
             ) as "Summary_algorithm",
-		coalesce(
+			coalesce(
                 daily."Summary_tradeable",
                 master_data."Summary_tradeable"
             ) as "Summary_tradeable",
-		coalesce(
+			coalesce(
                 daily."FinData_maxAge",
                 master_data."FinData_maxAge"
             ) as "FinData_maxAge",
-		coalesce(
+			coalesce(
                 daily."FinData_currentPrice",
                 master_data."FinData_currentPrice"
             ) as "FinData_currentPrice",
-		coalesce(
+			coalesce(
                 daily."FinData_targetHighPrice",
                 master_data."FinData_targetHighPrice"
             ) as "FinData_targetHighPrice",
-		coalesce(
+			coalesce(
                 daily."FinData_targetLowPrice",
                 master_data."FinData_targetLowPrice"
             ) as "FinData_targetLowPrice",
-		coalesce(
+			coalesce(
                 daily."FinData_targetMeanPrice",
                 master_data."FinData_targetMeanPrice"
             ) as "FinData_targetMeanPrice",
-		coalesce(
+			coalesce(
                 daily."FinData_targetMedianPrice",
                 master_data."FinData_targetMedianPrice"
             ) as "FinData_targetMedianPrice",
-		coalesce(
+			coalesce(
                 daily."FinData_recommendationMean",
                 master_data."FinData_recommendationMean"
             ) as "FinData_recommendationMean",
-		coalesce(
+			coalesce(
                 daily."FinData_recommendationKey",
                 master_data."FinData_recommendationKey"
             ) as "FinData_recommendationKey",
-		coalesce(
+			coalesce(
                 daily."FinData_numberOfAnalystOpinions",
                 master_data."FinData_numberOfAnalystOpinions"
             ) as "FinData_numberOfAnalystOpinions",
-		coalesce(
+			coalesce(
                 daily."FinData_totalCash",
                 master_data."FinData_totalCash"
             ) as "FinData_totalCash",
-		coalesce(
+			coalesce(
                 daily."FinData_totalCashPerShare",
                 master_data."FinData_totalCashPerShare"
             ) as "FinData_totalCashPerShare",
-		coalesce(
+			coalesce(
                 daily."FinData_ebitda",
                 master_data."FinData_ebitda"
             ) as "FinData_ebitda",
-		coalesce(
+			coalesce(
                 daily."FinData_totalDebt",
                 master_data."FinData_totalDebt"
             ) as "FinData_totalDebt",
-		coalesce(
+			coalesce(
                 daily."FinData_quickRatio",
                 master_data."FinData_quickRatio"
             ) as "FinData_quickRatio",
-		coalesce(
+			coalesce(
                 daily."FinData_currentRatio",
                 master_data."FinData_currentRatio"
             ) as "FinData_currentRatio",
-		coalesce(
+			coalesce(
                 daily."FinData_totalRevenue",
                 master_data."FinData_totalRevenue"
             ) as "FinData_totalRevenue",
-		coalesce(
+			coalesce(
                 daily."FinData_debtToEquity",
                 master_data."FinData_debtToEquity"
             ) as "FinData_debtToEquity",
-		coalesce(
+			coalesce(
                 daily."FinData_revenuePerShare",
                 master_data."FinData_revenuePerShare"
             ) as "FinData_revenuePerShare",
-		coalesce(
+			coalesce(
                 daily."FinData_returnOnAssets",
                 master_data."FinData_returnOnAssets"
             ) as "FinData_returnOnAssets",
-		coalesce(
+			coalesce(
                 daily."FinData_returnOnEquity",
                 master_data."FinData_returnOnEquity"
             ) as "FinData_returnOnEquity",
-		coalesce(
+			coalesce(
                 daily."FinData_grossProfits",
                 master_data."FinData_grossProfits"
             ) as "FinData_grossProfits",
-		coalesce(
+			coalesce(
                 daily."FinData_freeCashflow",
                 master_data."FinData_freeCashflow"
             ) as "FinData_freeCashflow",
-		coalesce(
+			coalesce(
                 daily."FinData_operatingCashflow",
                 master_data."FinData_operatingCashflow"
             ) as "FinData_operatingCashflow",
-		coalesce(
+			coalesce(
                 daily."FinData_earningsGrowth",
                 master_data."FinData_earningsGrowth"
             ) as "FinData_earningsGrowth",
-		coalesce(
+			coalesce(
                 daily."FinData_revenueGrowth",
                 master_data."FinData_revenueGrowth"
             ) as "FinData_revenueGrowth",
-		coalesce(
+			coalesce(
                 daily."FinData_grossMargins",
                 master_data."FinData_grossMargins"
             ) as "FinData_grossMargins",
-		coalesce(
+			coalesce(
                 daily."FinData_ebitdaMargins",
                 master_data."FinData_ebitdaMargins"
             ) as "FinData_ebitdaMargins",
-		coalesce(
+			coalesce(
                 daily."FinData_operatingMargins",
                 master_data."FinData_operatingMargins"
             ) as "FinData_operatingMargins",
-		coalesce(
+			coalesce(
                 daily."FinData_profitMargins",
                 master_data."FinData_profitMargins"
             ) as "FinData_profitMargins",
-		coalesce(
+			coalesce(
                 daily."FinData_financialCurrency",
                 master_data."FinData_financialCurrency"
             ) as "FinData_financialCurrency",
-		coalesce(
+			coalesce(
                 daily."KeyStats_ytdReturn",
                 master_data."KeyStats_ytdReturn"
             ) as "KeyStats_ytdReturn",
-		coalesce(
+			coalesce(
                 daily."KeyStats_beta3Year",
                 master_data."KeyStats_beta3Year"
             ) as "KeyStats_beta3Year",
-		coalesce(
+			coalesce(
                 daily."KeyStats_totalAssets",
                 master_data."KeyStats_totalAssets"
             ) as "KeyStats_totalAssets",
-		coalesce(
+			coalesce(
                 daily."KeyStats_yield",
                 master_data."KeyStats_yield"
             ) as "KeyStats_yield",
-		coalesce(
+			coalesce(
                 daily."KeyStats_fundInceptionDate",
                 master_data."KeyStats_fundInceptionDate"
             ) as "KeyStats_fundInceptionDate",
-		coalesce(
+			coalesce(
                 daily."KeyStats_threeYearAverageReturn",
                 master_data."KeyStats_threeYearAverageReturn"
             ) as "KeyStats_threeYearAverageReturn",
-		coalesce(
+			coalesce(
                 daily."KeyStats_fiveYearAverageReturn",
                 master_data."KeyStats_fiveYearAverageReturn"
             ) as "KeyStats_fiveYearAverageReturn",
-		coalesce(
+			coalesce(
                 daily."Summary_yield",
                 master_data."Summary_yield"
             ) as "Summary_yield",
-		coalesce(
+			coalesce(
                 daily."Summary_totalAssets",
                 master_data."Summary_totalAssets"
             ) as "Summary_totalAssets",
-		coalesce(
+			coalesce(
                 daily."Summary_navPrice",
                 master_data."Summary_navPrice"
             ) as "Summary_navPrice",
-		coalesce(
+			coalesce(
                 daily."ReceiptsfromGovernmentGrants",
                 master_data."ReceiptsfromGovernmentGrants"
             ) as "ReceiptsfromGovernmentGrants",
-		coalesce(
+			coalesce(
                 daily."DividendsPaidDirect",
                 master_data."DividendsPaidDirect"
             ) as "DividendsPaidDirect",
-		coalesce(
+			coalesce(
                 daily."DividendsReceivedDirect",
                 master_data."DividendsReceivedDirect"
             ) as "DividendsReceivedDirect",
-		coalesce(
+			coalesce(
                 daily."Summary_openInterest",
                 master_data."Summary_openInterest"
             ) as "Summary_openInterest",
-		coalesce(
+			coalesce(
                 daily."Summary_ytdReturn",
                 master_data."Summary_ytdReturn"
             ) as "Summary_ytdReturn",
-		coalesce(
+			coalesce(
                 daily."KeyStats_lastCapGain",
                 master_data."KeyStats_lastCapGain"
             ) as "KeyStats_lastCapGain",
-		coalesce(
+			coalesce(
                 daily."KeyStats_morningStarRiskRating",
                 master_data."KeyStats_morningStarRiskRating"
             ) as "KeyStats_morningStarRiskRating",
-		coalesce(
+			coalesce(
                 daily."KeyStats_morningStarOverallRating",
                 master_data."KeyStats_morningStarOverallRating"
             ) as "KeyStats_morningStarOverallRating",
-		coalesce(
+			coalesce(
                 daily."KeyStats_annualReportExpenseRatio",
                 master_data."KeyStats_annualReportExpenseRatio"
             ) as "KeyStats_annualReportExpenseRatio",
-		coalesce(
+			coalesce(
                 daily."KeyStats_annualHoldingsTurnover",
                 master_data."KeyStats_annualHoldingsTurnover"
             ) as "KeyStats_annualHoldingsTurnover"
