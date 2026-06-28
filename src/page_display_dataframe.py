@@ -318,15 +318,8 @@ def page_display_dataframe(
                 format="%.2f"
             )
 
-    # Apply styling: alternating row backgrounds
-    styled_df = df_to_display.style.apply(
-        lambda x: ['background-color: #1e1e1e' if i % 2 == 0 else 'background-color: #2a2a2a'
-                   for i in range(len(x))],
-        axis=0
-    )
-
-    # Color negative numbers red
-    styled_df = styled_df.map(
+    # Apply styling: color negative numbers red
+    styled_df = df_to_display.style.map(
         lambda val: 'color: #ff4444' if isinstance(val, (int, float)) and val < 0 else '',
         subset=df_to_display.select_dtypes(include=['number']).columns
     )

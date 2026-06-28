@@ -1116,7 +1116,7 @@
     b."target-close$",
     b."target-close%",
         CASE
-            WHEN (a.days_to_expiration >= 0) THEN round((((b.live_stock_price * a.implied_volatility) * (sqrt(((a.days_to_expiration)::numeric / 365.0)))::double precision))::numeric, 2)
+            WHEN (a.expiration_date >= p_target_date) THEN round((((b.live_stock_price * a.implied_volatility) * (sqrt(((a.days_to_expiration)::numeric / 365.0)))::double precision))::numeric, 2)
             ELSE NULL::numeric
         END AS expected_move,
     round((

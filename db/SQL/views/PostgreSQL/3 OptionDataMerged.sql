@@ -574,7 +574,7 @@ SELECT
 
 	-- Additional calculated fields
     CASE
-		WHEN a.days_to_expiration >= 0 THEN
+		WHEN a.expiration_date >= CURRENT_DATE THEN
 			ROUND((b.live_stock_price * a.implied_volatility * sqrt(a.days_to_expiration / 365.0))::numeric, 2)
 		ELSE NULL
 	END as expected_move,

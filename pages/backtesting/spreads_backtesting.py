@@ -125,6 +125,42 @@ def display_spreads_backtesting(selected_date, selected_row):
                 entry_buy_price = float(selected_row['buy_last_option_price'])
                 entry_stock_price = float(selected_row['close'])
 
+                # --- NEU: Optionale manuelle Preiskorrektur ---
+                st.markdown("### 🛠️ Echte Ausführungskurse (Optional)")
+                override_prices = st.checkbox(
+                    "Tatsächliche Ausführungspreise (Fills) manuell eintragen", 
+                    value=False,
+                    help="Aktiviere dies, um die historischen Kurse durch deine realen Kauf-/Verkaufspreise zu ersetzen."
+                )
+
+                if override_prices:
+                    # Platzsparende Spalten für Einstieg und Ausstieg
+                    edit_cols = st.columns(2)
+                    
+                    with edit_cols[0]:
+                        st.caption("🛫 Realer Einstieg (Credit)")
+                        entry_sell_price = st.number_input(
+                            "Short Put Verkaufspreis ($)", 
+                            min_value=0.0, value=entry_sell_price, step=0.01, format="%.2f"
+                        )
+                        entry_buy_price = st.number_input(
+                            "Long Put Kaufpreis ($)", 
+                            min_value=0.0, value=entry_buy_price, step=0.01, format="%.2f"
+                        )
+                        
+                    with edit_cols[1]:
+                        st.caption("🛬 Realer Ausstieg (Debit)")
+                        exit_sell_price = st.number_input(
+                            "Short Put Rückkaufpreis ($)", 
+                            min_value=0.0, value=exit_sell_price, step=0.01, format="%.2f"
+                        )
+                        exit_buy_price = st.number_input(
+                            "Long Put Verkaufspreis ($)", 
+                            min_value=0.0, value=exit_buy_price, step=0.01, format="%.2f"
+                        )
+                    st.markdown("---")
+                # --- Ende der Neuerung ---
+
                 strike_sell = float(selected_row['sell_strike'])
                 strike_buy = float(selected_row['buy_strike'])
                 spread_width = abs(strike_sell - strike_buy)
@@ -216,8 +252,8 @@ def display_spreads_backtesting(selected_date, selected_row):
                 sell_option_date_range_df = sell_option_date_range_future.result()
                 buy_option_date_range_df = buy_option_date_range_future.result()
                 stock_date_range_df = stock_date_range_future.result()
-            logger.info(f"Option data points {len(sell_option_date_range_df)}")
-            logger.info(f"Stock data points {len(stock_date_range_df)}")
+                logger.info(f"Option data points {len(sell_option_date_range_df)}")
+                logger.info(f"Stock data points {len(stock_date_range_df)}")
 
 
 

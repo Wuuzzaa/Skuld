@@ -71,9 +71,9 @@ def display_strategy_details(
                 bs_val = float(row['BS Price'])
                 price_val = float(row['Price'])
                 if price_val > bs_val:
-                    styles[bs_idx] = 'color: #2ecc71'  # green
+                    styles[bs_idx] = 'background-color: #90EE90; color: #000000; font-weight: bold'  # light green background with black text
                 else:
-                    styles[bs_idx] = 'color: #e74c3c'  # red
+                    styles[bs_idx] = 'background-color: #FFB6B6; color: #000000; font-weight: bold'  # light red background with black text
             except (ValueError, TypeError):
                 pass
         return styles
