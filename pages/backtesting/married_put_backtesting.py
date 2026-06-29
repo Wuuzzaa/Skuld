@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 import streamlit as st
@@ -8,6 +9,7 @@ import sys
 import os
 
 from config import PATH_DATABASE_QUERY_FOLDER
+from src.data_aging import is_weekend
 from src.historization import select_timetravel_into_dataframe
 from src.logger_config import setup_logging
 from src.page_display_dataframe import page_display_dataframe
@@ -66,34 +68,73 @@ def get_dividends_between_dates(symbol, from_date, to_date):
 @st.cache_data(ttl=300)
 def get_married_put_stock_range(symbol, from_date, to_date):
     """Holt die tagesgenauen historischen Aktienkurse für den Chart"""
-    sql = """
-        SELECT date, symbol, close
-        FROM "StockPricesYahooHistory"
-        WHERE symbol = :symbol
-        AND date BETWEEN :from_date AND :to_date
-    """
+    if str(to_date) == str(time.strftime("%Y-%m-%d", time.gmtime())) and is_weekend():
+        sql = """
+            SELECT date, symbol, close
+            FROM "StockPricesYahooHistory"
+            WHERE symbol = :symbol
+            AND date BETWEEN :from_date AND :to_date
+            AND date <> CURRENT_DATE
+            UNION ALL
+            SELECT date, symbol, close
+            FROM "StockPricesYahoo"
+            WHERE symbol = :symbol
+        """
+    else:
+             sql = """
+            SELECT date, symbol, close
+            FROM "StockPricesYahooHistory"
+            WHERE symbol = :symbol
+            AND date BETWEEN :from_date AND :to_date
+        """
     return select_into_dataframe(query=sql, params={"symbol": symbol, "from_date": from_date, "to_date": to_date})
 
 @st.cache_data(ttl=300)
 def get_married_put_option_range(option_osi, from_date, to_date):
     """Holt die tagesgenauen historischen Optionspreise für den Chart"""
-    sql = """
-        SELECT date, option_osi, day_close AS premium_option_price
-        FROM "OptionDataMassiveHistory"
-        WHERE option_osi = :option_osi
-        AND date BETWEEN :from_date AND :to_date
-    """
+    if str(to_date) == str(time.strftime("%Y-%m-%d", time.gmtime())) and is_weekend():
+        sql = """
+            SELECT date, option_osi, day_close AS premium_option_price
+            FROM "OptionDataMassiveHistory"
+            WHERE option_osi = :option_osi
+            AND date BETWEEN :from_date AND :to_date
+            AND date <> CURRENT_DATE
+            UNION ALL
+            SELECT date, option_osi, day_close AS premium_option_price
+            FROM "OptionDataMassiveHistory"
+            WHERE option_osi = :option_osi
+        """
+    else:
+            sql = """
+            SELECT date, option_osi, day_close AS premium_option_price
+            FROM "OptionDataMassiveHistory"
+            WHERE option_osi = :option_osi
+            AND date BETWEEN :from_date AND :to_date
+        """
     return select_into_dataframe(query=sql, params={"option_osi": option_osi, "from_date": from_date, "to_date": to_date})
 
 @st.cache_data(ttl=300)
 def get_married_put_earnings_date_range(symbol, from_date, to_date):
     """Holt die Earningsdates für den Chart"""
-    sql = """
-        SELECT DISTINCT 
-        FROM "StockPricesYahooHistory"
-        WHERE symbol = :symbol
-        AND date BETWEEN :from_date AND :to_date
-    """
+    if str(to_date) == str(time.strftime("%Y-%m-%d", time.gmtime())) and is_weekend():
+        sql = """
+            SELECT DISTINCT 
+            FROM "StockPricesYahooHistory"
+            WHERE symbol = :symbol
+            AND date BETWEEN :from_date AND :to_date
+            AND date <> CURRENT_DATE
+            UNION ALL
+            SELECT DISTINCT 
+            FROM "StockPricesYahoo"
+            WHERE symbol = :symbol
+        """
+    else:
+        sql = """
+            SELECT DISTINCT 
+            FROM "StockPricesYahooHistory"
+            WHERE symbol = :symbol
+            AND date BETWEEN :from_date AND :to_date
+        """
     return select_into_dataframe(query=sql, params={"symbol": symbol, "from_date": from_date, "to_date": to_date})
 
 def parse_date(value):

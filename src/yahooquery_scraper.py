@@ -201,8 +201,12 @@ class YahooQueryScraper:
                     if df is not None and not df.empty:
                         # symbol expiration_date and option-type from index to column
                         df = df.reset_index()
-                        df['dividends'] = df['dividends'].replace(0, np.nan)
-                        df['splits'] = df['splits'].replace(0, np.nan)
+                        cols_cleanup = ['dividends', 'splits']
+                        for col in cols_cleanup:
+                            if col in df.columns:
+                                df[col] = df[col].replace(0, np.nan)
+                            else:
+                                logger.warning(f"No column '{col}' in dataframe")
                         found_data = True
                         logger.info(f"SUCCESS: {len(df)} historical prices found")
                         yield df
@@ -210,7 +214,8 @@ class YahooQueryScraper:
                         logger.warning(f"WARNING: No historical prices available")
 
                 except Exception as e:
-                    logger.error(f"ERROR: Error fetching historical prices - {str(e)}")
+                    logger.error(f"Error fetching historical prices - {str(e)}")
+                    logger.error(e)
                     logger.error(f"{attempt} failed -> Retry after 10s")
                     time.sleep(10)
                 else:
@@ -251,7 +256,8 @@ def _get_ticker_batches(symbols, batch_size, retries, asynchronous=False):
         try:
             ticker_batches = [Ticker(symbol_batch, progress=True, asynchronous=asynchronous) for symbol_batch in local_symbol_batches]
         except Exception as e:
-                logger.error(f"ERROR: Error fetching historical prices - {str(e)}")
+                logger.error(f"Error fetching historical prices - {str(e)}")
+                logger.error(e)
                 logger.error(f"{attempt} failed -> Retry after 10s")
                 time.sleep(10)
         else:
