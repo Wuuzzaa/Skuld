@@ -119,7 +119,7 @@ def main(args):
                 ("Historical Volatility", calculate_and_store_stock_historical_volatility_history, ()),
             ],
             "historical_dividend_classification": [
-                ("Historical Volatility", calculate_dividend_classification_history_full, ()),
+                ("Historical Volatility", calculate_dividend_classification_history, ()),
             ],
         }
 
