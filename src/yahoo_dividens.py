@@ -29,14 +29,14 @@ def calculate_dividend_classification():
 def calculate_dividend_classification_history():
     logger.info("Calculation Yahoo Dividend Classification")
 
-    min_timestamp_select = f'SELECT MIN(date) as min_date FROM "{TABLE_DIVIDEND_DATA_YAHOO}History"'
-    df = select_into_dataframe(min_timestamp_select)
-    if len(df) > 0:
-        min_date = df.iloc[0]["min_date"]
-    else:
-        min_date = '2099-01-01'
+    # min_timestamp_select = f'SELECT MIN(date) as min_date FROM "{TABLE_DIVIDEND_DATA_YAHOO}History"'
+    # df = select_into_dataframe(min_timestamp_select)
+    # if df and len(df) > 0:
+    #     min_date = df.iloc[0]["min_date"]
+    # else:
+    #     min_date = '2099-01-01'
 
-    history_dates = select_into_dataframe('SELECT date from "DatesHistory" WHERE date < :min_date  ORDER BY date desc LIMIT 50', params={"min_date": min_date})
+    history_dates = select_into_dataframe(f'SELECT date from "DatesHistory" as dates WHERE NOT EXISTS (SELECT 1 FROM "{TABLE_DIVIDEND_DATA_YAHOO}History" as hist WHERE dates.date = hist.date) ORDER BY date desc LIMIT 50')
 
     iteration = 1
     for time_travel_date in history_dates["date"]:
@@ -61,6 +61,7 @@ def calculate_dividend_classification_history_full():
 
     history_dates = select_into_dataframe('SELECT date from "DatesHistory" ORDER BY date desc')
 
+    truncate_table(connection, f"{TABLE_DIVIDEND_DATA_YAHOO}HistoryDaily")
     iteration = 1
     for time_travel_date in history_dates["date"]:
         logger.info(f"Date {time_travel_date} ({iteration} of {len(history_dates)}")
@@ -69,7 +70,6 @@ def calculate_dividend_classification_history_full():
     
         # --- Database Persistence ---
         with get_postgres_engine().begin() as connection:
-            truncate_table(connection, f"{TABLE_DIVIDEND_DATA_YAHOO}HistoryDaily")
             insert_into_table(
                 connection,
                 table_name=f"{TABLE_DIVIDEND_DATA_YAHOO}HistoryDaily",

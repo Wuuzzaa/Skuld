@@ -151,10 +151,16 @@ def insert_into_master_data_table(source_table):
     pg_engine = get_postgres_engine()
     if pg_engine:
         pg_sql = f"""
-            INSERT INTO "{history_table}" as hist ({key_column_names_str}, {data_column_names_str})
-            SELECT {key_column_names_str}, {data_column_names_str}
+            INSERT INTO "{history_table}" as hist (from_date, to_date, {key_column_names_str}, {data_column_names_str})
+            SELECT 
+            (SELECT MIN(date) FROM "DatesHistory") as from_date,
+	        CURRENT_DATE to_date,
+            {key_column_names_str}, 
+            {data_column_names_str}
             FROM "{source_table}"
             ON CONFLICT({key_column_names_str}) DO UPDATE SET
+            from_date = CASE WHEN HIST.from_date IS NULL THEN EXCLUDED.from_date ELSE HIST.from_date END,
+            to_date = CASE WHEN HIST.to_date IS NULL THEN EXCLUDED.to_date ELSE HIST.to_date END,
             {update_clause}
             WHERE {where_clause}
         """
