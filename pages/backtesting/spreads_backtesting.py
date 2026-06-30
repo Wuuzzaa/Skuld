@@ -26,29 +26,63 @@ def parse_date(value):
 
 
 @st.cache_data(ttl=300)
-def get_option_data_at_date(option_osi, selected_date):
-    sql = """
-        SELECT
-            option_osi,
-            symbol,
-            contract_type,
-            expiration_date,
-            strike_price,
-            premium_option_price,
-            shares_per_contract,
-            LIVE_STOCK_PRICE AS close
-        FROM "OptionDataMerged"
-        WHERE option_osi = :option_osi
-    """
-    return select_timetravel_into_dataframe(
-        date=selected_date,
+def get_option_data_at_date(option_osi, symbol, selected_date):
+    if str(selected_date) == str(time.strftime("%Y-%m-%d", time.gmtime())) and not is_weekend():
+        sql = f"""
+            SELECT
+                a.option_osi,
+                a.symbol,
+                a.contract_type,
+                a.expiration_date,
+                a.strike_price,
+                a.day_close AS premium_option_price,
+                a.shares_per_contract,
+                b.close
+            FROM "OptionDataMassiveHistory" AS a
+            INNER JOIN "StockPricesYahooHistory" AS b
+            ON a.date = b.date AND a.symbol = b.symbol
+            WHERE a.option_osi = :option_osi
+            AND a.symbol = :symbol
+            AND b.symbol = :symbol
+            AND a.date BETWEEN '{selected_date}'::date - INTERVAL '1 week' AND '{selected_date}'::date
+            AND b.date BETWEEN '{selected_date}'::date - INTERVAL '1 week' AND '{selected_date}'::date
+            ORDER BY a.date DESC
+            LIMIT 1
+        """
+    else:
+        sql = f"""
+            SELECT
+                a.option_osi,
+                a.symbol,
+                a.contract_type,
+                a.expiration_date,
+                a.strike_price,
+                a.day_close AS premium_option_price,
+                a.shares_per_contract,
+                b.close
+            FROM (
+                SELECT * FROM "OptionDataMassiveHistory"
+                UNION ALL
+                SELECT CURRENT_DATE AS date, * FROM "OptionDataMassive"
+            ) AS a
+            INNER JOIN "StockPricesYahooHistory" AS b
+            ON a.date = b.date AND a.symbol = b.symbol
+            WHERE a.option_osi = :option_osi
+            AND a.symbol = :symbol
+            AND b.symbol = :symbol
+            AND a.date BETWEEN '{selected_date}'::date - INTERVAL '1 week' AND '{selected_date}'::date
+            AND b.date BETWEEN '{selected_date}'::date - INTERVAL '1 week' AND '{selected_date}'::date
+            ORDER BY a.date DESC
+            LIMIT 1
+        """
+    return select_into_dataframe(
         query=sql,
-        params={"option_osi": option_osi}
+        params={"option_osi": option_osi, "symbol": symbol}
     )
 
 @st.cache_data(ttl=300)
 def get_option_date_range(option_osi, from_date, to_date):
-    if str(to_date) == str(time.strftime("%Y-%m-%d", time.gmtime())) and is_weekend():
+    if str(to_date) == str(time.strftime("%Y-%m-%d", time.gmtime())) and not is_weekend():
       sql = """
             SELECT
                 date,
@@ -98,7 +132,7 @@ def get_option_date_range(option_osi, from_date, to_date):
 
 @st.cache_data(ttl=300)
 def get_stock_date_range(symbol, from_date, to_date):
-    if str(to_date) == str(time.strftime("%Y-%m-%d", time.gmtime())) and is_weekend():
+    if str(to_date) == str(time.strftime("%Y-%m-%d", time.gmtime())) and not is_weekend():
         sql = """
             SELECT
                 date,
@@ -110,7 +144,7 @@ def get_stock_date_range(symbol, from_date, to_date):
             AND date <> CURRENT_DATE
             UNION ALL
             SELECT
-                date,
+                CURRENT_DATE AS date,
                 symbol,
                 close
             FROM "StockPricesYahoo"
@@ -151,8 +185,8 @@ def display_spreads_backtesting(selected_date, selected_row):
         st.info("Wähle ein anderes Vergleichsdatum als das Einstiegdatum.")
     else:
         with ThreadPoolExecutor(max_workers=5) as executor:
-            sell_exit_future = executor.submit(get_option_data_at_date, selected_row['sell_option_osi'], compare_date)
-            buy_exit_future = executor.submit(get_option_data_at_date, selected_row['buy_option_osi'], compare_date)
+            sell_exit_future = executor.submit(get_option_data_at_date, selected_row['sell_option_osi'], selected_row['symbol'], compare_date)
+            buy_exit_future = executor.submit(get_option_data_at_date, selected_row['buy_option_osi'], selected_row['symbol'], compare_date)
             sell_option_date_range_future = executor.submit(get_option_date_range, selected_row['sell_option_osi'], selected_date, compare_date)
             buy_option_date_range_future = executor.submit(get_option_date_range, selected_row['buy_option_osi'], selected_date, compare_date)
             stock_date_range_future = executor.submit(get_stock_date_range, selected_row['symbol'], selected_date, compare_date)

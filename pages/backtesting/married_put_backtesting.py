@@ -21,28 +21,62 @@ logger = logging.getLogger(os.path.basename(__file__))
 
 @st.cache_data(ttl=300)
 def get_option_data_at_date(option_osi, selected_date):
-    sql = """
-        SELECT
-            premium_option_price
-        FROM "OptionData"
-        WHERE option_osi = :option_osi
-    """
-    return select_timetravel_into_dataframe(
-        date=selected_date,
+    if str(selected_date) == str(time.strftime("%Y-%m-%d", time.gmtime())) and not is_weekend():
+        sql = f"""
+            SELECT
+                day_close AS premium_option_price
+            FROM (
+                SELECT date, option_osi, day_close FROM "OptionDataMassiveHistory"
+                UNION ALL
+                SELECT CURRENT_DATE AS date, option_osi, day_close FROM "OptionDataMassive"
+            ) AS sub
+            WHERE option_osi = :option_osi
+            AND date <= '{selected_date}'::date
+            ORDER BY date DESC
+            LIMIT 1
+        """
+    else:
+        sql = f"""
+            SELECT
+                day_close AS premium_option_price
+            FROM "OptionDataMassiveHistory"
+            WHERE option_osi = :option_osi
+            AND date <= '{selected_date}'::date
+            ORDER BY date DESC
+            LIMIT 1
+        """
+    return select_into_dataframe(
         query=sql,
         params={"option_osi": option_osi}
     )
 
 @st.cache_data(ttl=300)
 def get_stock_data_at_date(symbol, selected_date):
-    sql = """
-        SELECT
-            close AS close_price
-        FROM "StockPricesYahoo"
-        WHERE symbol = :symbol
-    """
-    return select_timetravel_into_dataframe(
-        date=selected_date,
+    if str(selected_date) == str(time.strftime("%Y-%m-%d", time.gmtime())) and not is_weekend():
+        sql = f"""
+            SELECT
+                close AS close_price
+            FROM (
+                SELECT date, symbol, close FROM "StockPricesYahooHistory"
+                UNION ALL
+                SELECT CURRENT_DATE AS date, symbol, close FROM "StockPricesYahoo"
+            ) as sub
+            WHERE symbol = :symbol
+            AND date <= '{selected_date}'::date
+            ORDER BY date DESC
+            LIMIT 1
+        """
+    else:
+        sql = f"""
+            SELECT
+                close AS close_price
+            FROM "StockPricesYahooHistory"
+            WHERE symbol = :symbol
+            AND date <= '{selected_date}'::date
+            ORDER BY date DESC
+            LIMIT 1
+        """
+    return select_into_dataframe(
         query=sql,
         params={"symbol": symbol}
     )
@@ -68,7 +102,7 @@ def get_dividends_between_dates(symbol, from_date, to_date):
 @st.cache_data(ttl=300)
 def get_married_put_stock_range(symbol, from_date, to_date):
     """Holt die tagesgenauen historischen Aktienkurse für den Chart"""
-    if str(to_date) == str(time.strftime("%Y-%m-%d", time.gmtime())) and is_weekend():
+    if str(to_date) == str(time.strftime("%Y-%m-%d", time.gmtime())) and not is_weekend():
         sql = """
             SELECT date, symbol, close
             FROM "StockPricesYahooHistory"
@@ -76,7 +110,7 @@ def get_married_put_stock_range(symbol, from_date, to_date):
             AND date BETWEEN :from_date AND :to_date
             AND date <> CURRENT_DATE
             UNION ALL
-            SELECT date, symbol, close
+            SELECT CURRENT_DATE AS date, symbol, close
             FROM "StockPricesYahoo"
             WHERE symbol = :symbol
         """
@@ -92,7 +126,7 @@ def get_married_put_stock_range(symbol, from_date, to_date):
 @st.cache_data(ttl=300)
 def get_married_put_option_range(option_osi, from_date, to_date):
     """Holt die tagesgenauen historischen Optionspreise für den Chart"""
-    if str(to_date) == str(time.strftime("%Y-%m-%d", time.gmtime())) and is_weekend():
+    if str(to_date) == str(time.strftime("%Y-%m-%d", time.gmtime())) and not is_weekend():
         sql = """
             SELECT date, option_osi, day_close AS premium_option_price
             FROM "OptionDataMassiveHistory"
@@ -100,8 +134,8 @@ def get_married_put_option_range(option_osi, from_date, to_date):
             AND date BETWEEN :from_date AND :to_date
             AND date <> CURRENT_DATE
             UNION ALL
-            SELECT date, option_osi, day_close AS premium_option_price
-            FROM "OptionDataMassiveHistory"
+            SELECT CURRENT_DATE AS date, option_osi, day_close AS premium_option_price
+            FROM "OptionDataMassive"
             WHERE option_osi = :option_osi
         """
     else:
