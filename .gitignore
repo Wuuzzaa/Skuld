@@ -206,3 +206,4 @@ authelia/emails.txt
 
 # Uptime Kuma volume (created on first compose up; contains SQLite + secrets)
 uptime-kuma-data/
+/.junie/
