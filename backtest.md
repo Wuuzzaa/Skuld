@@ -315,6 +315,14 @@ Rollstrategien sind zustandsbehaftete Sub-Strategien, die einer Position zugeord
 ### 6.2 Eric Ludwig Default-Vorlage
 Diese Vorlage implementiert das 4-Phasen-Modell zur defensiven Verteidigung von (Short) Optionen.
 
+**Verfügbare Trigger-Variablen:**
+- `pos.delta_current`: Aktuelles Delta des/der Legs.
+- `pos.distance_to_strike_pct`: Abstand des Kurses zum Basispreis in %.
+- `pos.unrealized_pnl_pct`: Aktueller Gewinn/Verlust bezogen auf die Einstiegsprämie.
+- `pos.dte`: Verbleibende Tage bis zum Verfall.
+- `pos.roll_count`: Anzahl der bereits durchgeführten Rollvorgänge in der aktuellen Phase.
+- `snap.iv_rank`: Aktueller IV-Rank des Underlyings.
+
 **PHASE 1 – VERTIKAL (Basispreis-Optimierung):**
 - **Trigger:** [PLATZHALTER: z. B. Put im Geld bei X % / Delta > 0.60]
 - **Aktion:** Basispreis nach unten anpassen (gleiche oder ähnliche Laufzeit)
@@ -394,9 +402,11 @@ class EricLudwigStrategy(RollStrategy):
 
 ## 7. Execution-Layer
 
-### 7.1 Pricing
+### 7.1 Pricing & Timing
 
-Alle Orders werden als Market-Order zum Tagesschluss (`day_close`) gefüllt — EOD-Beschränkung.
+- **Timing:** Um **Look-Ahead Bias** zu vermeiden, sieht die Strategie am Tag $t$ zwar den Schlusskurs, Orders werden jedoch standardmäßig als **Market-on-Close (MOC)** simuliert. 
+- **Logik:** Die Strategie-Entscheidung basiert auf EOD-Daten von Tag $t$. Die Ausführung erfolgt zum Schlusskurs von Tag $t$. Dies ist legitim, da die meisten Broker MOC-Orders bis kurz vor Schluss annehmen. Alternativ kann in der Config auf "Next Day Open" umgestellt werden.
+- **Preisfindung:** Alle Orders werden zum Tagesschluss (`day_close`) gefüllt.
 
 ### 7.2 Slippage
 
@@ -422,9 +432,10 @@ CommissionConfig(
 )
 ```
 
-### 7.4 Margin
+### 7.4 Margin & Finanzierungskosten
 
-**V1: Reg-T (Regulation T).** Konkrete Berechnungsregeln je Position-Typ:
+**Margin (Reg-T):**
+Konkrete Berechnungsregeln je Position-Typ:
 
 | Position-Typ | Initial Margin |
 |---|---|
@@ -436,7 +447,12 @@ CommissionConfig(
 | Iron Condor | max(Call-Spread-Width, Put-Spread-Width) × 100 × Qty |
 | Long Stock auf Margin | 50% Initial / 25% Maintenance |
 
-**Margin-Call:** Maintenance-Verletzung → Engine schließt Position(en) automatisch (vereinfacht gegenüber realem Broker, der Anrufzeit gewähren würde).
+**Finanzierungskosten (V1):**
+- **Margin-Zinsen:** Bei negativer Cash-Bilanz (Long-Stock auf Margin) wird ein täglicher Zins belastet (Config: `margin_interest_rate`, z.B. 7% p.a.).
+- **Short Borrow Fees:** Beim Leerkauf von Aktien (Short Stock) wird eine tägliche Leihgebühr fällig (Config: `borrow_fee_default`, z.B. 1% p.a. oder symbol-spezifisch falls verfügbar).
+
+**Margin-Call:**
+Maintenance-Verletzung → Engine schließt Position(en) automatisch (vereinfacht gegenüber realem Broker, der Anrufzeit gewähren würde).
 
 **V2-Roadmap:** Portfolio Margin (risikobasiert).
 
@@ -492,7 +508,12 @@ src/backtesting/execution/
 
 **V2-Roadmap:** Postgres-Tabellen `BacktestRun`, `BacktestTrade`, `BacktestDaily` für queryable Persistenz.
 
-### 8.4 Komponenten
+### 8.4 Benchmark-Vergleich
+
+- **Logik:** Die Benchmark (Standard: SPY) wird als **Total Return** simuliert (inkl. Dividenden-Reinvestition), um eine faire Vergleichbarkeit zu Optionsstrategien zu gewährleisten.
+- **Berechnung:** Ein fiktives Portfolio startet mit demselben Kapital und kauft am Start-Datum die Benchmark zum Open-Kurs.
+
+### 8.5 Komponenten
 
 ```
 src/backtesting/results/
@@ -592,12 +613,13 @@ Externe Dependencies (alles bereits in Skuld):
 
 ---
 
-## 13. Offene Punkte für Implementation (nicht Design-Blocker, aber zu klären)
+## 13. Offene Punkte für Implementation
 
-1. **SQL Query Location & Encapsulation:** Alle SQL-Queries müssen in `Skuld/db/SQL/query/backtest` abgelegt werden. Eine saubere Kapselung ist zwingend erforderlich, um den Austausch der Datenquelle zu erleichtern.
-2. **Performance-Optimierung:** Algorithmen müssen so gestaltet sein, dass Backtests über typische Zeiträume in Sekunden durchlaufen.
-3. **Tatsächliche Daten-Historie messen.** `SELECT MIN(snapshot_date), MAX(snapshot_date) FROM "OptionDataMassiveHistoryDaily"` — sagt uns, wie weit Backtests zurückgehen können.
-4. **Performance der `getOptionDataMergedHistory(date)`-Funktion messen.** Falls zu langsam: eigene Bulk-Query schreiben.
-5. **Whitelist der Filter-Felder konkret festlegen** (Mapping „UI-Label → DB-Spalte → Kategorie").
-6. **Trading-Calendar-Quelle** — eigene Logik oder Bibliothek (z.B. `exchange_calendars`)?
-7. **Aktuelle Skuld-Symbol-Quelle für statisches Universum** in der UI: Tabelle/View identifizieren (heute nutzt `symbolpage.py` `OptionDataMerged` direkt).
+1. **SQL Query Location & Encapsulation:** Alle SQL-Queries müssen in `Skuld/db/SQL/query/backtest` abgelegt werden. Eine saubere Kapselung ist zwingend erforderlich.
+2. **Performance-Optimierung:** Um "Sekunden-Laufzeiten" zu erreichen, muss der `MarketSnapshot` im RAM als Hash-Map (Dict) organisiert sein, um O(1) Zugriff pro Symbol/Tag zu ermöglichen.
+3. **Tatsächliche Daten-Historie messen:** `SELECT MIN(snapshot_date), MAX(snapshot_date) FROM "OptionDataMassiveHistoryDaily"` — Bestimmt den verfügbaren Backtest-Zeitraum.
+4. **Performance der `getOptionDataMergedHistory(date)`-Funktion:** Diese muss für Bulk-Abfragen optimiert sein (Preloading).
+5. **Whitelist der Filter-Felder konkret festlegen:** Mapping „UI-Label → DB-Spalte → Kategorie“ (z.B. RSL, IV-Rank, Market Cap).
+6. **Trading-Calendar-Quelle:** Empfehlung: `exchange_calendars` (Python-Lib) zur korrekten Handhabung von US-Handelstagen.
+7. **Aktuelle Skuld-Symbol-Quelle:** Identifikation der Tabelle für das statische Universum (vermutlich `OptionDataMerged`).
+8. **Präzision der Finanzierungskosten:** Festlegung der Standard-Zinssätze für Margin und Borrow Fees in der `config.py`.
