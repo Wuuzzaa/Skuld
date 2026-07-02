@@ -217,6 +217,10 @@ def display_spreads_backtesting(selected_date, selected_row):
                     help="Aktiviere dies, um die historischen Kurse durch deine realen Kauf-/Verkaufspreise zu ersetzen."
                 )
 
+                # Variable für Gebühren standardmäßig auf 0.0 setzen
+                start_transaction_cost = 0.0
+                exit_transaction_cost = 0.0
+
                 if override_prices:
                     # Platzsparende Spalten für Einstieg und Ausstieg
                     edit_cols = st.columns(2)
@@ -231,6 +235,11 @@ def display_spreads_backtesting(selected_date, selected_row):
                             "Long Put Kaufpreis ($)", 
                             min_value=0.0, value=entry_buy_price, step=0.01, format="%.2f"
                         )
+                        start_transaction_cost = st.number_input(
+                            "Kauf Ordergebühren ($)", 
+                            min_value=0.0, value=0.0, step=0.50, format="%.2f",
+                            help="Trage hier die gesamten Gebühren (Einstieg für alle Kontrakte) ein."
+                        )
                         
                     with edit_cols[1]:
                         st.caption("🛬 Realer Ausstieg (Debit)")
@@ -242,6 +251,12 @@ def display_spreads_backtesting(selected_date, selected_row):
                             "Long Put Verkaufspreis ($)", 
                             min_value=0.0, value=exit_buy_price, step=0.01, format="%.2f"
                         )
+                        exit_transaction_cost = st.number_input(
+                            "Verkauf Ordergebühren ($)", 
+                            min_value=0.0, value=0.0, step=0.50, format="%.2f",
+                            help="Trage hier die gesamten Gebühren (Ausstieg für alle Kontrakte) ein."
+                        )
+            
                     st.markdown("---")
                 # --- Ende der Neuerung ---
 
@@ -249,17 +264,22 @@ def display_spreads_backtesting(selected_date, selected_row):
                 strike_buy = float(selected_row['buy_strike'])
                 spread_width = abs(strike_sell - strike_buy)
 
-                initial_cash_flow = entry_sell_price - entry_buy_price 
-                close_cash_flow = exit_buy_price - exit_sell_price
+                initial_cash_flow = (entry_sell_price - entry_buy_price) * 100 - start_transaction_cost
+                close_cash_flow = (exit_buy_price - exit_sell_price) * 100 - exit_transaction_cost
                 profit = initial_cash_flow + close_cash_flow
 
+                if parse_date(compare_date) >= parse_date(selected_row['expiration_date']):
+                    close_cash_flow = 0
+                    exit_buy_price = 0
+                    exit_sell_price = 0
+
                 if initial_cash_flow > 0:
-                    bpr_capital = spread_width - initial_cash_flow
+                    bpr_capital = spread_width * 100 - initial_cash_flow
                 else:
                     bpr_capital = abs(initial_cash_flow)
 
-                bpr_capital_total = bpr_capital * 100
-                profit_total = profit * 100
+                bpr_capital_total = bpr_capital
+                profit_total = profit
                 roi_pct = (profit / bpr_capital * 100) if bpr_capital > 0 else None
                 max_profit_pct = profit / initial_cash_flow * 100
                 # roi_pct = (profit / initial_cash_flow * 100) if initial_cash_flow > 0 else None
@@ -269,7 +289,7 @@ def display_spreads_backtesting(selected_date, selected_row):
                 # Oberste Reihe: Die wichtigsten harten Fakten als Key Performance Indicators (KPIs)
                 kpi_cols = st.columns(6)
                 with kpi_cols[0]:
-                    st.metric("Max Profit", f"${(initial_cash_flow * 100):+.2f}")
+                    st.metric("Max Profit", f"${(initial_cash_flow):+.2f}")
                 with kpi_cols[1]:
                     st.metric("Aktueller Profit", f"${profit_total:+.2f}", delta=f"{profit_total:+.2f}$")
                 with kpi_cols[2]:
