@@ -34,7 +34,7 @@ def validate_universe_and_range(
     """
     Confirm the DB has data for the requested (symbols × date-range).
 
-    - Queries MIN/MAX(date) from OptionDataMassiveHistoryDaily overall.
+    - Queries MIN/MAX(snapshot_date) from OptionDataMassiveHistoryDaily overall.
     - Queries per-symbol coverage. Symbols without data become a warning
       rather than a hard error — the user can then decide to drop them.
     - Returns ValidationResult; caller inspects `ok`.
@@ -55,7 +55,7 @@ def validate_universe_and_range(
         from src.database import select_into_dataframe
 
         overall_sql = (
-            'SELECT MIN("date") AS min_date, MAX("date") AS max_date '
+            'SELECT MIN("snapshot_date") AS min_date, MAX("snapshot_date") AS max_date '
             'FROM "OptionDataMassiveHistoryDaily"'
         )
         overall = select_into_dataframe(query=overall_sql)
