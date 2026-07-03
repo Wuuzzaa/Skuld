@@ -200,13 +200,15 @@ with tab_setup:
     universe_spec = _render_universe_setup()
 
     st.subheader("Timeframe")
+    # Default timeframe: last 2 months as requested
     today = date.today()
-    default_start = today - timedelta(days=365)
+    default_start = today - timedelta(days=60)
+    default_end = today
     c1, c2 = st.columns(2)
     with c1:
         start_d = st.date_input("Start date", value=default_start, key="start_d")
     with c2:
-        end_d = st.date_input("End date", value=today, key="end_d")
+        end_d = st.date_input("End date", value=default_end, key="end_d")
 
     st.subheader("Engine")
     c1, c2, c3 = st.columns(3)
