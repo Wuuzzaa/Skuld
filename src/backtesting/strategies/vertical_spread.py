@@ -28,7 +28,7 @@ VARIANTS = ["bull_put", "bear_call", "bull_call", "bear_put"]
 class VerticalSpreadStrategy(Strategy):
     name = "Vertical Spread"
     description = "Bull-Put / Bear-Call / Bull-Call / Bear-Put spreads."
-    preload_fields = ["day_close", "iv_rank"]
+    preload_fields = ["day_close", "iv_rank", "greeks_delta", "open_interest", "day_volume"]
 
     params = StrategyParams(
         variant=ChoiceParam("bull_put", choices=VARIANTS),

@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 class WheelStrategy(Strategy):
     name = "Wheel"
     description = "CSP -> Assignment -> Covered Call -> Called Away -> CSP loop."
-    preload_fields = ["day_close", "iv_rank"]
+    preload_fields = ["day_close", "iv_rank", "greeks_delta", "open_interest", "day_volume"]
 
     params = StrategyParams(
         put_delta_target=NumericParam(-0.30, range=(-0.50, -0.10), step=0.05),

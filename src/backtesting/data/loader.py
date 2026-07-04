@@ -52,8 +52,9 @@ class SmartPreloader:
     All queries live under `db/SQL/query/backtest/` per spec Kap. 13.1.
     """
 
-    def __init__(self, symbols: Optional[list[str]] = None):
+    def __init__(self, symbols: Optional[list[str]] = None, fields: Optional[list[str]] = None):
         self.symbols = symbols  # None => all symbols in the DB on that date
+        self.fields = fields    # None => use a default set of fields
         self._frame_cache: dict[date, pd.DataFrame] = {}
         self._snapshot_cache: dict[date, MarketSnapshot] = {}
 
@@ -73,7 +74,7 @@ class SmartPreloader:
         if key in self._snapshot_cache and symbols is None:
             return self._snapshot_cache[key]
 
-        frame = self._load_merged_frame(target_date)
+        frame = self._load_merged_frame(target_date, symbols=symbols)
         active = symbols if symbols is not None else self.symbols
 
         if active is not None and active:
@@ -95,22 +96,54 @@ class SmartPreloader:
 
     # ── Internals ─────────────────────────────────────────────────────────
 
-    def _load_merged_frame(self, target_date: date) -> pd.DataFrame:
+    def _load_merged_frame(self, target_date: date, symbols: Optional[list[str]] = None) -> pd.DataFrame:
         if target_date in self._frame_cache:
+            # Note: We assume that if it's cached, it contains all symbols/fields we need
+            # for this session. Usually SmartPreloader is per-backtest.
             return self._frame_cache[target_date]
 
         t0 = time.time()
 
-        # We call the DB function directly for maximum speed. Time-travel
-        # substitution is not needed here because the function itself takes
-        # the target_date as an argument.
-        sql = f'SELECT * FROM "getOptionDataMergedHistory"(:target_date)'
+        # Build column list
+        essential = {
+            "symbol", "option_osi", "contract_type", "expiration_date",
+            "strike_price", "day_close", "days_to_expiration", "shares_per_contract"
+        }
+        requested = set(self.fields) if self.fields else set()
+        
+        # If no fields specified, we might want to load a sensible default set
+        # or everything if really requested. But the goal is to be dynamic.
+        all_cols = essential | requested
+        cols_str = ", ".join([f'"{c}"' for c in sorted(all_cols)])
+
+        # Filter by symbols if provided
+        active_symbols = symbols if symbols is not None else self.symbols
+        where_clause_str = ""
+        params = {"target_date": target_date.isoformat()}
+        
+        if active_symbols:
+            where_clause_str = 'WHERE "symbol" IN :symbols'
+            params["symbols"] = tuple(active_symbols)
+
+        # Load SQL template
+        try:
+            template_path = Path(_sql_path("merged_snapshot.sql"))
+            sql_template = template_path.read_text(encoding="utf-8")
+            sql = sql_template.format(
+                columns=cols_str,
+                where_clause=where_clause_str
+            )
+        except Exception as e:
+            logger.error("Failed to load SQL template merged_snapshot.sql: %s", e)
+            # Fallback to hardcoded query if template fails
+            sql = f'SELECT {cols_str} FROM "getOptionDataMergedHistory"(:target_date) {where_clause_str}'
+        
         try:
             from src.database import select_into_dataframe
 
             df = select_into_dataframe(
                 query=sql,
-                params={"target_date": target_date.isoformat()},
+                params=params,
                 session_variables={"jit": "off", "enable_nestloop": "off"},
             )
         except Exception as e:

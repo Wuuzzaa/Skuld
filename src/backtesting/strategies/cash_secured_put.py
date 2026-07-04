@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 class CashSecuredPutStrategy(Strategy):
     name = "Cash-Secured Put"
     description = "Short OTM put, cash-secured. Buy back at profit target."
-    preload_fields = ["day_close", "iv_rank"]
+    preload_fields = ["day_close", "iv_rank", "greeks_delta", "open_interest", "day_volume"]
 
     params = StrategyParams(
         delta_target=NumericParam(-0.30, range=(-0.50, -0.10), step=0.05),
