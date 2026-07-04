@@ -28,15 +28,15 @@ FILTER_FIELDS: dict[str, FieldDef] = {
     # ─── Market ───────────────────────────────────────────────────────────
     "live_stock_price": FieldDef(
         "live_stock_price", "Stock Price", "Market", "float", "$",
-        "Latest close of the underlying",
+        "EOD close price of the underlying",
     ),
     "day_volume": FieldDef(
         "day_volume", "Day Volume", "Market", "int", None,
         "Trading volume of the underlying",
     ),
     "day_close": FieldDef(
-        "day_close", "Day Close", "Market", "float", "$",
-        "EOD close price",
+        "day_close", "Option Price", "Options", "float", "$",
+        "EOD close price of the option contract",
     ),
     # ─── Technicals ───────────────────────────────────────────────────────
     "historical_volatility_30d": FieldDef(

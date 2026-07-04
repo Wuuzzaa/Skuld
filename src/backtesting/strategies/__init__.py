@@ -15,6 +15,7 @@ from src.backtesting.strategies import cash_secured_put as _csp  # noqa: F401
 from src.backtesting.strategies import wheel as _wheel  # noqa: F401
 from src.backtesting.strategies import vertical_spread as _vs  # noqa: F401
 from src.backtesting.strategies import iron_condor as _ic  # noqa: F401
+from src.backtesting.strategies import buy_and_hold as _bah  # noqa: F401
 
 __all__ = [
     "Strategy", "StrategyParams",

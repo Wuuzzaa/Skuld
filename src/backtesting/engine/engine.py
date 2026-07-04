@@ -75,8 +75,12 @@ def run(
     )
 
     universe = Universe(universe_spec)
+    symbols_to_preload = None
+    if universe_spec.mode == "static":
+        symbols_to_preload = list(set(universe_spec.symbols or []) | {cfg.benchmark_symbol}) if cfg.benchmark_symbol else universe_spec.symbols
+
     preloader = preloader or SmartPreloader(
-        symbols=universe_spec.symbols if universe_spec.mode == "static" else None,
+        symbols=symbols_to_preload,
         fields=getattr(strategy, "preload_fields", [])
     )
     executor = Executor(cfg)
@@ -99,7 +103,20 @@ def run(
     for i, d in enumerate(days):
         logger.debug("--- Processing Day %d/%d: %s ---", i + 1, len(days), d)
         symbols_today = universe.resolve(d)
-        snapshot = preloader.get_snapshot(d, symbols=symbols_today or None)
+        
+        # Ensure benchmark is loaded even if not in universe
+        load_symbols = symbols_today
+        if load_symbols is not None and cfg.benchmark_symbol:
+            load_symbols = list(set(load_symbols) | {cfg.benchmark_symbol})
+            
+        snapshot = preloader.get_snapshot(d, symbols=load_symbols)
+
+        # Inject flag for last day if useful for strategies
+        is_last_day = (i == len(days) - 1)
+        if is_last_day:
+            object.__setattr__(snapshot, "is_last_day", True)
+        else:
+            object.__setattr__(snapshot, "is_last_day", False)
 
         # ── 2. Automated maintenance ────────────────────────────────────
         logger.debug("Maintenance: MTM, Dividends, Splits, Expiries, DTE, Rolling")

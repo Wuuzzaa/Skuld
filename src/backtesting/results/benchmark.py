@@ -26,7 +26,7 @@ class BenchmarkTracker:
 
     def observe(self, d: date, snapshot: MarketSnapshot) -> None:
         stock = snapshot.get_stock(self.symbol)
-        if stock is None or stock.day_close <= 0:
+        if stock is None or stock.live_stock_price <= 0:
             # Missing benchmark data for this day -> skip, but still stamp
             # last observed value for continuity.
             if self._series:
@@ -35,7 +35,7 @@ class BenchmarkTracker:
                     "date": d, "price": last["price"], "value": last["value"],
                 })
             return
-        price = stock.day_close
+        price = stock.live_stock_price
         if self.entry_price is None:
             self.entry_price = price
             self.shares = self.initial_cash / price

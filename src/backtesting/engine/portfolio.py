@@ -170,10 +170,10 @@ class Position:
         ]
         if not short_strikes:
             return None
-        nearest_strike = min(short_strikes, key=lambda s: abs(s - stock.day_close))
+        nearest_strike = min(short_strikes, key=lambda s: abs(s - stock.live_stock_price))
         if nearest_strike == 0:
             return None
-        return (stock.day_close - nearest_strike) / nearest_strike
+        return (stock.live_stock_price - nearest_strike) / nearest_strike
 
     def unrealized_pnl_pct(self) -> Optional[float]:
         """Unrealized P&L relative to entry cash flow."""
@@ -235,7 +235,7 @@ class Portfolio:
                 if isinstance(leg, StockLeg):
                     stock = snapshot.get_stock(leg.symbol)
                     if stock:
-                        leg.current_price = stock.day_close
+                        leg.current_price = stock.live_stock_price
                 elif isinstance(leg, OptionLeg):
                     chain = snapshot.get_chain(leg.symbol)
                     if chain:
@@ -289,7 +289,7 @@ class Portfolio:
                     continue
 
                 stock = snapshot.get_stock(leg.symbol)
-                stock_price = stock.day_close if stock else leg.strike
+                stock_price = stock.live_stock_price if stock else leg.strike
                 itm = (leg.is_call and stock_price > leg.strike) or (
                     leg.is_put and stock_price < leg.strike
                 )
@@ -398,14 +398,14 @@ class Portfolio:
             return False, ""
 
         if isinstance(stop, StopLossOrder):
-            if stock.day_close <= stop.level:
+            if stock.live_stock_price <= stop.level:
                 return True, "stop_loss"
         elif isinstance(stop, TrailingStopOrder):
-            if stop.peak is None or stock.day_close > stop.peak:
-                stop.peak = stock.day_close
+            if stop.peak is None or stock.live_stock_price > stop.peak:
+                stop.peak = stock.live_stock_price
             if stop.peak is not None:
                 threshold = stop.peak * (1 - stop.trail_pct)
-                if stock.day_close <= threshold:
+                if stock.live_stock_price <= threshold:
                     return True, "trailing_stop"
         elif isinstance(stop, TakeProfitOrder):
             if position.unrealized_pnl >= stop.level:

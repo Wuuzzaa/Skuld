@@ -64,8 +64,8 @@ pages/
 - Funktion `getOptionDataMergedHistory(p_target_date date)`
 
 Diese liefern für jedes historische Datum eine vollständige rekonstruierte merged Option-/Stock-Sicht inklusive aller Felder:
-- Option-Chain (alle Strikes × Expiries, Greeks, IV, OI, Volume, Day-Close)
-- Stock-Daten (OHLC, technische Indikatoren, Earnings-Distanz, Dividenden, HV30)
+- Option-Chain (alle Strikes × Expiries, Greeks, IV, OI, Volume, day_close)
+- Stock-Daten (live_stock_price, OHLC, technische Indikatoren, Earnings-Distanz, Dividenden, HV30)
 - IV-Rank, IV-Percentile
 - Fundamental-Daten (~400 Felder aus Yahoo)
 - Asset-Profile (Sektor, Industrie, Country, Market Cap)
@@ -406,7 +406,7 @@ class EricLudwigStrategy(RollStrategy):
 
 - **Timing:** Um **Look-Ahead Bias** zu vermeiden, sieht die Strategie am Tag $t$ zwar den Schlusskurs, Orders werden jedoch standardmäßig als **Market-on-Close (MOC)** simuliert. 
 - **Logik:** Die Strategie-Entscheidung basiert auf EOD-Daten von Tag $t$. Die Ausführung erfolgt zum Schlusskurs von Tag $t$. Dies ist legitim, da die meisten Broker MOC-Orders bis kurz vor Schluss annehmen. Alternativ kann in der Config auf "Next Day Open" umgestellt werden.
-- **Preisfindung:** Alle Orders werden zum Tagesschluss (`day_close`) gefüllt.
+- **Preisfindung:** Alle Orders werden zum Tagesschluss gefüllt (Aktien: `live_stock_price`, Optionen: `day_close`).
 
 ### 7.2 Slippage
 
@@ -564,7 +564,7 @@ Streamlit-Page mit 5 Tabs/Sektionen:
 | Thema | Status V1 | Anmerkung |
 |---|---|---|
 | Granularität | Nur EOD | Keine Intraday-Strategien |
-| Bid/Ask-Realismus | `day_close` als Mid-Proxy + Slippage-Heuristik | Bei illiquiden Symbolen optimistisch |
+| Bid/Ask-Realismus | `day_close` (Optionen) bzw. `live_stock_price` (Aktien) als Mid-Proxy + Slippage-Heuristik | Bei illiquiden Symbolen optimistisch |
 | Survivor-Bias | Nicht behandelt | Statisches Universum = heutige Symbole; historische S&P-Mitgliedschaft = V2 |
 | Early Assignment | Nicht modelliert | Nur Expiry-Assignment |
 | Portfolio Margin | Nicht in V1 | Reg-T only |

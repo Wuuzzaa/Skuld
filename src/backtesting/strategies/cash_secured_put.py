@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 class CashSecuredPutStrategy(Strategy):
     name = "Cash-Secured Put"
     description = "Short OTM put, cash-secured. Buy back at profit target."
-    preload_fields = ["day_close", "iv_rank", "greeks_delta", "open_interest", "day_volume"]
+    preload_fields = ["day_close", "live_stock_price", "iv_rank", "greeks_delta", "open_interest", "day_volume"]
 
     params = StrategyParams(
         delta_target=NumericParam(-0.30, range=(-0.50, -0.10), step=0.05),
@@ -57,7 +57,7 @@ class CashSecuredPutStrategy(Strategy):
         # Entries
         for symbol in snapshot.universe:
             stock = snapshot.get_stock(symbol)
-            if stock is None or stock.day_close <= 0:
+            if stock is None or stock.live_stock_price <= 0:
                 continue
             existing = [
                 p for p in portfolio.positions_by_symbol(symbol)
@@ -86,5 +86,6 @@ class CashSecuredPutStrategy(Strategy):
                     ),
                 ],
                 tags={"template": "cash_secured_put"},
+                reason="sell_csp",
             ))
         return actions

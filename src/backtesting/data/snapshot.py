@@ -111,12 +111,12 @@ class StockData:
 
     symbol: str
     as_of: date
-    day_close: float
+    live_stock_price: float
     day_open: Optional[float] = None
     day_high: Optional[float] = None
     day_low: Optional[float] = None
+    day_close: Optional[float] = None
     day_volume: Optional[int] = None
-    live_stock_price: Optional[float] = None
     iv_rank: Optional[float] = None
     iv_percentile: Optional[float] = None
     historical_volatility_30d: Optional[float] = None
@@ -142,6 +142,7 @@ class MarketSnapshot:
     stocks: dict[str, StockData] = field(default_factory=dict)
     chains: dict[str, OptionChain] = field(default_factory=dict)
     universe: list[str] = field(default_factory=list)
+    is_last_day: bool = False
 
     def get_stock(self, symbol: str) -> Optional[StockData]:
         return self.stocks.get(symbol)
