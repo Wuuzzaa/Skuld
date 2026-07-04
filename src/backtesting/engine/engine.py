@@ -55,8 +55,15 @@ def run(
     """
     from src.backtesting.execution.executor import Executor
     from src.backtesting.results.collector import ResultsCollector
+    from src.logger_config import setup_logging
+
+    # Ensure debug logging to console as requested
+    setup_logging(log_level=logging.DEBUG, component="engine", console_output=True)
 
     cfg = config or RunConfig()
+
+    logger.debug("Starting backtest: strategy=%s, period=%s to %s, initial_cash=%.2f", 
+                 getattr(strategy, 'name', 'unknown'), start_date, end_date, cfg.initial_cash)
 
     portfolio = Portfolio(
         cash=cfg.initial_cash,
@@ -85,13 +92,16 @@ def run(
         logger.warning("No trading days between %s and %s", start_date, end_date)
         return collector.finalize()
 
+    logger.debug("Total trading days to process: %d", len(days))
     strategy.on_init(cfg)
 
     for i, d in enumerate(days):
+        logger.debug("--- Processing Day %d/%d: %s ---", i + 1, len(days), d)
         symbols_today = universe.resolve(d)
         snapshot = preloader.get_snapshot(d, symbols=symbols_today or None)
 
         # ── 2. Automated maintenance ────────────────────────────────────
+        logger.debug("Maintenance: MTM, Dividends, Splits, Expiries, DTE, Rolling")
         portfolio.mark_to_market(snapshot)
         portfolio.apply_dividends(snapshot)
         portfolio.apply_splits(snapshot)
@@ -106,29 +116,35 @@ def run(
         compute_daily = getattr(strategy, "compute_daily", None)
         if callable(compute_daily):
             try:
+                logger.debug("Calling strategy.compute_daily")
                 compute_daily(snapshot, portfolio)
             except Exception as e:
                 logger.exception("compute_daily failed on %s: %s", d, e)
 
         actions: list[Action] = []
         try:
+            logger.debug("Calling strategy.on_day")
             result = strategy.on_day(snapshot, portfolio)
             if result:
                 actions = list(result)
+                logger.debug("Strategy produced %d actions", len(actions))
         except Exception as e:
             logger.exception("on_day failed on %s: %s", d, e)
 
         # ── 4. Execute actions ──────────────────────────────────────────
         for action in actions:
             try:
+                logger.debug("Executing action: %s", action)
                 trade_log = executor.execute(action, portfolio, snapshot)
                 if trade_log:
+                    logger.debug("Action resulted in %d trade entries", len(trade_log))
                     for entry in trade_log:
                         collector.record_trade(d, entry)
             except Exception as e:
                 logger.exception("execution failed on %s: %s", d, e)
 
         # ── 5. Record end-of-day snapshot of the portfolio ──────────────
+        logger.debug("Recording EOD snapshot")
         collector.record_day(d, portfolio, snapshot)
 
         if progress_callback is not None:
@@ -137,4 +153,5 @@ def run(
             except Exception:
                 pass
 
+    logger.debug("Backtest completed. Finalizing results.")
     return collector.finalize()
