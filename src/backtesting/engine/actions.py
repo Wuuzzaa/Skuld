@@ -39,6 +39,7 @@ class Action:
 @dataclass
 class OpenPosition(Action):
     legs: list[LegSpec]
+    reason: str = "strategy"
     tags: dict[str, str] = field(default_factory=dict)
     stop_loss: Optional[float] = None
     take_profit: Optional[float] = None

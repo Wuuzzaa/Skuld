@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 class IronCondorStrategy(Strategy):
     name = "Iron Condor"
     description = "Short call-spread + short put-spread, symmetric width."
-    preload_fields = ["day_close", "iv_rank", "greeks_delta", "open_interest", "day_volume"]
+    preload_fields = ["day_close", "live_stock_price", "iv_rank", "greeks_delta", "open_interest", "day_volume"]
 
     params = StrategyParams(
         short_delta=NumericParam(0.16, range=(0.05, 0.35), step=0.01),
@@ -100,5 +100,6 @@ class IronCondorStrategy(Strategy):
                             quantity=1, option_osi=long_put.option_osi),
                 ],
                 tags={"template": "iron_condor"},
+                reason="entry",
             ))
         return actions

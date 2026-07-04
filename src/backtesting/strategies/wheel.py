@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 class WheelStrategy(Strategy):
     name = "Wheel"
     description = "CSP -> Assignment -> Covered Call -> Called Away -> CSP loop."
-    preload_fields = ["day_close", "iv_rank", "greeks_delta", "open_interest", "day_volume"]
+    preload_fields = ["day_close", "live_stock_price", "iv_rank", "greeks_delta", "open_interest", "day_volume"]
 
     params = StrategyParams(
         put_delta_target=NumericParam(-0.30, range=(-0.50, -0.10), step=0.05),
@@ -76,7 +76,7 @@ class WheelStrategy(Strategy):
             )
 
             stock = snapshot.get_stock(symbol)
-            if stock is None or stock.day_close <= 0:
+            if stock is None or stock.live_stock_price <= 0:
                 continue
 
             if has_stock and not has_short_call:
@@ -101,6 +101,7 @@ class WheelStrategy(Strategy):
                                 option_osi=option.option_osi,
                             )],
                             tags={"template": "wheel", "stage": "cc"},
+                            reason="sell_cc",
                         ))
                         break
                 continue
@@ -122,5 +123,6 @@ class WheelStrategy(Strategy):
                         quantity=-1, option_osi=option.option_osi,
                     )],
                     tags={"template": "wheel", "stage": "csp"},
+                    reason="sell_csp",
                 ))
         return actions

@@ -105,10 +105,8 @@ class SmartPreloader:
         t0 = time.time()
 
         # Build column list
-        essential = {
-            "symbol", "option_osi", "contract_type", "expiration_date",
-            "strike_price", "day_close", "days_to_expiration", "shares_per_contract"
-        }
+        # Minimum fields required for any backtest
+        essential = {"symbol", "live_stock_price"}
         requested = set(self.fields) if self.fields else set()
         
         # If no fields specified, we might want to load a sensible default set
@@ -191,12 +189,12 @@ class SmartPreloader:
             snap.stocks[symbol] = StockData(
                 symbol=symbol,
                 as_of=target_date,
-                day_close=_as_float(row_dict.get("day_close")),
+                live_stock_price=_as_float(row_dict.get("live_stock_price")),
                 day_open=_as_optional_float(row_dict.get("day_open")),
                 day_high=_as_optional_float(row_dict.get("day_high")),
                 day_low=_as_optional_float(row_dict.get("day_low")),
+                day_close=_as_optional_float(row_dict.get("day_close")),
                 day_volume=_as_optional_int(row_dict.get("day_volume")),
-                live_stock_price=_as_optional_float(row_dict.get("live_stock_price")),
                 iv_rank=_as_optional_float(row_dict.get("iv_rank")),
                 iv_percentile=_as_optional_float(row_dict.get("iv_percentile")),
                 historical_volatility_30d=_as_optional_float(

@@ -41,7 +41,7 @@ class _SyntheticPreloader:
         for i, sym in enumerate(self.symbols):
             price = 100.0 + (seed % 20) + i * 5
             snap.stocks[sym] = StockData(
-                symbol=sym, as_of=d, day_close=price,
+                symbol=sym, as_of=d, live_stock_price=price, day_close=price,
                 iv_rank=40.0, historical_volatility_30d=0.25,
             )
             chain = OptionChain(symbol=sym, as_of=d)

@@ -141,7 +141,7 @@ class Executor:
 
         # Margin check
         underlying_prices = {
-            l.symbol: (snapshot.get_stock(l.symbol).day_close
+            l.symbol: (snapshot.get_stock(l.symbol).live_stock_price
                        if snapshot.get_stock(l.symbol) else 0.0)
             for l in position.legs
         }
@@ -171,6 +171,7 @@ class Executor:
         for entry in trade_logs:
             entry["position_id"] = str(position.id)
             entry["commission"] = commissions / max(len(trade_logs), 1)
+            entry["reason"] = action.reason
         return trade_logs
 
     # ── Close (full or partial) ──────────────────────────────────────────
@@ -372,7 +373,7 @@ class Executor:
             stock = snapshot.get_stock(spec.symbol)
             if stock is None:
                 return None, None
-            return None, stock.day_close
+            return None, stock.live_stock_price
 
         # option leg
         chain = snapshot.get_chain(spec.symbol)

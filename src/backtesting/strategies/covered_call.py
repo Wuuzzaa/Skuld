@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 class CoveredCallStrategy(Strategy):
     name = "Covered Call"
     description = "Long stock + short OTM call. Buy back at profit target."
-    preload_fields = ["day_close", "iv_rank", "greeks_delta", "open_interest", "day_volume"]
+    preload_fields = ["day_close", "live_stock_price", "iv_rank", "greeks_delta", "open_interest", "day_volume"]
 
     params = StrategyParams(
         shares_per_symbol=NumericParam(100, range=(100, 1000), step=100),
@@ -51,7 +51,7 @@ class CoveredCallStrategy(Strategy):
 
         for symbol in snapshot.universe:
             stock = snapshot.get_stock(symbol)
-            if stock is None or stock.day_close <= 0:
+            if stock is None or stock.live_stock_price <= 0:
                 continue
 
             has_cc = any(
@@ -77,7 +77,7 @@ class CoveredCallStrategy(Strategy):
             if option is None:
                 continue
 
-            cost = stock.day_close * shares_qty
+            cost = stock.live_stock_price * shares_qty
             if cost > portfolio.buying_power:
                 continue
 
@@ -90,5 +90,6 @@ class CoveredCallStrategy(Strategy):
                     ),
                 ],
                 tags={"template": "covered_call"},
+                reason="entry",
             ))
         return actions
