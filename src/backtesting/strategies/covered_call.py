@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 class CoveredCallStrategy(Strategy):
     name = "Covered Call"
     description = "Long stock + short OTM call. Buy back at profit target."
-    preload_fields = ["day_close", "iv_rank"]
+    preload_fields = ["day_close", "iv_rank", "greeks_delta", "open_interest", "day_volume"]
 
     params = StrategyParams(
         shares_per_symbol=NumericParam(100, range=(100, 1000), step=100),

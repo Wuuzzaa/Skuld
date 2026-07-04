@@ -76,7 +76,8 @@ def run(
 
     universe = Universe(universe_spec)
     preloader = preloader or SmartPreloader(
-        symbols=universe_spec.symbols if universe_spec.mode == "static" else None
+        symbols=universe_spec.symbols if universe_spec.mode == "static" else None,
+        fields=getattr(strategy, "preload_fields", [])
     )
     executor = Executor(cfg)
     collector = ResultsCollector(
