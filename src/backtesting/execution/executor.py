@@ -213,7 +213,11 @@ class Executor:
                 })
             else:  # OptionLeg
                 price = leg.current_premium
-                slip = self.slippage.option_slippage_pct(open_interest=0) or 0.01
+                # Use today's actual open_interest from the snapshot so a
+                # liquid option gets liquid-tier slippage on close, not the
+                # OI=0 illiquid tier.
+                oi = self._leg_open_interest(leg, snapshot)
+                slip = self.slippage.option_slippage_pct(open_interest=oi) or 0.01
                 fill = price * (1 + slip * _sign_for_buy(trade_qty))
                 leg_cashflow = -fill * trade_qty * leg.shares_per_contract
                 cashflow += leg_cashflow
@@ -279,7 +283,10 @@ class Executor:
                 position.legs.remove(leg)
             else:  # OptionLeg
                 price = leg.current_premium
-                slip = self.slippage.option_slippage_pct(open_interest=0) or 0.01
+                # Same fix as _execute_close: use today's real OI from the
+                # snapshot rather than defaulting to 0 (illiquid tier).
+                oi = self._leg_open_interest(leg, snapshot)
+                slip = self.slippage.option_slippage_pct(open_interest=oi) or 0.01
                 fill = price * (1 + slip * _sign_for_buy(trade_qty))
                 leg_cashflow = -fill * trade_qty * leg.shares_per_contract
                 comm = self.commission.option_commission(abs(trade_qty))
@@ -402,6 +409,24 @@ class Executor:
             return self.slippage.stock_slippage_pct()
         oi = opt.open_interest if opt else 0
         return self.slippage.option_slippage_pct(open_interest=oi)
+
+    def _leg_open_interest(
+        self, leg: "OptionLeg", snapshot: MarketSnapshot
+    ) -> int:
+        """Look up today's open_interest for an option leg from the snapshot.
+
+        Returns 0 if the contract can't be found (e.g. on/after expiry or
+        after a delisting). Used to compute realistic close/adjust slippage —
+        without this the executor would treat every close as an OI=0 order
+        and pay the 3% illiquid-tier slippage regardless of actual liquidity.
+        """
+        chain = snapshot.get_chain(leg.symbol)
+        if chain is None:
+            return 0
+        for opt in chain.all():
+            if opt.option_osi == leg.option_osi:
+                return int(opt.open_interest or 0)
+        return 0
 
 
 def _sign_for_buy(quantity: int) -> int:
