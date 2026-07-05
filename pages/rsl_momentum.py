@@ -1,11 +1,20 @@
+import logging
+import os
+
 import streamlit as st
 import pandas as pd
 
 from config import PATH_DATABASE_QUERY_FOLDER
 from src.historization import select_timetravel_into_dataframe
+from src.logger_config import setup_logging
 from src.sp500_constituents import SP500_SYMBOLS
 from src.rsl_momentum_strategy import calculate_rsl_momentum_ranking
 from src.streamlit_helpers import render_date_filter
+from pages.backtesting.rsl_momentum import display_rsl_momentum_backtesting
+
+# Setup logging
+setup_logging(component="streamlit", sub_component="rsl_momentum", log_level=logging.DEBUG, console_output=True)
+logger = logging.getLogger(os.path.basename(__file__))
 
 @st.cache_data(ttl=300)
 def load_rsl_data(date: str):
@@ -209,6 +218,8 @@ def main():
         #### Universum:
         S&P 500 Konstituenten. Daten: Live-Kurse aus OptionDataMerged (Polygon.io).
         """)
+
+    display_rsl_momentum_backtesting(selected_date, top_n, max_per_sector, exit_percentile)
 
 
 if __name__ == "__main__":
