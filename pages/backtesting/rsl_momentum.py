@@ -315,7 +315,8 @@ def calculate_rsl_momentum_strategy(start_date, end_date, start_budget=10000.0,
         # Calculate benchmark capital starting at the same start_budget
         if not df_merged['price'].empty and df_merged['price'].iloc[0] > 0:
             spy_start = df_merged['price'].iloc[0]
-            df_merged['spy_benchmark'] = start_budget * (df_merged['price'] / spy_start)
+            shares = start_budget / spy_start
+            df_merged['spy_benchmark'] = shares * df_merged['price'] # df_merged['spy_benchmark'] = start_budget * (df_merged['price'] / spy_start)
         else:
             df_merged['spy_benchmark'] = start_budget
             
@@ -357,7 +358,7 @@ def display_rsl_momentum_backtesting(selected_date, top_n, max_per_sector, exit_
                                          format_func=lambda x: {'daily': 'Täglich', 'weekly': 'Wöchentlich', 'monthly': 'Monatlich'}[x],
                                          help="Die Frequenz, mit der die Strategie rebalanciert wird.")
     with col2:
-        flat_fee = st.number_input("Ordergebühr flat ($)", min_value=0.0, value=4.90, step=0.50, format="%.2f",
+        flat_fee = st.number_input("Ordergebühr flat ($)", min_value=0.0, value=1.0, step=0.50, format="%.2f",
                                     help="Die feste Gebühr, die bei jedem Kauf- oder Verkaufsvorgang (Trade) anfällt.")
         pct_fee = st.number_input("Variable Gebühr (%)", min_value=0.0, max_value=5.0, value=0.1, step=0.05, format="%.2f",
                                    help="Die prozentuale Gebühr, die auf Basis des gesamten Transaktionsvolumens erhoben wird (z. B. 0.1% des Transaktionswerts).") / 100.0
