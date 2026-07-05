@@ -119,6 +119,8 @@ def calculate_rsl_momentum_strategy(start_date, end_date, start_budget=10000.0,
     
     # Vectorized rank and percentile calculations per snapshot date
     start = time.time()
+
+    df_history = df_history.sort_values(by=['snapshot_date', 'symbol']).reset_index(drop=True)
     df_history['rank'] = df_history.groupby('snapshot_date')['rsl'].rank(ascending=False, method='first')
     counts = df_history.groupby('snapshot_date')['symbol'].transform('count')
     df_history['percentile'] = ((counts - df_history['rank'] + 1) / counts * 100).round(1)
