@@ -8,8 +8,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Optional
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pandas as pd
 
@@ -57,7 +56,10 @@ class ResultsCollector:
         self._trades: list[dict] = []
         self._dailies: list[dict] = []
         self._details: list[dict] = []
-        self._closed_positions_seen: set[UUID] = set()
+        # Positions get recorded exactly once — when Portfolio._move_to_closed
+        # fires the on_position_closed callback (wired by the engine). No more
+        # reconstruction-from-trade-log downstream.
+        self._closed_positions: list[dict] = []
 
     # ── Recording ────────────────────────────────────────────────────────
 
@@ -80,10 +82,6 @@ class ResultsCollector:
             "open_positions": len(portfolio.open_positions),
             "unrealized_pnl": unrealized,
         })
-        for p in portfolio.closed_positions:
-            if p.id in self._closed_positions_seen:
-                continue
-            self._closed_positions_seen.add(p.id)
 
     def record_detail(self, d: date, symbol: str, message: str, **kwargs) -> None:
         entry = {
@@ -94,6 +92,43 @@ class ResultsCollector:
         entry.update(kwargs)
         self._details.append(entry)
 
+    def on_position_closed(self, position) -> None:
+        """Called by Portfolio._move_to_closed the moment a position is
+        moved out of `open_positions`. Snapshots the closed position into
+        the position_log immediately — no rebuild-from-trades later, so
+        Assignment / Expiry / DTE-Close paths all record real
+        `realized_pnl` (previously they fell out of the log entirely)."""
+        # Snapshot legs so late mutations (unlikely, defensive) can't
+        # rewrite history.
+        legs_snapshot = []
+        for leg in list(position.legs):
+            leg_kind = "stock" if isinstance(leg, StockLeg) else "option"
+            legs_snapshot.append({
+                "kind": leg_kind,
+                "symbol": leg.symbol,
+                "quantity": int(leg.quantity),
+                "option_osi": getattr(leg, "option_osi", None),
+                "strike": getattr(leg, "strike", None),
+                "expiration_date": getattr(leg, "expiration_date", None),
+            })
+        self._closed_positions.append({
+            "position_id": str(position.id),
+            "symbol": position.symbol,
+            "open_date": position.opened_at,
+            "close_date": position.closed_at,
+            "entry_cashflow": float(position.entry_cashflow),
+            "realized_pnl": float(position.realized_pnl),
+            "holding_days": (
+                (position.closed_at - position.opened_at).days
+                if position.closed_at is not None
+                and position.opened_at is not None
+                else None
+            ),
+            "close_reason": position.tags.get("close_reason"),
+            "template": position.tags.get("template"),
+            "legs_at_close": legs_snapshot,
+        })
+
     # ── Finalisation ─────────────────────────────────────────────────────
 
     def finalize(self) -> Results:
@@ -102,7 +137,7 @@ class ResultsCollector:
         trade_df = pd.DataFrame(self._trades)
         daily_df = pd.DataFrame(self._dailies)
         detail_df = pd.DataFrame(self._details)
-        position_df = self._build_position_log()
+        position_df = pd.DataFrame(self._closed_positions)
         benchmark_df = self.benchmark.to_dataframe()
 
         metrics_calc = MetricsCalculator(
@@ -125,55 +160,6 @@ class ResultsCollector:
             benchmark_series=benchmark_df,
             metrics=metrics.__dict__ if hasattr(metrics, "__dict__") else dict(metrics),
         )
-
-    def _build_position_log(self) -> pd.DataFrame:
-        # The engine hands us dailies + trades but not the closed-position
-        # objects directly, so we reconstruct summaries via the trade log.
-        if not self._trades:
-            return pd.DataFrame()
-        trades = pd.DataFrame(self._trades)
-        if "position_id" not in trades.columns:
-            return pd.DataFrame()
-
-        rows = []
-        for pos_id, group in trades.groupby("position_id"):
-            open_rows = group[group["type"].str.startswith("open", na=False)]
-            close_rows = group[group["type"].str.startswith("close", na=False)]
-            symbol = group["symbol"].iloc[0] if "symbol" in group.columns else ""
-            open_date = group["date"].min()
-            close_date = close_rows["date"].max() if not close_rows.empty else None
-            realized = 0.0
-            for _, row in group.iterrows():
-                qty = row.get("quantity", 0) or 0
-                if row["type"].startswith("open_stock"):
-                    realized -= row.get("price", 0) * qty
-                elif row["type"].startswith("close_stock"):
-                    realized += row.get("price", 0) * qty
-                elif row["type"].startswith("open_option"):
-                    realized -= (
-                        row.get("premium", 0) * qty * 100
-                    )
-                elif row["type"].startswith("close_option"):
-                    realized += (
-                        row.get("premium", 0) * qty * 100
-                    )
-                realized -= row.get("commission", 0) or 0
-            rows.append({
-                "position_id": pos_id,
-                "symbol": symbol,
-                "open_date": open_date,
-                "close_date": close_date,
-                "realized_pnl": realized,
-                "holding_days": (
-                    (close_date - open_date).days
-                    if close_date is not None and open_date is not None else None
-                ),
-                "close_reason": (
-                    close_rows["reason"].iloc[-1]
-                    if "reason" in close_rows.columns and not close_rows.empty else None
-                ),
-            })
-        return pd.DataFrame(rows)
 
 
 def _as_config_dict(config) -> dict:

@@ -279,7 +279,7 @@ with tab_setup:
             pct = int(current / total * 100)
             progress_bar.progress(pct, text=f"Day {current}/{total} — {d}")
             status_area.markdown(
-                f"**{d}** — equity: `${portfolio.equity:,.0f}` — "
+                f"**{d}** — equity: `${portfolio.equity:,.2f}` — "
                 f"open positions: `{len(portfolio.open_positions)}`"
             )
 
@@ -334,13 +334,13 @@ with tab_setup:
 
 def _render_metric_cards(metrics: dict) -> None:
     def fmt_pct(v):
-        return f"{v * 100:.1f}%" if isinstance(v, (int, float)) and v is not None else "—"
+        return f"{v * 100:.2f}%" if isinstance(v, (int, float)) and v is not None else "—"
 
     def fmt_num(v, d=2):
         return f"{v:.{d}f}" if isinstance(v, (int, float)) and v is not None else "—"
 
     def fmt_dol(v):
-        return f"${v:,.0f}" if isinstance(v, (int, float)) and v is not None else "—"
+        return f"${v:,.2f}" if isinstance(v, (int, float)) and v is not None else "—"
 
     cols = st.columns(4)
     cols[0].metric("Total Return", fmt_pct(metrics.get("total_return")))
@@ -359,6 +359,57 @@ def _render_metric_cards(metrics: dict) -> None:
     cols[1].metric("Sortino", fmt_num(metrics.get("sortino")))
     cols[2].metric("Calmar", fmt_num(metrics.get("calmar")))
     cols[3].metric("Alpha", fmt_pct(metrics.get("alpha")))
+
+
+# ── DataFrame column formatting ──────────────────────────────────────────
+# All USD amounts render as $x,xxx.xx; all percentage columns render with
+# 2 decimals. Applied via `st.column_config` on every backtesting table.
+#
+# Percentages are stored as fractions internally (0.15 == 15%). Streamlit's
+# NumberColumn format string prints the raw value, so we scale percent
+# columns *100 in a display copy before passing to `st.dataframe`.
+
+_DOLLAR_COLUMNS = {
+    "price", "premium", "cost", "proceeds", "commission",
+    "cash", "equity", "margin_used", "buying_power",
+    "unrealized_pnl", "realized_pnl", "total_pnl", "avg_pnl",
+    "entry_price", "exit_price", "strike",
+}
+_PERCENT_COLUMNS = {
+    "slippage_pct", "contribution_pct", "win_rate", "pnl_pct", "target_pnl",
+    "iv_rank", "iv_percentile",
+}
+
+
+def _column_config_for(df) -> dict:
+    """Build a Streamlit column_config dict enforcing 2-dp USD / percent
+    formatting on the well-known money and percent columns of a backtest
+    dataframe. Unknown columns are left to Streamlit's defaults."""
+    cfg: dict = {}
+    if df is None or df.empty:
+        return cfg
+    for col in df.columns:
+        if col in _DOLLAR_COLUMNS:
+            cfg[col] = st.column_config.NumberColumn(format="$%.2f")
+        elif col in _PERCENT_COLUMNS:
+            cfg[col] = st.column_config.NumberColumn(format="%.2f%%")
+    return cfg
+
+
+def _prepare_display_df(df):
+    """Return a copy of ``df`` with percent columns scaled to display units.
+
+    We keep the source dataframes as fractions (0.15 == 15%) — the UI copy
+    multiplies those columns by 100 so `NumberColumn(format="%.2f%%")`
+    prints "15.00%".
+    """
+    if df is None or df.empty:
+        return df
+    out = df.copy()
+    for col in _PERCENT_COLUMNS:
+        if col in out.columns:
+            out[col] = pd.to_numeric(out[col], errors="coerce") * 100.0
+    return out
 
 
 with tab_perf:
@@ -393,7 +444,7 @@ with tab_perf:
             fig_dd = go.Figure(go.Scatter(x=dd.index, y=dd, mode="lines",
                                           line=dict(color="crimson")))
             fig_dd.update_layout(
-                title="Drawdown", yaxis_tickformat=".0%",
+                title="Drawdown", yaxis_tickformat=".2%",
                 xaxis_title="Date", yaxis_title="Drawdown",
             )
             st.plotly_chart(fig_dd, use_container_width=True)
@@ -408,11 +459,19 @@ with tab_trades:
     elif r.trade_log is None or r.trade_log.empty:
         st.info("No trades were executed.")
     else:
-        st.dataframe(r.trade_log, use_container_width=True, height=500)
+        trade_df = _prepare_display_df(r.trade_log)
+        st.dataframe(
+            trade_df, use_container_width=True, height=500,
+            column_config=_column_config_for(trade_df),
+        )
 
         if not r.position_log.empty:
             st.subheader("Closed positions")
-            st.dataframe(r.position_log, use_container_width=True, height=400)
+            pos_df = _prepare_display_df(r.position_log)
+            st.dataframe(
+                pos_df, use_container_width=True, height=400,
+                column_config=_column_config_for(pos_df),
+            )
 
 
 # ── Symbols tab ──────────────────────────────────────────────────────────
@@ -441,7 +500,11 @@ with tab_symbols:
             total = by_symbol["total_pnl"].sum()
             if total != 0:
                 by_symbol["contribution_pct"] = by_symbol["total_pnl"] / total
-            st.dataframe(by_symbol, use_container_width=True)
+            by_symbol_display = _prepare_display_df(by_symbol)
+            st.dataframe(
+                by_symbol_display, use_container_width=True,
+                column_config=_column_config_for(by_symbol_display),
+            )
 
 
 # ── Details tab ──────────────────────────────────────────────────────────
@@ -453,7 +516,11 @@ with tab_details:
     elif r.detail_log is None or r.detail_log.empty:
         st.info("No detailed logs available.")
     else:
-        st.dataframe(r.detail_log, use_container_width=True, height=600)
+        detail_df = _prepare_display_df(r.detail_log)
+        st.dataframe(
+            detail_df, use_container_width=True, height=600,
+            column_config=_column_config_for(detail_df),
+        )
 
 
 # ── Export tab ───────────────────────────────────────────────────────────

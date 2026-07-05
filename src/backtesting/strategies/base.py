@@ -52,6 +52,16 @@ class StrategyParams:
     def specs(self) -> dict[str, Param]:
         return dict(self._params)
 
+    def copy(self) -> "StrategyParams":
+        """Return a deep-ish clone: the Param specs are shared (they're
+        declarative and immutable in practice), but the values dict is
+        independent so per-instance `set(...)` calls don't bleed into
+        sibling instances or the class default."""
+        clone = StrategyParams.__new__(StrategyParams)
+        object.__setattr__(clone, "_params", dict(self._params))
+        object.__setattr__(clone, "_values", dict(self._values))
+        return clone
+
 
 class Strategy:
     """Base class for backtest strategies (Bahn 2 API in the spec)."""
@@ -71,6 +81,15 @@ class Strategy:
             from src.backtesting.strategies.registry import registry
             registry.register(cls)
 
+    def __init__(self):
+        # Give each instance its own params copy so per-run `params.set(...)`
+        # never leaks into sibling instances or the class default. Required
+        # for parallel/Grid-Search backtests (V2) and safer for the UI even
+        # in V1, where a fresh instance is created per run.
+        cls_params = type(self).params
+        if isinstance(cls_params, StrategyParams):
+            self.params = cls_params.copy()
+
     def on_init(self, config) -> None:
         return
 
@@ -78,6 +97,14 @@ class Strategy:
         """
         Log a detail for the current day and symbol.
         The message and extra kwargs will be recorded in the Results' detail_log.
+
+        Quantity convention (mirrors the engine's trade-mirror rows):
+          * `quantity_change`   — signed delta applied by an action
+                                  (positive = buy/add, negative = sell/close).
+          * `quantity_position` — remaining balance of the affected leg AFTER
+                                  the action (0 for full close).
+        Non-trade rows (e.g. "Holding position") should pass
+        `quantity_change=0` and `quantity_position=<current balance>`.
         """
         if self._logger:
             self._logger.record_detail(snapshot.date, symbol, message, **kwargs)

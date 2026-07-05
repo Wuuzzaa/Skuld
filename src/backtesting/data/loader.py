@@ -56,7 +56,6 @@ class SmartPreloader:
         self.symbols = symbols  # None => all symbols in the DB on that date
         self.fields = fields    # None => use a default set of fields
         self._frame_cache: dict[date, pd.DataFrame] = {}
-        self._snapshot_cache: dict[date, MarketSnapshot] = {}
 
     # ── Public API ────────────────────────────────────────────────────────
 
@@ -68,22 +67,17 @@ class SmartPreloader:
         (or `self.symbols` if omitted).
 
         The heavy lifting is one SQL call to `getOptionDataMergedHistory`.
-        Subsequent calls on the same date reuse the cached DataFrame.
+        Subsequent calls on the same date reuse the cached raw DataFrame
+        (`_frame_cache`) but rebuild the `MarketSnapshot` — sufficient for
+        V1 where each day is visited exactly once per backtest.
         """
-        key = target_date
-        if key in self._snapshot_cache and symbols is None:
-            return self._snapshot_cache[key]
-
         frame = self._load_merged_frame(target_date, symbols=symbols)
         active = symbols if symbols is not None else self.symbols
 
         if active is not None and active:
             frame = frame[frame["symbol"].isin(active)]
 
-        snapshot = self._frame_to_snapshot(target_date, frame)
-        if symbols is None:
-            self._snapshot_cache[key] = snapshot
-        return snapshot
+        return self._frame_to_snapshot(target_date, frame)
 
     def prefetch(self, dates: list[date]) -> None:
         """Optional: pull frames for a whole date range up-front."""
@@ -92,7 +86,6 @@ class SmartPreloader:
 
     def clear_cache(self) -> None:
         self._frame_cache.clear()
-        self._snapshot_cache.clear()
 
     # ── Internals ─────────────────────────────────────────────────────────
 

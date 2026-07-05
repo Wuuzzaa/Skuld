@@ -84,7 +84,8 @@ class BuyAndHoldStrategy(Strategy):
                 current_qty = sum(l.quantity for l in pos.legs)
                 self.log_detail(
                     symbol, "Holding position", snapshot,
-                    price=price, quantity=current_qty, cost=0, proceeds=0, commission=0
+                    price=price, quantity_change=0, quantity_position=current_qty,
+                    cost=0, proceeds=0, commission=0,
                 )
 
         return actions

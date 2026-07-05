@@ -48,7 +48,7 @@ class IronCondorStrategy(Strategy):
             pnl_pct = p.unrealized_pnl_pct()
             if pnl_pct is not None and pnl_pct >= exit_pct:
                 self.log_detail(
-                    p.symbol, f"Closing Iron Condor: Target PnL reached ({pnl_pct:.1%})", snapshot,
+                    p.symbol, f"Closing Iron Condor: Target PnL reached ({pnl_pct:.2%})", snapshot,
                     pnl_pct=pnl_pct, exit_reason="profit_target"
                 )
                 actions.append(ClosePosition(
@@ -64,7 +64,8 @@ class IronCondorStrategy(Strategy):
                 self.log_detail(
                     p.symbol, "Holding Iron Condor", snapshot,
                     pnl_pct=pnl_pct, target_pnl=exit_pct,
-                    quantity=qty, cost=0, proceeds=0, commission=0
+                    quantity_change=0, quantity_position=qty,
+                    cost=0, proceeds=0, commission=0,
                 )
 
         # Entries

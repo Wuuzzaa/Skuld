@@ -91,6 +91,11 @@ def run(
         config=cfg,
         benchmark_symbol=cfg.benchmark_symbol,
     )
+    # Wire the portfolio's close-callback into the collector so every path
+    # that closes a position (executor, DTE-close, stop-order, expiry) ends
+    # up in `results.position_log` with the P&L the portfolio actually
+    # booked — no reconstruction from trade-log.
+    portfolio.on_position_closed = collector.on_position_closed
     # Inject collector into strategy for logging details
     object.__setattr__(strategy, "_logger", collector)
 
@@ -160,8 +165,10 @@ def run(
                     logger.debug("Action resulted in %d trade entries", len(trade_log))
                     for entry in trade_log:
                         collector.record_trade(d, entry)
-                        # Also mirror to detail log for consistent transaction tracking
-                        _record_trade_as_detail(collector, d, entry)
+                        # Also mirror to detail log for consistent transaction tracking.
+                        # Portfolio is queried AFTER the trade so quantity_position
+                        # reflects the post-action leg balance (close → 0).
+                        _record_trade_as_detail(collector, d, entry, portfolio)
             except Exception as e:
                 logger.exception("execution failed on %s: %s", d, e)
 
@@ -179,31 +186,95 @@ def run(
     return collector.finalize()
 
 
-def _record_trade_as_detail(collector, d: date, entry: dict) -> None:
-    """Helper to mirror a trade-log entry into the detail-log with specific fields."""
+def _record_trade_as_detail(
+    collector, d: date, entry: dict, portfolio: Portfolio
+) -> None:
+    """Helper to mirror a trade-log entry into the detail-log with specific fields.
+
+    Emits one detail row per trade-log entry (one per leg for multi-leg orders).
+
+    Two quantity columns are recorded:
+      * `quantity_change`   — signed delta from this action
+                              (positive = buy/add, negative = sell/close).
+      * `quantity_position` — remaining balance of the affected leg AFTER this
+                              action (0 for a full close). For stock legs the
+                              leg is identified by symbol within the position;
+                              for option legs by `option_osi`.
+    """
+    from src.backtesting.engine.portfolio import OptionLeg, StockLeg
+
     t = entry.get("type", "")
     symbol = entry.get("symbol", "")
-    qty = entry.get("quantity", 0)
+    qty = entry.get("quantity", 0) or 0
     price = entry.get("price") or entry.get("premium", 0)
     comm = entry.get("commission", 0)
-    
+
     # Consistent logic now that executor uses trade_qty (positive = buy, negative = sell)
     multiplier = 100 if "option" in t else 1
     val = price * abs(qty) * multiplier
-    
+
     if qty > 0:
         cost = val
         proceeds = 0.0
     else:
         cost = 0.0
         proceeds = val
-            
+
+    # Post-action leg balance: search the position that owns this trade.
+    quantity_position = _resolve_leg_quantity_after_action(
+        portfolio, entry, symbol
+    )
+
     collector.record_detail(
-        d, symbol, 
+        d, symbol,
         message=f"Transaction: {t} ({entry.get('reason', 'n/a')})",
         price=price,
-        quantity=qty,
+        quantity_change=qty,
+        quantity_position=quantity_position,
         cost=cost,
         proceeds=proceeds,
-        commission=comm
+        commission=comm,
     )
+
+
+def _resolve_leg_quantity_after_action(
+    portfolio: Portfolio, entry: dict, symbol: str
+) -> int:
+    """Return the current quantity of the leg touched by a trade-log entry.
+
+    Looks up the position by `position_id` (open or closed) and picks the
+    matching leg:
+      * option legs → matched by `option_osi`,
+      * stock  legs → matched by `symbol`.
+
+    Returns 0 if the position/leg no longer exists (full close).
+    """
+    from src.backtesting.engine.portfolio import OptionLeg, StockLeg
+
+    pos_id = entry.get("position_id")
+    if not pos_id:
+        return 0
+
+    # Positions container holds open positions; closed positions moved to
+    # closed_positions when the last leg was removed. We search both.
+    all_positions = list(portfolio.positions) + list(portfolio.closed_positions)
+    position = next(
+        (p for p in all_positions if str(p.id) == str(pos_id)),
+        None,
+    )
+    if position is None:
+        return 0
+
+    t = entry.get("type", "")
+    if "option" in t:
+        osi = entry.get("option_osi")
+        for leg in position.legs:
+            if isinstance(leg, OptionLeg) and leg.option_osi == osi:
+                return int(leg.quantity)
+        return 0
+
+    # stock leg
+    for leg in position.legs:
+        if isinstance(leg, StockLeg) and leg.symbol == symbol:
+            return int(leg.quantity)
+    return 0

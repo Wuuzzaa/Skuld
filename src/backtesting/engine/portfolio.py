@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Optional, Union
+from typing import Callable, Optional, Union
 from uuid import UUID, uuid4
 
 from src.backtesting.data.snapshot import MarketSnapshot, Option
@@ -195,6 +195,13 @@ class Portfolio:
     closed_positions: list[Position] = field(default_factory=list)
     margin_used: float = 0.0
     config: dict = field(default_factory=dict)
+    # Optional callback fired exactly once per position when it moves to
+    # closed. Wired by the engine to ResultsCollector.on_position_closed
+    # so `results.position_log` becomes a direct record of what actually
+    # happened, not a rebuild-from-trade-log after the fact.
+    on_position_closed: Optional[Callable[["Position"], None]] = field(
+        default=None, repr=False
+    )
 
     # ── Basic accessors ──────────────────────────────────────────────────
 
@@ -279,9 +286,18 @@ class Portfolio:
         return
 
     def apply_expiries(self, snapshot: MarketSnapshot) -> None:
-        """Handle option-leg expirations: ITM => assignment, OTM => worthless."""
+        """Handle option-leg expirations: ITM => assignment, OTM => worthless.
+
+        When the last leg of a position expires (OTM) or gets fully
+        assigned into a delivered stock leg that then leaves the position,
+        we close the position via `_move_to_closed`. `realized_pnl` is the
+        sum of (entry cash flow) + (all assignment cash flows) — computed
+        here per-position so the collector's position_log records the
+        true P&L, not a reconstructed number.
+        """
         for position in self.open_positions:
             expired_any = False
+            expiry_cashflow = 0.0
             for leg in list(position.legs):
                 if not isinstance(leg, OptionLeg):
                     continue
@@ -294,7 +310,9 @@ class Portfolio:
                     leg.is_put and stock_price < leg.strike
                 )
                 if itm:
-                    self._settle_assignment(position, leg, stock_price)
+                    expiry_cashflow += self._settle_assignment(
+                        position, leg, stock_price
+                    )
                 else:
                     # OTM: leg simply vanishes; premium was already realized at open
                     position.legs.remove(leg)
@@ -304,16 +322,21 @@ class Portfolio:
                 isinstance(l, (StockLeg, OptionLeg)) for l in position.legs
             ):
                 position.closed_at = snapshot.date
+                position.realized_pnl = position.entry_cashflow + expiry_cashflow
+                position.tags.setdefault("close_reason", "expiry")
                 self._move_to_closed(position)
 
     def _settle_assignment(
         self, position: Position, leg: OptionLeg, stock_price: float
-    ) -> None:
+    ) -> float:
         """
         Short ITM call: shares delivered, cash += strike * qty * shares.
         Long ITM call: opposite (rare in defensive strategies).
         Short ITM put: shares assigned, cash -= strike * qty * shares.
         Long ITM put: opposite.
+
+        Returns the cash delta booked to the portfolio so the caller
+        (`apply_expiries`) can accumulate it into `position.realized_pnl`.
         """
         cash_delta = -leg.strike * leg.quantity * leg.shares_per_contract
         stock_qty_delta = leg.quantity * leg.shares_per_contract
@@ -360,6 +383,7 @@ class Portfolio:
             )
 
         position.legs.remove(leg)
+        return cash_delta
 
     def check_dte_close(self, snapshot: MarketSnapshot) -> None:
         """Auto-close option positions whose min-DTE <= threshold."""
@@ -454,3 +478,11 @@ class Portfolio:
         if position in self.positions:
             self.positions.remove(position)
         self.closed_positions.append(position)
+        if self.on_position_closed is not None:
+            try:
+                self.on_position_closed(position)
+            except Exception:
+                # Callback failures must not corrupt portfolio state.
+                logger.exception(
+                    "on_position_closed callback failed for %s", position.id
+                )
