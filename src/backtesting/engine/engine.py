@@ -91,6 +91,8 @@ def run(
         config=cfg,
         benchmark_symbol=cfg.benchmark_symbol,
     )
+    # Inject collector into strategy for logging details
+    object.__setattr__(strategy, "_logger", collector)
 
     days = trading_days(start_date, end_date)
     if not days:
@@ -158,6 +160,8 @@ def run(
                     logger.debug("Action resulted in %d trade entries", len(trade_log))
                     for entry in trade_log:
                         collector.record_trade(d, entry)
+                        # Also mirror to detail log for consistent transaction tracking
+                        _record_trade_as_detail(collector, d, entry)
             except Exception as e:
                 logger.exception("execution failed on %s: %s", d, e)
 
@@ -173,3 +177,33 @@ def run(
 
     logger.debug("Backtest completed. Finalizing results.")
     return collector.finalize()
+
+
+def _record_trade_as_detail(collector, d: date, entry: dict) -> None:
+    """Helper to mirror a trade-log entry into the detail-log with specific fields."""
+    t = entry.get("type", "")
+    symbol = entry.get("symbol", "")
+    qty = entry.get("quantity", 0)
+    price = entry.get("price") or entry.get("premium", 0)
+    comm = entry.get("commission", 0)
+    
+    # Consistent logic now that executor uses trade_qty (positive = buy, negative = sell)
+    multiplier = 100 if "option" in t else 1
+    val = price * abs(qty) * multiplier
+    
+    if qty > 0:
+        cost = val
+        proceeds = 0.0
+    else:
+        cost = 0.0
+        proceeds = val
+            
+    collector.record_detail(
+        d, symbol, 
+        message=f"Transaction: {t} ({entry.get('reason', 'n/a')})",
+        price=price,
+        quantity=qty,
+        cost=cost,
+        proceeds=proceeds,
+        commission=comm
+    )
