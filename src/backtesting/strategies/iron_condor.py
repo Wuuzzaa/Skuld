@@ -47,12 +47,32 @@ class IronCondorStrategy(Strategy):
                 continue
             pnl_pct = p.unrealized_pnl_pct()
             if pnl_pct is not None and pnl_pct >= exit_pct:
+                self.log_detail(
+                    p.symbol, f"Closing Iron Condor: Target PnL reached ({pnl_pct:.1%})", snapshot,
+                    pnl_pct=pnl_pct, exit_reason="profit_target"
+                )
                 actions.append(ClosePosition(
                     position_id=p.id, reason=f"target_{exit_pct:.0%}",
                 ))
+            else:
+                # Log holding state with required fields
+                # For options, we show the number of contracts (usually based on short legs)
+                qty = 0
+                if p.legs:
+                    qty = abs(p.legs[0].quantity)
+                
+                self.log_detail(
+                    p.symbol, "Holding Iron Condor", snapshot,
+                    pnl_pct=pnl_pct, target_pnl=exit_pct,
+                    quantity=qty, cost=0, proceeds=0, commission=0
+                )
 
         # Entries
         for symbol in snapshot.universe:
+            stock = snapshot.get_stock(symbol)
+            underlying_price = stock.live_stock_price if stock else None
+            iv_rank = stock.iv_rank if stock else None
+
             has_ic = any(
                 p.symbol == symbol and p.tags.get("template") == "iron_condor"
                 for p in portfolio.open_positions
@@ -68,7 +88,13 @@ class IronCondorStrategy(Strategy):
                 symbol, "put", delta_target=short_delta,
                 dte_range=dte_range, min_open_interest=100,
             )
+            
             if short_call is None or short_put is None:
+                self.log_detail(
+                    symbol, "Entry skipped: No suitable short legs found", snapshot,
+                    underlying_price=underlying_price, iv_rank=iv_rank,
+                    target_delta=short_delta, dte_range=dte_range
+                )
                 continue
 
             long_call = snapshot.find_option(
@@ -85,9 +111,23 @@ class IronCondorStrategy(Strategy):
                            short_put.days_to_expiration),
                 min_open_interest=50,
             )
+            
             if long_call is None or long_put is None:
+                self.log_detail(
+                    symbol, "Entry skipped: No suitable wings found", snapshot,
+                    underlying_price=underlying_price, iv_rank=iv_rank,
+                    short_call=short_call.strike, short_put=short_put.strike,
+                    wing_width=wing_width
+                )
                 continue
 
+            self.log_detail(
+                symbol, "Entry: Opening Iron Condor signal", snapshot,
+                underlying_price=underlying_price, iv_rank=iv_rank,
+                short_call_strike=short_call.strike, long_call_strike=long_call.strike,
+                short_put_strike=short_put.strike, long_put_strike=long_put.strike,
+                dte=short_call.days_to_expiration
+            )
             actions.append(OpenPosition(
                 legs=[
                     LegSpec(kind="option", symbol=symbol, contract_type="call",

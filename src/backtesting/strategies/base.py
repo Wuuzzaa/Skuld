@@ -62,6 +62,7 @@ class Strategy:
     universe_default: Optional[UniverseSpec] = None
     preload_fields: list[str] = []
     rolling_manager = None  # optional attribute — set by subclasses
+    _logger: Optional["ResultsCollector"] = None
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -72,6 +73,14 @@ class Strategy:
 
     def on_init(self, config) -> None:
         return
+
+    def log_detail(self, symbol: str, message: str, snapshot: "MarketSnapshot", **kwargs) -> None:
+        """
+        Log a detail for the current day and symbol.
+        The message and extra kwargs will be recorded in the Results' detail_log.
+        """
+        if self._logger:
+            self._logger.record_detail(snapshot.date, symbol, message, **kwargs)
 
     def compute_daily(
         self, snapshot: "MarketSnapshot", portfolio: "Portfolio"

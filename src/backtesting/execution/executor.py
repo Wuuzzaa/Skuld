@@ -193,38 +193,37 @@ class Executor:
         entries: list[dict] = []
 
         for leg in list(position.legs):
-            if fraction < 1.0:
-                # Not implementing partial-leg splits in V1 — round to whole units
-                pass
+            trade_qty = -int(leg.quantity * fraction)
+            if trade_qty == 0:
+                continue
+
             if isinstance(leg, StockLeg):
-                qty = int(leg.quantity * fraction)
-                if qty == 0:
-                    continue
                 price = leg.current_price
                 slip = self.slippage.stock_slippage_pct()
-                fill = price * (1 - slip * _sign_for_buy(qty))
-                cashflow += fill * qty
-                commissions += self.commission.stock_commission(qty, fill)
-                leg.quantity -= qty
+                fill = price * (1 + slip * _sign_for_buy(trade_qty))
+                leg_cashflow = -fill * trade_qty
+                cashflow += leg_cashflow
+                comm = self.commission.stock_commission(abs(trade_qty), fill)
+                commissions += comm
+                leg.quantity += trade_qty
                 entries.append({
                     "type": "close_stock", "date": snapshot.date,
-                    "symbol": leg.symbol, "quantity": qty,
+                    "symbol": leg.symbol, "quantity": trade_qty,
                     "price": fill, "reason": reason, "slippage_pct": slip,
                 })
             else:  # OptionLeg
-                qty = int(leg.quantity * fraction)
-                if qty == 0:
-                    continue
                 price = leg.current_premium
                 slip = self.slippage.option_slippage_pct(open_interest=0) or 0.01
-                fill = price * (1 - slip * _sign_for_buy(qty))
-                cashflow += fill * (-qty) * leg.shares_per_contract
-                commissions += self.commission.option_commission(qty)
-                leg.quantity -= qty
+                fill = price * (1 + slip * _sign_for_buy(trade_qty))
+                leg_cashflow = -fill * trade_qty * leg.shares_per_contract
+                cashflow += leg_cashflow
+                comm = self.commission.option_commission(abs(trade_qty))
+                commissions += comm
+                leg.quantity += trade_qty
                 entries.append({
                     "type": "close_option", "date": snapshot.date,
                     "symbol": leg.symbol, "option_osi": leg.option_osi,
-                    "quantity": qty, "premium": fill,
+                    "quantity": trade_qty, "premium": fill,
                     "reason": reason, "slippage_pct": slip,
                 })
 
@@ -263,16 +262,17 @@ class Executor:
         # 1) close specified legs at market
         legs_to_close = [l for l in position.legs if l.id in action.close_leg_ids]
         for leg in legs_to_close:
+            trade_qty = -leg.quantity
             if isinstance(leg, StockLeg):
                 price = leg.current_price
                 slip = self.slippage.stock_slippage_pct()
-                fill = price * (1 - slip * _sign_for_buy(leg.quantity))
-                cashflow = fill * leg.quantity
-                comm = self.commission.stock_commission(leg.quantity, fill)
-                portfolio.cash += cashflow - comm
+                fill = price * (1 + slip * _sign_for_buy(trade_qty))
+                leg_cashflow = -fill * trade_qty
+                comm = self.commission.stock_commission(abs(trade_qty), fill)
+                portfolio.cash += leg_cashflow - comm
                 entries.append({
                     "type": "close_stock", "date": snapshot.date,
-                    "symbol": leg.symbol, "quantity": leg.quantity,
+                    "symbol": leg.symbol, "quantity": trade_qty,
                     "price": fill, "reason": action.reason,
                     "position_id": str(position.id), "commission": comm,
                 })
@@ -280,14 +280,14 @@ class Executor:
             else:  # OptionLeg
                 price = leg.current_premium
                 slip = self.slippage.option_slippage_pct(open_interest=0) or 0.01
-                fill = price * (1 - slip * _sign_for_buy(leg.quantity))
-                cashflow = fill * (-leg.quantity) * leg.shares_per_contract
-                comm = self.commission.option_commission(leg.quantity)
-                portfolio.cash += cashflow - comm
+                fill = price * (1 + slip * _sign_for_buy(trade_qty))
+                leg_cashflow = -fill * trade_qty * leg.shares_per_contract
+                comm = self.commission.option_commission(abs(trade_qty))
+                portfolio.cash += leg_cashflow - comm
                 entries.append({
                     "type": "close_option", "date": snapshot.date,
                     "symbol": leg.symbol, "option_osi": leg.option_osi,
-                    "quantity": leg.quantity, "premium": fill,
+                    "quantity": trade_qty, "premium": fill,
                     "reason": action.reason,
                     "position_id": str(position.id), "commission": comm,
                 })

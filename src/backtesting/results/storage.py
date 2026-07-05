@@ -83,6 +83,7 @@ def save_results(results, runs_dir: Optional[Path] = None) -> Path:
     _write_frame(results.trade_log, run_dir / "trade_log")
     _write_frame(results.daily_log, run_dir / "daily_log")
     _write_frame(results.position_log, run_dir / "position_log")
+    _write_frame(results.detail_log, run_dir / "detail_log")
     _write_frame(results.benchmark_series, run_dir / "benchmark")
 
     logger.info("Saved backtest run to %s", run_dir)
@@ -113,6 +114,7 @@ def load_results(run_id: str, runs_dir: Optional[Path] = None):
         trade_log=_read_frame(run_dir / "trade_log"),
         daily_log=_read_frame(run_dir / "daily_log"),
         position_log=_read_frame(run_dir / "position_log"),
+        detail_log=_read_frame(run_dir / "detail_log"),
         benchmark_series=_read_frame(run_dir / "benchmark"),
     )
 

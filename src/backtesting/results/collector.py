@@ -29,6 +29,7 @@ class Results:
     config: dict
     trade_log: pd.DataFrame
     daily_log: pd.DataFrame
+    detail_log: pd.DataFrame
     position_log: pd.DataFrame
     benchmark_series: pd.DataFrame
     metrics: dict = field(default_factory=dict)
@@ -55,6 +56,7 @@ class ResultsCollector:
         )
         self._trades: list[dict] = []
         self._dailies: list[dict] = []
+        self._details: list[dict] = []
         self._closed_positions_seen: set[UUID] = set()
 
     # ── Recording ────────────────────────────────────────────────────────
@@ -83,6 +85,15 @@ class ResultsCollector:
                 continue
             self._closed_positions_seen.add(p.id)
 
+    def record_detail(self, d: date, symbol: str, message: str, **kwargs) -> None:
+        entry = {
+            "date": d,
+            "symbol": symbol,
+            "message": message,
+        }
+        entry.update(kwargs)
+        self._details.append(entry)
+
     # ── Finalisation ─────────────────────────────────────────────────────
 
     def finalize(self) -> Results:
@@ -90,6 +101,7 @@ class ResultsCollector:
 
         trade_df = pd.DataFrame(self._trades)
         daily_df = pd.DataFrame(self._dailies)
+        detail_df = pd.DataFrame(self._details)
         position_df = self._build_position_log()
         benchmark_df = self.benchmark.to_dataframe()
 
@@ -108,6 +120,7 @@ class ResultsCollector:
             config=self.config,
             trade_log=trade_df,
             daily_log=daily_df,
+            detail_log=detail_df,
             position_log=position_df,
             benchmark_series=benchmark_df,
             metrics=metrics.__dict__ if hasattr(metrics, "__dict__") else dict(metrics),

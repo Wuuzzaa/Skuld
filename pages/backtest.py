@@ -45,8 +45,8 @@ st.caption(
     "limitations."
 )
 
-tab_setup, tab_perf, tab_trades, tab_symbols, tab_export = st.tabs(
-    ["Setup", "Performance", "Trades", "Symbols", "Export"]
+tab_setup, tab_perf, tab_trades, tab_symbols, tab_details, tab_export = st.tabs(
+    ["Setup", "Performance", "Trades", "Symbols", "Details", "Export"]
 )
 
 
@@ -444,6 +444,18 @@ with tab_symbols:
             st.dataframe(by_symbol, use_container_width=True)
 
 
+# ── Details tab ──────────────────────────────────────────────────────────
+
+with tab_details:
+    r = st.session_state.backtest_results
+    if r is None:
+        st.info("Run a backtest first.")
+    elif r.detail_log is None or r.detail_log.empty:
+        st.info("No detailed logs available.")
+    else:
+        st.dataframe(r.detail_log, use_container_width=True, height=600)
+
+
 # ── Export tab ───────────────────────────────────────────────────────────
 
 with tab_export:
@@ -473,6 +485,13 @@ with tab_export:
                 file_name=f"positions_{r.run_id}.csv",
                 mime="text/csv",
             )
+
+        st.download_button(
+            "Detail log (CSV)",
+            data=export_csv(r.detail_log),
+            file_name=f"details_{r.run_id}.csv",
+            mime="text/csv",
+        )
 
         st.download_button(
             "Metrics (JSON)",
