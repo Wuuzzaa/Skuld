@@ -5,12 +5,12 @@ import streamlit as st
 import pandas as pd
 
 from config import PATH_DATABASE_QUERY_FOLDER
+from pages.backtesting.rsl_momentum_backtesting import display_rsl_momentum_backtesting
 from src.historization import select_timetravel_into_dataframe
 from src.logger_config import setup_logging
-from src.sp500_constituents import SP500_SYMBOLS
 from src.rsl_momentum_strategy import calculate_rsl_momentum_ranking
+from src.sp500_symbols_wiki import get_sp500_symbols_for_date
 from src.streamlit_helpers import render_date_filter
-from pages.backtesting.rsl_momentum import display_rsl_momentum_backtesting
 
 # Setup logging
 setup_logging(component="streamlit", sub_component="rsl_momentum", log_level=logging.DEBUG, console_output=True)
@@ -20,10 +20,13 @@ logger = logging.getLogger(os.path.basename(__file__))
 def load_rsl_data(date: str):
     """Load RSL data for S&P 500 symbols from database."""
     query_path = PATH_DATABASE_QUERY_FOLDER / "rsl_query.sql"
+
+    symbols = get_sp500_symbols_for_date(target_date=date)
+
     df = select_timetravel_into_dataframe(
         date=date,
         sql_file_path=query_path,
-        params={"symbols": list(SP500_SYMBOLS)}
+        params={"symbols": list(symbols)}
     )
     return df
 

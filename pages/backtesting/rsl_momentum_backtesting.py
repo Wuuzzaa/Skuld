@@ -9,7 +9,6 @@ import time
 
 from src.data_aging import is_weekend
 from src.database import select_into_dataframe
-from src.sp500_constituents import SP500_SYMBOLS
 from src.streamlit_helpers import render_date_filter
 
 logger = logging.getLogger(os.path.basename(__file__))
@@ -36,16 +35,17 @@ def calculate_rsl_momentum_strategy(start_date, end_date, start_budget=10000.0,
     start_calculate_rsl_momentum_strategy = time.time()
     start_date_str = str(start_date)
     end_date_str = str(end_date)
-    today_str = time.strftime("%Y-%m-%d", time.gmtime())
-    
-    symbols = list(SP500_SYMBOLS)
+    today_str = time.strftime("%Y-%m-%d", time.gmtime())  
     
     # 1. Fetch S&P 500 constituents profile data for sector diversification
     df_profiles = select_into_dataframe("""
         SELECT symbol, name as company_name, sector 
         FROM "StockAssetProfilesYahoo"
-        WHERE symbol = ANY(:symbols)
-    """, params={"symbols": symbols})
+        WHERE symbol IN (
+                SELECT symbol 
+                FROM "StockSP500ConstituentsHistorical"
+            )
+    """)
     
     # 2. Fetch history (optimized: select conditionally based on end_date)
     is_end_date_today = (end_date_str == today_str and not is_weekend())
@@ -76,8 +76,12 @@ def calculate_rsl_momentum_strategy(start_date, end_date, start_budget=10000.0,
             FROM rsl_union t
             JOIN price_union p 
                 ON t.snapshot_date = p.snapshot_date AND t.symbol = p.symbol
+            JOIN "StockSP500ConstituentsHistorical" as sp
+            ON t.symbol = sp.symbol
             WHERE t.snapshot_date BETWEEN :start_date AND :end_date
-              AND t.symbol = ANY(:symbols)
+              -- check if the symbol was in the S&P 500 at the time of the snapshot
+              AND (date_added <= t.snapshot_date OR date_added IS NULL)
+              AND (date_removed > t.snapshot_date OR date_removed IS NULL)
         """
     else:
         sql_history = """
@@ -89,14 +93,17 @@ def calculate_rsl_momentum_strategy(start_date, end_date, start_budget=10000.0,
             FROM "TechnicalIndicatorsCalculatedHistoryDaily" t
             JOIN "StockPricesYahooHistoryDaily" p 
                 ON t.snapshot_date = p.snapshot_date AND t.symbol = p.symbol
+            JOIN "StockSP500ConstituentsHistorical" as sp
+            ON t.symbol = sp.symbol
             WHERE t.snapshot_date BETWEEN :start_date AND :end_date
-              AND t.symbol = ANY(:symbols)
+              -- check if the symbol was in the S&P 500 at the time of the snapshot
+              AND (date_added <= t.snapshot_date OR date_added IS NULL)
+              AND (date_removed > t.snapshot_date OR date_removed IS NULL)
         """
         
     df_history = select_into_dataframe(sql_history, params={
         "start_date": start_date_str, 
-        "end_date": end_date_str, 
-        "symbols": symbols
+        "end_date": end_date_str
     })
     
     if df_history.empty:

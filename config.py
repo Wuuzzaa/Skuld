@@ -51,7 +51,7 @@ TABLE_STOCK_HISTORICAL_VOLATILITY_YAHOO = 'StockHistoricalVolatilityYahoo'
 TABLE_STOCK_SYMBOLS_MASSIVE = 'StockSymbolsMassive'
 TABLE_STOCK_ASSET_PROFILES_YAHOO = 'StockAssetProfilesYahoo'
 TABLE_DIVIDEND_DATA_YAHOO = 'DividendDataYahoo'
-
+TABLE_STOCK_SP500_CONSTITUENTS_HISTORICAL = 'StockSP500ConstituentsHistorical'
 
 # History enabled tables
 HISTORY_ENABLED_TABLES = [

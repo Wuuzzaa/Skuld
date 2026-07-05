@@ -37,6 +37,7 @@ JOB_MODES = [
     "historical_full",
     "historization",
     "only_run_migrations",
+    "sp500_constituents",
 
 ]
 

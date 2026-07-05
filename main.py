@@ -7,6 +7,7 @@ from src.logger_config import setup_logging, get_log_level_from_db
 from src.database import drop_all_views, get_postgres_engine, recreate_views, run_migrations
 from src.send_alert import send_telegram_message
 from src.massiv_api import load_option_chains
+from src.sp500_symbols_wiki import load_sp500_constituents_from_wikipedia
 from src.stock_volatility import calculate_and_store_stock_historical_volatility_history, calculate_and_store_stock_implied_volatility_history
 from src.technical_indicators import calc_technical_indicators, calc_technical_indicators_history
 from src.yahoo_asset_profile import load_asset_profile
@@ -96,6 +97,7 @@ def main(args):
                 ("Yahoo Finance Analyst Price Targets", scrape_yahoo_finance_analyst_price_targets, (symbols["stocks"],)),
                 ("Earning Dates", scrape_earning_dates, (symbols["stocks"],)),
                 ("Yahoo Asset Profiles", load_asset_profile, (symbols["all"],)),
+                ("S&P500 Constituents", load_sp500_constituents_from_wikipedia, ()),
             ],
             "market_start_mid_end": [
                 ("Fetch Current Stock Day Prices", load_stock_prices, (symbols["all"],)),
@@ -120,6 +122,9 @@ def main(args):
             ],
             "historical_dividend_classification": [
                 ("Historical Volatility", calculate_dividend_classification_history, ()),
+            ],
+            "sp500_constituents": [
+                ("S&P500 Constituents", load_sp500_constituents_from_wikipedia, ()),
             ],
         }
 
@@ -236,6 +241,7 @@ if __name__ == "__main__":
                             "historical_full",
                             "historization",
                             "only_run_migrations",
+                            "sp500_constituents"
                         ],
                         help="Mode for data collection")
     parser.add_argument("--env", type=str, required=False, default=None,
