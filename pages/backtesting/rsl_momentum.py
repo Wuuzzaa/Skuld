@@ -7,6 +7,7 @@ import plotly.graph_objects as go
 from datetime import datetime, date
 import time
 
+from src.data_aging import is_weekend
 from src.database import select_into_dataframe
 from src.sp500_constituents import SP500_SYMBOLS
 from src.streamlit_helpers import render_date_filter
@@ -32,6 +33,7 @@ def calculate_rsl_momentum_strategy(start_date, end_date, start_budget=10000.0,
     """
     Simulate RSL Momentum rotation strategy backtest from start_date to end_date.
     """
+    start_calculate_rsl_momentum_strategy = time.time()
     start_date_str = str(start_date)
     end_date_str = str(end_date)
     today_str = time.strftime("%Y-%m-%d", time.gmtime())
@@ -46,13 +48,14 @@ def calculate_rsl_momentum_strategy(start_date, end_date, start_budget=10000.0,
     """, params={"symbols": symbols})
     
     # 2. Fetch history (optimized: select conditionally based on end_date)
-    is_end_date_today = (end_date_str == today_str)
+    is_end_date_today = (end_date_str == today_str and not is_weekend())
     
     if is_end_date_today:
         sql_history = """
             WITH rsl_union AS (
                 SELECT snapshot_date, symbol, "RSL" as rsl
                 FROM "TechnicalIndicatorsCalculatedHistoryDaily"
+                WHERE snapshot_date <> CURRENT_DATE
                 UNION ALL
                 SELECT CURRENT_DATE AS snapshot_date, symbol, "RSL" as rsl
                 FROM "TechnicalIndicatorsCalculated"
@@ -60,6 +63,7 @@ def calculate_rsl_momentum_strategy(start_date, end_date, start_budget=10000.0,
             price_union AS (
                 SELECT snapshot_date, symbol, close as price
                 FROM "StockPricesYahooHistoryDaily"
+                WHERE snapshot_date <> CURRENT_DATE
                 UNION ALL
                 SELECT CURRENT_DATE AS snapshot_date, symbol, close as price
                 FROM "StockPricesYahoo"
@@ -96,17 +100,23 @@ def calculate_rsl_momentum_strategy(start_date, end_date, start_budget=10000.0,
     })
     
     if df_history.empty:
+        logger.info("No historical data available.")
         return None
         
     # Merge profiles
+    start = time.time()
     df_history = df_history.merge(df_profiles, on='symbol', how='left')
     df_history['snapshot_date'] = pd.to_datetime(df_history['snapshot_date']).dt.date
+    logger.info(f"Merge profiles in {round(time.time() - start, 2)}s.")
+        
     
     # Vectorized rank and percentile calculations per snapshot date
+    start = time.time()
     df_history['rank'] = df_history.groupby('snapshot_date')['rsl'].rank(ascending=False, method='first')
     counts = df_history.groupby('snapshot_date')['symbol'].transform('count')
     df_history['percentile'] = ((counts - df_history['rank'] + 1) / counts * 100).round(1)
     df_history['above_threshold'] = df_history['percentile'] >= (100 - exit_percentile)
+    logger.info(f"Vectorized rank and percentile calculations per snapshot date in {round(time.time() - start, 2)}s.")
     
     # Sort history chronologically
     df_history = df_history.sort_values('snapshot_date')
@@ -136,6 +146,7 @@ def calculate_rsl_momentum_strategy(start_date, end_date, start_budget=10000.0,
         data_by_date[date_grp] = grp.set_index('symbol').to_dict(orient='index')
         
     # Backtest simulation
+    start_sim = time.time()
     cash = start_budget
     current_positions = {} # {symbol: {shares, entry_price, entry_date, last_price, sector, company_name}}
     portfolio_history = []
@@ -260,13 +271,15 @@ def calculate_rsl_momentum_strategy(start_date, end_date, start_budget=10000.0,
                             'fee': fee,
                             'cash_flow': -(cost + fee)
                         })
-                        
+    logger.info(f"Simulation completed in {round(time.time() - start_sim, 2)}s.")
+
     # 3. S&P 500 Buy & Hold benchmark query
     if is_end_date_today:
         sql_spy = """
             SELECT snapshot_date, close as price
             FROM "StockPricesYahooHistoryDaily"
             WHERE symbol = 'SPY'
+            AND snapshot_date <> CURRENT_DATE
             UNION ALL
             SELECT CURRENT_DATE as snapshot_date, close as price
             FROM "StockPricesYahoo"
@@ -277,6 +290,7 @@ def calculate_rsl_momentum_strategy(start_date, end_date, start_budget=10000.0,
             SELECT snapshot_date, close as price
             FROM "StockPricesYahooHistoryDaily"
             WHERE symbol = 'SPY'
+              AND snapshot_date <> CURRENT_DATE
               AND snapshot_date BETWEEN :start_date AND :end_date
             ORDER BY snapshot_date ASC
         """
@@ -308,7 +322,8 @@ def calculate_rsl_momentum_strategy(start_date, end_date, start_budget=10000.0,
         df_port = df_merged.drop(columns=['snapshot_date', 'price']).rename(columns={'spy_benchmark': 'spy_value'})
     else:
         df_port['spy_value'] = start_budget
-        
+
+    logger.info(f"Calculate RSL Momentum Strategy in {round(time.time() - start_calculate_rsl_momentum_strategy, 2)}s.")
     return df_port, df_trades
 
 def display_rsl_momentum_backtesting(selected_date, top_n, max_per_sector, exit_percentile):
@@ -317,7 +332,7 @@ def display_rsl_momentum_backtesting(selected_date, top_n, max_per_sector, exit_
     
     # Date query for compare/end date (same as spreads/married put)
     compare_date = render_date_filter(
-        date_query=f'select date from (select date from "DatesHistory" union select current_date) as sub WHERE date > \'{selected_date}\' ORDER BY date DESC',
+        date_query=f'select date from (select DISTINCT snapshot_date AS date from "StockPricesYahooHistoryDaily" union select current_date AS date) as sub WHERE date > \'{selected_date}\' ORDER BY date DESC',
         date_label="Vergleichsdatum (Ende des Backtests):",
         date_session_key="rsl_momentum_compare_date",
         date_list_session_key="rsl_momentum_list_compare" + str(selected_date.strftime('%Y%m%d')),
