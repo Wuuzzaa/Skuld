@@ -179,11 +179,14 @@ echo "[remote] Streaming dump to $REMOTE_TMP ..." >&2
         pg_dump -U "$DB_USER" "${EXCLUDE_ARGS[@]}" "$DB"
 
     # Phase 2: last N days of each HistoryDaily table as COPY blocks.
+    # SET search_path before every block: pg_dump ends with SET search_path=''
+    # which makes unqualified identifiers invisible to psql during restore.
     while IFS= read -r tbl; do
         [ -z "$tbl" ] && continue
         echo ""
         echo "-- Slim data (last $DAYS days) for $tbl"
-        echo "COPY \"$tbl\" FROM stdin;"
+        echo "SET search_path TO public;"
+        echo "COPY public.\"$tbl\" FROM stdin;"
         docker exec -e PGOPTIONS='-c default_transaction_read_only=on' "$CONTAINER" \
             psql -U "$DB_USER" -d "$DB" -tAc \
             "\\COPY (SELECT * FROM \"$tbl\" WHERE snapshot_date >= CURRENT_DATE - INTERVAL '$DAYS days') TO STDOUT"

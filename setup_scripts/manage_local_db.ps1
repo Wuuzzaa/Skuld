@@ -303,7 +303,8 @@ echo "[remote] Streaming dump to $REMOTE_TMP ..." >&2
         [ -z "$tbl" ] && continue
         echo ""
         echo "-- Slim data (last $DAYS days) for $tbl"
-        echo "COPY \"$tbl\" FROM stdin;"
+        echo "SET search_path TO public;"
+        echo "COPY public.\"$tbl\" FROM stdin;"
         docker exec -e PGOPTIONS='-c default_transaction_read_only=on' "$CONTAINER" \
             psql -U "$DB_USER" -d "$DB" -tAc \
             "\\COPY (SELECT * FROM \"$tbl\" WHERE snapshot_date >= CURRENT_DATE - INTERVAL '$DAYS days') TO STDOUT"
