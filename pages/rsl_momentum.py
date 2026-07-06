@@ -31,6 +31,25 @@ def load_rsl_data(date: str):
     return df
 
 
+@st.cache_data(ttl=300)
+def load_spy_rsl(date: str) -> float | None:
+    """Load SPY RSL for the given date."""
+    query_path = PATH_DATABASE_QUERY_FOLDER / "rsl_query.sql"
+    try:
+        df = select_timetravel_into_dataframe(
+            date=date,
+            sql_file_path=query_path,
+            params={"symbols": ["SPY"]}
+        )
+        if df is not None and not df.empty:
+            row = df[df["symbol"] == "SPY"]
+            if not row.empty:
+                return float(row.iloc[0]["rsl"])
+    except Exception:
+        pass
+    return None
+
+
 def main():
     st.title("RSL Momentum Rotation")
 
@@ -50,8 +69,30 @@ def main():
         exit_percentile = st.number_input("Exit below Top %", min_value=1.0, max_value=90.0, value=50.0, step=5.0,
                                           help="Unter diesem Percentil wird verkauft")
 
+    # Regime Filter
+    with st.expander("⚙️ Regime-Filter (Drawdown-Schutz)", expanded=False):
+        rf_col1, rf_col2 = st.columns(2)
+        with rf_col1:
+            min_rsl_threshold = st.number_input(
+                "Absoluter RSL-Mindest-Filter",
+                min_value=0.0, max_value=2.0, value=0.0, step=0.01,
+                help="Nur Aktien mit RSL ≥ diesem Wert kommen als Top Pick in Frage. "
+                     "1.0 = Aktie muss über SMA200 notieren. 0.0 = deaktiviert."
+            )
+            if min_rsl_threshold > 0:
+                st.caption(f"Aktien unter RSL {min_rsl_threshold:.2f} werden nicht gekauft → freie Plätze bleiben Cash.")
+        with rf_col2:
+            spy_filter_enabled = st.toggle(
+                "SPY-Marktfilter aktivieren",
+                value=False,
+                help="Wenn SPY unter seinem SMA200 notiert (RSL < 1.0), werden keine neuen Positionen eröffnet."
+            )
+            if spy_filter_enabled:
+                st.caption("Wenn SPY RSL < 1.0 → Portfolio bleibt zu 100% in Cash (kein Neukauf).")
+
     # Load data
     df = load_rsl_data(selected_date)
+    spy_rsl = load_spy_rsl(selected_date) if spy_filter_enabled else None
 
     if df is None or df.empty:
         st.error("Keine RSL-Daten verfügbar. Bitte prüfe die Datenbankverbindung.")
@@ -63,11 +104,25 @@ def main():
         top_n=int(top_n),
         max_per_sector=int(max_per_sector),
         exit_percentile=float(exit_percentile),
+        min_rsl_threshold=float(min_rsl_threshold),
+        spy_filter_enabled=spy_filter_enabled,
+        spy_rsl=spy_rsl,
     )
 
     ranking = pd.DataFrame(result["ranking"])
     top_picks = pd.DataFrame(result["top_picks"])
     summary = result["summary"]
+    regime = result["regime"]
+
+    # --- Regime Status Banner ---
+    if spy_filter_enabled or min_rsl_threshold > 0:
+        if not regime["spy_is_bullish"]:
+            st.error(f"🚨 **BÄRENMARKT** — SPY RSL {regime['spy_rsl']:.4f} < 1.0 → Keine neuen Positionen. Portfolio 100% Cash.")
+        else:
+            spy_info = f" | SPY RSL: {regime['spy_rsl']:.4f} ✅" if spy_filter_enabled and spy_rsl else ""
+            cash_info = f" | Cash-Quote: {regime['cash_quota']:.0f}%" if regime['cash_quota'] > 0 else ""
+            eligible_info = f" | Kaufbar: {regime['eligible_for_buy']} Aktien" if min_rsl_threshold > 0 else ""
+            st.info(f"🟢 **Bullenmarkt aktiv**{spy_info}{cash_info}{eligible_info}")
 
     # --- Top Picks Cards ---
     if not top_picks.empty:
@@ -85,11 +140,14 @@ def main():
     # --- Summary Stats ---
     if summary:
         st.divider()
-        s1, s2, s3, s4 = st.columns(4)
+        s1, s2, s3, s4, s5 = st.columns(5)
         s1.metric("S&P 500 Ranked", summary["total_stocks"])
         s2.metric("Above Threshold", summary["above_threshold"])
         s3.metric("Avg RSL (Top Picks)", f"{summary['avg_rsl_top_picks']:.4f}" if summary['avg_rsl_top_picks'] else "N/A")
         s4.metric("RSL Range", f"{summary['min_rsl']:.3f} – {summary['max_rsl']:.3f}")
+        s5.metric("Cash Positionen", summary["cash_positions"],
+                  delta=f"{regime['cash_quota']:.0f}% Cash" if summary["cash_positions"] > 0 else None,
+                  delta_color="off")
 
     # --- Full Ranking Table ---
     st.divider()
@@ -222,7 +280,9 @@ def main():
         S&P 500 Konstituenten. Daten: Live-Kurse aus OptionDataMerged (Polygon.io).
         """)
 
-    display_rsl_momentum_backtesting(selected_date, top_n, max_per_sector, exit_percentile)
+    display_rsl_momentum_backtesting(selected_date, top_n, max_per_sector, exit_percentile,
+                                      min_rsl_threshold=min_rsl_threshold,
+                                      spy_filter_enabled=spy_filter_enabled)
 
 
 if __name__ == "__main__":

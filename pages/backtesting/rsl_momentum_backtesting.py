@@ -336,7 +336,8 @@ def calculate_rsl_momentum_strategy(start_date, end_date, start_budget=10000.0,
     logger.info(f"Calculate RSL Momentum Strategy in {round(time.time() - start_calculate_rsl_momentum_strategy, 2)}s.")
     return df_port, df_trades
 
-def display_rsl_momentum_backtesting(selected_date, top_n, max_per_sector, exit_percentile):
+def display_rsl_momentum_backtesting(selected_date, top_n, max_per_sector, exit_percentile,
+                                      min_rsl_threshold: float = 0.0, spy_filter_enabled: bool = False):
     st.divider()
     st.subheader("📈 Backtesting RSL Momentum Rotation")
     
