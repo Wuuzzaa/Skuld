@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SKULD Roll Support — Strategie & Logik</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #22263a;
+      --border: #2e3250;
+      --accent: #4f8ef7;
+      --accent2: #7c5cfc;
+      --green: #22c55e;
+      --yellow: #f59e0b;
+      --red: #ef4444;
+      --text: #e2e8f0;
+      --muted: #8892b0;
+      --mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 15px;
+      line-height: 1.7;
+      padding: 40px 24px;
+    }
+
+    .container { max-width: 900px; margin: 0 auto; }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 6px;
+    }
+    .subtitle {
+      color: var(--muted);
+      font-size: 14px;
+      margin-bottom: 40px;
+    }
+
+    h2 {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--accent);
+      margin: 40px 0 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    h3 {
+      font-size: 15px;
+      font-weight: 600;
+      color: #cbd5e1;
+      margin: 24px 0 10px;
+    }
+
+    p { margin-bottom: 12px; color: var(--text); }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 14px;
+    }
+    th {
+      background: var(--surface2);
+      color: var(--muted);
+      font-weight: 600;
+      text-align: left;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    td {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--surface2); }
+    td code {
+      background: var(--surface2);
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: var(--mono);
+      font-size: 13px;
+      color: #93c5fd;
+    }
+
+    /* Code blocks */
+    pre {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      overflow-x: auto;
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.6;
+      margin: 16px 0;
+    }
+    pre .comment { color: #4b5c8a; }
+    pre .key     { color: #93c5fd; }
+    pre .val     { color: #86efac; }
+    pre .op      { color: #f9a8d4; }
+    pre .branch  { color: #fcd34d; }
+    pre .label   { color: #c4b5fd; font-weight: 600; }
+
+    /* Stage cards */
+    .stages { display: grid; gap: 16px; margin: 20px 0; }
+
+    .stage-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px 24px;
+      position: relative;
+    }
+    .stage-card.s1 { border-left: 3px solid var(--green); }
+    .stage-card.s2 { border-left: 3px solid var(--yellow); }
+    .stage-card.s3 { border-left: 3px solid var(--red); }
+    .stage-card.end { border-left: 3px solid var(--accent2); }
+
+    .stage-badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 20px;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .s1 .stage-badge { background: #14532d; color: #86efac; }
+    .s2 .stage-badge { background: #451a03; color: #fcd34d; }
+    .s3 .stage-badge { background: #450a0a; color: #fca5a5; }
+    .end .stage-badge { background: #2e1065; color: #c4b5fd; }
+
+    .stage-card h3 { margin-top: 0; color: #fff; }
+
+    .stage-formula {
+      background: var(--surface2);
+      border-radius: 6px;
+      padding: 12px 16px;
+      margin-top: 12px;
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.8;
+    }
+    .stage-formula .label { color: var(--muted); font-size: 11px; display: block; margin-bottom: 4px; }
+
+    .condition {
+      background: var(--surface2);
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin: 8px 0;
+      font-size: 14px;
+    }
+    .condition .icon { margin-right: 8px; }
+
+    /* Decision flow */
+    .flow {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 24px;
+      margin: 20px 0;
+    }
+    .flow-step {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .flow-step:last-child { margin-bottom: 0; }
+    .flow-num {
+      min-width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .flow-content strong { color: #fff; }
+
+    /* Skuld integration box */
+    .skuld-box {
+      background: linear-gradient(135deg, #1a1d27, #1e2040);
+      border: 1px solid #3b4280;
+      border-radius: 10px;
+      padding: 24px;
+      margin: 20px 0;
+    }
+    .skuld-box h3 {
+      color: var(--accent);
+      margin-top: 0;
+    }
+
+    .data-source {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      padding: 3px 10px;
+      border-radius: 4px;
+      font-family: var(--mono);
+    }
+    .ds-db   { background: #0c2340; color: #60a5fa; border: 1px solid #1e3a5f; }
+    .ds-user { background: #1a2e1a; color: #86efac; border: 1px solid #14532d; }
+    .ds-calc { background: #2d1a40; color: #c4b5fd; border: 1px solid #4c1d95; }
+
+    .tag-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+
+    /* Warning / info boxes */
+    .callout {
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin: 16px 0;
+      font-size: 14px;
+    }
+    .callout.info  { background: #0c1a33; border-left: 3px solid var(--accent); }
+    .callout.warn  { background: #1c1000; border-left: 3px solid var(--yellow); }
+    .callout.green { background: #051a0e; border-left: 3px solid var(--green); }
+
+    /* Footer */
+    .footer {
+      margin-top: 60px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <h1>SKULD Roll Support</h1>
+  <p class="subtitle">Formalisierte Roll-Logik für Cash Secured Puts &amp; Covered Calls — Grundlage für die SKULD-Implementierung · Stand 2026-06-27</p>
+
+  <!-- ============================================================ -->
+  <h2>1. Grundgrößen eines laufenden Trades</h2>
+
+  <table>
+    <thead>
+      <tr><th>Variable</th><th>Bedeutung</th><th>Quelle in SKULD</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>S</code></td>
+        <td>Aktueller Aktienkurs</td>
+        <td><span class="data-source ds-db">🗄 DB · live_stock_price</span></td>
+      </tr>
+      <tr>
+        <td><code>K</code></td>
+        <td>Basispreis (Strike) des laufenden Puts</td>
+        <td><span class="data-source ds-user">✏ Manuell eingeben</span></td>
+      </tr>
+      <tr>
+        <td><code>P_eröffnung</code></td>
+        <td>Prämie bei Eröffnung (eingenommen, pro Aktie)</td>
+        <td><span class="data-source ds-user">✏ Manuell eingeben</span></td>
+      </tr>
+      <tr>
+        <td><code>P_aktuell</code></td>
+        <td>Aktueller Marktpreis des laufenden Puts — das ist der Preis den du heute zahlen müsstest um die Position zu schließen (Rückkaufpreis = Schließungskosten). Wenn P_aktuell &lt; P_eröffnung hast du Gewinn.</td>
+        <td><span class="data-source ds-db">🗄 DB · OptionDataMerged (ask-Näherung)</span></td>
+      </tr>
+      <tr>
+        <td><code>P_kum</code></td>
+        <td>Kumulierte Netto-Prämien aller bisherigen Rollen (inkl. Eröffnung)</td>
+        <td><span class="data-source ds-user">✏ Manuell führen / später DB</span></td>
+      </tr>
+      <tr>
+        <td><code>DTE</code></td>
+        <td>Verbleibende Laufzeit in Tagen</td>
+        <td><span class="data-source ds-db">🗄 DB · dte-Feld</span></td>
+      </tr>
+      <tr>
+        <td><code>n</code></td>
+        <td>Anzahl Kontrakte (1 Kontrakt = 100 Aktien)</td>
+        <td><span class="data-source ds-user">✏ Manuell eingeben</span></td>
+      </tr>
+      <tr>
+        <td><code>Stufe</code></td>
+        <td>Aktuelle Roll-Stufe (0 = noch nie gerollt, 1, 2, 3)</td>
+        <td><span class="data-source ds-user">✏ Manuell / abgeleitet</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- ============================================================ -->
+  <h2>2. Abgeleitete Kennzahlen (automatisch berechnet)</h2>
+
+  <pre><span class="comment"># ── Gewinn/Verlust ─────────────────────────────────────────────</span>
+<span class="key">Gewinn_pct</span>      <span class="op">=</span> (P_eröffnung <span class="op">-</span> P_aktuell) / P_eröffnung        <span class="comment"># z.B. 0.55 = 55% Gewinn</span>
+<span class="key">PnL_absolut</span>     <span class="op">=</span> (P_eröffnung <span class="op">-</span> P_aktuell) <span class="op">×</span> n <span class="op">×</span> 100              <span class="comment"># in $</span>
+
+<span class="comment"># ── Positionsanalyse ───────────────────────────────────────────</span>
+<span class="key">Innerer_Wert</span>    <span class="op">=</span> max(0, K <span class="op">-</span> S)                                 <span class="comment"># wie weit Put im Geld</span>
+<span class="key">Restzeitwert</span>    <span class="op">=</span> P_aktuell <span class="op">-</span> Innerer_Wert                         <span class="comment"># verbleibender Zeitwert</span>
+
+<span class="comment"># ── Gewinnschwelle ─────────────────────────────────────────────</span>
+<span class="key">Gewinnschwelle</span>  <span class="op">=</span> K <span class="op">-</span> P_kum                                       <span class="comment"># Break-Even Aktienkurs</span>
+<span class="key">Abstand_GS</span>      <span class="op">=</span> S <span class="op">-</span> Gewinnschwelle                               <span class="comment"># > 0 = im Gewinn, < 0 = im Verlust</span>
+</pre>
+
+  <!-- ============================================================ -->
+  <h2>3. Entscheidungsprozess (5 Tage vor Verfall)</h2>
+
+  <div class="flow">
+    <div class="flow-step">
+      <div class="flow-num">1</div>
+      <div class="flow-content">
+        <strong>Gewinncheck:</strong> Ist <code>Gewinn_pct ≥ 50%</code>?<br>
+        <span class="muted" style="color:var(--green)">→ JA: Position schließen. Trade beendet.</span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num">2</div>
+      <div class="flow-content">
+        <strong>Zeitwert-Check:</strong> Gibt es noch nennenswerten Restzeitwert?<br>
+        <span style="color:var(--muted)">→ Wenn Restzeitwert ≈ 0: Roll fast kostenlos möglich → Stufe 1 prüfen</span><br>
+        <span style="color:var(--muted)">→ Wenn noch viel Zeitwert: warten, noch nicht rollen</span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num">3</div>
+      <div class="flow-content">
+        <strong>Roll-Stufe bestimmen</strong> (siehe Abschnitt 4)
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num">4</div>
+      <div class="flow-content">
+        <strong>Endspiel-Check:</strong> Hat Stufe 3 mehrfach nicht geholfen?<br>
+        <span style="color:var(--accent2)">→ Aktie einbuchen lassen → Covered Calls schreiben</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2>4. Die drei Roll-Stufen</h2>
+
+  <div class="stages">
+
+    <!-- STUFE 1 -->
+    <div class="stage-card s1">
+      <span class="stage-badge">Stufe 1</span>
+      <h3>Gleicher Strike, neue Laufzeit</h3>
+      <p>Günstigste Option — wir rollen den Put auf denselben Basispreis, aber mit frischer Laufzeit von 30–60 Tagen. Der Zeitwert des alten Puts ist weitgehend verfallen.</p>
+
+      <div class="condition">
+        <span class="icon">✅</span> <strong>Einsatz wenn:</strong> Stufe 0 oder nach erstem Roll — Aktie leicht unter Strike, aber Erholung möglich
+      </div>
+
+      <div class="stage-formula">
+        <span class="label">EINGABEN</span>
+        K_neu = K (gleicher Strike)<br>
+        DTE_neu = 30–60 Tage<br>
+        P_roll = neue Prämie für K_neu / DTE_neu (aus DB)
+        <br><br>
+        <span class="label">BERECHNUNG</span>
+        Netto_1 = P_roll − P_aktuell<br>
+        P_kum_neu = P_kum + Netto_1<br>
+        Gewinnschwelle_neu = K − P_kum_neu
+      </div>
+
+      <div class="condition" style="margin-top:12px">
+        <span class="icon">⚠️</span> <strong>Sinnvoll wenn:</strong> Netto_1 &gt; 0 <em>und</em> Gewinnschwelle_neu &lt; Gewinnschwelle_alt
+      </div>
+    </div>
+
+    <!-- STUFE 2 -->
+    <div class="stage-card s2">
+      <span class="stage-badge">Stufe 2</span>
+      <h3>Niedrigerer Strike, 60 Tage</h3>
+      <p>Wir gehen mit dem Strike weiter runter — unter den aktuellen Aktienkurs. Das bringt mehr Zeitwert (höhere Prämie) und gibt der Aktie mehr Spielraum. Dafür sinkt unser Basispreis.</p>
+
+      <div class="condition">
+        <span class="icon">🔶</span> <strong>Einsatz wenn:</strong> Stufe 1 liefert kein sinnvolles Netto <em>oder</em> Aktie ist stark gefallen (K deutlich im Geld)
+      </div>
+
+      <div class="stage-formula">
+        <span class="label">EINGABEN</span>
+        K2 = Strike unter aktuellem Kurs S (z.B. S − 5% oder nächster OTM-Strike)<br>
+        DTE_neu = 60 Tage<br>
+        P_roll = neue Prämie für K2 / DTE_neu (aus DB)
+        <br><br>
+        <span class="label">BERECHNUNG</span>
+        Netto_2 = P_roll − P_aktuell<br>
+        P_kum_neu = P_kum + Netto_2<br>
+        Gewinnschwelle_neu = K2 − P_kum_neu
+      </div>
+
+      <div class="condition" style="margin-top:12px">
+        <span class="icon">⚠️</span> <strong>Sinnvoll wenn:</strong> Netto_2 &gt; 0 <em>und</em> Gewinnschwelle_neu weiter verbessert
+      </div>
+    </div>
+
+    <!-- STUFE 3 -->
+    <div class="stage-card s3">
+      <span class="stage-badge">Stufe 3</span>
+      <h3>Niedrigerer Strike + Kontraktverdopplung</h3>
+      <p>Notfallmaßnahme: wir erhöhen die Kontraktanzahl auf 2 (statt 1). Das verdoppelt das eingenommene Prämienvolumen — aber auch das gebundene Kapital und das Risiko.</p>
+
+      <div class="condition">
+        <span class="icon">🔴</span> <strong>Einsatz wenn:</strong> Stufe 2 reicht nicht, Aktie stark gefallen, aber fundamentale Überzeugung intakt
+      </div>
+
+      <div class="stage-formula">
+        <span class="label">EINGABEN</span>
+        K2 = wie Stufe 2<br>
+        DTE_neu = 30–60 Tage<br>
+        n_neu = n × 2 (Verdopplung)<br>
+        P_roll = neue Prämie für K2 / DTE_neu (aus DB)
+        <br><br>
+        <span class="label">BERECHNUNG</span>
+        Netto_3 = (P_roll × n_neu − P_aktuell × n) × 100   ← Absolutbetrag!<br>
+        Netto_3_pro_Aktie = Netto_3 / (n_neu × 100)<br>
+        P_kum_neu = P_kum + Netto_3_pro_Aktie<br>
+        Gewinnschwelle_neu = K2 − P_kum_neu
+      </div>
+
+      <div class="condition" style="margin-top:12px">
+        <span class="icon">🛑</span> <strong>Voraussetzung:</strong> Freies Kapital ≥ K2 × n_neu × 100 (Margin für 2 Kontrakte)
+      </div>
+    </div>
+
+    <!-- ENDSPIEL -->
+    <div class="stage-card end">
+      <span class="stage-badge">Endspiel</span>
+      <h3>Aktie einbuchen → Covered Calls (Wheel)</h3>
+      <p>Wenn keine Roll-Stufe mehr greift oder wir bewusst die Einbuchung akzeptieren: Aktie wird zum Strike gekauft. Dann beginnt die CC-Phase — wir schreiben Calls um den Einstiegspreis zu senken.</p>
+
+      <div class="stage-formula">
+        <span class="label">NEUER EINSTIEGSPREIS</span>
+        Effektiver_Einstand = K − P_kum               ← = Gewinnschwelle<br>
+        <br>
+        <span class="label">COVERED CALL ZIEL</span>
+        CC_Strike = Effektiver_Einstand oder höher<br>
+        CC_Laufzeit = 30–90 Tage<br>
+        Neue_Gewinnschwelle = Effektiver_Einstand − CC_Prämien_kum
+      </div>
+
+      <div class="condition" style="margin-top:12px">
+        <span class="icon">💡</span> Asymmetrische Technik: 1 Call auf 200 Aktien (statt 100) — mehr Spielraum bei Kursanstieg
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ============================================================ -->
+  <h2>5. SKULD-Integration — Wie die App das umsetzen soll</h2>
+
+  <div class="skuld-box">
+    <h3>Vision: Skuld rechnet selbst — du entscheidest nur</h3>
+    <p>Der User gibt seinen Trade ein (manuell, weil keine Trade-API vorhanden). Skuld zieht aktuelle Marktdaten aus der DB, berechnet den aktuellen Stand der Position und schlägt konkrete Roll-Alternativen vor — mit echten Prämien, echten Strikes, echter neuer Gewinnschwelle.</p>
+  </div>
+
+  <h3>Input-Felder (User gibt manuell ein)</h3>
+  <div class="tag-row">
+    <span class="data-source ds-user">✏ Symbol (z.B. AAPL)</span>
+    <span class="data-source ds-user">✏ Strike K</span>
+    <span class="data-source ds-user">✏ Ablaufdatum</span>
+    <span class="data-source ds-user">✏ P_eröffnung</span>
+    <span class="data-source ds-user">✏ Anzahl Kontrakte n</span>
+    <span class="data-source ds-user">✏ P_kum (kumulierte Prämien bisheriger Rollen)</span>
+    <span class="data-source ds-user">✏ Aktuell auf Stufe 0/1/2/3</span>
+  </div>
+
+  <h3>Was Skuld automatisch aus der DB holt</h3>
+  <div class="tag-row">
+    <span class="data-source ds-db">🗄 Aktueller Aktienkurs S</span>
+    <span class="data-source ds-db">🗄 P_aktuell (Marktpreis des laufenden Puts)</span>
+    <span class="data-source ds-db">🗄 Roll-Kandidaten: Prämien für K / K-5% / K-10% bei 30, 45, 60 DTE</span>
+  </div>
+
+  <h3>Was Skuld berechnet und anzeigt</h3>
+  <div class="tag-row">
+    <span class="data-source ds-calc">⚙ Aktueller P&amp;L %</span>
+    <span class="data-source ds-calc">⚙ Innerer Wert + Restzeitwert</span>
+    <span class="data-source ds-calc">⚙ Aktuelle Gewinnschwelle</span>
+    <span class="data-source ds-calc">⚙ Stufe-1-Szenario mit neuer GS</span>
+    <span class="data-source ds-calc">⚙ Stufe-2-Szenario mit neuer GS</span>
+    <span class="data-source ds-calc">⚙ Stufe-3-Szenario mit Kapitalcheck</span>
+    <span class="data-source ds-calc">⚙ Empfehlung welche Stufe greift</span>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2>6. Entscheidungsregeln für die Empfehlung</h2>
+
+  <table>
+    <thead>
+      <tr><th>Bedingung</th><th>Empfehlung</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Gewinn_pct ≥ 50% und DTE ≤ 5</td>
+        <td style="color:var(--green)">✅ Schließen — Gewinnziel erreicht</td>
+      </tr>
+      <tr>
+        <td>DTE &gt; 5 und Gewinn_pct &gt; 0</td>
+        <td style="color:var(--muted)">⏳ Abwarten — noch Zeit</td>
+      </tr>
+      <tr>
+        <td>DTE ≤ 5, Netto_1 &gt; 0, GS verbessert sich</td>
+        <td style="color:var(--green)">🔄 Roll Stufe 1</td>
+      </tr>
+      <tr>
+        <td>Stufe-1-Netto ≤ 0, Netto_2 &gt; 0, GS verbessert sich</td>
+        <td style="color:var(--yellow)">🔄 Roll Stufe 2</td>
+      </tr>
+      <tr>
+        <td>Stufe-2-Netto ≤ 0 oder unzureichend, Kapital vorhanden</td>
+        <td style="color:var(--red)">🔄 Roll Stufe 3 (Verdopplung)</td>
+      </tr>
+      <tr>
+        <td>Keine Stufe verbessert GS, Stufe 3 bereits aktiv</td>
+        <td style="color:var(--accent2)">📦 Einbuchen → Covered Calls</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout warn">
+    <strong>Offene Frage:</strong> Gibt es einen maximalen Verlust-Schwellwert ab dem man den Trade aufgibt (Verlustbegrenzung statt endlos rollen)? Das Buch erwähnt das nicht explizit — muss vom User entschieden werden.
+  </div>
+
+  <div class="callout info">
+    <strong>Hinweis P_aktuell:</strong> In OptionDataMerged gibt es keinen direkten bid/ask. Als Näherung: <code>last_price</code> oder Black-Scholes Preis (bs_price) mit aktuellem IV. Für exakte Schließungskosten ist der Ask-Preis relevant — Skuld zeigt eine Näherung, die finale Zahl kommt vom Broker.
+  </div>
+
+  <!-- ============================================================ -->
+  <h2>7. Numerisches Beispiel (aus dem Buch)</h2>
+
+  <table>
+    <thead>
+      <tr><th>Schritt</th><th>Wert</th><th>Erklärung</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Eröffnung</td><td>K = 305, P_eröffnung = 10,05</td><td>CSP auf Aktie bei ~315</td></tr>
+      <tr><td>P_kum nach Eröffnung</td><td>10,05</td><td>Gewinnschwelle = 294,95</td></tr>
+      <tr><td>5 Tage vor Verfall: Aktie fällt auf 285</td><td>P_aktuell ≈ 21,00</td><td>Verlust — Put tief im Geld</td></tr>
+      <tr><td>Roll Stufe 1 (K=305, 30 DTE)</td><td>P_roll = 21,00 + ~1,00 Netto</td><td>Neue GS = 293,95</td></tr>
+      <tr><td>Roll Stufe 2 (K=285, 60 DTE)</td><td>P_roll = 4,00 Netto</td><td>Neue GS = 290,95</td></tr>
+    </tbody>
+  </table>
+
+  <div class="footer">
+    <strong>SKULD Roll Support</strong> · Dokumentiert 2026-06-27 · Basis: "Optionen unschlagbar handeln" Kapitel 3<br>
+    Nächster Schritt: Brainstorming Implementierung (Streamlit vs. React, DB-Schema für Trade-Tracking)
+  </div>
+
+</div>
+</body>
+</html>

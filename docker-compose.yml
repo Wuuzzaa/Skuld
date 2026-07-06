@@ -149,7 +149,6 @@ services:
   # --- HEALTH SIDECAR ---
   # Tiny stdlib HTTP server exposing /version + /health (db, disk, cron heartbeat).
   # Reuses the existing skuld-app-image, so no extra build step / no new image to push.
-  # Probed by uptime-kuma over the internal `web` network — never exposed to Traefik.
   skuld-health:
     image: skuld-app-image
     pull_policy: never
@@ -195,54 +194,6 @@ services:
         reservations:
           cpus: '0.02'
           memory: 32M
-
-  # --- UPTIME KUMA ---
-  # See ops/MONITORING.md for the full concept. SSO is automatic because
-  # Authelia's session cookie is scoped to *.skuld-options.com (see authelia/configuration.yml).
-  uptime-kuma:
-    image: louislam/uptime-kuma:1
-    container_name: uptime-kuma
-    volumes:
-      - ./uptime-kuma-data:/app/data
-    networks:
-      - web
-      - postgres_setup_default
-    restart: unless-stopped
-
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-    deploy:
-      resources:
-        limits:
-          cpus: '0.25'
-          memory: 256M
-        reservations:
-          cpus: '0.05'
-          memory: 64M
-
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.kuma.rule=Host(`${MONITORING_DOMAIN:-monitoring.skuld-options.com}`)"
-      - "traefik.http.routers.kuma.entrypoints=${TRAEFIK_ENTRYPOINT}"
-      - "${TRAEFIK_CERTRESOLVER_LABEL_KUMA}"
-      - "traefik.http.services.kuma.loadbalancer.server.port=3001"
-
-      # Same middleware story as skuld-frontend: prod = authelia, staging override = empty.
-      - "traefik.http.routers.kuma.middlewares=${MONITORING_MIDDLEWARES:-authelia}"
-
-    healthcheck:
-      # Kuma's official image ships /app/extra/healthcheck (node-based) but no
-      # wget/curl. Using the bundled binary keeps the container marked healthy,
-      # which is what Traefik's docker provider needs to expose its router.
-      test: ["CMD", "/app/extra/healthcheck"]
-      interval: 60s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
 
 networks:
   web:

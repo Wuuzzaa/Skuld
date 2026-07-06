@@ -19,19 +19,11 @@ production:
   domain: app.skuld-options.com
   auth_domain: auth.skuld-options.com
   telegram_chat_id: "-1003610692224"
-  telegram_chat_id_ops: "-1004370406507"
   db_container: postgres_setup-db-1
   compose_args: "-f docker-compose.yml"
   traefik_entrypoint: websecure
   certresolver_skuld: "traefik.http.routers.skuld.tls.certresolver=letsencrypt"
   certresolver_authelia: "traefik.http.routers.authelia.tls.certresolver=letsencrypt"
-  # Kuma uses the Cloudflare Origin Cert from /opt/traefik/dynamic/tls.yml
-  # (default cert store), not Let's Encrypt — CF intercepts ACME HTTP-01
-  # for proxied subdomains. So no certresolver, just plain tls=true.
-  certresolver_kuma: "traefik.http.routers.kuma.tls=true"
-  monitoring_domain: monitoring.skuld-options.com
-  monitoring_url: https://monitoring.skuld-options.com
-  monitoring_middlewares: "authelia"
   auth_scheme: https
   authelia: "true"
   skuld_middlewares: "authelia"
@@ -50,17 +42,11 @@ home:
   domain: test.skuld-options.com
   auth_domain: auth-test.skuld-options.com
   telegram_chat_id: "-5262458068"
-  # No separate ops channel for staging — alerts go to the same chat as trading.
-  telegram_chat_id_ops: "-5262458068"
   db_container: skuld_staging_db
   compose_args: "-f docker-compose.yml -f docker-compose.testing.yml"
   traefik_entrypoint: web
   certresolver_skuld: "traefik.enable=true"
   certresolver_authelia: "traefik.enable=true"
-  certresolver_kuma: "traefik.enable=true"
-  monitoring_domain: monitoring-test.skuld-options.com
-  monitoring_url: http://monitoring-test.skuld-options.com
-  monitoring_middlewares: ""
   auth_scheme: http
   authelia: "true"
   skuld_middlewares: "force-https,authelia"

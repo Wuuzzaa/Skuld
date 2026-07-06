@@ -19,9 +19,8 @@
 #      (this overwrites ./authelia/ with the snapshot)
 #   3. docker compose up -d authelia
 #
-# Telegram alerts: same token+chat_id as backup_db.py. Token is hardcoded
-# below to mirror the existing pattern (see [[skuld-architecture-audit-2026-06-14]]
-# for why this should eventually be moved into env / GitHub Secret).
+# Telegram alerts: same token+chat_id as backup_db.py.
+# Token and chat_id are injected via environment variables on the server.
 
 set -euo pipefail
 
@@ -30,12 +29,10 @@ AUTHELIA_DIR="${AUTHELIA_DIR:-/opt/skuld/authelia}"
 DEST_DIR="${DEST_DIR:-/home/deploy/backups/authelia}"
 RETENTION_DAYS="${RETENTION_DAYS:-30}"
 
-# Telegram (matches backup_db.py — see SKULD audit notes about extracting these)
-# Ops alerts go to the dedicated ops chat when TELEGRAM_OPS_CHAT_ID is set;
-# fall back to the trading chat so the script keeps working on staging /
-# during rollouts that haven't propagated the new env var yet.
-TG_TOKEN="${TELEGRAM_BOT_TOKEN:-8245443180:AAG0x1FfKfu1CYtj3CmiTb5FzDVlOB224dc}"
-TG_CHAT="${TELEGRAM_OPS_CHAT_ID:-${TELEGRAM_CHAT_ID:--1003610692224}}"
+# Telegram alerts: token and chat_id must be set as environment variables
+# on the server (TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID). Never hardcode here.
+TG_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
+TG_CHAT="${TELEGRAM_CHAT_ID:-}"
 
 # ── helpers ───────────────────────────────────────────────────────────────
 notify_tg() {
