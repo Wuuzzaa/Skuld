@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 from config import TABLE_FUNDAMENTAL_DATA_YAHOO, TABLE_STOCK_PRICES_YAHOO
-from src.database import get_postgres_engine, insert_into_table, insert_into_table_bulk, truncate_table
+from src.database import execute_sql, get_postgres_engine, insert_into_table, insert_into_table_bulk, select_into_dataframe, truncate_table
 from src.stock_volatility import calculate_and_store_stock_historical_volatility, calculate_and_store_stock_historical_volatility_history
 from src.technical_indicators import calc_technical_indicators_history
 from src.yahooquery_scraper import YahooQueryScraper
@@ -343,6 +343,7 @@ def load_stock_prices(symbols):
                         if_exists="append"
                     )
 
+    check_stock_split()
     calculate_and_store_stock_historical_volatility()
 
 def load_historical_prices_(symbols):
@@ -364,7 +365,7 @@ def load_historical_prices_(symbols):
                     if_exists="append"
                 )
 
-def load_historical_prices(symbols):
+def load_historical_prices(symbols, delete_all_existing=True):
     logger.info(f"Fetching historical stock prices (high, low, close) for {len(symbols)} symbols using YahooQueryScraper...")
     table_name = f"{TABLE_STOCK_PRICES_YAHOO}HistoryDaily"
     # replace symbol prefix I: with ^ for indices to match yahoo format
@@ -373,7 +374,11 @@ def load_historical_prices(symbols):
     total_rows = 0
     conn = get_postgres_engine().raw_connection()
     try:
-        truncate_table(conn, table_name)
+        if delete_all_existing:
+            truncate_table(conn, table_name)
+        else:
+            execute_sql(conn, f'DELETE FROM "{table_name}" WHERE symbol IN ({",".join([f"'{symbol}'" for symbol in symbols])})', table_name, "DELETE")
+            
 
         batch = 1
         for df in yahoo_query.get_historical_prices(period='26y'):
@@ -398,6 +403,15 @@ def load_historical_prices(symbols):
     finally:
         conn.close()
     logger.info(f"Total historical price entries loaded: {total_rows}")
+
+def check_stock_split():
+    df = select_into_dataframe('select symbol, splits from "StockPricesYahoo" where splits is not NULL AND splits <> 0')
+
+    if not df.empty:
+        logger.info(f"Found {len(df)} symbols with stock splits. Updating historical prices...")
+        symbols_with_splits = df['symbol'].tolist()
+        load_historical_prices(symbols_with_splits, delete_all_existing=False)
+
 
 if __name__ == "__main__":
 
