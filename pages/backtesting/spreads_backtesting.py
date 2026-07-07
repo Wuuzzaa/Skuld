@@ -11,6 +11,8 @@ from datetime import datetime, date
 import time
 import plotly.graph_objects as go
 
+from src.yahooquery_scraper import YahooQueryScraper
+
 logger = logging.getLogger(os.path.basename(__file__))
 
 def parse_date(value):
@@ -38,8 +40,18 @@ def get_option_data_at_date(option_osi, symbol, selected_date):
                 a.day_close AS premium_option_price,
                 a.shares_per_contract,
                 b.close
-            FROM "OptionDataMassiveHistory" AS a
-            INNER JOIN "StockPricesYahooHistory" AS b
+            FROM (
+                SELECT * FROM "OptionDataMassiveHistory"
+                WHERE date <> CURRENT_DATE
+                UNION ALL
+                SELECT CURRENT_DATE AS date, * FROM "OptionDataMassive"
+            ) AS a
+            INNER JOIN (
+                SELECT * FROM "StockPricesYahooHistory"
+                WHERE date <> CURRENT_DATE
+                UNION ALL
+                SELECT CURRENT_DATE AS date, * FROM "StockPricesYahoo"
+            ) AS b
             ON a.date = b.date AND a.symbol = b.symbol
             WHERE a.option_osi = :option_osi
             AND a.symbol = :symbol
@@ -60,11 +72,7 @@ def get_option_data_at_date(option_osi, symbol, selected_date):
                 a.day_close AS premium_option_price,
                 a.shares_per_contract,
                 b.close
-            FROM (
-                SELECT * FROM "OptionDataMassiveHistory"
-                UNION ALL
-                SELECT CURRENT_DATE AS date, * FROM "OptionDataMassive"
-            ) AS a
+            FROM "OptionDataMassiveHistory" AS a
             INNER JOIN "StockPricesYahooHistory" AS b
             ON a.date = b.date AND a.symbol = b.symbol
             WHERE a.option_osi = :option_osi
@@ -93,22 +101,14 @@ def get_option_date_range(option_osi, from_date, to_date):
                 strike_price,
                 day_close AS premium_option_price,
                 shares_per_contract
-            FROM "OptionDataMassiveHistory"
+            FROM (
+                SELECT * FROM "OptionDataMassiveHistory"
+                WHERE date <> CURRENT_DATE
+                UNION ALL
+                SELECT CURRENT_DATE AS date, * FROM "OptionDataMassive"
+            ) AS subquery
             WHERE option_osi = :option_osi
             AND date BETWEEN :from_date AND :to_date
-            AND date <> CURRENT_DATE
-            UNION ALL
-            SELECT
-                CURRENT_DATE AS date,
-                option_osi,
-                symbol,
-                contract_type,
-                expiration_date,
-                strike_price,
-                day_close AS premium_option_price,
-                shares_per_contract
-            FROM "OptionDataMassive"
-            WHERE option_osi = :option_osi
         """ 
     else:
         sql = """
@@ -138,17 +138,14 @@ def get_stock_date_range(symbol, from_date, to_date):
                 date,
                 symbol,
                 close
-            FROM "StockPricesYahooHistory"
+            FROM (
+                SELECT * FROM "StockPricesYahooHistory"
+                WHERE date <> CURRENT_DATE
+                UNION ALL
+                SELECT CURRENT_DATE AS date, * FROM "StockPricesYahoo"
+            ) AS subquery
             WHERE symbol = :symbol
             AND date BETWEEN :from_date AND :to_date
-            AND date <> CURRENT_DATE
-            UNION ALL
-            SELECT
-                CURRENT_DATE AS date,
-                symbol,
-                close
-            FROM "StockPricesYahoo"
-            WHERE symbol = :symbol
         """
     else:
         sql = """
@@ -200,10 +197,15 @@ def display_spreads_backtesting(selected_date, selected_row):
             if sell_exit_df is None or buy_exit_df is None or sell_exit_df.empty or buy_exit_df.empty:
                 st.warning("Die Option konnte für das Vergleichsdatum nicht geladen werden.")
             else:
-                # [DEIN BESTEHENDER CODE: 1. Daten auslesen und 2. Mathematische Berechnungen bleiben exakt gleich]
-                exit_sell_price = float(sell_exit_df.iloc[0]['premium_option_price'])
                 exit_buy_price = float(buy_exit_df.iloc[0]['premium_option_price'])   
                 exit_stock_price = float(buy_exit_df.iloc[0]['close'])        
+                exit_stock_price = float(buy_exit_df.iloc[0]['close'])        
+                
+                if str(compare_date) == str(time.strftime("%Y-%m-%d", time.gmtime())) and not is_weekend():
+                    yahoo_query = YahooQueryScraper.instance(selected_row['symbol'])
+                    df_option_chain = yahoo_query.get_option_chain(symbols=[selected_row['symbol']])
+                    exit_sell_price = (df_option_chain[df_option_chain['contractSymbol'] == selected_row['sell_option_osi']]['bid'].values[0] + df_option_chain[df_option_chain['contractSymbol'] == selected_row['sell_option_osi']]['ask'].values[0]) / 2
+                    exit_buy_price = (df_option_chain[df_option_chain['contractSymbol'] == selected_row['buy_option_osi']]['bid'].values[0] + df_option_chain[df_option_chain['contractSymbol'] == selected_row['buy_option_osi']]['ask'].values[0]) / 2 
 
                 entry_sell_price = float(selected_row['sell_last_option_price'])
                 entry_buy_price = float(selected_row['buy_last_option_price'])

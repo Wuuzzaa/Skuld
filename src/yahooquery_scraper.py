@@ -227,6 +227,51 @@ class YahooQueryScraper:
                 logger.error(" ! " * 80)
                 raise Exception("RETRY LIMIT REACHED")
 
+    def get_option_chain(self, symbols=None):
+        print(f"Loading for {len(self.symbols)} symbols option chain from Yahoo Finance")
+        if not symbols:
+            symbols = self.symbols
+
+        all_option_data = []
+        local_batch_size = 500
+        local_ticker_batches = _get_ticker_batches(symbols, local_batch_size, self.retries, asynchronous=False)
+                
+        for ticker_batch in local_ticker_batches:
+            for attempt in range(self.retries):
+                try:
+                    if len(symbols) > local_batch_size:
+                        print(f"Fetching Yahoo option chain for batch of up to {local_batch_size} symbols...")
+                    df = ticker_batch.option_chain
+                    if df is not None and not df.empty:
+                        # symbol expiration_date and option-type from index to column
+                        df = df.reset_index()
+                        all_option_data.append(df)
+                        print(f"SUCCESS: {len(df)} options found")
+                    else:
+                        print(f"WARNING: No option data available")
+                        
+                except Exception as e:
+                    print(f"ERROR: Error fetching options - {str(e)}")
+                    print(f"{attempt} failed -> Retry after 10s")
+                    time.sleep(10)
+                else: 
+                    # Success - exit the retry loop
+                    break
+            else:
+                print(" ! " * 80)
+                print("RETRY LIMIT REACHED")
+                print(" ! " * 80)
+                time.sleep(1)
+
+        if not all_option_data:
+            print("WARNING: No option data found for any symbols")
+            return
+        
+        # Combine all data
+        df = pd.concat(all_option_data, ignore_index=True)
+        print(f"{len(df)} option chains")
+        return df
+    
     def get_modules(self, symbols=None, modules=None):
         data = self._load_module_data(symbols=symbols, modules=modules)
         return data
@@ -270,3 +315,4 @@ def _get_ticker_batches(symbols, batch_size, retries, asynchronous=False):
             raise Exception("RETRY LIMIT REACHED")
     
     return ticker_batches
+
