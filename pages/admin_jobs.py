@@ -214,22 +214,44 @@ with tab_logs:
                         content = selected_file.read_text(encoding="utf-8", errors="replace")
                         lines = content.splitlines()
 
-                        # Apply filters
+                        # Apply filters — multiline-aware: log entries start with a
+                        # timestamp; continuation lines (stack traces etc.) belong to
+                        # the preceding entry and are kept together with it.
+                        TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}")
+
                         if log_level_filter:
                             filtered = []
+                            include = False
                             for line in lines:
-                                for level in log_level_filter:
-                                    if level in line:
-                                        filtered.append(line)
-                                        break
+                                if TIMESTAMP_RE.match(line):
+                                    include = any(level in line for level in log_level_filter)
+                                if include:
+                                    filtered.append(line)
                             lines = filtered
 
                         if search_term:
-                            lines = [l for l in lines if search_term.lower() in l.lower()]
+                            matched = []
+                            include = False
+                            for line in lines:
+                                if TIMESTAMP_RE.match(line):
+                                    include = search_term.lower() in line.lower()
+                                if include:
+                                    matched.append(line)
+                            lines = matched
 
                         st.caption(f"{len(lines)} lines displayed | File: {selected_file.name}")
 
-                        max_lines = st.slider("Lines to show", 50, 2000, 500, step=50)
+                        col_dl, col_slider = st.columns([1, 3])
+                        with col_dl:
+                            st.download_button(
+                                label="⬇ Download Log",
+                                data=content.encode("utf-8"),
+                                file_name=selected_file.name,
+                                mime="text/plain",
+                                use_container_width=True,
+                            )
+                        with col_slider:
+                            max_lines = st.slider("Lines to show", 50, 2000, 500, step=50)
                         display_lines = lines[-max_lines:] if len(lines) > max_lines else lines
 
                         log_text = "\n".join(display_lines)
@@ -613,7 +635,18 @@ with tab_history:
                     try:
                         content = log_path.read_text(encoding="utf-8", errors="replace")
                         lines = content.splitlines()
-                        st.caption(f"{len(lines)} lines | {job.get('file_size_kb', 0):.0f} KB")
+                        col_cap, col_dl2 = st.columns([3, 1])
+                        with col_cap:
+                            st.caption(f"{len(lines)} lines | {job.get('file_size_kb', 0):.0f} KB")
+                        with col_dl2:
+                            st.download_button(
+                                label="⬇ Download",
+                                data=content.encode("utf-8"),
+                                file_name=Path(job["log_path"]).name,
+                                mime="text/plain",
+                                key=f"dl_{idx}",
+                                use_container_width=True,
+                            )
                         # Lines to show: default "All" so the user actually sees the
                         # full log. Using a selectbox (not slider) avoids dragging
                         # through intermediate values, each of which triggers a
