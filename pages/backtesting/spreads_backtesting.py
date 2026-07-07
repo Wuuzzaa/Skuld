@@ -181,13 +181,16 @@ def display_spreads_backtesting(selected_date, selected_row):
     if parse_date(compare_date) == parse_date(selected_date):
         st.info("Wähle ein anderes Vergleichsdatum als das Einstiegdatum.")
     else:
-        with ThreadPoolExecutor(max_workers=5) as executor:
+        with ThreadPoolExecutor(max_workers=10) as executor:
             sell_exit_future = executor.submit(get_option_data_at_date, selected_row['sell_option_osi'], selected_row['symbol'], compare_date)
             buy_exit_future = executor.submit(get_option_data_at_date, selected_row['buy_option_osi'], selected_row['symbol'], compare_date)
             sell_option_date_range_future = executor.submit(get_option_date_range, selected_row['sell_option_osi'], selected_date, compare_date)
             buy_option_date_range_future = executor.submit(get_option_date_range, selected_row['buy_option_osi'], selected_date, compare_date)
             stock_date_range_future = executor.submit(get_stock_date_range, selected_row['symbol'], selected_date, compare_date)
-            
+            if str(compare_date) == str(time.strftime("%Y-%m-%d", time.gmtime())) and not is_weekend():
+                yahoo_query = YahooQueryScraper.instance(selected_row['symbol'])
+                df_option_chain_future = executor.submit(yahoo_query.get_option_chain, symbols=[selected_row['symbol']])
+
             sell_exit_df = sell_exit_future.result()
             buy_exit_df = buy_exit_future.result()
 
@@ -197,13 +200,12 @@ def display_spreads_backtesting(selected_date, selected_row):
             if sell_exit_df is None or buy_exit_df is None or sell_exit_df.empty or buy_exit_df.empty:
                 st.warning("Die Option konnte für das Vergleichsdatum nicht geladen werden.")
             else:
-                exit_buy_price = float(buy_exit_df.iloc[0]['premium_option_price'])   
-                exit_stock_price = float(buy_exit_df.iloc[0]['close'])        
+                exit_sell_price = float(sell_exit_df.iloc[0]['premium_option_price'])   
+                exit_buy_price = float(buy_exit_df.iloc[0]['premium_option_price'])     
                 exit_stock_price = float(buy_exit_df.iloc[0]['close'])        
                 
                 if str(compare_date) == str(time.strftime("%Y-%m-%d", time.gmtime())) and not is_weekend():
-                    yahoo_query = YahooQueryScraper.instance(selected_row['symbol'])
-                    df_option_chain = yahoo_query.get_option_chain(symbols=[selected_row['symbol']])
+                    df_option_chain = df_option_chain_future.result()
                     exit_sell_price = (df_option_chain[df_option_chain['contractSymbol'] == selected_row['sell_option_osi']]['bid'].values[0] + df_option_chain[df_option_chain['contractSymbol'] == selected_row['sell_option_osi']]['ask'].values[0]) / 2
                     exit_buy_price = (df_option_chain[df_option_chain['contractSymbol'] == selected_row['buy_option_osi']]['bid'].values[0] + df_option_chain[df_option_chain['contractSymbol'] == selected_row['buy_option_osi']]['ask'].values[0]) / 2 
 
@@ -350,7 +352,7 @@ def display_spreads_backtesting(selected_date, selected_row):
                         st.write("Annualisierter ROI: n/a")
 
                 # Breakeven berechnen
-                breakeven_price = strike_sell - initial_cash_flow
+                breakeven_price = strike_sell - (initial_cash_flow/100)
 
                 st.markdown("---")
                 st.markdown("### 📈 Kursverlauf & Positions-Wertentwicklung")
@@ -359,6 +361,18 @@ def display_spreads_backtesting(selected_date, selected_row):
                 # Sicherstellen, dass das Datum überall denselben Datentyp (String oder Date) hat
                 sell_option_date_range_df = sell_option_date_range_future.result()
                 buy_option_date_range_df = buy_option_date_range_future.result()
+                
+                # Wenn das Vergleichsdatum heute ist, müssen wir die aktuellen Optionspreise aus der Option Chain abrufen und in den DataFrame einfügen
+                # Überschreibe die letzten Zeilen der DataFrames mit den aktuellen Preisen aus der Option Chain oder dem manuellen Override -> exit_buy_price exit_sell_price
+                # Für die Sell-Option
+                row_idx = -1
+                col_idx = sell_option_date_range_df.columns.get_loc('premium_option_price')
+                sell_option_date_range_df.iloc[row_idx, col_idx] = exit_sell_price
+
+                # Für die Buy-Option
+                col_idx_buy = buy_option_date_range_df.columns.get_loc('premium_option_price')
+                buy_option_date_range_df.iloc[row_idx, col_idx_buy] = exit_buy_price
+
                 stock_date_range_df = stock_date_range_future.result()
                 logger.info(f"Option data points {len(sell_option_date_range_df)}")
                 logger.info(f"Stock data points {len(stock_date_range_df)}")
@@ -396,8 +410,8 @@ def display_spreads_backtesting(selected_date, selected_row):
                     # Rechnerisch: initial_cash_flow + (price_buy_opt - price_sell_opt)
                     # Für die Gesamtdepot-Sicht multiplizieren wir direkt mit 100
                     merged_history['position_value_total'] = (
-                        initial_cash_flow + (merged_history['price_buy_opt'] - merged_history['price_sell_opt'])
-                    ) * 100
+                        initial_cash_flow + (merged_history['price_buy_opt'] - merged_history['price_sell_opt']) * 100
+                    )
 
                     # --- PLOTLY CHART MIT ZWEI Y-ACHSEN (MAKE_SUBPLOTS) ---
                     from plotly.subplots import make_subplots

@@ -324,10 +324,10 @@ with st.spinner("Calculating spreads..."):
 
     sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'spreads_input.sql'
     df = _cached_select_into_dataframe(date=selected_date, sql_file_path=sql_file_path, params=params)
-    logging.debug(f"Input data head: {df.head()}")
+    # logging.debug(f"Input data head: {df.head()}")
 
     spreads_df = _cached_get_page_spreads(df, strategy_type=strategy_type, iv_correction=st.session_state.iv_correction, risk_free_rate=st.session_state.risk_free_rate / 100)
-    logging.debug(f"Calculated spreads head: {spreads_df.head()}")
+    # logging.debug(f"Calculated spreads head: {spreads_df.head()}")
 
 # Apply spread filters
 filtered_df = spreads_df.copy()

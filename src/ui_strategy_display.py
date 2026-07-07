@@ -111,7 +111,7 @@ def display_strategy_details(
     if extra_info:
         st.write(f"**Sektor:** {extra_info.get('company_sector', 'N/A')} | **Branche:** {extra_info.get('company_industry', 'N/A')}")
         if 'analyst_mean_target' in extra_info and pd.notnull(extra_info['analyst_mean_target']):
-            st.write(f"**Analyst Kursziel:** ${extra_info['analyst_mean_target']:.2f} (Aktuell: ${extra_info.get('close', 0):.2f})")
+            st.write(f"**Analyst Kursziel:** ${extra_info['analyst_mean_target']:.2f}$ (Aktuell: ${extra_info.get('close', 0):.2f}$)")
 
     # 3. External Links
     display_external_links(symbol, extra_info)
