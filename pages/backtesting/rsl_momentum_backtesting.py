@@ -52,37 +52,82 @@ def calculate_rsl_momentum_strategy(start_date, end_date, start_budget=10000.0,
     
     if is_end_date_today:
         sql_history = """
-            WITH rsl_union AS (
-                SELECT snapshot_date, symbol, "RSL" as rsl
-                FROM "TechnicalIndicatorsCalculatedHistoryDaily"
-                WHERE snapshot_date <> CURRENT_DATE
-                UNION ALL
-                SELECT CURRENT_DATE AS snapshot_date, symbol, "RSL" as rsl
-                FROM "TechnicalIndicatorsCalculated"
-            ),
-            price_union AS (
-                SELECT snapshot_date, symbol, close as price
-                FROM "StockPricesYahooHistoryDaily"
-                WHERE snapshot_date <> CURRENT_DATE
-                UNION ALL
-                SELECT CURRENT_DATE AS snapshot_date, symbol, close as price
-                FROM "StockPricesYahoo"
-            )
-            SELECT 
-                t.snapshot_date,
-                t.symbol,
-                t.rsl,
-                p.price
-            FROM rsl_union t
-            JOIN price_union p 
-                ON t.snapshot_date = p.snapshot_date AND t.symbol = p.symbol
-            JOIN "StockSP500ConstituentsHistorical" as sp
-            ON t.symbol = sp.symbol
-            WHERE t.snapshot_date BETWEEN :start_date AND :end_date
-              -- check if the symbol was in the S&P 500 at the time of the snapshot
-              AND (date_added <= t.snapshot_date OR date_added IS NULL)
-              AND (date_removed > t.snapshot_date OR date_removed IS NULL)
+            SELECT
+                T.SNAPSHOT_DATE,
+                T.SYMBOL,
+                T."RSL" as rsl,
+                P.CLOSE AS PRICE
+            FROM
+                "TechnicalIndicatorsCalculatedHistoryDaily" T
+                JOIN "StockPricesYahooHistoryDaily" P 
+                    ON T.SNAPSHOT_DATE = P.SNAPSHOT_DATE AND T.SYMBOL = P.SYMBOL
+                JOIN "StockSP500ConstituentsHistorical" AS SP 
+                    ON T.SYMBOL = SP.SYMBOL
+            WHERE
+                T.SNAPSHOT_DATE BETWEEN :start_date AND :end_date AND T.SNAPSHOT_DATE <> CURRENT_DATE
+                AND P.SNAPSHOT_DATE BETWEEN :start_date AND :end_date  AND P.SNAPSHOT_DATE <> CURRENT_DATE
+                AND (SP.DATE_ADDED <= T.SNAPSHOT_DATE OR SP.DATE_ADDED IS NULL)
+                AND (SP.DATE_REMOVED > T.SNAPSHOT_DATE OR SP.DATE_REMOVED IS NULL)
+            UNION ALL
+            SELECT
+                CURRENT_DATE AS SNAPSHOT_DATE,
+                T.SYMBOL,
+                T."RSL" as rsl,
+                P.CLOSE AS PRICE
+            FROM
+                "TechnicalIndicatorsCalculated" T
+                JOIN "StockPricesYahoo" P 
+                    ON T.SYMBOL = P.SYMBOL
+                JOIN "StockSP500ConstituentsHistorical" AS SP 
+                    ON T.SYMBOL = SP.SYMBOL
+            WHERE (SP.DATE_ADDED <= CURRENT_DATE OR SP.DATE_ADDED IS NULL)
+                AND (SP.DATE_REMOVED > CURRENT_DATE OR SP.DATE_REMOVED IS NULL);
         """
+
+        # sql_history = """
+        #     WITH historical_sp500_prices AS (
+        #         SELECT
+        #             P.SNAPSHOT_DATE,
+        #             P.SYMBOL,
+        #             P.CLOSE
+        #         FROM
+        #             "StockSP500ConstituentsHistorical" AS SP
+        #             JOIN "StockPricesYahooHistoryDaily" P 
+        #                 ON P.SYMBOL = SP.SYMBOL
+        #         WHERE
+        #             P.SNAPSHOT_DATE BETWEEN :start_date AND :end_date AND P.SNAPSHOT_DATE <> CURRENT_DATE
+        #             AND (SP.DATE_ADDED <= P.SNAPSHOT_DATE OR SP.DATE_ADDED IS NULL)
+        #             AND (SP.DATE_REMOVED > P.SNAPSHOT_DATE OR SP.DATE_REMOVED IS NULL)
+        #     )
+        #     SELECT
+        #         H.SNAPSHOT_DATE,
+        #         H.SYMBOL,
+        #         T."RSL" as rsl,
+        #         H.CLOSE AS PRICE
+        #     FROM
+        #         "TechnicalIndicatorsCalculatedHistoryDaily" T
+        #         -- Wir joinen das CTE als INNER JOIN. Da Postgres meist die rechte/kleinere Seite 
+        #         -- in den Hash packt, zwingen wir es hier zum Streaming der großen Indikatoren-Tabelle.
+        #         JOIN historical_sp500_prices H
+        #             ON T.SNAPSHOT_DATE = H.SNAPSHOT_DATE AND T.SYMBOL = H.SYMBOL
+        #         WHERE t.SNAPSHOT_DATE BETWEEN :start_date AND :end_date AND t.SNAPSHOT_DATE <> CURRENT_DATE
+
+        #     UNION ALL
+
+        #     SELECT
+        #         CURRENT_DATE AS SNAPSHOT_DATE,
+        #         T.SYMBOL,
+        #         T."RSL" as rsl,
+        #         P.CLOSE AS PRICE
+        #     FROM
+        #         "TechnicalIndicatorsCalculated" T
+        #         JOIN "StockPricesYahoo" P 
+        #             ON T.SYMBOL = P.SYMBOL
+        #         JOIN "StockSP500ConstituentsHistorical" AS SP 
+        #             ON T.SYMBOL = SP.SYMBOL
+        #     WHERE (SP.DATE_ADDED <= CURRENT_DATE OR SP.DATE_ADDED IS NULL)
+        #         AND (SP.DATE_REMOVED > CURRENT_DATE OR SP.DATE_REMOVED IS NULL);
+        # """
     else:
         sql_history = """
             SELECT 
@@ -95,11 +140,12 @@ def calculate_rsl_momentum_strategy(start_date, end_date, start_budget=10000.0,
                 ON t.snapshot_date = p.snapshot_date AND t.symbol = p.symbol
             JOIN "StockSP500ConstituentsHistorical" as sp
             ON t.symbol = sp.symbol
-            WHERE t.snapshot_date BETWEEN :start_date AND :end_date
+            WHERE 
               -- check if the symbol was in the S&P 500 at the time of the snapshot
-              AND (date_added <= t.snapshot_date OR date_added IS NULL)
+              (date_added <= t.snapshot_date OR date_added IS NULL)
               AND (date_removed > t.snapshot_date OR date_removed IS NULL)
         """
+    
         
     df_history = select_into_dataframe(sql_history, params={
         "start_date": start_date_str, 
@@ -289,17 +335,18 @@ def calculate_rsl_momentum_strategy(start_date, end_date, start_budget=10000.0,
             FROM "StockPricesYahooHistoryDaily"
             WHERE symbol = 'SPY'
             AND snapshot_date <> CURRENT_DATE
+            AND snapshot_date BETWEEN :start_date AND :end_date
             UNION ALL
             SELECT CURRENT_DATE as snapshot_date, close as price
             FROM "StockPricesYahoo"
             WHERE symbol = 'SPY'
+            ORDER BY snapshot_date ASC
         """
     else:
         sql_spy = """
             SELECT snapshot_date, close as price
             FROM "StockPricesYahooHistoryDaily"
             WHERE symbol = 'SPY'
-              AND snapshot_date <> CURRENT_DATE
               AND snapshot_date BETWEEN :start_date AND :end_date
             ORDER BY snapshot_date ASC
         """

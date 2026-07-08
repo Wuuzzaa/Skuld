@@ -409,6 +409,7 @@ def check_stock_split():
 
     if not df.empty:
         logger.info(f"Found {len(df)} symbols with stock splits. Updating historical prices...")
+        logger.info(df['symbol'].tolist())
         symbols_with_splits = df['symbol'].tolist()
         load_historical_prices(symbols_with_splits, delete_all_existing=False)
 
