@@ -381,7 +381,7 @@ def load_historical_prices(symbols, delete_all_existing=True):
             
 
         batch = 1
-        for df in yahoo_query.get_historical_prices(period='26y'):
+        for df in yahoo_query.get_historical_prices(period='26y', symbols=symbols):
             logger.info(f"Batch {batch} - fetched {len(df) if df is not None else 0} historical price entries")
             if df is not None and not df.empty:
                 # rename date column to snapshot_date for consistency
