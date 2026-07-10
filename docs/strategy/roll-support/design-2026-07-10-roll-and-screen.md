@@ -163,6 +163,20 @@ Scoring-Matrix (wie `dividend_screener`) über `StockData ⋈ OptionDataMerged`.
 
 > **Ehrliche Beschriftung:** Proxy-Kriterien (1, 2, 5) werden in der UI als „(aktuell)" gekennzeichnet, nicht als „10 Jahre". Keine Schein-Genauigkeit.
 
+#### Warum nur „aktuell" — verifizierte Datenlage (2026-07-10)
+
+Faktenlage aus dem Code (`src/yahooquery_financials.py`, `src/yahooquery_scraper.py`):
+
+- Yahoo (`yahooquery.all_financial_data()`, Default `frequency="a"`) liefert nur **~4 Jahresabschlüsse** je Symbol. **10 Jahre gibt Yahoo grundsätzlich nicht her.**
+- SKULD ruft `all_financial_data()` ohne `frequency` auf und reduziert das Ergebnis anschließend per `idx = df.groupby('symbol')['asOfDate'].idxmax()` auf **nur den jüngsten** Jahresabschluss. Die übrigen ~3 Jahre werden verworfen.
+- `FundamentalDataYahoo` hat PK = `symbol` (keine Zeitachse). `FundamentalDataYahooHistoryDaily` historisiert nur den täglichen Snapshot dieses einen Werts — das ist **kein** Jahresverlauf, sondern nur „wann änderte sich der zuletzt gemeldete Wert".
+
+**Fazit:** Ein echter Mehrjahres-Trend ist mit den aktuell gespeicherten Daten nicht möglich. Als Proxy dienen die aktuellen Wachstumsraten (`FinData_revenueGrowth`, `Forward_EPS_Growth_Percent`, `KeyStats_earningsQuarterlyGrowth`) — Aussage „wächst aktuell / positiv?" statt „seit 10 Jahren durchgehend?".
+
+**Spätere Ausbaustufen (NICHT V1, dokumentiert für Backlog):**
+- *4-Jahres-Trend:* Fundamental-Sammlung so umbauen, dass die von Yahoo gelieferten ~4 Jahre behalten werden (neue Tabelle mit Key `symbol + fiscalYear`). Ermöglicht echtes „4 Jahre EPS/Umsatz steigend?". **Berührt DB-Schema → nur mit expliziter User-Freigabe.**
+- *10-Jahres-Trend:* Zweitquelle anbinden (z.B. stockanalysis.com / FMP / macrotrends). Eigenes größeres Projekt (Scraper + Tabelle + Pipeline), nicht Teil von „Roll & Screen".
+
 ### Options-Auswahl je Aktie (bester Put)
 
 Aus `OptionDataMerged` je qualifizierter Aktie der beste passende Put:
