@@ -328,21 +328,12 @@ echo "$REMOTE_TMP"
 
     Write-Host "Building slim dump on $rHost (this may take a few minutes)..." -ForegroundColor Cyan
 
-    # Feed the remote-bash script via a temporary file to avoid
-    # complex PowerShell pipe-to-process escaping.
-    $tmpScript = [System.IO.Path]::GetTempFileName()
-    Set-Content -Path $tmpScript -Value $remoteScript -NoNewline -Encoding UTF8
     $remotePath = ""
-    try {
-        # Redirect the script into ssh's stdin.
-        $sshArgs = "-o StrictHostKeyChecking=no ${rUser}@${rHost} bash -s"
-        $execCmd = "$sshCmd $sshArgs"
-        $output = & cmd /c "type ""$tmpScript"" | $execCmd" 2>&1
-        $lines = ($output | Out-String) -split "`r?`n" | Where-Object { $_.Trim() -ne "" }
-        if ($lines.Count -gt 0) { $remotePath = $lines[-1].Trim() }
-    } finally {
-        Remove-Item -Path $tmpScript -Force -ErrorAction SilentlyContinue
-    }
+    # Pipe script text directly to ssh stdin to avoid UTF-8 BOM artifacts
+    # that can break bash parsing on the remote host.
+    $output = $remoteScript | & $sshCmd -o StrictHostKeyChecking=no "${rUser}@${rHost}" "bash -s" 2>&1
+    $lines = ($output | Out-String) -split "`r?`n" | Where-Object { $_.Trim() -ne "" }
+    if ($lines.Count -gt 0) { $remotePath = $lines[-1].Trim() }
 
     if ([string]::IsNullOrWhiteSpace($remotePath) -or -not $remotePath.StartsWith("/tmp/skuld_slim_")) {
         Write-Error "Remote slim dump failed. Output tail: $output"
