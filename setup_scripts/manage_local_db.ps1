@@ -264,7 +264,7 @@ function Get-RemoteSlimDump {
     # so PowerShell does not expand anything - only __REMOTE_TMP__ /
     # __DAYS__ get substituted after.
     $remoteScript = @'
-set -euo pipefail
+    set -eu
 
 REMOTE_TMP='__REMOTE_TMP__'
 DAYS='__DAYS__'
