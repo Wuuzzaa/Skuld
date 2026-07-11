@@ -323,6 +323,12 @@ echo "$REMOTE_TMP"
     $remoteScript = $remoteScript.Replace('__REMOTE_TMP__', $remoteTmp)
     $remoteScript = $remoteScript.Replace('__DAYS__', $rDays.ToString())
 
+    # The .ps1 file is saved with CRLF line endings, so the here-string above
+    # carries a literal `\r` at the end of every line. Bash treats `\r` as
+    # part of the preceding token (not a line separator), so e.g. "set -eu\r"
+    # is parsed as one bad option string. Normalize to LF before sending.
+    $remoteScript = $remoteScript -replace "`r`n", "`n"
+
     # Safety guard before executing anything remotely.
     Assert-ReadonlySql -Sql $remoteScript
 
