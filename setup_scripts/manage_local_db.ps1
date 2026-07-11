@@ -347,9 +347,22 @@ echo "$REMOTE_TMP"
     # contexts (e.g. Task Scheduler, some terminal hosts) even after the
     # remote script has already finished and printed its output.
     $execCmd = "$sshCmd -n -o StrictHostKeyChecking=no ${rUser}@${rHost} ""$remoteExec"""
+    # $ErrorActionPreference = "Stop" (set at top of script) causes PowerShell
+    # to throw a terminating error the moment ssh writes ANYTHING to stderr -
+    # including the informational >&2 progress messages in the remote script.
+    # Temporarily relax it so those messages are captured, not thrown.
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = "SilentlyContinue"
     $output = Invoke-Expression $execCmd 2>&1
-    $lines = ($output | Out-String) -split "`r?`n" | Where-Object { $_.Trim() -ne "" }
-    if ($lines.Count -gt 0) { $remotePath = $lines[-1].Trim() }
+    $ErrorActionPreference = $prevEAP
+
+    # Separate stdout (plain strings) from stderr (ErrorRecord objects).
+    # The remote script writes all progress to stderr; only the final tmp-path
+    # goes to stdout - that is what we need to capture as $remotePath.
+    $stdoutLines = $output | Where-Object { $_ -is [string] } | Where-Object { $_.Trim() -ne "" }
+    $stderrLines = $output | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] }
+    foreach ($e in $stderrLines) { Write-Host "  $($e.ToString().Trim())" -ForegroundColor DarkGray }
+    if ($stdoutLines.Count -gt 0) { $remotePath = ($stdoutLines | Select-Object -Last 1).Trim() }
 
     if ([string]::IsNullOrWhiteSpace($remotePath) -or -not $remotePath.StartsWith("/tmp/skuld_slim_")) {
         Write-Error "Remote slim dump failed. Output tail: $output"
