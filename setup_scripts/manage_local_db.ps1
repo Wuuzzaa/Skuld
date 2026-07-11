@@ -157,18 +157,18 @@ function Get-RemoteDumpFile {
 
     # --- Connectivity Check ---
     Write-Host "Verifying SSH connection to $rUser@$rHost..." -ForegroundColor Cyan
-    $testCmd = "$sshCmd -o BatchMode=yes -o StrictHostKeyChecking=no ${rUser}@${rHost} echo 'SSH_CONNECTION_OK'"
+    $testCmd = "$sshCmd -n -o BatchMode=yes -o StrictHostKeyChecking=no ${rUser}@${rHost} echo 'SSH_CONNECTION_OK'"
     $testResult = Invoke-Expression $testCmd 2>&1
-    
+
     if ("$testResult" -ne "SSH_CONNECTION_OK") {
         Write-Error "SSH Connection FAILED!`nDetails: $testResult`nHint: Check your VPN, IP, User, or SSH Key permissions."
     }
     Write-Host "SSH Connection established." -ForegroundColor Green
 
     Write-Host "Checking $rHost for newest backup in $rPath..." -ForegroundColor Yellow
-    
+
     # Removed 2>/dev/null so we see if directory exists
-    $findCmd = "$sshCmd -o StrictHostKeyChecking=no ${rUser}@${rHost} ""ls -1t $rPath/*.sql* | head -n 1"""
+    $findCmd = "$sshCmd -n -o StrictHostKeyChecking=no ${rUser}@${rHost} ""ls -1t $rPath/*.sql* | head -n 1"""
     
     try {
         $latestFile = Invoke-Expression $findCmd
@@ -246,7 +246,7 @@ function Get-RemoteSlimDump {
     }
 
     Write-Host "Verifying SSH connection to $rUser@$rHost..." -ForegroundColor Cyan
-    $testCmd = "$sshCmd -o BatchMode=yes -o StrictHostKeyChecking=no ${rUser}@${rHost} echo 'SSH_CONNECTION_OK'"
+    $testCmd = "$sshCmd -n -o BatchMode=yes -o StrictHostKeyChecking=no ${rUser}@${rHost} echo 'SSH_CONNECTION_OK'"
     $testResult = Invoke-Expression $testCmd 2>&1
     if ("$testResult" -ne "SSH_CONNECTION_OK") {
         Write-Error "SSH Connection FAILED! Details: $testResult"
@@ -329,9 +329,19 @@ echo "$REMOTE_TMP"
     Write-Host "Building slim dump on $rHost (this may take a few minutes)..." -ForegroundColor Cyan
 
     $remotePath = ""
-    # Pipe script text directly to ssh stdin to avoid UTF-8 BOM artifacts
-    # that can break bash parsing on the remote host.
-    $output = $remoteScript | & $sshCmd -o StrictHostKeyChecking=no "${rUser}@${rHost}" "bash -s" 2>&1
+    # Windows PowerShell 5.1 mangles multi-line strings piped into a native
+    # exe's stdin (newlines/encoding get corrupted in transit, breaking the
+    # remote bash script). Base64-encode the script and decode it on the
+    # remote side instead - this sidesteps stdin piping/encoding entirely.
+    $encodedScript = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($remoteScript))
+    $remoteExec = "echo $encodedScript | base64 -d | bash"
+    # -n redirects ssh's local stdin from NUL. Without it, ssh forwards local
+    # stdin to the remote command and then waits for local stdin EOF before
+    # tearing down the connection - this hangs indefinitely in non-interactive
+    # contexts (e.g. Task Scheduler, some terminal hosts) even after the
+    # remote script has already finished and printed its output.
+    $execCmd = "$sshCmd -n -o StrictHostKeyChecking=no ${rUser}@${rHost} ""$remoteExec"""
+    $output = Invoke-Expression $execCmd 2>&1
     $lines = ($output | Out-String) -split "`r?`n" | Where-Object { $_.Trim() -ne "" }
     if ($lines.Count -gt 0) { $remotePath = $lines[-1].Trim() }
 
@@ -348,7 +358,7 @@ echo "$REMOTE_TMP"
     Invoke-Expression $downloadCmd
 
     # Best-effort cleanup on the server regardless of SCP outcome.
-    $cleanupCmd = "$sshCmd -o StrictHostKeyChecking=no ${rUser}@${rHost} ""rm -f '$remotePath'"""
+    $cleanupCmd = "$sshCmd -n -o StrictHostKeyChecking=no ${rUser}@${rHost} ""rm -f '$remotePath'"""
     Invoke-Expression $cleanupCmd 2>&1 | Out-Null
 
     if (Test-Path $localFile) {
