@@ -23,6 +23,7 @@ from config import PATH_DATABASE_QUERY_FOLDER
 from src.database import select_into_dataframe
 from src.streamlit_helpers import render_date_filter
 from src.page_display_dataframe import page_display_dataframe
+from src.ui_utils import filter_by_expiration_type
 from src.roll_support_calc import position_status, roll_candidate, roll_candidate_explained
 from src.put_screener import score_candidates, score_breakdown, put_metrics, DEFAULT_PE_MAX
 
@@ -42,6 +43,18 @@ def _parse_date(value):
     if isinstance(value, date):
         return value
     return pd.to_datetime(value).date()
+
+
+@st.cache_data(ttl=300)
+def _load_symbols():
+    """Symbol-Werthilfe aus der aktuellen Kette (OptionDataMerged) — schlank & schnell,
+    wie symbolpage/watchlist. Reiner DB-Read -> darf cachen."""
+    df = select_into_dataframe(
+        query='SELECT DISTINCT symbol FROM "OptionDataMerged" ORDER BY symbol ASC',
+    )
+    if df is None or df.empty:
+        return []
+    return df["symbol"].dropna().astype(str).tolist()
 
 
 @st.cache_data(ttl=300)
@@ -119,14 +132,19 @@ def render_roller_tab():
     st.caption("Wähle deinen historisch eröffneten Put, sieh Gewinn/Verlust und alle 3 Roll-Stufen "
                "(Buch Kap. 3). Ampel: ✅ Basispreis gesenkt · ⚠️ Prämie positiv, GS nicht besser · ❌ Roll kostet drauf.")
 
-    # 1) Symbol (Freitext) + Kontrakte — nichts lädt vor der Eingabe
+    # 1) Symbol (Werthilfe aus aktueller Kette — schnell, wie symbolpage/watchlist) + Kontrakte
+    symbols = _load_symbols()
+    if not symbols:
+        st.error("Keine Symbole in der aktuellen Optionskette gefunden.")
+        return
+
     col_sym, col_n = st.columns([2, 1])
-    symbol = col_sym.text_input("Symbol", value="", placeholder="z.B. AAPL",
-                                key="roll_symbol").strip().upper()
+    symbol = col_sym.selectbox("Symbol", symbols, index=None,
+                               placeholder="Symbol wählen…", key="roll_symbol")
     n_contracts = col_n.number_input("Kontrakte (n)", min_value=1, value=1, step=1)
 
     if not symbol:
-        st.info("Symbol eingeben — erst dann werden Historie und Kurse geladen.")
+        st.info("Symbol wählen — erst dann werden Historie und Kurse geladen.")
         return
 
     entry_date = render_date_filter(
@@ -141,16 +159,31 @@ def render_roller_tab():
     if not entry_date:
         return
 
-    # 2) DTE-Bereich am Einstiegsdatum + verfügbare Puts
-    dte_min, dte_max = st.slider(
+    # 2) DTE-Bereich am Einstiegsdatum + Verfallstyp-Filter + verfügbare Puts
+    sc1, sc2 = st.columns([3, 2])
+    dte_min, dte_max = sc1.slider(
         "DTE-Bereich am Einstiegsdatum (Tage bis Verfall)",
         min_value=1, max_value=400, value=(30, 60), step=1,
         help="Zeigt alle Puts, deren Restlaufzeit am Einstiegsdatum in diesem Bereich lag.",
     )
+    with sc2:
+        st.caption("Verfallstyp")
+        f1, f2, f3 = st.columns(3)
+        show_monthly = f1.checkbox("Monthly", value=True, key="roll_monthly")
+        show_weekly = f2.checkbox("Weekly", value=True, key="roll_weekly")
+        show_daily = f3.checkbox("Daily", value=False, key="roll_daily")
+
     hist_df = _load_put_history(symbol, entry_date, dte_min, dte_max)
     if hist_df is None or hist_df.empty:
         st.warning(f"Keine Puts für {symbol} am {entry_date} im DTE-Bereich {dte_min}–{dte_max} gefunden.")
         return
+
+    hist_df = filter_by_expiration_type(hist_df, "expiration_date",
+                                        show_monthly, show_weekly, show_daily)
+    if hist_df.empty:
+        st.warning("Keine Puts für die gewählten Verfallstypen (Monthly/Weekly/Daily).")
+        return
+    hist_df = hist_df.reset_index(drop=True)  # stabiler Positions-Index für die Zeilenauswahl
 
     st.markdown("**Wähle deinen eröffneten Put:**")
     event = page_display_dataframe(
