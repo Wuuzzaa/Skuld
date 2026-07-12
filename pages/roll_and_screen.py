@@ -186,12 +186,22 @@ def render_roller_tab():
     hist_df = hist_df.reset_index(drop=True)  # stabiler Positions-Index für die Zeilenauswahl
 
     st.markdown("**Wähle deinen eröffneten Put:**")
-    event = page_display_dataframe(
-        hist_df[["expiration_date", "strike_price", "premium_option_price",
-                 "days_to_expiration", "stock_close", "option_osi"]],
-        symbol_column="option_osi",
+    put_table = hist_df[["expiration_date", "strike_price", "premium_option_price",
+                         "days_to_expiration", "stock_close", "option_osi"]].rename(columns={
+        "expiration_date": "Expiry",
+        "strike_price": "Strike",
+        "premium_option_price": "Prämie ($)",
+        "days_to_expiration": "DTE",
+        "stock_close": "Aktienkurs",
+        "option_osi": "Kontrakt (OSI)",
+    })
+    event = st.dataframe(
+        put_table,
+        use_container_width=True,
+        hide_index=True,
         on_select="rerun",
         selection_mode="single-row",
+        key="roll_put_pick",
     )
     rows = event.selection.rows if hasattr(event, "selection") else []
     if not rows:
