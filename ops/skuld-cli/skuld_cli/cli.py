@@ -413,7 +413,7 @@ def setup(dry_run: bool):
     # ── Phase 2: Runner Token ──────────────────────────────────────────
     console.print("\n[bold]Phase 4 — GitHub Runner Token[/bold]")
     console.print("  Token holen mit:")
-    console.print("  [dim]gh api repos/Wuuzzaa/Skuld/actions/runners/registration-token --jq .token[/dim]")
+    console.print("  [dim]gh api repos/<owner>/<repo>/actions/runners/registration-token --jq .token[/dim]")
     runner_token = click.prompt("  Runner Token (leer = Runner überspringen)", default="")
     install_runner = bool(runner_token)
 

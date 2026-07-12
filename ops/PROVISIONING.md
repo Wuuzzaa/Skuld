@@ -83,8 +83,8 @@ myserver:
   host: SERVER_IP           # or "localhost" if runner is on the same machine
   user: deploy
   runner: self-hosted       # or "ubuntu-latest" for cloud with SSH deploy
-  domain: myserver.skuld-options.com
-  auth_domain: auth-myserver.skuld-options.com
+  domain: myserver.<your-domain>.com
+  auth_domain: auth-myserver.<your-domain>.com
   telegram_chat_id: "-YOUR_CHAT_ID"
   db_container: skuld_myserver_db
   compose_args: "-f docker-compose.yml -f docker-compose.testing.yml"

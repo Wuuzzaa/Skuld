@@ -137,7 +137,7 @@ No GitHub Artifacts needed -- the transfer is direct server-to-server.
     host: 1.2.3.4
     user: deploy
     runner: ubuntu-latest
-    domain: new.skuld-options.com
+    domain: new.<your-domain>.com
     telegram_chat_id: "-123456"
     db_container: my-db-container
     compose_args: "-f docker-compose.yml"
