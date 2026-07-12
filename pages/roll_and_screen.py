@@ -24,6 +24,7 @@ from src.database import select_into_dataframe
 from src.streamlit_helpers import render_date_filter
 from src.page_display_dataframe import page_display_dataframe
 from src.ui_utils import filter_by_expiration_type
+from src.utils.option_utils import get_expiration_type
 from src.black_scholes import PutValue
 from src.roll_support_calc import position_status, roll_candidate, roll_candidate_explained
 from src.put_screener import score_candidates, score_breakdown, put_metrics, DEFAULT_PE_MAX
@@ -190,18 +191,42 @@ def render_roller_tab():
                .sort_values(["expiration_date", "strike_price"], ascending=[True, False])
                .reset_index(drop=True))
 
-    st.markdown("**Wähle deinen eröffneten Put:**")
-    put_table = hist_df[["expiration_date", "strike_price", "premium_option_price",
-                         "days_to_expiration", "stock_close", "option_osi"]].rename(columns={
-        "expiration_date": "Expiry",
+    # Schritt A: Verfallsdatum wählen (Dropdown mit sprechendem Label) — schneller Überblick,
+    # statt aller Strikes über alle Verfälle in einer langen Liste.
+    exp_options = (hist_df[["expiration_date", "days_to_expiration"]]
+                   .drop_duplicates()
+                   .sort_values("expiration_date"))
+    exp_labels = {}
+    for _, e in exp_options.iterrows():
+        exp = e["expiration_date"]
+        dte = int(e["days_to_expiration"])
+        typ = get_expiration_type(exp)
+        exp_labels[f"{pd.to_datetime(exp).strftime('%d.%m.%Y')} · {dte} DTE · {typ}"] = exp
+
+    st.markdown("**1. Verfallsdatum wählen:**")
+    chosen_label = st.selectbox("Verfallsdatum", list(exp_labels.keys()),
+                                index=None, placeholder="Verfall wählen…",
+                                key="roll_expiry_pick", label_visibility="collapsed")
+    if not chosen_label:
+        st.info("Verfallsdatum wählen — dann erscheinen die Strikes.")
+        return
+    chosen_exp = exp_labels[chosen_label]
+
+    # Schritt B: nur die Strikes DIESES Verfalls, aufsteigend, ohne OSI-Ballast.
+    exp_df = (hist_df[hist_df["expiration_date"] == chosen_exp]
+              .sort_values("strike_price", ascending=True)
+              .reset_index(drop=True))
+
+    st.markdown("**2. Deinen Strike anklicken:**")
+    strike_table = exp_df[["strike_price", "premium_option_price", "days_to_expiration",
+                           "stock_close"]].rename(columns={
         "strike_price": "Strike",
         "premium_option_price": "Prämie ($)",
         "days_to_expiration": "DTE",
         "stock_close": "Aktienkurs",
-        "option_osi": "Kontrakt (OSI)",
     })
     event = st.dataframe(
-        put_table,
+        strike_table,
         use_container_width=True,
         hide_index=True,
         on_select="rerun",
@@ -210,9 +235,9 @@ def render_roller_tab():
     )
     rows = event.selection.rows if hasattr(event, "selection") else []
     if not rows:
-        st.info("Klicke oben die Zeile deines Puts an.")
+        st.info("Klicke oben die Zeile deines Strikes an.")
         return
-    put = hist_df.iloc[rows[0]]
+    put = exp_df.iloc[rows[0]]
 
     K = float(put["strike_price"])
     option_osi = put["option_osi"]
