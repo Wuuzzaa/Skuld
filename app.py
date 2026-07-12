@@ -41,7 +41,6 @@ earnings_put_scanner = st.Page("pages/earnings_put_scanner.py", title="Earnings 
 covered_call_scanner = st.Page("pages/covered_call_scanner.py", title="ITM Covered Call Scanner")
 roll_and_screen = st.Page("pages/roll_and_screen.py", title="Roll & Screen")
 symbolpage = st.Page("pages/symbolpage.py", title="Symbol Page")
-backtest = st.Page("pages/backtest.py", title="Backtesting")
 admin_jobs = st.Page("pages/admin_jobs.py", title="Admin - Jobs")
 
 # Set up navigation
@@ -64,7 +63,6 @@ page = st.navigation(
         zahltagstrategie,
         data_logs,
         symbolpage,
-        backtest,
         admin_jobs
     ]
 )
