@@ -8,7 +8,7 @@ import pandas as pd
 from config import TABLE_FUNDAMENTAL_DATA_YAHOO, TABLE_STOCK_PRICES_YAHOO
 from src.database import execute_sql, get_postgres_engine, insert_into_table, insert_into_table_bulk, select_into_dataframe, truncate_table
 from src.stock_volatility import calculate_and_store_stock_historical_volatility, calculate_and_store_stock_historical_volatility_history
-from src.technical_indicators import calc_technical_indicators_history
+from src.technical_indicators import calc_technical_indicators, calc_technical_indicators_history
 from src.yahooquery_scraper import YahooQueryScraper
 
 # Add parent directory to path for imports
@@ -345,6 +345,7 @@ def load_stock_prices(symbols):
 
     check_stock_split()
     calculate_and_store_stock_historical_volatility()
+    calc_technical_indicators(symbols)
 
 def load_historical_prices_(symbols):
     # replace symbol prefix I: with ^ for indices to match yahoo format
@@ -381,7 +382,7 @@ def load_historical_prices(symbols, delete_all_existing=True):
             
 
         batch = 1
-        for df in yahoo_query.get_historical_prices(period='26y'):
+        for df in yahoo_query.get_historical_prices(period='26y', symbols=symbols):
             logger.info(f"Batch {batch} - fetched {len(df) if df is not None else 0} historical price entries")
             if df is not None and not df.empty:
                 # rename date column to snapshot_date for consistency
@@ -409,6 +410,7 @@ def check_stock_split():
 
     if not df.empty:
         logger.info(f"Found {len(df)} symbols with stock splits. Updating historical prices...")
+        logger.info(df['symbol'].tolist())
         symbols_with_splits = df['symbol'].tolist()
         load_historical_prices(symbols_with_splits, delete_all_existing=False)
 

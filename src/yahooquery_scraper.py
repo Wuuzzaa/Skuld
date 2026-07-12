@@ -176,16 +176,18 @@ class YahooQueryScraper:
 
             return df
 
-    def get_historical_prices(self, period="1d"):
+    def get_historical_prices(self, period="1d", symbols=None):
+        if symbols is None:
+            symbols = self.symbols
         local_batch_size = 500
-        local_ticker_batches = _get_ticker_batches(self.symbols, local_batch_size, self.retries, asynchronous=True)
+        local_ticker_batches = _get_ticker_batches(symbols, local_batch_size, self.retries, asynchronous=True)
         batch = 1
         for ticker_batch in local_ticker_batches:
             logger.info(f"({batch}/{len(local_ticker_batches)}) Batch")
             batch += 1
             for attempt in range(self.retries):
                 try:
-                    if len(self.symbols) > local_batch_size:
+                    if len(symbols) > local_batch_size:
                         logger.info(f"Fetching Yahoo historical data for batch of up to {local_batch_size} symbols...")
                     # # Historical prices for 26y can be very slow — use longer timeout
                     hist_timeout = YAHOO_REQUEST_TIMEOUT * 3 if period != '1d' else YAHOO_REQUEST_TIMEOUT

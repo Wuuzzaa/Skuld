@@ -157,18 +157,18 @@ function Get-RemoteDumpFile {
 
     # --- Connectivity Check ---
     Write-Host "Verifying SSH connection to $rUser@$rHost..." -ForegroundColor Cyan
-    $testCmd = "$sshCmd -o BatchMode=yes -o StrictHostKeyChecking=no ${rUser}@${rHost} echo 'SSH_CONNECTION_OK'"
+    $testCmd = "$sshCmd -n -o BatchMode=yes -o StrictHostKeyChecking=no ${rUser}@${rHost} echo 'SSH_CONNECTION_OK'"
     $testResult = Invoke-Expression $testCmd 2>&1
-    
+
     if ("$testResult" -ne "SSH_CONNECTION_OK") {
         Write-Error "SSH Connection FAILED!`nDetails: $testResult`nHint: Check your VPN, IP, User, or SSH Key permissions."
     }
     Write-Host "SSH Connection established." -ForegroundColor Green
 
     Write-Host "Checking $rHost for newest backup in $rPath..." -ForegroundColor Yellow
-    
+
     # Removed 2>/dev/null so we see if directory exists
-    $findCmd = "$sshCmd -o StrictHostKeyChecking=no ${rUser}@${rHost} ""ls -1t $rPath/*.sql* | head -n 1"""
+    $findCmd = "$sshCmd -n -o StrictHostKeyChecking=no ${rUser}@${rHost} ""ls -1t $rPath/*.sql* | head -n 1"""
     
     try {
         $latestFile = Invoke-Expression $findCmd
@@ -246,7 +246,7 @@ function Get-RemoteSlimDump {
     }
 
     Write-Host "Verifying SSH connection to $rUser@$rHost..." -ForegroundColor Cyan
-    $testCmd = "$sshCmd -o BatchMode=yes -o StrictHostKeyChecking=no ${rUser}@${rHost} echo 'SSH_CONNECTION_OK'"
+    $testCmd = "$sshCmd -n -o BatchMode=yes -o StrictHostKeyChecking=no ${rUser}@${rHost} echo 'SSH_CONNECTION_OK'"
     $testResult = Invoke-Expression $testCmd 2>&1
     if ("$testResult" -ne "SSH_CONNECTION_OK") {
         Write-Error "SSH Connection FAILED! Details: $testResult"
@@ -264,7 +264,7 @@ function Get-RemoteSlimDump {
     # so PowerShell does not expand anything - only __REMOTE_TMP__ /
     # __DAYS__ get substituted after.
     $remoteScript = @'
-set -euo pipefail
+    set -eu
 
 REMOTE_TMP='__REMOTE_TMP__'
 DAYS='__DAYS__'
@@ -323,26 +323,46 @@ echo "$REMOTE_TMP"
     $remoteScript = $remoteScript.Replace('__REMOTE_TMP__', $remoteTmp)
     $remoteScript = $remoteScript.Replace('__DAYS__', $rDays.ToString())
 
+    # The .ps1 file is saved with CRLF line endings, so the here-string above
+    # carries a literal `\r` at the end of every line. Bash treats `\r` as
+    # part of the preceding token (not a line separator), so e.g. "set -eu\r"
+    # is parsed as one bad option string. Normalize to LF before sending.
+    $remoteScript = $remoteScript -replace "`r`n", "`n"
+
     # Safety guard before executing anything remotely.
     Assert-ReadonlySql -Sql $remoteScript
 
     Write-Host "Building slim dump on $rHost (this may take a few minutes)..." -ForegroundColor Cyan
 
-    # Feed the remote-bash script via a temporary file to avoid
-    # complex PowerShell pipe-to-process escaping.
-    $tmpScript = [System.IO.Path]::GetTempFileName()
-    Set-Content -Path $tmpScript -Value $remoteScript -NoNewline -Encoding UTF8
     $remotePath = ""
-    try {
-        # Redirect the script into ssh's stdin.
-        $sshArgs = "-o StrictHostKeyChecking=no ${rUser}@${rHost} bash -s"
-        $execCmd = "$sshCmd $sshArgs"
-        $output = & cmd /c "type ""$tmpScript"" | $execCmd" 2>&1
-        $lines = ($output | Out-String) -split "`r?`n" | Where-Object { $_.Trim() -ne "" }
-        if ($lines.Count -gt 0) { $remotePath = $lines[-1].Trim() }
-    } finally {
-        Remove-Item -Path $tmpScript -Force -ErrorAction SilentlyContinue
-    }
+    # Windows PowerShell 5.1 mangles multi-line strings piped into a native
+    # exe's stdin (newlines/encoding get corrupted in transit, breaking the
+    # remote bash script). Base64-encode the script and decode it on the
+    # remote side instead - this sidesteps stdin piping/encoding entirely.
+    $encodedScript = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($remoteScript))
+    $remoteExec = "echo $encodedScript | base64 -d | bash"
+    # -n redirects ssh's local stdin from NUL. Without it, ssh forwards local
+    # stdin to the remote command and then waits for local stdin EOF before
+    # tearing down the connection - this hangs indefinitely in non-interactive
+    # contexts (e.g. Task Scheduler, some terminal hosts) even after the
+    # remote script has already finished and printed its output.
+    $execCmd = "$sshCmd -n -o StrictHostKeyChecking=no ${rUser}@${rHost} ""$remoteExec"""
+    # $ErrorActionPreference = "Stop" (set at top of script) causes PowerShell
+    # to throw a terminating error the moment ssh writes ANYTHING to stderr -
+    # including the informational >&2 progress messages in the remote script.
+    # Temporarily relax it so those messages are captured, not thrown.
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = "SilentlyContinue"
+    $output = Invoke-Expression $execCmd 2>&1
+    $ErrorActionPreference = $prevEAP
+
+    # Separate stdout (plain strings) from stderr (ErrorRecord objects).
+    # The remote script writes all progress to stderr; only the final tmp-path
+    # goes to stdout - that is what we need to capture as $remotePath.
+    $stdoutLines = $output | Where-Object { $_ -is [string] } | Where-Object { $_.Trim() -ne "" }
+    $stderrLines = $output | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] }
+    foreach ($e in $stderrLines) { Write-Host "  $($e.ToString().Trim())" -ForegroundColor DarkGray }
+    if ($stdoutLines.Count -gt 0) { $remotePath = ($stdoutLines | Select-Object -Last 1).Trim() }
 
     if ([string]::IsNullOrWhiteSpace($remotePath) -or -not $remotePath.StartsWith("/tmp/skuld_slim_")) {
         Write-Error "Remote slim dump failed. Output tail: $output"
@@ -357,7 +377,7 @@ echo "$REMOTE_TMP"
     Invoke-Expression $downloadCmd
 
     # Best-effort cleanup on the server regardless of SCP outcome.
-    $cleanupCmd = "$sshCmd -o StrictHostKeyChecking=no ${rUser}@${rHost} ""rm -f '$remotePath'"""
+    $cleanupCmd = "$sshCmd -n -o StrictHostKeyChecking=no ${rUser}@${rHost} ""rm -f '$remotePath'"""
     Invoke-Expression $cleanupCmd 2>&1 | Out-Null
 
     if (Test-Path $localFile) {
