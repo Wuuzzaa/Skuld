@@ -6,7 +6,9 @@
 --
 -- Muster: get_option_data_at_date / get_option_date_range aus spreads_backtesting.py
 -- Quelle: "OptionDataMassiveHistory" (+ "OptionDataMassive" für CURRENT_DATE).
--- Params: :symbol, :entry_date
+-- Params: :symbol, :entry_date, :dte_min, :dte_max
+--   :dte_min/:dte_max filtern auf die Restlaufzeit AM Einstiegsdatum
+--   (expiration_date - entry_date), sodass nur Puts im gewählten DTE-Bereich erscheinen.
 --
 -- Hinweis: day_close ist die Prämie je Aktie ($). shares_per_contract i.d.R. 100.
 SELECT
@@ -37,4 +39,5 @@ WHERE a.symbol = :symbol
   AND a.contract_type = 'put'
   AND a.date = :entry_date::date
   AND a.expiration_date::date > :entry_date::date
+  AND (a.expiration_date::date - :entry_date::date) BETWEEN :dte_min AND :dte_max
 ORDER BY a.expiration_date ASC, a.strike_price DESC
