@@ -1,5 +1,10 @@
 """Buch-verifizierte Roll-Formeln — Szenarien aus 'Optionen unschlagbar handeln', Kap. 3."""
-from src.roll_support_calc import position_status, roll_candidate, ampel
+from src.roll_support_calc import (
+    position_status,
+    roll_candidate,
+    roll_candidate_explained,
+    ampel,
+)
 
 
 def test_ampel_gruen_wenn_netto_positiv_und_gs_gesenkt():
@@ -41,3 +46,19 @@ def test_roll_candidate_szenario3_stufe3_zwei_kontrakte():
     assert round(r["breakeven_new"], 2) == 26.15        # 27.50 - 270/(2*100)
     assert round(r["kapital_noetig"], 2) == 5500.00     # 27.50 * 2 * 100
     assert r["ampel"] == "✅"
+
+
+def test_roll_candidate_explained_liefert_herleitung():
+    exp = roll_candidate_explained(stufe=1, K=30.0, K2=29.0,
+                                   P_eroeffnung=100.0, P_heute=210.0, P_neu=220.0, n=1)
+    # Kernzahlen identisch zu roll_candidate:
+    assert round(exp["netto_abs"], 2) == 110.00
+    assert round(exp["breakeven_new"], 2) == 27.90
+    assert exp["ampel"] == "✅"
+    # Herleitung vorhanden und nachvollziehbar:
+    labels = [s["label"] for s in exp["steps"]]
+    assert "Netto-Prämie" in labels
+    assert "Neue Gewinnschwelle" in labels
+    netto_step = next(s for s in exp["steps"] if s["label"] == "Netto-Prämie")
+    assert "100" in netto_step["formel"] and "220" in netto_step["formel"] and "210" in netto_step["formel"]
+    assert round(netto_step["wert"], 2) == 110.00

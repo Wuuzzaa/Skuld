@@ -104,3 +104,36 @@ def roll_candidate(stufe: int, K: float, K2: float, P_eroeffnung: float,
         "kapital_noetig": kapital_noetig,
         "ampel": ampel(netto_abs, breakeven_new, breakeven_old),
     }
+
+
+def roll_candidate_explained(stufe: int, K: float, K2: float, P_eroeffnung: float,
+                             P_heute: float, P_neu: float, n: int) -> dict:
+    """Wie roll_candidate(), plus 'steps': Klartext-Herleitung für die UI.
+
+    Verändert keine Zahlen — reine Zusatz-Transparenz (Formel + eingesetzte Werte).
+    """
+    base = roll_candidate(stufe=stufe, K=K, K2=K2, P_eroeffnung=P_eroeffnung,
+                          P_heute=P_heute, P_neu=P_neu, n=n)
+    steps = [
+        {
+            "label": "Netto-Prämie",
+            "formel": f"Eröffnung {P_eroeffnung:.0f} + {n}×{P_neu:.0f} (neu) − {P_heute:.0f} (Rückkauf)",
+            "wert": base["netto_abs"],
+        },
+        {
+            "label": "Neue Gewinnschwelle",
+            "formel": f"K2 {K2:.2f} − Netto {base['netto_abs']:.0f} / ({n}×100)",
+            "wert": base["breakeven_new"],
+        },
+        {
+            "label": "Alte Gewinnschwelle",
+            "formel": f"K {K:.2f} − Eröffnung {P_eroeffnung:.0f} / 100",
+            "wert": base["breakeven_old"],
+        },
+        {
+            "label": "Kapital nötig",
+            "formel": f"K2 {K2:.2f} × {n} × 100",
+            "wert": base["kapital_noetig"],
+        },
+    ]
+    return {**base, "steps": steps}
