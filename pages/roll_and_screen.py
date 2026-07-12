@@ -24,7 +24,7 @@ from src.database import select_into_dataframe
 from src.streamlit_helpers import render_date_filter
 from src.page_display_dataframe import page_display_dataframe
 from src.roll_support_calc import position_status, roll_candidate, roll_candidate_explained
-from src.put_screener import score_candidates, criterion_labels, DEFAULT_PE_MAX
+from src.put_screener import score_candidates, score_breakdown, DEFAULT_PE_MAX
 
 logger = logging.getLogger(os.path.basename(__file__))
 
@@ -344,19 +344,17 @@ def render_screener_tab():
                "Harte Filter: Preis 15–80 $, Options-Liquidität OI/Vol ≥ 100. "
                "Kriterien mit '(aktuell)' sind Momentaufnahmen, kein Mehrjahres-Trend.")
 
-    with st.sidebar:
-        st.markdown("### 📈 Screener-Filter")
-        pe_max = st.slider("KGV-Obergrenze", min_value=10, max_value=200,
-                           value=int(DEFAULT_PE_MAX), step=5,
-                           help="Tech-Werte dürfen höher liegen — Schwelle hier großzügiger stellen.")
-        min_score = st.slider("Mindest-Score", min_value=0, max_value=9, value=5, step=1)
-        dte_min, dte_max = st.slider("DTE-Fenster (Tage)", min_value=7, max_value=90,
-                                     value=(21, 45), step=1)
-        min_oi = st.number_input("Min. Open Interest", min_value=100, value=100, step=50)
-        min_vol = st.number_input("Min. Tagesvolumen", min_value=100, value=100, step=50)
+    with st.expander("🔍 Filter", expanded=True):
+        c1, c2, c3, c4 = st.columns(4)
+        pe_max = c1.slider("KGV-Obergrenze", 10, 200, int(DEFAULT_PE_MAX), 5,
+                           help="Tech-Werte dürfen höher liegen.")
+        min_score = c2.slider("Mindest-Score", 0, 9, 5, 1)
+        dte_min, dte_max = c3.slider("DTE-Fenster (Tage)", 7, 90, (21, 45), 1)
+        min_oi = c4.number_input("Min. Open Interest", min_value=100, value=100, step=50)
+        min_vol = c4.number_input("Min. Tagesvolumen", min_value=100, value=100, step=50)
 
     if not st.button("🔍 Screener starten", type="primary", key="run_screener"):
-        st.info("Filter links einstellen und 'Screener starten' klicken.")
+        st.info("Filter oben einstellen und 'Screener starten' klicken.")
         return
 
     with st.spinner("Screene Aktien + Puts …"):
@@ -372,7 +370,6 @@ def render_screener_tab():
         st.warning(f"Keine Aktie erreicht Score ≥ {min_score}. Schwelle senken.")
         return
 
-    labels = criterion_labels()
     display_cols = [
         "symbol", "price", "score",
         "put_strike", "put_expiry", "put_dte", "put_premium",
@@ -381,17 +378,42 @@ def render_screener_tab():
     ]
     display_cols = [c for c in display_cols if c in scored.columns]
     st.success(f"{len(scored)} qualifizierte Aktien (Score ≥ {min_score}, max {scored.iloc[0]['score_max']}).")
-    page_display_dataframe(
+    event = page_display_dataframe(
         scored[display_cols],
         symbol_column="symbol",
-        on_select="ignore",
+        on_select="rerun",
+        selection_mode="single-row",
     )
+    sel = event.selection.rows if hasattr(event, "selection") else []
+    if not sel:
+        st.info("Klicke eine Aktie an, um die Score-Herleitung zu sehen.")
+        return
 
-    with st.expander("ℹ️ Score-Details je Kriterium"):
-        crit_cols = ["symbol", "score"] + list(labels.keys())
-        crit_cols = [c for c in crit_cols if c in scored.columns]
-        detail = scored[crit_cols].rename(columns=labels)
-        st.dataframe(detail, use_container_width=True, hide_index=True)
+    row = scored.iloc[sel[0]]
+    st.divider()
+    st.markdown(f"### 🔬 Score-Herleitung — {row['symbol']}  ({int(row['score'])}/{int(row['score_max'])})")
+
+    bd = score_breakdown(row, pe_max=pe_max)
+    ann_map = {"aktuell": "🔶 (aktuell)", "Näherung": "🔶 (Näherung)", "day_close": "🔶 (day_close)", "": ""}
+    detail = pd.DataFrame([{
+        "Kriterium": i["label"],
+        "Erreicht": "✅" if i["erreicht"] else "❌",
+        "Möglich": i["moeglich"],
+        "Ist-Wert": i["ist_wert"],
+        "Annahme": ann_map.get(i["annahme"], ""),
+    } for i in bd])
+    st.dataframe(detail, use_container_width=True, hide_index=True)
+
+    getroffene = sorted({i["annahme"] for i in bd if i["annahme"]})
+    if getroffene:
+        with st.expander("⚠️ Getroffene Annahmen", expanded=False):
+            texte = {
+                "aktuell": "**(aktuell):** Momentaufnahme statt Mehrjahres-Trend — Yahoo liefert nur den jüngsten Abschluss, kein 10-Jahres-Verlauf.",
+                "Näherung": "**(Näherung):** Ersatzgröße statt echtem Wert (z. B. Support ≈ 52W-Tief + SMA200).",
+                "day_close": "**(day_close):** Prämie = Tagesschluss statt echtem Bid/Ask.",
+            }
+            for a in getroffene:
+                st.markdown("- " + texte.get(a, a))
 
 
 # ---------------------------------------------------------------------------
