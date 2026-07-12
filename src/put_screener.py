@@ -107,3 +107,24 @@ def score_breakdown(row, pe_max: float = DEFAULT_PE_MAX) -> list:
 def criterion_labels() -> dict:
     """Mapping crit_-Spalte -> menschenlesbare Beschriftung (für die UI)."""
     return {col: label for col, label, *_ in _CRITERIA}
+
+
+def put_metrics(strike: float, premium: float, dte: int) -> dict:
+    """Kennzahlen eines verkaufbaren Puts. Reine Arithmetik, keine DB.
+
+    premium_pct      = Prämie / Strike * 100
+    annualized_pct   = premium_pct * 365 / dte
+    breakeven        = Strike - Prämie
+    capital_required = Strike * 100  (Cash-Secured)
+    """
+    strike = float(strike or 0)
+    premium = float(premium or 0)
+    dte = int(dte or 0)
+    premium_pct = (premium / strike * 100.0) if strike > 0 else 0.0
+    annualized_pct = (premium_pct * 365.0 / dte) if dte > 0 else 0.0
+    return {
+        "premium_pct": premium_pct,
+        "annualized_pct": annualized_pct,
+        "breakeven": strike - premium,
+        "capital_required": strike * 100.0,
+    }

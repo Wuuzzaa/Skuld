@@ -1,6 +1,6 @@
 """Scoring-Kern des CSP-Screeners — pure Python, keine DB."""
 import pandas as pd
-from src.put_screener import score_candidates, score_breakdown, SCORE_MAX
+from src.put_screener import score_candidates, score_breakdown, put_metrics, SCORE_MAX
 
 
 def _sample_row():
@@ -50,3 +50,17 @@ def test_breakdown_summe_gleich_score():
     score = int(scored.iloc[0]["score"])
     bd = score_breakdown(_sample_row(), pe_max=40.0)
     assert sum(1 for i in bd if i["erreicht"]) == score
+
+
+def test_put_metrics_basic():
+    m = put_metrics(strike=30.0, premium=1.20, dte=40)
+    assert round(m["premium_pct"], 2) == 4.0          # 1.20/30*100
+    assert round(m["breakeven"], 2) == 28.80          # 30 - 1.20
+    assert round(m["capital_required"], 2) == 3000.0  # 30*100
+    assert round(m["annualized_pct"], 1) == 36.5      # 4.0 * 365/40
+
+
+def test_put_metrics_guards_zero():
+    m = put_metrics(strike=0.0, premium=1.0, dte=0)
+    assert m["premium_pct"] == 0.0
+    assert m["annualized_pct"] == 0.0
