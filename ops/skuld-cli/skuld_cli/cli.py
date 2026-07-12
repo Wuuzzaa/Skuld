@@ -6,8 +6,12 @@ prerequisite is an authenticated `gh` CLI (https://cli.github.com/).
 """
 
 import json
+import re
+import shlex
+import subprocess
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 
 import click
 from rich.console import Console
@@ -342,6 +346,178 @@ def doctor():
     else:
         console.print("\n[red bold]Some checks failed.[/red bold] Fix the issues above.")
         sys.exit(1)
+
+
+# ─── skuld setup ───────────────────────────────────────────────────────
+
+_PROVISION_SCRIPT = Path(__file__).resolve().parents[2] / "provision-server.sh"
+_ENVIRONMENTS_YAML = Path(__file__).resolve().parents[2] / "environments.yaml"
+
+
+def _derive_auth_domain(domain: str) -> str:
+    return f"auth.{domain}"
+
+
+def _ssh_cmd(ip: str, key: str, user: str) -> list:
+    return ["ssh", "-i", key, "-o", "StrictHostKeyChecking=accept-new",
+            "-o", "ConnectTimeout=15", f"{user}@{ip}"]
+
+
+@main.command()
+@click.option("--dry-run", is_flag=True, help="Zeige was gemacht würde, ohne auszuführen")
+def setup(dry_run: bool):
+    """Interaktiver Wizard: neuen Server einrichten, DB befüllen, environments.yaml updaten.
+
+    Fuehrt durch: IP/Rolle/Domain abfragen, Server haerten, DB befuellen, Config schreiben.
+    """
+    console.rule("[bold cyan]SKULD Setup Wizard[/bold cyan]")
+    if dry_run:
+        console.print("[yellow]DRY-RUN — es wird nichts ausgeführt.[/yellow]\n")
+
+    # ── Phase 0: Verbindungsdaten ──────────────────────────────────────
+    console.print("[bold]Phase 1 — Server[/bold]")
+    ip = click.prompt("  Server IP")
+    ssh_user = click.prompt("  SSH-User", default="root")
+    default_key = str(Path.home() / ".ssh" / "id_ed25519_ionos")
+    if not Path(default_key).exists():
+        default_key = str(Path.home() / ".ssh" / "id_ed25519")
+    ssh_key = click.prompt("  SSH-Key (Pfad)", default=default_key)
+
+    if not Path(ssh_key).exists():
+        console.print(f"[red]Key nicht gefunden: {ssh_key}[/red]")
+        sys.exit(1)
+
+    # Verbindung testen
+    if not dry_run:
+        console.print(f"\n  Teste Verbindung zu {ip} ...")
+        test = subprocess.run(
+            _ssh_cmd(ip, ssh_key, ssh_user) + ["echo OK"],
+            capture_output=True, text=True
+        )
+        if test.returncode != 0 or "OK" not in test.stdout:
+            console.print(f"[red]SSH-Verbindung fehlgeschlagen:[/red] {test.stderr.strip()}")
+            console.print("  Tipp: Phase 0 (Key in Web-Console hinterlegen) abgeschlossen?")
+            sys.exit(1)
+        console.print("  [green]Verbindung OK[/green]")
+
+    # ── Phase 1: Umgebungs-Details ─────────────────────────────────────
+    console.print("\n[bold]Phase 2 — Umgebung[/bold]")
+    env_name = click.prompt("  Umgebungs-Name (z.B. prod2, test1)")
+    role = click.prompt("  Rolle", type=click.Choice(["prod", "test"]), default="test")
+
+    console.print("\n[bold]Phase 3 — Domain[/bold]")
+    domain = click.prompt("  Web-Domain (z.B. app.<deine-domain>.com)")
+    proposed_auth = _derive_auth_domain(domain)
+    auth_domain = click.prompt("  Auth-Domain", default=proposed_auth)
+
+    # ── Phase 2: Runner Token ──────────────────────────────────────────
+    console.print("\n[bold]Phase 4 — GitHub Runner Token[/bold]")
+    console.print("  Token holen mit:")
+    console.print("  [dim]gh api repos/Wuuzzaa/Skuld/actions/runners/registration-token --jq .token[/dim]")
+    runner_token = click.prompt("  Runner Token (leer = Runner überspringen)", default="")
+    install_runner = bool(runner_token)
+
+    # ── Phase 3: SSH-Keys für deploy-User ─────────────────────────────
+    authorized_keys = ""
+    conf_path = _PROVISION_SCRIPT.parent / "provision-server.conf"
+    if conf_path.exists():
+        m = re.search(r'SSH_AUTHORIZED_KEYS="\n(.*?)\n"', conf_path.read_text(), flags=re.S)
+        if m:
+            authorized_keys = m.group(1).strip()
+
+    # ── Phase 4: Härtung ──────────────────────────────────────────────
+    console.print("\n[bold]Phase 5 — Server härten[/bold]")
+    env_vars = f"ROLE={role} RUNNER_LABELS=skuld-{role} INSTALL_RUNNER={'true' if install_runner else 'false'}"
+    if runner_token:
+        env_vars += f" RUNNER_TOKEN={shlex.quote(runner_token)}"
+    if authorized_keys:
+        # Übergabe als Env-Var ist komplex bei Newlines — schreibe temporäre Datei
+        env_vars += " INSTALL_EXTRA_KEYS=false"  # Skript liest conf direkt wenn vorhanden
+
+    provision_cmd = (
+        f"ssh -i {shlex.quote(ssh_key)} -o StrictHostKeyChecking=accept-new "
+        f"{ssh_user}@{ip} {shlex.quote(env_vars + ' bash -s')} "
+        f"< {shlex.quote(str(_PROVISION_SCRIPT))}"
+    )
+    console.print(f"  Befehl: [dim]{provision_cmd}[/dim]")
+
+    if not dry_run:
+        if not _PROVISION_SCRIPT.exists():
+            console.print(f"[red]provision-server.sh nicht gefunden: {_PROVISION_SCRIPT}[/red]")
+            sys.exit(1)
+        result = subprocess.run(provision_cmd, shell=True)
+        if result.returncode != 0:
+            console.print("[red]Härtung fehlgeschlagen. Abbruch.[/red]")
+            sys.exit(result.returncode)
+        console.print("[green]Härtung abgeschlossen.[/green]")
+    else:
+        console.print("[dim]DRY-RUN: provision-server.sh würde ausgeführt.[/dim]")
+
+    # ── Phase 5: DB-Befüllung ──────────────────────────────────────────
+    console.print("\n[bold]Phase 6 — Datenbank[/bold]")
+    db_choice = click.prompt(
+        "  DB-Befüllung",
+        type=click.Choice(["empty", "dump"]),
+        default="empty",
+    )
+
+    if db_choice == "dump":
+        dump_path = Path(click.prompt("  Pfad zur lokalen pg_dump-Datei")).expanduser()
+        if not dry_run and not dump_path.exists():
+            console.print(f"[red]Datei nicht gefunden: {dump_path}[/red]")
+            sys.exit(1)
+
+        confirm_str = f"restore-to-{env_name}"
+        console.print(f"\n  [yellow]Achtung:[/yellow] DB wird auf {ip} eingespielt (nur Ziel-Server, nie Prod).")
+        typed = click.prompt(f'  Bestätigung — tippe "{confirm_str}"')
+        if typed.strip() != confirm_str:
+            console.print("[yellow]Abgebrochen.[/yellow]")
+            sys.exit(0)
+
+        remote_dump = f"/tmp/skuld_restore_{env_name}.sql.gz"
+        scp_cmd = (
+            f"scp -i {shlex.quote(ssh_key)} "
+            f"{shlex.quote(str(dump_path))} {ssh_user}@{ip}:{remote_dump}"
+        )
+        restore_cmd = (
+            f"ssh -i {shlex.quote(ssh_key)} {ssh_user}@{ip} "
+            f"'gunzip -c {remote_dump} | docker exec -i skuld_db psql -U skuld skuld && rm {remote_dump}'"
+        )
+
+        if not dry_run:
+            console.print("  Kopiere Dump ...")
+            subprocess.run(scp_cmd, shell=True, check=True)
+            console.print("  Spiele ein ...")
+            subprocess.run(restore_cmd, shell=True, check=True)
+            console.print("[green]DB-Restore abgeschlossen.[/green]")
+        else:
+            console.print(f"[dim]DRY-RUN: scp {dump_path} → {ip}, dann restore[/dim]")
+
+    # ── Phase 6: environments.yaml updaten ────────────────────────────
+    console.print("\n[bold]Phase 7 — environments.yaml[/bold]")
+    new_entry = (
+        f"\n{env_name}:\n"
+        f"  host: {ip}\n"
+        f"  role: {role}\n"
+        f"  domain: {domain}\n"
+        f"  auth_domain: {auth_domain}\n"
+        f"  runner_label: skuld-{role}\n"
+        f"  default_branch: master\n"
+        f"  compose_file: docker-compose.yml\n"
+    )
+    console.print(new_entry)
+
+    if not dry_run:
+        with open(_ENVIRONMENTS_YAML, "a") as f:
+            f.write(new_entry)
+        console.print(f"[green]Eintrag '{env_name}' in environments.yaml geschrieben.[/green]")
+
+    # ── Abschluss ──────────────────────────────────────────────────────
+    console.rule("[green]Setup abgeschlossen[/green]")
+    console.print(f"\n[bold]Nächste Schritte:[/bold]")
+    console.print(f"  1. DNS: {domain} → {ip} zeigen lassen (Cloudflare)")
+    console.print(f"  2. Deploy starten:  skuld deploy {env_name}")
+    console.print()
 
 
 # ─── skuld watch ───────────────────────────────────────────────────────
