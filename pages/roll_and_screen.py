@@ -24,7 +24,7 @@ from src.database import select_into_dataframe
 from src.streamlit_helpers import render_date_filter
 from src.page_display_dataframe import page_display_dataframe
 from src.roll_support_calc import position_status, roll_candidate, roll_candidate_explained
-from src.put_screener import score_candidates, score_breakdown, DEFAULT_PE_MAX
+from src.put_screener import score_candidates, score_breakdown, put_metrics, DEFAULT_PE_MAX
 
 logger = logging.getLogger(os.path.basename(__file__))
 
@@ -338,6 +338,15 @@ def _load_screener(dte_min, dte_max, min_oi, min_vol):
     )
 
 
+@st.cache_data(ttl=300)
+def _load_symbol_puts(symbol, dte_min, dte_max):
+    """Aktuell verkaufbare Puts eines Symbols. Reiner DB-Read -> darf cachen."""
+    return select_into_dataframe(
+        sql_file_path=PATH_DATABASE_QUERY_FOLDER / "screener_symbol_puts.sql",
+        params={"symbol": symbol, "dte_min": int(dte_min), "dte_max": int(dte_max)},
+    )
+
+
 def render_screener_tab():
     st.subheader("📈 Screener — neuer Cash-Secured-Put-Einstieg")
     st.caption("Qualifizierte Aktien nach Buch-Checkliste (Kap. 4+5) mit dem besten Put am Geld. "
@@ -414,6 +423,35 @@ def render_screener_tab():
             }
             for a in getroffene:
                 st.markdown("- " + texte.get(a, a))
+
+    # Verkaufbare Puts für die gewählte Aktie (DTE 30-45, verstellbar)
+    st.divider()
+    st.markdown("### 💰 Verkaufbare Puts — jetzt")
+    pc1, _pc2 = st.columns([1, 3])
+    p_dte_min, p_dte_max = pc1.slider("DTE-Fenster", 7, 90, (30, 45), 1, key="screener_put_dte")
+    puts = _load_symbol_puts(row["symbol"], p_dte_min, p_dte_max)
+    if puts is None or puts.empty:
+        st.info(f"Keine liquiden Puts für {row['symbol']} im DTE-Fenster {p_dte_min}–{p_dte_max}.")
+    else:
+        put_rows = []
+        for _, o in puts.iterrows():
+            m = put_metrics(o["strike_price"], o["premium_option_price"], o["days_to_expiration"])
+            delta = o["greeks_delta"]
+            put_rows.append({
+                "Strike": round(float(o["strike_price"]), 2),
+                "Expiry": o["expiration_date"],
+                "DTE": int(o["days_to_expiration"]),
+                "Prämie ($)": round(float(o["premium_option_price"]), 2),
+                "Rendite %": round(m["premium_pct"], 2),
+                "Annualisiert %": round(m["annualized_pct"], 1),
+                "Gewinnschwelle": round(m["breakeven"], 2),
+                "Kapital ($)": round(m["capital_required"], 0),
+                "Delta": round(float(delta), 3) if delta is not None and pd.notna(delta) else None,
+                "OI": int(o["open_interest"]),
+                "Vol": int(o["day_volume"]),
+            })
+        st.dataframe(pd.DataFrame(put_rows), use_container_width=True, hide_index=True)
+        st.caption("🔶 Prämie = day_close (Näherung; echter Bid/Ask im Broker prüfen).")
 
 
 # ---------------------------------------------------------------------------
