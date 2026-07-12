@@ -9,7 +9,8 @@
 -- DTE-Fenster 21-45 (~30, monatlich bevorzugt via UI/get_expiration_type),
 -- bei Gleichstand höchstes Open Interest.
 --
--- Params: :dte_min (z.B. 21), :dte_max (z.B. 45), :min_oi (>=100), :min_vol (>=100)
+-- Params: :dte_min (z.B. 21), :dte_max (z.B. 45), :min_oi (>=100), :min_vol (>=100),
+--         :price_min / :price_max (Aktienkurs-Fenster, Default Buch 15..80)
 -- Spaltennamen gegen dividend_screener.sql / covered_call_scanner.sql verifiziert.
 WITH puts AS (
     SELECT DISTINCT ON (o.symbol)
@@ -30,7 +31,7 @@ WITH puts AS (
       AND o.premium_option_price > 0
       AND o.open_interest >= :min_oi
       AND o.day_volume    >= :min_vol
-      AND o.live_stock_price BETWEEN 15 AND 80
+      AND o.live_stock_price BETWEEN :price_min AND :price_max
     ORDER BY o.symbol,
              ABS(o.strike_price - o.live_stock_price) ASC,  -- am nächsten zum Geld
              o.open_interest DESC                            -- Gleichstand: liquidester

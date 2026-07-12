@@ -390,12 +390,13 @@ def _render_endgame_hint():
 # Tab 1 — Screener (Buch Kap. 4+5)
 # ---------------------------------------------------------------------------
 @st.cache_data(ttl=300)
-def _load_screener(dte_min, dte_max, min_oi, min_vol):
+def _load_screener(dte_min, dte_max, min_oi, min_vol, price_min, price_max):
     """StockData ⋈ OptionDataMerged, harte Filter in SQL. Reiner DB-Read -> darf cachen."""
     return select_into_dataframe(
         sql_file_path=PATH_DATABASE_QUERY_FOLDER / "put_screener.sql",
         params={"dte_min": int(dte_min), "dte_max": int(dte_max),
-                "min_oi": int(min_oi), "min_vol": int(min_vol)},
+                "min_oi": int(min_oi), "min_vol": int(min_vol),
+                "price_min": float(price_min), "price_max": float(price_max)},
     )
 
 
@@ -415,13 +416,15 @@ def render_screener_tab():
                "Kriterien mit '(aktuell)' sind Momentaufnahmen, kein Mehrjahres-Trend.")
 
     with st.expander("🔍 Filter", expanded=True):
-        c1, c2, c3, c4 = st.columns(4)
-        pe_max = c1.slider("KGV-Obergrenze", 10, 200, int(DEFAULT_PE_MAX), 5,
+        c1, c2, c3, c4, c5 = st.columns(5)
+        price_min, price_max = c1.slider("Aktienkurs ($)", 1, 500, (15, 80), 1,
+                                         help="Buch-Default 15–80 $ (Kapitaleinsatz für 200 Aktien).")
+        pe_max = c2.slider("KGV-Obergrenze", 10, 200, int(DEFAULT_PE_MAX), 5,
                            help="Tech-Werte dürfen höher liegen.")
-        min_score = c2.slider("Mindest-Score", 0, 9, 5, 1)
-        dte_min, dte_max = c3.slider("DTE-Fenster (Tage)", 7, 90, (21, 45), 1)
-        min_oi = c4.number_input("Min. Open Interest", min_value=100, value=100, step=50)
-        min_vol = c4.number_input("Min. Tagesvolumen", min_value=100, value=100, step=50)
+        min_score = c3.slider("Mindest-Score", 0, 9, 5, 1)
+        dte_min, dte_max = c4.slider("DTE-Fenster (Tage)", 7, 90, (21, 45), 1)
+        min_oi = c5.number_input("Min. Open Interest", min_value=100, value=100, step=50)
+        min_vol = c5.number_input("Min. Tagesvolumen", min_value=100, value=100, step=50)
 
     # Button setzt ein Flag im Session-State. Sonst wäre st.button nur EINEN Rerun lang
     # True — ein Klick auf eine Ergebniszeile (neuer Rerun) würde die Anzeige sonst
@@ -433,10 +436,10 @@ def render_screener_tab():
         return
 
     with st.spinner("Screene Aktien + Puts …"):
-        raw = _load_screener(dte_min, dte_max, min_oi, min_vol)
+        raw = _load_screener(dte_min, dte_max, min_oi, min_vol, price_min, price_max)
 
     if raw is None or raw.empty:
-        st.warning("Keine Treffer. Filter lockern (Preis 15–80 $, OI/Vol ≥ 100, DTE-Fenster).")
+        st.warning(f"Keine Treffer. Filter lockern (Preis {price_min}–{price_max} $, OI/Vol ≥ 100, DTE-Fenster).")
         return
 
     scored = score_candidates(raw, pe_max=pe_max)
@@ -537,7 +540,9 @@ def render_screener_tab():
                 "OI": int(o["open_interest"]),
                 "Vol": int(o["day_volume"]),
             })
-        put_df = pd.DataFrame(put_rows).sort_values(["Expiry", "Strike"], ascending=[True, True])
+        put_df = (pd.DataFrame(put_rows)
+                  .sort_values(["Expiry", "Strike"], ascending=[True, True])
+                  .reset_index(drop=True))
 
         # BS-Vergleich einfärben: grün wenn Markt-Prämie > BS-Preis (überteuert -> gut für Verkäufer).
         def _highlight_bs(r):
@@ -549,11 +554,39 @@ def render_screener_tab():
                 styles[idx] = f"background-color: {col}; color: #000000; font-weight: bold"
             return styles
 
-        st.dataframe(put_df.style.apply(_highlight_bs, axis=1),
-                     use_container_width=True, hide_index=True)
+        put_event = st.dataframe(put_df.style.apply(_highlight_bs, axis=1),
+                                 use_container_width=True, hide_index=True,
+                                 on_select="rerun", selection_mode="single-row",
+                                 key="screener_put_pick")
         st.caption("🔶 Prämie = day_close (Näherung; echter Bid/Ask im Broker prüfen). "
                    "BS-Preis grün = Markt teurer als Black-Scholes (gut für Verkäufer). "
-                   "Sortiert nach Verfallsdatum, darin nach Strike (aufsteigend).")
+                   "Sortiert nach Verfallsdatum, darin nach Strike (aufsteigend). "
+                   "**Klicke einen Put für Details.**")
+
+        psel = put_event.selection.rows if hasattr(put_event, "selection") else []
+        if psel:
+            p = put_df.iloc[psel[0]]
+            st.markdown(f"#### 🔍 Put-Detail — {row['symbol']} {p['Strike']:.2f} · {p['Expiry']}")
+            d1, d2, d3, d4 = st.columns(4)
+            d1.metric("Prämie", f"${p['Prämie ($)']:.2f}")
+            bs_txt = f"${p['BS-Preis ($)']:.2f}" if pd.notna(p["BS-Preis ($)"]) else "—"
+            fair = ""
+            if pd.notna(p["BS-Preis ($)"]):
+                fair = "über BS (gut für Verkäufer)" if p["Prämie ($)"] > p["BS-Preis ($)"] else "unter BS"
+            d1.metric("BS-Preis", bs_txt, help=fair)
+            d2.metric("Rendite", f"{p['Rendite %']:.2f}%")
+            d2.metric("Annualisiert", f"{p['Annualisiert %']:.1f}%")
+            d3.metric("Gewinnschwelle", f"${p['Gewinnschwelle']:.2f}")
+            d3.metric("Kapital (CSP)", f"${p['Kapital ($)']:.0f}")
+            d4.metric("DTE", f"{int(p['DTE'])} T")
+            d4.metric("Delta", f"{p['Delta']:.3f}" if pd.notna(p["Delta"]) else "—")
+            g1, g2, g3, g4 = st.columns(4)
+            g1.metric("Theta", f"{p['Theta']:.4f}" if pd.notna(p["Theta"]) else "—")
+            g2.metric("IV", f"{p['IV %']:.1f}%" if pd.notna(p["IV %"]) else "—")
+            g3.metric("Exp. Move", f"±{p['Exp. Move']:.2f}" if pd.notna(p["Exp. Move"]) else "—")
+            g4.metric("OI / Vol", f"{int(p['OI'])} / {int(p['Vol'])}")
+            if fair:
+                st.caption(f"Bewertung: Markt-Prämie **{fair}**.")
 
 
 # ---------------------------------------------------------------------------
