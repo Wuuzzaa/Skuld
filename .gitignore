@@ -208,7 +208,3 @@ authelia/emails.txt
 uptime-kuma-data/
 src/*_test.py
 /.junie/
-
-# Roll & Screen unit tests — local verification only, NOT on master (user request)
-tests/test_roll_support_calc.py
-tests/test_put_screener.py
