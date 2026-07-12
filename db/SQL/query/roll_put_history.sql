@@ -19,7 +19,7 @@ SELECT
     a.strike_price,
     a.day_close AS premium_option_price,
     a.shares_per_contract,
-    (a.expiration_date::date - :entry_date::date) AS days_to_expiration,
+    (a.expiration_date::date - CAST(:entry_date AS date)) AS days_to_expiration,
     b.close AS stock_close
 FROM (
     SELECT * FROM "OptionDataMassiveHistory"
@@ -37,7 +37,7 @@ INNER JOIN (
 WHERE a.symbol = :symbol
   AND b.symbol = :symbol
   AND a.contract_type = 'put'
-  AND a.date = :entry_date::date
-  AND a.expiration_date::date > :entry_date::date
-  AND (a.expiration_date::date - :entry_date::date) BETWEEN :dte_min AND :dte_max
+  AND a.date = CAST(:entry_date AS date)
+  AND a.expiration_date::date > CAST(:entry_date AS date)
+  AND (a.expiration_date::date - CAST(:entry_date AS date)) BETWEEN :dte_min AND :dte_max
 ORDER BY a.expiration_date ASC, a.strike_price DESC
