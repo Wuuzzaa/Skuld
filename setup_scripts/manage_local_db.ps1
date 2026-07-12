@@ -142,6 +142,11 @@ function Get-RemoteDumpFile {
     $keyInput = Read-Host "Path to private SSH key (Leave empty if using auto-agent or default: $SshKey)"
     if (-not [string]::IsNullOrWhiteSpace($keyInput)) { $SshKey = $keyInput }
 
+    $defaultDownloadPath = Resolve-DownloadDirectory
+    $localDownloadPath = Read-Host "Local download folder (Default: $defaultDownloadPath)"
+    if ([string]::IsNullOrWhiteSpace($localDownloadPath)) { $localDownloadPath = $defaultDownloadPath }
+    $localDownloadPath = [Environment]::ExpandEnvironmentVariables($localDownloadPath)
+
     # Build commands
     $sshCmd = "ssh"
     $scpCmd = "scp"
@@ -186,7 +191,7 @@ function Get-RemoteDumpFile {
     
     Write-Host "Found newest backup: $fileName" -ForegroundColor Green
     
-    $localDownloadPath = Join-Path $env:USERPROFILE "Downloads"
+    if (-not (Test-Path $localDownloadPath)) { New-Item -ItemType Directory -Path $localDownloadPath | Out-Null }
     $localFile = Join-Path $localDownloadPath $fileName
 
     if (Test-Path $localFile) {
@@ -348,7 +353,7 @@ echo "$REMOTE_TMP"
         Write-Error "Remote slim dump failed. Output tail: $output"
     }
 
-    $localDownloadPath = Join-Path $env:USERPROFILE "Downloads"
+    $localDownloadPath = Resolve-DownloadDirectory
     if (-not (Test-Path $localDownloadPath)) { New-Item -ItemType Directory -Path $localDownloadPath | Out-Null }
     $localFile = Join-Path $localDownloadPath (Split-Path $remotePath -Leaf)
 
@@ -366,6 +371,14 @@ echo "$REMOTE_TMP"
     } else {
         Write-Error "Download failed."
     }
+}
+
+function Resolve-DownloadDirectory {
+    if ($script:DOWNLOAD_DIR_VAL -and -not [string]::IsNullOrWhiteSpace($script:DOWNLOAD_DIR_VAL)) {
+        return [Environment]::ExpandEnvironmentVariables($script:DOWNLOAD_DIR_VAL)
+    }
+
+    return (Join-Path $env:USERPROFILE "Downloads")
 }
 
 # --- Configuration paths ---
@@ -405,6 +418,8 @@ REMOTE_DB_HOST=91.98.156.116
 REMOTE_DB_USER=deploy
 REMOTE_DB_PATH=/home/deploy/backups/postgres
 SSH_KEY_PATH=
+# Local download target for DB dumps
+DOWNLOAD_DIR=
 # Slim Download Config
 SLIM_DAYS=60
 "@
@@ -437,6 +452,7 @@ $REMOTE_HOST_VAL = if ($EnvVars.ContainsKey("REMOTE_DB_HOST")) { $EnvVars["REMOT
 $REMOTE_USER_VAL = if ($EnvVars.ContainsKey("REMOTE_DB_USER")) { $EnvVars["REMOTE_DB_USER"] } else { "deploy" }
 $REMOTE_PATH_VAL = if ($EnvVars.ContainsKey("REMOTE_DB_PATH")) { $EnvVars["REMOTE_DB_PATH"] } else { "/home/deploy/backups/postgres" }
 $SSH_KEY_VAL     = if ($EnvVars.ContainsKey("SSH_KEY_PATH"))     { $EnvVars["SSH_KEY_PATH"] }     else { "" }
+$script:DOWNLOAD_DIR_VAL = if ($EnvVars.ContainsKey("DOWNLOAD_DIR")) { $EnvVars["DOWNLOAD_DIR"] } else { (Join-Path $env:USERPROFILE "Downloads") }
 $SLIM_DAYS_VAL   = if ($EnvVars.ContainsKey("SLIM_DAYS"))        { $EnvVars["SLIM_DAYS"] }        else { "60" }
 
 # --- 2. Check Docker ---

@@ -23,6 +23,14 @@ NC='\033[0m' # No Color
 
 # --- Helper Functions ---
 
+resolve_download_dir() {
+    local configured_dir="${DOWNLOAD_DIR_VAL:-$HOME/Downloads}"
+    case "$configured_dir" in
+        "~"*) configured_dir="${HOME}${configured_dir#"~"}" ;;
+    esac
+    echo "$configured_dir"
+}
+
 # --- Safety Guards ---
 # See docs/superpowers/specs/2026-07-05-slim-db-download-design.md
 #
@@ -69,7 +77,7 @@ assert_local_container() {
 #
 # The remote side stays read-only (pg_dump + \COPY … TO STDOUT). A single
 # .sql.gz file is produced under /tmp on the server, SCP'd locally into
-# ~/Downloads, and the remote temp file is removed immediately.
+# the configured download folder, and the remote temp file is removed immediately.
 get_remote_slim_dump() {
     local default_host="$1"
     local default_user="$2"
@@ -220,7 +228,8 @@ REMOTE_EOF
         exit 1
     fi
 
-    local download_dir="$HOME/Downloads"
+    local download_dir
+    download_dir=$(resolve_download_dir)
     mkdir -p "$download_dir"
     local local_file="$download_dir/$(basename "$remote_path")"
 
@@ -259,9 +268,17 @@ get_remote_dump_file() {
     read -p "Path to private SSH key (Leave empty for agent/default: $default_key): " r_key
     r_key=${r_key:-$default_key}
 
+    local default_download_dir
+    default_download_dir=$(resolve_download_dir)
+    read -p "Local download folder (Default: $default_download_dir): " local_download_dir
+    local_download_dir=${local_download_dir:-$default_download_dir}
+
     # Expand tilde (~) manually if present (shell read does not expand it)
     case "$r_key" in 
         "~"*) r_key="${HOME}${r_key#"~"}" ;;
+    esac
+    case "$local_download_dir" in
+        "~"*) local_download_dir="${HOME}${local_download_dir#"~"}" ;;
     esac
 
     SSH_CMD="ssh"
@@ -299,7 +316,8 @@ get_remote_dump_file() {
     FILENAME=$(basename "$LATEST_FILE_REMOTE")
     echo -e "${GREEN}Found newest backup: $FILENAME${NC}" >&2
 
-    DOWNLOAD_DIR="$HOME/Downloads"
+    DOWNLOAD_DIR="$local_download_dir"
+    mkdir -p "$DOWNLOAD_DIR"
     LOCAL_FILE="$DOWNLOAD_DIR/$FILENAME"
 
     if [ -f "$LOCAL_FILE" ]; then
@@ -343,6 +361,8 @@ REMOTE_DB_HOST=91.98.156.116
 REMOTE_DB_USER=deploy
 REMOTE_DB_PATH=/home/deploy/backups/postgres
 SSH_KEY_PATH=
+# Local download target for DB dumps
+DOWNLOAD_DIR=
 # Slim Download Config
 SLIM_DAYS=60
 EOT
@@ -381,6 +401,7 @@ REMOTE_HOST_VAL=${REMOTE_DB_HOST:-"91.98.156.116"}
 REMOTE_USER_VAL=${REMOTE_DB_USER:-"deploy"}
 REMOTE_PATH_VAL=${REMOTE_DB_PATH:-"/home/deploy/backups/postgres"}
 SSH_KEY_VAL=${SSH_KEY_PATH:-""}
+DOWNLOAD_DIR_VAL=${DOWNLOAD_DIR:-"$HOME/Downloads"}
 SLIM_DAYS_VAL=${SLIM_DAYS:-"60"}
 
 
