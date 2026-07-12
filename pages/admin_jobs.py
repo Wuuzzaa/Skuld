@@ -436,30 +436,21 @@ with tab_jobs:
 # ==============================================================================
 # TAB 3: JOB HISTORY (parsed from log files)
 # ==============================================================================
-with tab_history:
-    st.markdown("#### Job Run History")
-    st.caption("Parsed from log files — shows status, duration, and errors for past job runs.")
 
-    col_days, col_mode = st.columns(2)
-    with col_days:
-        history_days = st.selectbox("Time Range", [3, 7, 14, 30], index=2,
-                                    format_func=lambda d: f"Last {d} days")
-    with col_mode:
-        history_mode_filter = st.selectbox("Filter by Mode", ["All"] + JOB_MODES,
-                                           key="history_mode_filter")
-
-    # Parse log files locally (same shared Docker volume as Log Viewer)
+@st.cache_data(ttl=120)
+def _load_job_history(logs_base_str: str, history_days: int) -> list[dict]:
+    """Scan log files and return parsed job history entries. Cached for 2 minutes."""
+    logs_base = Path(logs_base_str)
     cutoff_date = (datetime.now() - timedelta(days=history_days)).strftime("%Y-%m-%d")
-    history_entries = []
+    entries = []
 
-    # Scan all component directories (dynamic, same as Log Viewer)
-    if LOGS_BASE.exists():
-        log_components = [d.name for d in LOGS_BASE.iterdir() if d.is_dir()]
-    else:
-        log_components = []
+    if not logs_base.exists():
+        return entries
+
+    log_components = [d.name for d in logs_base.iterdir() if d.is_dir()]
 
     for component in log_components:
-        comp_dir = LOGS_BASE / component
+        comp_dir = logs_base / component
         if not comp_dir.exists():
             continue
         for date_dir in comp_dir.iterdir():
@@ -468,7 +459,6 @@ with tab_history:
             for log_file in date_dir.iterdir():
                 if log_file.suffix != ".log":
                     continue
-                # Extract start time from filename: YYYYMMDD_HHMMSS_component.log
                 match = re.match(r"(\d{8})_(\d{6})_", log_file.name)
                 if not match:
                     continue
@@ -476,7 +466,6 @@ with tab_history:
                 started_str = match.group(2)
                 started_time = f"{started_str[:2]}:{started_str[2:4]}"
 
-                # Detect mode from first 50 lines
                 try:
                     with open(log_file, "r", encoding="utf-8", errors="replace") as f:
                         head_lines = [f.readline() for _ in range(50)]
@@ -487,24 +476,17 @@ with tab_history:
                 except Exception:
                     continue
 
-                # Mode detection
                 mode = "unknown"
                 for line in head_lines:
                     if not line:
                         continue
-                    # Pattern: "Starting: option_data" or "mode: all"
                     m = re.search(r"(?:Starting|mode)[:\s]+(\w+)", line, re.IGNORECASE)
                     if m and m.group(1).lower() in [x.lower() for x in JOB_MODES]:
                         mode = m.group(1).lower()
                         break
                 if mode == "unknown":
-                    mode = component  # fallback to component name
+                    mode = component
 
-                # Apply mode filter
-                if history_mode_filter != "All" and mode != history_mode_filter:
-                    continue
-
-                # Status detection from tail (aligned with pipeline_monitor.py output)
                 status = "unknown"
                 if re.search(r"✗.*ABORTED|Pipeline ABORTED", tail_joined):
                     status = "failed"
@@ -519,7 +501,6 @@ with tab_history:
                 elif re.search(r"Historization Pipeline Completed Successfully", tail_joined):
                     status = "success"
 
-                # Duration extraction
                 duration_seconds = None
                 dur_match = re.search(r"Total Runtime:\s*(\d+)s", tail_joined)
                 if dur_match:
@@ -529,15 +510,13 @@ with tab_history:
                     if dur_match2:
                         duration_seconds = int(float(dur_match2.group(1)))
 
-                # Error summary (last ERROR lines)
                 error_lines = [l for l in all_lines if "ERROR" in l]
                 error_summary = "\n".join(error_lines[-5:]) if error_lines else ""
 
-                # File stats
                 file_size_kb = log_file.stat().st_size / 1024
                 total_lines = len(all_lines)
 
-                history_entries.append({
+                entries.append({
                     "date": date_dir.name,
                     "started": started_time,
                     "mode": mode,
@@ -549,8 +528,28 @@ with tab_history:
                     "log_path": str(log_file),
                 })
 
-    # Sort by date + started descending
-    history_entries.sort(key=lambda x: (x["date"], x["started"]), reverse=True)
+    entries.sort(key=lambda x: (x["date"], x["started"]), reverse=True)
+    return entries
+
+
+with tab_history:
+    st.markdown("#### Job Run History")
+    st.caption("Parsed from log files — shows status, duration, and errors for past job runs.")
+
+    col_days, col_mode = st.columns(2)
+    with col_days:
+        history_days = st.selectbox("Time Range", [3, 7, 14, 30], index=2,
+                                    format_func=lambda d: f"Last {d} days")
+    with col_mode:
+        history_mode_filter = st.selectbox("Filter by Mode", ["All"] + JOB_MODES,
+                                           key="history_mode_filter")
+
+    all_history_entries = _load_job_history(str(LOGS_BASE), history_days)
+
+    if history_mode_filter != "All":
+        history_entries = [e for e in all_history_entries if e["mode"] == history_mode_filter]
+    else:
+        history_entries = all_history_entries
 
     if history_entries:
         # Statistics cards
@@ -674,6 +673,17 @@ with tab_history:
 # ==============================================================================
 # TAB 4: RECENT ACTIVITY (from DataChangeLogs)
 # ==============================================================================
+@st.cache_data(ttl=60)
+def _load_activity_log(hours_back: int) -> "pd.DataFrame":
+    """Query DataChangeLogs for recent activity. Cached for 1 minute."""
+    cutoff = (datetime.now() - timedelta(hours=hours_back)).strftime("%Y-%m-%d %H:%M:%S")
+    return select_into_dataframe(
+        f"""SELECT * FROM "DataChangeLogs"
+            WHERE timestamp >= '{cutoff}'
+            ORDER BY timestamp DESC"""
+    )
+
+
 with tab_activity:
     st.markdown("#### Recent Data Operations")
 
@@ -681,12 +691,7 @@ with tab_activity:
                               format_func=lambda h: f"{h} hours" if h < 48 else f"{h // 24} days")
 
     try:
-        cutoff = (datetime.now() - timedelta(hours=hours_back)).strftime("%Y-%m-%d %H:%M:%S")
-        df = select_into_dataframe(
-            f"""SELECT * FROM "DataChangeLogs"
-                WHERE timestamp >= '{cutoff}'
-                ORDER BY timestamp DESC"""
-        )
+        df = _load_activity_log(hours_back)
 
         if not df.empty:
             # Summary metrics
