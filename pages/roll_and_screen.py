@@ -45,18 +45,6 @@ def _parse_date(value):
 
 
 @st.cache_data(ttl=300)
-def _load_symbols():
-    """DISTINCT-Symbolliste für die Selectbox. Reiner DB-Read -> darf cachen."""
-    df = select_into_dataframe(
-        sql_file_path=PATH_DATABASE_QUERY_FOLDER / "roll_symbols.sql",
-        params={},
-    )
-    if df is None or df.empty:
-        return []
-    return df["symbol"].dropna().astype(str).tolist()
-
-
-@st.cache_data(ttl=300)
 def _load_put_history(symbol, entry_date, dte_min, dte_max):
     """Puts eines Symbols am Einstiegsdatum im DTE-Bereich. Reiner DB-Read -> darf cachen."""
     return select_into_dataframe(
@@ -131,19 +119,14 @@ def render_roller_tab():
     st.caption("Wähle deinen historisch eröffneten Put, sieh Gewinn/Verlust und alle 3 Roll-Stufen "
                "(Buch Kap. 3). Ampel: ✅ Basispreis gesenkt · ⚠️ Prämie positiv, GS nicht besser · ❌ Roll kostet drauf.")
 
-    # 1) Symbol (Selectbox mit Autocomplete) + Kontrakte
-    symbols = _load_symbols()
-    if not symbols:
-        st.error("Keine Symbole mit historischen Optionsdaten gefunden.")
-        return
-
+    # 1) Symbol (Freitext) + Kontrakte — nichts lädt vor der Eingabe
     col_sym, col_n = st.columns([2, 1])
-    symbol = col_sym.selectbox("Symbol", symbols,
-                               index=None, placeholder="Symbol wählen…")
+    symbol = col_sym.text_input("Symbol", value="", placeholder="z.B. AAPL",
+                                key="roll_symbol").strip().upper()
     n_contracts = col_n.number_input("Kontrakte (n)", min_value=1, value=1, step=1)
 
     if not symbol:
-        st.info("Bitte ein Symbol wählen.")
+        st.info("Symbol eingeben — erst dann werden Historie und Kurse geladen.")
         return
 
     entry_date = render_date_filter(
