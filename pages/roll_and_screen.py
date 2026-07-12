@@ -13,7 +13,6 @@ nur reine DB-Reads nutzen @st.cache_data (Muster spreads_backtesting.py).
 """
 import logging
 import os
-import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, date
 
@@ -21,12 +20,10 @@ import pandas as pd
 import streamlit as st
 
 from config import PATH_DATABASE_QUERY_FOLDER
-from src.data_aging import is_weekend
 from src.database import select_into_dataframe
 from src.streamlit_helpers import render_date_filter
 from src.page_display_dataframe import page_display_dataframe
-from src.yahooquery_scraper import YahooQueryScraper
-from src.roll_support_calc import position_status, roll_candidate
+from src.roll_support_calc import position_status, roll_candidate, roll_candidate_explained
 from src.put_screener import score_candidates, criterion_labels, DEFAULT_PE_MAX
 
 logger = logging.getLogger(os.path.basename(__file__))
@@ -47,16 +44,25 @@ def _parse_date(value):
     return pd.to_datetime(value).date()
 
 
-def _today_str():
-    return time.strftime("%Y-%m-%d", time.gmtime())
+@st.cache_data(ttl=300)
+def _load_symbols():
+    """DISTINCT-Symbolliste für die Selectbox. Reiner DB-Read -> darf cachen."""
+    df = select_into_dataframe(
+        sql_file_path=PATH_DATABASE_QUERY_FOLDER / "roll_symbols.sql",
+        params={},
+    )
+    if df is None or df.empty:
+        return []
+    return df["symbol"].dropna().astype(str).tolist()
 
 
 @st.cache_data(ttl=300)
-def _load_put_history(symbol, entry_date):
-    """Puts eines Symbols, die am Einstiegsdatum in der Historie lagen. Reiner DB-Read -> darf cachen."""
+def _load_put_history(symbol, entry_date, dte_min, dte_max):
+    """Puts eines Symbols am Einstiegsdatum im DTE-Bereich. Reiner DB-Read -> darf cachen."""
     return select_into_dataframe(
         sql_file_path=PATH_DATABASE_QUERY_FOLDER / "roll_put_history.sql",
-        params={"symbol": symbol, "entry_date": str(entry_date)},
+        params={"symbol": symbol, "entry_date": str(entry_date),
+                "dte_min": int(dte_min), "dte_max": int(dte_max)},
     )
 
 
@@ -69,48 +75,31 @@ def _load_roll_candidates(symbol, K, dte_min, dte_max):
     )
 
 
-# NICHT gecacht: aktueller Put-Preis wird immer frisch gerechnet (User-Wunsch).
-def _current_put_price(option_osi, symbol, strike, expiration_date):
-    """Heutiger Preis des bestehenden Puts.
+# NICHT gecacht: immer frisch (User-Wunsch), aber kein externer Call.
+def _current_put_price(option_osi, symbol):
+    """Heutiger Wert des bestehenden Puts = letzter verfügbarer day_close aus der DB.
 
-    Live (Handelstag): Bid/Ask-Mittel via YahooQuery. Sonst: letzter day_close
-    aus der Historie (1-Wochen-Fallback), Muster get_option_data_at_date.
+    Kein Live-YahooQuery (User-Wunsch). Nimmt den jüngsten day_close bis heute.
     Rückgabe: (preis_je_aktie, quelle_str) oder (None, grund).
     """
-    today = _today_str()
-    live = str(date.today()) == today and not is_weekend()
-
-    if live:
-        try:
-            yq = YahooQueryScraper.instance(symbol)
-            chain = yq.get_option_chain(symbols=[symbol])
-            row = chain[chain["contractSymbol"] == option_osi]
-            if not row.empty:
-                bid = float(row["bid"].values[0])
-                ask = float(row["ask"].values[0])
-                if bid > 0 or ask > 0:
-                    return (bid + ask) / 2.0, "Live (Bid/Ask-Mittel)"
-        except Exception as exc:  # noqa: BLE001 — Live-Quelle darf ausfallen, Fallback DB
-            logger.warning("Live-Optionspreis fehlgeschlagen (%s), nutze DB-Fallback: %s", symbol, exc)
-
-    # DB-Fallback: letzter verfügbarer day_close bis heute (1-Wochen-Fenster).
     sql = """
         SELECT a.day_close AS premium_option_price, a.date
         FROM (
-            SELECT * FROM "OptionDataMassiveHistory" WHERE date <> CURRENT_DATE
+            SELECT date, option_osi, symbol, day_close FROM "OptionDataMassiveHistory"
+            WHERE date <> CURRENT_DATE
             UNION ALL
-            SELECT CURRENT_DATE AS date, * FROM "OptionDataMassive"
+            SELECT CURRENT_DATE AS date, option_osi, symbol, day_close FROM "OptionDataMassive"
         ) AS a
         WHERE a.option_osi = :osi AND a.symbol = :symbol
           AND a.date <= CURRENT_DATE
-          AND a.date >= CURRENT_DATE - INTERVAL '1 week'
         ORDER BY a.date DESC
         LIMIT 1
     """
     df = select_into_dataframe(query=sql, params={"osi": option_osi, "symbol": symbol})
     if df is not None and not df.empty:
-        return float(df.iloc[0]["premium_option_price"]), "DB (letzter day_close)"
-    return None, "kein Preis gefunden"
+        d = df.iloc[0]["date"]
+        return float(df.iloc[0]["premium_option_price"]), f"DB day_close ({d})"
+    return None, "kein Preis in DB"
 
 
 def _current_stock_price(symbol):
@@ -142,13 +131,19 @@ def render_roller_tab():
     st.caption("Wähle deinen historisch eröffneten Put, sieh Gewinn/Verlust und alle 3 Roll-Stufen "
                "(Buch Kap. 3). Ampel: ✅ Basispreis gesenkt · ⚠️ Prämie positiv, GS nicht besser · ❌ Roll kostet drauf.")
 
-    # 1) Symbol + Einstiegsdatum
+    # 1) Symbol (Selectbox mit Autocomplete) + Kontrakte
+    symbols = _load_symbols()
+    if not symbols:
+        st.error("Keine Symbole mit historischen Optionsdaten gefunden.")
+        return
+
     col_sym, col_n = st.columns([2, 1])
-    symbol = col_sym.text_input("Symbol", value="", placeholder="z.B. AAPL").strip().upper()
+    symbol = col_sym.selectbox("Symbol", symbols,
+                               index=None, placeholder="Symbol wählen…")
     n_contracts = col_n.number_input("Kontrakte (n)", min_value=1, value=1, step=1)
 
     if not symbol:
-        st.info("Bitte ein Symbol eingeben.")
+        st.info("Bitte ein Symbol wählen.")
         return
 
     entry_date = render_date_filter(
@@ -163,10 +158,15 @@ def render_roller_tab():
     if not entry_date:
         return
 
-    # 2) Verfügbare Puts zum Einstiegsdatum
-    hist_df = _load_put_history(symbol, entry_date)
+    # 2) DTE-Bereich am Einstiegsdatum + verfügbare Puts
+    dte_min, dte_max = st.slider(
+        "DTE-Bereich am Einstiegsdatum (Tage bis Verfall)",
+        min_value=1, max_value=400, value=(30, 60), step=1,
+        help="Zeigt alle Puts, deren Restlaufzeit am Einstiegsdatum in diesem Bereich lag.",
+    )
+    hist_df = _load_put_history(symbol, entry_date, dte_min, dte_max)
     if hist_df is None or hist_df.empty:
-        st.warning(f"Keine Puts für {symbol} am {entry_date} in der Historie gefunden.")
+        st.warning(f"Keine Puts für {symbol} am {entry_date} im DTE-Bereich {dte_min}–{dte_max} gefunden.")
         return
 
     st.markdown("**Wähle deinen eröffneten Put:**")
@@ -199,7 +199,7 @@ def render_roller_tab():
 
     # 4) Heutiger Wert desselben Puts + aktueller Aktienkurs (immer frisch)
     with ThreadPoolExecutor(max_workers=3) as ex:
-        f_price = ex.submit(_current_put_price, option_osi, symbol, K, expiration_date)
+        f_price = ex.submit(_current_put_price, option_osi, symbol)
         f_stock = ex.submit(_current_stock_price, symbol)
         p_today_share, price_src = f_price.result()
         S = f_stock.result()
@@ -232,6 +232,11 @@ def render_roller_tab():
 
     # 6) Roll-Kandidaten: alle 3 Stufen gleichzeitig
     st.divider()
+    im_verlust = P_heute > P_eroeffnung
+    if im_verlust:
+        st.error("🔴 Position im Verlust — **Rollen sinnvoll** (Basispreis senken nach Buch-Regel).")
+    else:
+        st.success("🟢 Position im Gewinn — Rollen **optional** (z. B. um Laufzeit zu verlängern).")
     st.markdown("### 🎯 Roll-Kandidaten (alle 3 Stufen)")
     cand = _load_roll_candidates(symbol, K, 30, 90)
     if cand is None or cand.empty:
@@ -267,18 +272,19 @@ def render_roller_tab():
 
 
 def _render_stufe(stufe, df, K, P_eroeffnung, P_heute, n, breakeven_old, title):
-    """Rendert eine Stufen-Tabelle. Gibt True zurück, wenn mind. ein ✅-Kandidat existiert."""
+    """Rendert eine Stufen-Tabelle mit Klick-Herleitung. True wenn mind. ein ✅ existiert."""
     st.markdown(f"#### {title}")
     if df is None or df.empty:
         st.caption("Keine passenden Strikes in dieser Stufe.")
         return False
 
-    rows = []
-    for _, o in df.iterrows():
+    rows, calc_by_idx = [], {}
+    for i, (_, o) in enumerate(df.iterrows()):
         K2 = float(o["strike_price"])
         P_neu = float(o["premium_option_price"]) * 100.0  # $/Kontrakt
         r = roll_candidate(stufe=stufe, K=K, K2=K2, P_eroeffnung=P_eroeffnung,
                            P_heute=P_heute, P_neu=P_neu, n=n)
+        calc_by_idx[i] = dict(K2=K2, P_neu=P_neu)
         rows.append({
             "Ampel": r["ampel"],
             "Neuer Strike": K2,
@@ -292,8 +298,21 @@ def _render_stufe(stufe, df, K, P_eroeffnung, P_heute, n, breakeven_old, title):
             "OI": int(o["open_interest"]),
             "Vol": int(o["day_volume"]),
         })
-    out = pd.DataFrame(rows).sort_values(["Ampel", "Netto absolut ($)"], ascending=[True, False])
-    st.dataframe(out, use_container_width=True, hide_index=True)
+    out = pd.DataFrame(rows)
+    event = st.dataframe(out, use_container_width=True, hide_index=True,
+                         on_select="rerun", selection_mode="single-row",
+                         key=f"stufe_{stufe}")
+    sel = event.selection.rows if hasattr(event, "selection") else []
+    if sel:
+        c = calc_by_idx[sel[0]]
+        exp = roll_candidate_explained(stufe=stufe, K=K, K2=c["K2"],
+                                       P_eroeffnung=P_eroeffnung, P_heute=P_heute,
+                                       P_neu=c["P_neu"], n=n)
+        with st.container(border=True):
+            st.markdown(f"**Herleitung — Strike {c['K2']:.2f}** ({exp['ampel']})")
+            for s in exp["steps"]:
+                st.write(f"- **{s['label']}:** {s['formel']} = **{s['wert']:.2f}**")
+            st.caption("🔶 Prämien = day_close (Näherung; echter Bid/Ask im Broker prüfen).")
     return (out["Ampel"] == "✅").any()
 
 
