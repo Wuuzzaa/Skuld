@@ -1,6 +1,6 @@
 # SKULD Portable DevOps — Design-Spec
 
-**Datum:** 2026-07-11
+**Datum:** 2026-07-11 (aktualisiert 2026-07-12)
 **Branch:** `feature/portable-devops`
 **Status:** Entwurf zur Freigabe
 **Autor:** Daniel (Interview) + Claude (Design)
@@ -9,8 +9,8 @@
 
 ## 1. Ziel & Motivation
 
-SKULD ist heute faktisch an Hetzner gebunden (Hetzner-Cloud-API im `provision-hetzner.ps1`,
-hetzner-spezifisches `cloud-init.yml.tpl`, feste IP `91.98.156.116` in `environments.yaml`).
+SKULD ist heute faktisch an einen einzigen Hoster gebunden (Hetzner-Cloud-API im `provision-hetzner.ps1`,
+hetzner-spezifisches `cloud-init.yml.tpl`, feste IP in `environments.yaml`).
 
 **Kernziel:** SKULD **hoster-unabhängig** machen — auf *jedem* Linux-Host (beliebiger Anbieter,
 Root-Server, Bare-Metal) in wenigen Minuten reproduzierbar aufsetzbar, mit **minimalem manuellem
@@ -26,9 +26,10 @@ Aufwand**. Auslöser-Szenario: „Ich muss kurzfristig komplett von Hetzner weg.
    User selbst unter Stress) es fehlerfrei befolgen kann. Das Runbook enthält sicherheitsrelevante
    Abläufe und liegt daher **auf dem Desktop, NICHT im öffentlichen GitHub-Repo**.
 
-**Erste Bewährungsprobe:** Ein bereits laufender Server bei einem *anderen* Anbieter (nicht Hetzner)
-wird als künftiges Prod aufgesetzt — zunächst als isolierte Testumgebung, dann bei Bewährung
-Umschaltung auf Prod. Das aktuelle Hetzner-Prod bleibt dabei zu jedem Zeitpunkt unangetastet.
+**Erste Bewährungsprobe:** Ein bereits laufender Server bei einem *anderen* Anbieter wird als
+künftiges Prod aufgesetzt — zunächst als isolierte Testumgebung, dann bei Bewährung Umschaltung
+auf Prod. Das aktuelle Prod bleibt dabei zu jedem Zeitpunkt unangetastet.
+OS des neuen Servers: **Ubuntu 24.04.4** (getestete LTS, kein OS-Risiko).
 
 ---
 
@@ -47,7 +48,7 @@ Das Setup ist bereits zu ~85 % solide. Vorhanden und funktionierend:
   + `ops/cloud-init.yml.tpl` (härtet beim Boot).
 - **Environment-Config** (`ops/environments.yaml`): `production` (Hetzner) + `home` (Homeserver,
   self-hosted Runner, `docker-compose.testing.yml`, DB-Container `skuld_staging_db`).
-- **CLI-Ansatz** (`ops/skuld-cli/`, Python): Wrapper über GitHub-Actions-Workflows.
+- **CLI-Ansatz** (`ops/skuld-cli/`, Python + Click): Wrapper über GitHub-Actions-Workflows.
 - **Teil-Doku**: `ops/README.md`, `ops/PROVISIONING.md`, `docs/deployment-contract.md`,
   `docs/deployment-operating-model.md`, `docs/developer-setup.md`.
 
@@ -56,8 +57,8 @@ Das Setup ist bereits zu ~85 % solide. Vorhanden und funktionierend:
 - **P1 — Zwei divergierende Härtungs-Wahrheiten:** `cloud-init.yml.tpl` (User `holu`+`deploy`,
   fail2ban, `MaxAuthTries 2`) und `provision-server.sh` (nur `deploy`, kein fail2ban, kein
   `MaxAuthTries`) erzeugen *unterschiedlich* gehärtete Server. → Muss zu **einer** Wahrheit werden.
-- **P2 — Doku-Widersprüche:** `deployment-contract.md` nennt alte Server (`skuld-1/2`, Helsinki
-  `204.168.128.55`), die nicht mehr aktiv sind bzw. nicht in `environments.yaml` stehen.
+- **P2 — Doku-Widersprüche:** `deployment-contract.md` nennt alte Server (`skuld-1/2`, eine alte IP),
+  die nicht mehr aktiv sind bzw. nicht in `environments.yaml` stehen.
   `ops/setup-home-server.sh` ist deprecated, wird aber noch referenziert.
 - **P3 — Prod/Test-Trennung unvollständig & unklar dokumentiert:** `home` ist mal „Staging", mal
   „Backup-Test". Rolle muss eindeutig sein.
@@ -75,17 +76,18 @@ Das Setup ist bereits zu ~85 % solide. Vorhanden und funktionierend:
 ```
                         ┌─ Weg B (bequem, wenn Hoster cloud-init kann):
    Neuer Linux-Host ────┤     cloud-init  →  ruft NUR  provision-server.sh  auf
-   (beliebiger Anbieter) └─ Weg A (universell, Fallback, IMMER möglich):
-                              skuld provision <ip>  →  SSH-in  →  provision-server.sh
-                                                   │
-                                                   ▼
+   (beliebiger Anbieter) └─ Weg A (universell, IMMER möglich):
+                              skuld setup  →  interaktiver Wizard auf dem PC
+                                           →  SSH-in  →  provision-server.sh
+                                           │
+                                           ▼
                           ┌─────────────────────────────────────────┐
                           │  EINE Härtungs-Wahrheit                  │
                           │  ops/provision-server.sh (idempotent)    │
                           │  Docker · UFW · SSH-Hardening · fail2ban │
                           │  deploy-User+Keys · Runner · Netzwerke   │
                           └─────────────────────────────────────────┘
-                                                   │
+                                           │
                      identischer Server, egal über welchen Weg erzeugt
 ```
 
@@ -103,13 +105,10 @@ statt die Härtung selbst zu duplizieren. Damit kann es keine divergierenden Ser
 
 - **Übernahme aus cloud-init** (schließt P1): fail2ban (sshd-Jail) und SSH `MaxAuthTries 2`
   werden ergänzt, sodass SSH-in-provisionierte Server identisch zu cloud-init-Servern sind.
-- **OS-Guard vorne** (für Ubuntu 26.04): Prüft die OS-Version. Bei nicht getesteter Version
-  (z. B. 26.04) **klare Warnung + Abbruch-Option** statt halb-kaputtem Durchlauf. Docker-Repo-Zeile
-  (`$(lsb_release -cs)`) wird so gebaut, dass sie bei neuen Codenames sauber fehlschlägt mit
-  verständlicher Meldung, nicht stumm.
+- **OS-Guard vorne**: Prüft die OS-Version. Bei nicht getesteter Version
+  (> 24.x) **klare Warnung + Abbruch-Option** statt halb-kaputtem Durchlauf.
 - **Idempotenz bleibt** (mehrfach ausführbar).
-- **Rolle als Parameter:** `--role prod|test` (bzw. Env-Var) steuert Runner-Label und markiert den
-  Server eindeutig.
+- **Rolle als Env-Var `ROLE`** (`prod`/`test`) steuert Runner-Label und markiert den Server eindeutig.
 
 **Bleibt unverändert:** Docker CE, UFW (22/80/443 + Tailscale/Docker-Subnetze), `daemon.json`
 `iptables:false`, Docker-Netzwerke `web` + `postgres_setup_default`, App-Dir `/opt/skuld`,
@@ -117,94 +116,109 @@ GitHub-Runner, optional Cloudflare-Tunnel.
 
 ### Baustein 2 — Zwei Wege, ein Ergebnis
 
-- **Weg A (universell / Fallback):** `skuld provision <ip> --role …` → SSH als root/sudo-User →
-  pipet `provision-server.sh` auf den Host. Funktioniert auf *jedem* Linux mit SSH-Zugang.
+- **Weg A (universell / bevorzugt):** `skuld setup` Wizard auf dem PC fragt interaktiv durch und
+  piped `provision-server.sh` per SSH auf den Host. Funktioniert auf *jedem* Linux mit SSH-Zugang.
 - **Weg B (bequem):** `cloud-init.yml.tpl` wird zum dünnen Bootstrap reduziert: es lädt
-  `provision-server.sh` (per `curl` aus dem Repo bzw. per `write_files` eingebettet) und ruft es auf.
-  Für Hoster mit cloud-init/user-data-Support.
+  `provision-server.sh` und ruft es auf. Für Hoster mit cloud-init/user-data-Support.
 
 **Für den konkreten neuen Server:** Weg A (root-Zugang existiert bereits, kein Neu-Erstellen nötig).
 
-### Baustein 3 — `skuld` Verwaltungs-Skript („alles per Skript")
+### Baustein 3 — `skuld setup` Wizard (interaktiv, auf dem PC)
 
-Ein einziger Einstiegspunkt vom PC des Users. Baut auf dem vorhandenen `ops/skuld-cli/` auf
-(erweitert es oder ergänzt einen schlanken Bash-Wrapper — die konkrete Form legt der Umsetzungsplan
-fest). Kommandos:
+**Motto:** „so viel Handarbeit wie möglich abnehmen, einfach, überschaubar."
 
-| Kommando | Wirkung |
-|---|---|
-| `skuld provision <ip> --role prod\|test` | Server hochziehen (Weg A: SSH-in → provision-server.sh) |
-| `skuld key add <name> <pubkey>` | SSH-Public-Key auf allen Servern der Rolle hinterlegen (idempotent) |
-| `skuld key remove <name>` | Key entfernen |
-| `skuld key list` | Autorisierte Keys je Server anzeigen |
-| `skuld deploy prod\|test` | Deploy anstoßen (ruft bestehende GitHub-Actions-Workflows) |
-| `skuld rollback prod` | Auf vorherige lauffähige Version zurück |
-| `skuld status` | Was läuft wo (Server erreichbar? Container up? Version?) |
+Der Wizard läuft auf dem PC und fragt alles, was er braucht. Kein Auswendiglernen von Flags.
 
-**SSH-Key-Verwaltung zentral:** Eine gepflegte Liste autorisierter Entwickler-Keys (heute teils
-hardcodiert in `provision-server.conf`, teils via `add-developer-key.sh`) wird **eine** Quelle.
-`skuld key …` wirkt konsistent über alle Server einer Rolle. Genauer Speicherort (Config-Datei vs.
-`provision-server.conf`-Ablösung) → Umsetzungsplan.
+#### Wizard-Ablauf (6 Phasen)
+
+```
+Phase 0 (MANUELL, einmalig — vor dem Wizard, da neuer Server zunächst nur root-Web-UI hat):
+  1. ssh-keygen auf dem PC (falls kein Key) — Wizard erklärt das
+  2. Public Key via Web-Console des Anbieters in root/authorized_keys
+  3. ssh root@<ip> von außen testen → muss klappen
+  → ab hier hat der Wizard einen Weg rein.
+
+skuld setup (auf dem PC, interaktiv):
+  1. Server:    IP, SSH-User (default: root), welcher SSH-Key (default: ~/.ssh/id_ed25519)
+  2. Umgebung:  Name (z.B. prod2, test1), Rolle (prod/test)
+  3. Domain:    Web-Domain (z.B. app.<your-domain>.com)
+                Auth-Domain: Wizard schlägt auth.<web-domain> vor, Enter oder eigene eingeben
+  4. Härtung:   Linux absichern — ruft provision-server.sh, keine weiteren Fragen
+                (Docker, UFW, SSH, MaxAuthTries=2, fail2ban, deploy-User, Runner)
+  5. DB:        Wie wird die Datenbank befüllt?
+                  (a) Leer starten (frisches Schema via Migrations)
+                  (b) Aus lokalem pg_dump-File (User gibt Pfad an)
+                  (c) Kopie von laufendem Prod/Test-Server (NICHT für diesen Schritt gebaut —
+                      User hat dump lokal)
+                Wenn (b): Wizard kopiert Dump per scp auf neuen Server und spielt ein.
+                SICHERHEIT: Restore immer nur auf neuen/Ziel-Server. Bestätigungs-String.
+  6. Fertig:    „Jetzt DNS auf <ip> zeigen lassen (Cloudflare), dann: skuld deploy <name>"
+```
+
+#### Wizard-Felder
+
+| Feld | Default | Abgeleitet? |
+|---|---|---|
+| Umgebungs-Name | — | Nein, frei |
+| Server-IP | — | Nein |
+| SSH-User | `root` | Ja |
+| SSH-Key | `~/.ssh/id_ed25519` | Ja, überschreibbar |
+| Rolle | `test` | Ja, überschreibbar |
+| Web-Domain | — | Nein |
+| Auth-Domain | `auth.<web-domain>` | Ja, Wizard schlägt vor, Enter bestätigt |
+| Authelia | `ja` | Ja, überschreibbar |
+| DB-Befüllung | leer | Nein |
+| Dump-Pfad (wenn b) | — | Nein |
+
+Technische Traefik/Authelia-Details werden NICHT abgefragt, sondern von den obigen Feldern
+abgeleitet und ins Runbook geschrieben. Daniel muss Authelia/Traefik nicht verstehen.
 
 ### Baustein 4 — Prod/Test physisch getrennt
 
-Umsetzung von Anforderung 2. **Physische Trennung** (nicht nur logisch):
-
-- **Getrennte Config:** Prod und Test werden als eigenständige, klar rollenmarkierte Umgebungen
-  geführt (Aufteilung/Kennzeichnung von `environments.yaml` — Detail im Umsetzungsplan; die
-  bestehende `home`/`production`-Struktur bleibt Grundlage).
-- **Getrennte Runner-Labels & Secrets-Trennung:** Ein Test-Deploy nutzt Test-Runner/Test-Ziel und
-  kann Prod technisch nicht adressieren.
+- **Getrennte Config:** Prod und Test als eigenständige, klar rollenmarkierte Umgebungen in
+  `environments.yaml`.
+- **Getrennte Runner-Labels:** `skuld-prod` / `skuld-test`. Ein Test-Deploy kann Prod nicht adressieren.
 - **Bestehender Guard-Job bleibt** als zweite Sicherung (master → prod; alles andere kann prod nicht).
-- **Der neue Server** startet als isolierte Test-Rolle; Umschaltung auf Prod-Rolle ist ein
-  bewusster, dokumentierter Konfig-Schritt — niemals ein Seiteneffekt.
+- **Der neue Server** startet als isolierte Test-Rolle; Umschaltung auf Prod ist ein bewusster,
+  dokumentierter Konfig-Schritt.
 
 ### Baustein 5 — Das felsenfeste Runbook (Desktop, NICHT GitHub)
 
 Ein einziges, lückenloses Dokument (`SKULD-RUNBOOK.md` auf dem Desktop). Kein Vorwissen
 vorausgesetzt, Copy-Paste-fähig, mit „was tun wenn Schritt X fehlschlägt". Inhalt:
 
-1. **Phase 0 — Fuß in die Tür (manuell, einmalig, über die Web-Console des Anbieters):**
-   SSH-Key auf dem PC erzeugen (falls keiner da), Public Key via Web-Console in root
-   `authorized_keys`, `ssh root@<ip>` von außen testen. Erst danach kann das Skript ran.
-2. **Phase 1 — Provisionieren:** `skuld provision <ip> --role test`.
-3. **Phase 2 — Abgesicherter Zugangs-Übergang:** deploy-Key-Login testen → **erst dann** root-SSH +
-   Passwort-Login deaktivieren. Web-Console des Anbieters bleibt als Notfall-Rückweg (funktioniert
-   unabhängig von SSH → kein Aussperren möglich).
-4. **Deploy & Betrieb:** `skuld deploy`, `skuld status`, Logs, Health.
-5. **Rollback:** Schritt-für-Schritt.
-6. **SSH-Key-Verwaltung:** Entwickler hinzufügen/entfernen, überall konsistent.
-7. **Secrets:** vollständige Liste aller benötigten GitHub-Secrets + wofür, + Rotations-Hinweis.
-8. **Katastrophenfall — „Hoster komplett weg → auf neuem Host neu aufbauen":** von null,
-   inkl. Datenwiederherstellung. **Hier wird die Backup-Lücke (P5) ehrlich benannt:** aktuell kein
-   Off-Site-Backup → Wiederherstellung nur aus dem, was der (verlorene) Hoster noch hat; empfohlener
-   Nachrüst-Weg (verschlüsselter täglicher `pg_dump` in unabhängigen Object-Storage) wird beschrieben,
-   aber nicht in diesem Projekt gebaut.
-9. **Fehlerbehebung:** die häufigsten Stolpersteine (OS 26.04, Docker+UFW, Runner-Registrierung,
-   Cert/Domain) mit konkreten Prüf- und Fix-Befehlen.
+1. Phase 0 — Fuß in die Tür (SSH-Key, Web-Console, Test)
+2. Phase 1 — Wizard starten: `skuld setup`
+3. Phase 2 — Abgesicherter Zugangs-Übergang (deploy-Key testen → root deaktivieren)
+4. Deploy & Betrieb
+5. Rollback
+6. SSH-Key-Verwaltung
+7. Secrets (vollständige Liste + Rotations-Hinweis)
+8. Katastrophenfall — „Hoster weg" + **ehrlich benannte Backup-Lücke P5**
+9. Fehlerbehebung (häufigste Stolpersteine)
 
 ---
 
 ## 5. Explizit NICHT in Scope
 
-- **Hoster-API-Provisioning (Stufe 2)** für Nicht-Hetzner-Anbieter (Server *erstellen* per API).
-- **Off-Site-Backup-System** (P5) — auf ausdrücklichen Wunsch des Users vertagt; nur im Runbook
-  als Lücke + Nachrüst-Anleitung dokumentiert.
+- **Hoster-API-Provisioning (Stufe 2)** für Nicht-Hetzner-Anbieter.
+- **Off-Site-Backup-System (P5)** — vertagt; nur im Runbook als Lücke + Nachrüst-Anleitung.
 - **Blue-Green / Zero-Downtime-Deploys**, Log-Aggregation, Monitoring-Ausbau.
-- **Automatische Secret-Rotation** (nur manueller Rotations-Hinweis im Runbook).
-- **Migration/Abschaltung des aktuellen Hetzner-Prod** — bleibt unangetastet; der neue Server wird
-  parallel aufgebaut und getestet.
+- **Automatische Secret-Rotation.**
+- **Migration/Abschaltung des aktuellen Hetzner-Prod.**
+- **DB-Kopie direkt von Server zu Server** (kein Server-zu-Server-Tunnel): User hat Dump lokal.
 
 ---
 
 ## 6. Sicherheits-Leitplanken (gelten für die Umsetzung)
 
-- **Nichts Sicherheitskritisches ins öffentliche Repo:** keine echten Keys, IPs von Prod-Secrets,
-  Passwörter, Recovery-Details. Das Runbook lebt auf dem Desktop.
+- **Nichts Sicherheitskritisches ins öffentliche Repo:** keine echten Keys, IPs, Passwörter.
+  Das Runbook lebt auf dem Desktop.
 - **Kein Anfassen von `master`** ohne ausdrückliche Freigabe. Arbeit auf `feature/portable-devops`.
 - **Kein Push** ohne Freigabe. Kein Deploy gegen echtes Prod während der Entwicklung.
 - **Aussperr-Schutz** ist im Runbook harte Regel: neuer Zugang nachweislich getestet, bevor alter
   deaktiviert wird; Web-Console als unabhängiger Rückweg.
+- **DB-Restore nur auf Ziel-Server** (nie zurück auf Prod), mit Bestätigungs-String.
 - **Backup-Lücke wird nicht verschleiert**, sondern klar als Risiko benannt.
 
 ---
@@ -212,24 +226,22 @@ vorausgesetzt, Copy-Paste-fähig, mit „was tun wenn Schritt X fehlschlägt". I
 ## 7. Definition of Done
 
 - [ ] `provision-server.sh` ist die einzige Härtungs-Wahrheit (fail2ban + `MaxAuthTries 2` ergänzt),
-      hat einen OS-Guard, und läuft auf dem neuen Server sauber durch (oder bricht klar ab).
-- [ ] `cloud-init.yml.tpl` ist auf einen dünnen Bootstrap reduziert, der `provision-server.sh` aufruft.
-- [ ] `skuld`-CLI kann: provision, key add/remove/list, deploy, rollback, status.
+      hat einen OS-Guard, und läuft auf dem neuen Server sauber durch.
+- [ ] `cloud-init.yml.tpl` ist auf einen dünnen Bootstrap reduziert.
+- [ ] `skuld setup` Wizard läuft: fragt durch, härtet Server, befüllt DB aus lokalem Dump, schreibt
+      `environments.yaml`-Eintrag.
 - [ ] Prod/Test sind physisch getrennt; ein Test-Deploy kann Prod technisch nicht erreichen.
-- [ ] Doku-Widersprüche (P2) bereinigt: keine toten Server-Referenzen, keine deprecated-Verweise.
-- [ ] `SKULD-RUNBOOK.md` liegt auf dem Desktop, deckt Phase 0–2, Deploy, Rollback, Keys, Secrets,
-      Katastrophenfall und Fehlerbehebung lückenlos ab; Backup-Lücke benannt.
-- [ ] **Live-Test bestanden:** SKULD läuft auf dem neuen Fremd-Server (Ubuntu 26.04), erreichbar
-      über die echte Domain, als isolierte Test-Rolle — ohne das Hetzner-Prod zu berühren.
+- [ ] Doku-Widersprüche (P2) bereinigt.
+- [ ] `SKULD-RUNBOOK.md` liegt auf dem Desktop, Backup-Lücke benannt.
+- **Live-Test bestanden:** SKULD läuft auf dem neuen Server (Ubuntu 24.04), erreichbar über die
+      echte Domain, als isolierte Test-Rolle — ohne das bestehende Prod zu berühren.
 - [ ] Alles auf `feature/portable-devops`, nichts auf master, nichts gepusht ohne Freigabe.
 
 ---
 
-## 8. Offene Punkte (bewusst offen gelassen)
+## 8. Offene Punkte
 
-1. **Backup (P5):** vertagt; im Runbook als Lücke dokumentiert. Nachrüsten ist ein eigenes Mini-Projekt.
-2. **Ubuntu 26.04:** nicht getestete OS-Version; der Live-Test deckt auf, ob Docker-Repo/Pakete passen.
-   Falls es doch 24.04 ist, entfällt das Risiko.
-3. **`skuld`-CLI-Form:** Erweiterung des Python-`skuld-cli` vs. schlanker Bash-Wrapper — Entscheidung
-   im Umsetzungsplan, nach Blick in den bestehenden CLI-Code.
-4. **Genauer Speicherort der zentralen Key-Liste** — im Umsetzungsplan.
+1. **Backup (P5):** vertagt; im Runbook als Lücke dokumentiert.
+2. **`skuld`-CLI-Form:** Erweiterung des Python-`skuld-cli` (Click) — Wizard als neues `setup`-Kommando.
+3. **Deploy Key:** liegt als GitHub Secret; Wizard überträgt ihn auf den neuen Server,
+   kein neuer GitHub-UI-Schritt nötig.
