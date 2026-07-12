@@ -6,7 +6,7 @@ import os
 
 # Ins skuld-cli Verzeichnis wechseln
 script_dir = os.path.dirname(os.path.abspath(__file__))
-cli_dir = os.path.join(script_dir, "ops", "skuld-cli")
+cli_dir = os.path.join(script_dir, "skuld-cli")
 
 print("Installiere Abhaengigkeiten...")
 subprocess.run([sys.executable, "-m", "pip", "install", "--quiet",
