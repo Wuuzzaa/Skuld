@@ -18,6 +18,7 @@ from src.yfinance_analyst_price_targets import scrape_yahoo_finance_analyst_pric
 from config import *
 from src.historization import create_history_tables_and_views, generate_table_functions_for_history_enabled_views, generate_time_travel_views_for_history_enabled_views, run_historization_pipeline
 from src.pipeline_monitor import PipelineMonitor
+from src.log_cleanup import cleanup_old_logs
 
 logger = logging.getLogger(__name__)
 
@@ -272,4 +273,5 @@ if __name__ == "__main__":
         os.environ['SKULD_ENV'] = args.env
 
     main(args)
+    cleanup_old_logs()
 

@@ -208,10 +208,16 @@ with tab_logs:
                 with col_filter2:
                     search_term = st.text_input("Search in logs", placeholder="e.g. timeout, OOM, failed")
 
-                # Read and display log
+                # Read and display log — cache in session_state, reload only on file change
                 if selected_file:
+                    cache_key = str(selected_file)
+                    if st.session_state.get("_log_viewer_path") != cache_key:
+                        st.session_state["_log_viewer_path"] = cache_key
+                        st.session_state["_log_viewer_content"] = selected_file.read_text(
+                            encoding="utf-8", errors="replace"
+                        )
                     try:
-                        content = selected_file.read_text(encoding="utf-8", errors="replace")
+                        content = st.session_state["_log_viewer_content"]
                         lines = content.splitlines()
 
                         # Apply filters — multiline-aware: log entries start with a
@@ -444,10 +450,11 @@ def _load_job_history(logs_base_str: str, history_days: int) -> list[dict]:
     cutoff_date = (datetime.now() - timedelta(days=history_days)).strftime("%Y-%m-%d")
     entries = []
 
+    # Scan job component directories only — exclude streamlit app logs
     if not logs_base.exists():
         return entries
 
-    log_components = [d.name for d in logs_base.iterdir() if d.is_dir()]
+    log_components = [d.name for d in logs_base.iterdir() if d.is_dir() and d.name != "streamlit"]
 
     for component in log_components:
         comp_dir = logs_base / component
