@@ -183,7 +183,11 @@ def render_roller_tab():
     if hist_df.empty:
         st.warning("Keine Puts für die gewählten Verfallstypen (Monthly/Weekly/Daily).")
         return
-    hist_df = hist_df.reset_index(drop=True)  # stabiler Positions-Index für die Zeilenauswahl
+    # Nach Verfallsdatum, darin nach Strike (absteigend) ordnen — dann Index zurücksetzen,
+    # damit die Zeilenauswahl (hist_df.iloc[rows[0]]) exakt zur angezeigten Reihenfolge passt.
+    hist_df = (hist_df
+               .sort_values(["expiration_date", "strike_price"], ascending=[True, False])
+               .reset_index(drop=True))
 
     st.markdown("**Wähle deinen eröffneten Put:**")
     put_table = hist_df[["expiration_date", "strike_price", "premium_option_price",
@@ -304,6 +308,11 @@ def _render_stufe(stufe, df, K, P_eroeffnung, P_heute, n, breakeven_old, title):
         st.caption("Keine passenden Strikes in dieser Stufe.")
         return False
 
+    # Nach Verfallsdatum, darin nach Strike (absteigend) ordnen. reset_index hält die
+    # calc_by_idx-Zuordnung (unten) synchron mit der angezeigten Reihenfolge.
+    df = df.sort_values(["expiration_date", "strike_price"],
+                        ascending=[True, False]).reset_index(drop=True)
+
     rows, calc_by_idx = [], {}
     for i, (_, o) in enumerate(df.iterrows()):
         K2 = float(o["strike_price"])
@@ -388,7 +397,12 @@ def render_screener_tab():
         min_oi = c4.number_input("Min. Open Interest", min_value=100, value=100, step=50)
         min_vol = c4.number_input("Min. Tagesvolumen", min_value=100, value=100, step=50)
 
-    if not st.button("🔍 Screener starten", type="primary", key="run_screener"):
+    # Button setzt ein Flag im Session-State. Sonst wäre st.button nur EINEN Rerun lang
+    # True — ein Klick auf eine Ergebniszeile (neuer Rerun) würde die Anzeige sonst
+    # abbrechen lassen und das Detail-Panel verschwinden.
+    if st.button("🔍 Screener starten", type="primary", key="run_screener"):
+        st.session_state["screener_ran"] = True
+    if not st.session_state.get("screener_ran"):
         st.info("Filter oben einstellen und 'Screener starten' klicken.")
         return
 
@@ -476,8 +490,12 @@ def render_screener_tab():
                 "OI": int(o["open_interest"]),
                 "Vol": int(o["day_volume"]),
             })
-        st.dataframe(pd.DataFrame(put_rows), use_container_width=True, hide_index=True)
-        st.caption("🔶 Prämie = day_close (Näherung; echter Bid/Ask im Broker prüfen).")
+        st.dataframe(
+            pd.DataFrame(put_rows).sort_values(["Expiry", "Strike"], ascending=[True, False]),
+            use_container_width=True, hide_index=True,
+        )
+        st.caption("🔶 Prämie = day_close (Näherung; echter Bid/Ask im Broker prüfen). "
+                   "Sortiert nach Verfallsdatum, darin nach Strike (absteigend).")
 
 
 # ---------------------------------------------------------------------------
