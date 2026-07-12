@@ -19,11 +19,12 @@ from datetime import datetime, date
 import pandas as pd
 import streamlit as st
 
-from config import PATH_DATABASE_QUERY_FOLDER
+from config import PATH_DATABASE_QUERY_FOLDER, RISK_FREE_RATE
 from src.database import select_into_dataframe
 from src.streamlit_helpers import render_date_filter
 from src.page_display_dataframe import page_display_dataframe
 from src.ui_utils import filter_by_expiration_type
+from src.black_scholes import PutValue
 from src.roll_support_calc import position_status, roll_candidate, roll_candidate_explained
 from src.put_screener import score_candidates, score_breakdown, put_metrics, DEFAULT_PE_MAX
 
@@ -466,36 +467,68 @@ def render_screener_tab():
 
     # Verkaufbare Puts für die gewählte Aktie (DTE 30-45, verstellbar)
     st.divider()
-    st.markdown("### 💰 Verkaufbare Puts — jetzt")
+    st.markdown("### Verkaufbare Puts — jetzt")
     pc1, _pc2 = st.columns([1, 3])
     p_dte_min, p_dte_max = pc1.slider("DTE-Fenster", 7, 90, (30, 45), 1, key="screener_put_dte")
     puts = _load_symbol_puts(row["symbol"], p_dte_min, p_dte_max)
     if puts is None or puts.empty:
         st.info(f"Keine liquiden Puts für {row['symbol']} im DTE-Fenster {p_dte_min}–{p_dte_max}.")
     else:
+        def _num(v):
+            return float(v) if v is not None and pd.notna(v) else None
+
+        def _bs_put(S, K, iv, dte):
+            """Black-Scholes-Put-Preis; None wenn Eingaben unbrauchbar."""
+            S, K, iv = _num(S), _num(K), _num(iv)
+            dte = int(dte) if dte is not None and pd.notna(dte) else 0
+            if not S or not K or not iv or iv <= 0 or dte <= 0:
+                return None
+            try:
+                return round(PutValue(S, K, iv, dte, RISK_FREE_RATE), 2)
+            except (ValueError, ZeroDivisionError):
+                return None
+
         put_rows = []
         for _, o in puts.iterrows():
             m = put_metrics(o["strike_price"], o["premium_option_price"], o["days_to_expiration"])
-            delta = o["greeks_delta"]
+            iv = _num(o["implied_volatility"])
+            bs = _bs_put(o["live_stock_price"], o["strike_price"], iv, o["days_to_expiration"])
+            delta, theta = _num(o["greeks_delta"]), _num(o["greeks_theta"])
+            exp_move = _num(o.get("expected_move"))
             put_rows.append({
-                "Strike": round(float(o["strike_price"]), 2),
                 "Expiry": o["expiration_date"],
+                "Strike": round(float(o["strike_price"]), 2),
                 "DTE": int(o["days_to_expiration"]),
                 "Prämie ($)": round(float(o["premium_option_price"]), 2),
+                "BS-Preis ($)": bs,
                 "Rendite %": round(m["premium_pct"], 2),
                 "Annualisiert %": round(m["annualized_pct"], 1),
                 "Gewinnschwelle": round(m["breakeven"], 2),
                 "Kapital ($)": round(m["capital_required"], 0),
-                "Delta": round(float(delta), 3) if delta is not None and pd.notna(delta) else None,
+                "Delta": round(delta, 3) if delta is not None else None,
+                "Theta": round(theta, 4) if theta is not None else None,
+                "IV %": round(iv * 100, 1) if iv is not None else None,
+                "Exp. Move": round(exp_move, 2) if exp_move is not None else None,
                 "OI": int(o["open_interest"]),
                 "Vol": int(o["day_volume"]),
             })
-        st.dataframe(
-            pd.DataFrame(put_rows).sort_values(["Expiry", "Strike"], ascending=[True, False]),
-            use_container_width=True, hide_index=True,
-        )
+        put_df = pd.DataFrame(put_rows).sort_values(["Expiry", "Strike"], ascending=[True, True])
+
+        # BS-Vergleich einfärben: grün wenn Markt-Prämie > BS-Preis (überteuert -> gut für Verkäufer).
+        def _highlight_bs(r):
+            styles = [""] * len(r)
+            bs_v, pr_v = r.get("BS-Preis ($)"), r.get("Prämie ($)")
+            if bs_v is not None and pd.notna(bs_v) and pr_v is not None and pd.notna(pr_v):
+                col = "#90EE90" if float(pr_v) > float(bs_v) else "#FFB6B6"
+                idx = put_df.columns.get_loc("BS-Preis ($)")
+                styles[idx] = f"background-color: {col}; color: #000000; font-weight: bold"
+            return styles
+
+        st.dataframe(put_df.style.apply(_highlight_bs, axis=1),
+                     use_container_width=True, hide_index=True)
         st.caption("🔶 Prämie = day_close (Näherung; echter Bid/Ask im Broker prüfen). "
-                   "Sortiert nach Verfallsdatum, darin nach Strike (absteigend).")
+                   "BS-Preis grün = Markt teurer als Black-Scholes (gut für Verkäufer). "
+                   "Sortiert nach Verfallsdatum, darin nach Strike (aufsteigend).")
 
 
 # ---------------------------------------------------------------------------

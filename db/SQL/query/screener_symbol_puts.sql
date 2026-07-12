@@ -1,7 +1,8 @@
 -- screener_symbol_puts.sql
 -- Aktuell verkaufbare PUTS eines Symbols im DTE-Fenster (Screener-Detail).
--- Kein Strike-Filter (anders als roll_candidates.sql) — alle liquiden Puts,
--- sortiert nächst-am-Geld zuerst.
+-- Kein Strike-Filter (anders als roll_candidates.sql) — alle liquiden Puts.
+-- Kennzahlen wie in der Spread-Detailansicht (Delta, Theta, IV, Exp. Move) + Rohwerte
+-- für Black-Scholes (live_stock_price, implied_volatility).
 -- Quelle: "OptionDataMerged". Params: :symbol, :dte_min, :dte_max
 SELECT
     o.symbol,
@@ -12,7 +13,11 @@ SELECT
     o.open_interest,
     o.day_volume,
     o.greeks_delta,
+    o.greeks_theta,
     o.implied_volatility,
+    o.iv_rank,
+    o.iv_percentile,
+    o.expected_move,
     o.live_stock_price
 FROM "OptionDataMerged" o
 WHERE o.symbol = :symbol
@@ -21,4 +26,4 @@ WHERE o.symbol = :symbol
   AND o.premium_option_price > 0
   AND o.open_interest > 0
   AND o.day_volume > 0
-ORDER BY ABS(o.strike_price - o.live_stock_price) ASC, o.days_to_expiration ASC
+ORDER BY o.expiration_date ASC, o.strike_price ASC
