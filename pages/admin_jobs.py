@@ -89,7 +89,7 @@ def _docker_exec_detached(container: str, cmd: list[str]) -> str | None:
 
 st.subheader("Admin - Job Management")
 
-tab_jobs, tab_logs = st.tabs(["Trigger Jobs", "Log Files"])
+tab_jobs, tab_status, tab_logs = st.tabs(["Trigger Jobs", "Job Status", "Log Files"])
 
 
 # ==============================================================================
@@ -119,6 +119,108 @@ with tab_jobs:
 
 
 # ==============================================================================
+# TAB 2: JOB STATUS — one row per finished job, read from logs/_status/*.jsonl
+# Written by run_data_collection.sh at job end (captures OK/FAIL/OOM/TIMEOUT/
+# SKIPPED, even for killed jobs). No per-log parsing → stays fast.
+# ==============================================================================
+STATUS_DIR = LOGS_BASE / "_status"
+
+STATUS_STYLE = {
+    "OK": "🟢 OK",
+    "FAIL": "🔴 FAIL",
+    "OOM": "🔴 OOM",
+    "TIMEOUT": "🟠 TIMEOUT",
+    "SKIPPED": "⚪ SKIPPED",
+}
+
+
+def _load_status_rows(days: int) -> list[dict]:
+    """Read the most recent `days` JSONL status files, newest first."""
+    if not STATUS_DIR.exists():
+        return []
+    files = sorted(
+        (f for f in STATUS_DIR.iterdir() if f.suffix == ".jsonl"),
+        reverse=True,
+    )[:days]
+    rows: list[dict] = []
+    for f in files:
+        for line in f.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rows.append(json_lib.loads(line))
+            except json_lib.JSONDecodeError:
+                continue  # skip a corrupt/partial line, keep the rest
+    return rows
+
+
+with tab_status:
+    st.markdown("#### Job Status")
+    st.caption(
+        "One line per finished job, written when the job ends "
+        "(covers crashes, OOM and timeouts too). Auto-deleted after 14 days."
+    )
+
+    if not STATUS_DIR.exists():
+        st.info(
+            "No status entries yet. The status log fills up once jobs run "
+            "with the updated `run_data_collection.sh`."
+        )
+    else:
+        col_a, col_b = st.columns([1, 3])
+        with col_a:
+            days = st.selectbox("Time range (days)", [1, 3, 7, 14], index=2)
+
+        rows = _load_status_rows(days)
+
+        if not rows:
+            st.info("No status entries in the selected range.")
+        else:
+            import pandas as pd
+
+            df = pd.DataFrame(rows)
+            # Newest first by timestamp.
+            if "ts" in df.columns:
+                df = df.sort_values("ts", ascending=False, kind="stable")
+
+            # Summary counts per status.
+            counts = df["status"].value_counts().to_dict()
+            metric_cols = st.columns(5)
+            for i, key in enumerate(["OK", "FAIL", "OOM", "TIMEOUT", "SKIPPED"]):
+                metric_cols[i].metric(STATUS_STYLE[key].split(" ", 1)[-1], counts.get(key, 0))
+
+            with col_b:
+                mode_options = ["(all)"] + sorted(df["mode"].dropna().unique().tolist())
+                sel_mode = st.selectbox("Filter by mode", mode_options)
+            if sel_mode != "(all)":
+                df = df[df["mode"] == sel_mode]
+
+            # Pretty display columns.
+            disp = df.copy()
+            disp["status"] = disp["status"].map(lambda s: STATUS_STYLE.get(s, s))
+            if "duration_s" in disp.columns:
+                disp["duration"] = disp["duration_s"].map(
+                    lambda s: f"{int(s) // 3600}h {int(s) % 3600 // 60}m {int(s) % 60}s"
+                    if pd.notna(s) else ""
+                )
+            keep = [c for c in ["ts", "mode", "status", "duration", "exit_code", "note"] if c in disp.columns]
+            st.dataframe(
+                disp[keep],
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "ts": "Time (UTC)",
+                    "mode": "Mode",
+                    "status": "Status",
+                    "duration": "Duration",
+                    "exit_code": "Exit",
+                    "note": "Note",
+                },
+            )
+
+
+# ==============================================================================
 # TAB 2: LOG FILES — browse & download only, no in-page rendering
 # ==============================================================================
 with tab_logs:
@@ -131,7 +233,7 @@ with tab_logs:
         # Component
         components = sorted(
             d.name for d in LOGS_BASE.iterdir()
-            if d.is_dir() and d.name != "streamlit"
+            if d.is_dir() and d.name not in ("streamlit", "_status")
         )
 
         if not components:
@@ -193,7 +295,7 @@ with tab_logs:
 
         rows = []
         for comp_dir in sorted(LOGS_BASE.iterdir()):
-            if not comp_dir.is_dir() or comp_dir.name == "streamlit":
+            if not comp_dir.is_dir() or comp_dir.name in ("streamlit", "_status"):
                 continue
             for date_dir in sorted(comp_dir.iterdir(), reverse=True):
                 if not date_dir.is_dir():
