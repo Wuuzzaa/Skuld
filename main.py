@@ -249,14 +249,24 @@ if __name__ == "__main__":
                         help="Environment name (e.g. Staging, Prod)")
     args = parser.parse_args()
 
-    # Log component based on mode for separate log directories
+    # Log component based on mode for separate log directories.
+    # Each mode gets its own folder so dedicated jobs (saturday_night,
+    # market_start_mid_end, ...) are distinguishable in the log browser
+    # instead of all landing in the shared data_collector bucket.
     MODE_COMPONENTS = {
         "historization": "historization",
         "historical_prices": "historical",
         "historical_iv": "historical",
+        "historical_volatility": "historical",
         "historical_technical_indicators": "historical",
+        "historical_dividend_classification": "historical",
         "historical_full": "historical",
         "only_run_migrations": "migrations",
+        "saturday_night": "saturday_night",
+        "market_start_mid_end": "market_start_mid_end",
+        "stock_data_daily": "stock_data_daily",
+        "option_data": "option_data",
+        "sp500_constituents": "sp500_constituents",
     }
     log_component = MODE_COMPONENTS.get(args.mode, "data_collector")
     
