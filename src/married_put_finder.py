@@ -103,7 +103,7 @@ def calculate_put_only_metrics(
 
     # Intrinsic & time value
     df["intrinsic_value"] = (df["strike_price"] - current_price).clip(lower=0)
-    df["put_time_value"] = midprice - df["intrinsic_value"]
+    df["put_time_value"] = (midprice - df["intrinsic_value"]).clip(lower=0)  # ← min. 0!
 
     # Time value per month (30-day basis)
     df["put_time_value_per_mo"] = df.apply(

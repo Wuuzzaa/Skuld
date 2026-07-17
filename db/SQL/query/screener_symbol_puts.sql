@@ -3,7 +3,8 @@
 -- Kein Strike-Filter (anders als roll_candidates.sql) — alle liquiden Puts.
 -- Kennzahlen wie in der Spread-Detailansicht (Delta, Theta, IV, Exp. Move) + Rohwerte
 -- für Black-Scholes (live_stock_price, implied_volatility).
--- Quelle: "OptionDataMerged". Params: :symbol, :dte_min, :dte_max
+-- Quelle: "OptionDataMerged". Params: :symbol, :dte_min, :dte_max,
+--         :min_oi, :min_vol, :min_premium_share
 SELECT
     o.symbol,
     o.strike_price,
@@ -23,7 +24,7 @@ FROM "OptionDataMerged" o
 WHERE o.symbol = :symbol
   AND o.contract_type = 'put'
   AND o.days_to_expiration BETWEEN :dte_min AND :dte_max
-  AND o.premium_option_price > 0
-  AND o.open_interest > 0
-  AND o.day_volume > 0
+  AND o.premium_option_price >= :min_premium_share
+  AND o.open_interest >= :min_oi
+  AND o.day_volume >= :min_vol
 ORDER BY o.expiration_date ASC, o.strike_price ASC

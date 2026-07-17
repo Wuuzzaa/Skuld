@@ -53,9 +53,12 @@ def position_status(K: float, S: float, P_eroeffnung: float,
 
     Returns:
         dict mit pnl_pct, pnl_abs, inner_value, time_value, breakeven_old.
+    
+    Hinweis: Zeitwert kann theoretisch nicht negativ sein (Arbitrage-Gesetz).
+    Falls Daten fehlerhaft → max(0, TV) sichert Realismus.
     """
     inner_value = max(0.0, K - S) * 100.0          # innerer Wert pro Kontrakt in $
-    time_value = P_heute - inner_value             # Restzeitwert
+    time_value = max(0.0, P_heute - inner_value)   # Restzeitwert (min. 0!)
     breakeven_old = K - P_eroeffnung / 100.0       # alte Gewinnschwelle je Aktie
     pnl_abs = (P_eroeffnung - P_heute) * n         # G/V absolut
     pnl_pct = (P_eroeffnung - P_heute) / P_eroeffnung * 100.0  # G/V in %
@@ -137,3 +140,99 @@ def roll_candidate_explained(stufe: int, K: float, K2: float, P_eroeffnung: floa
         },
     ]
     return {**base, "steps": steps}
+
+
+# ---------------------------------------------------------------------------
+# Eric Ludwig Hints: Zeitwert, Theta-Gamma, Roll-Trigger-Score
+# ---------------------------------------------------------------------------
+def time_value_percentage(P_heute: float, P_eroeffnung: float) -> float:
+    """Berechnet den Restzeitwert als % der ursprünglichen Prämie.
+    
+    Nach Eric Ludwig: Roll triggern, wenn TV ≤ 10–15 % der Eröffnungsprämie.
+    
+    Args:
+        P_heute:      Aktueller Put-Preis (absolut $/Kontrakt).
+        P_eroeffnung: Ursprüngliche Prämie (absolut $/Kontrakt).
+    
+    Returns:
+        Prozentsatz (0–100). Bei P_eroeffnung=0 → 0.
+    """
+    if P_eroeffnung == 0:
+        return 0.0
+    # Restzeitwert = aktueller Preis (enthält inneren Wert + Zeitwert)
+    # Approximation: TV% = (P_heute / P_eroeffnung) * 100
+    return (P_heute / P_eroeffnung) * 100.0
+
+
+def theta_gamma_score(dte: int) -> tuple[float, str]:
+    """Bewertet das Rollzeitfenster nach Theta-Gamma-Balance (Eric Ludwig).
+    
+    Optimales Fenster: 7–14 Tage vor Verfall (Theta hoch, Gamma noch nicht explosiv).
+    Zu früh: Zeitwert noch zu hoch.
+    Zu spät (< 3 Tage): Gamma-Explosion, volatile Bewegungen.
+    
+    Args:
+        dte: Days to Expiration (Restlaufzeit).
+    
+    Returns:
+        (score: 0.0–1.0, label: "Optimal"/"Früh"/"Spät"/"Sehr spät")
+        Score 1.0 = ideales Fenster, 0.0 = ungünstig.
+    """
+    if dte >= 14:
+        return 0.3, "Noch früh — Zeitwert höher"
+    elif 7 <= dte < 14:
+        return 1.0, "✅ Optimales Rollzeitfenster (7–14 DTE)"
+    elif 3 <= dte < 7:
+        return 0.7, "⚠️ Bald zu spät — Gamma steigt"
+    else:
+        return 0.2, "🔴 Zu spät — Gamma-Explosion unmittelbar"
+
+
+def roll_trigger_score(P_heute: float, P_eroeffnung: float, dte: int) -> dict:
+    """Kombinierter Score zur Roll-Empfehlung (Eric Ludwig Insights).
+    
+    Bewertet, wie sehr ein aktiver Roll empfohlen ist, basierend auf:
+    - Zeitwert % (Hauptfaktor): < 10 % → sehr empfohlen
+    - DTE-Fenster (Sekundär): 7–14 Tage ideal
+    
+    Args:
+        P_heute:      Aktueller Put-Preis.
+        P_eroeffnung: Ursprüngliche Prämie.
+        dte:          Days to Expiration.
+    
+    Returns:
+        dict mit 'score', 'trigger', 'tv_pct', 'dte_label', 'empfehlung'.
+    """
+    tv_pct = time_value_percentage(P_heute, P_eroeffnung)
+    dte_score, dte_label = theta_gamma_score(dte)
+    
+    # Zeitwert-Stufen (Hauptregel von Ludwig)
+    if tv_pct <= 10:
+        tv_score = 1.0
+        tv_label = "🟢 Sehr hoch — ROLL TRIGGERN"
+    elif tv_pct <= 15:
+        tv_score = 0.85
+        tv_label = "🟡 Hoch — Roll sinnvoll"
+    elif tv_pct <= 25:
+        tv_score = 0.6
+        tv_label = "⚠️ Mittel — Optional"
+    else:
+        tv_score = 0.3
+        tv_label = "🔴 Niedrig — Warten"
+    
+    # Kombinierter Score (70 % Zeitwert, 30 % DTE-Fenster)
+    combined = (tv_score * 0.7) + (dte_score * 0.3)
+    
+    return {
+        "score": combined,
+        "trigger": combined >= 0.7,
+        "tv_pct": tv_pct,
+        "tv_label": tv_label,
+        "dte": dte,
+        "dte_label": dte_label,
+        "dte_score": dte_score,
+        "empfehlung": (
+            f"{tv_label} | {dte_label}" if combined >= 0.7
+            else f"{tv_label} — noch warten"
+        ),
+    }

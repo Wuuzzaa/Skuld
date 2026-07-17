@@ -7,7 +7,7 @@
 --
 -- Quelle: "OptionDataMerged" (aktuelle Kette). Spaltennamen gegen bestehende
 -- Queries (covered_call_scanner.sql, iron_condor_input.sql) verifiziert.
--- Params: :symbol, :K, :dte_min, :dte_max
+-- Params: :symbol, :K, :dte_min, :dte_max, :min_oi, :min_vol, :delta_min, :delta_max
 --
 -- Liquiditäts-Vorfilter: open_interest und day_volume vorhanden/> 0.
 SELECT
@@ -28,6 +28,8 @@ WHERE o.symbol = :symbol
   AND o.days_to_expiration BETWEEN :dte_min AND :dte_max
   AND o.strike_price <= :K
   AND o.premium_option_price > 0
-  AND o.open_interest > 0
-  AND o.day_volume > 0
+  AND o.open_interest >= :min_oi
+  AND o.day_volume >= :min_vol
+  AND o.greeks_delta IS NOT NULL
+  AND o.greeks_delta BETWEEN :delta_min AND :delta_max
 ORDER BY o.strike_price DESC, o.days_to_expiration ASC

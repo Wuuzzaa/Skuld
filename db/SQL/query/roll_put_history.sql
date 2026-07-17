@@ -22,22 +22,27 @@ SELECT
     (a.expiration_date::date - CAST(:entry_date AS date)) AS days_to_expiration,
     b.close AS stock_close
 FROM (
-    SELECT * FROM "OptionDataMassiveHistory"
-    WHERE date <> CURRENT_DATE
+        SELECT * FROM "OptionDataMassiveHistory"
+        WHERE date = CAST(:entry_date AS date)
+            AND symbol = :symbol
+            AND contract_type = 'put'
     UNION ALL
-    SELECT CURRENT_DATE AS date, * FROM "OptionDataMassive"
+        SELECT CURRENT_DATE AS date, * FROM "OptionDataMassive"
+        WHERE CAST(:entry_date AS date) = CURRENT_DATE
+            AND symbol = :symbol
+            AND contract_type = 'put'
 ) AS a
 INNER JOIN (
-    SELECT * FROM "StockPricesYahooHistory"
-    WHERE date <> CURRENT_DATE
+        SELECT * FROM "StockPricesYahooHistory"
+        WHERE date = CAST(:entry_date AS date)
+            AND symbol = :symbol
     UNION ALL
-    SELECT CURRENT_DATE AS date, * FROM "StockPricesYahoo"
+        SELECT CURRENT_DATE AS date, * FROM "StockPricesYahoo"
+        WHERE CAST(:entry_date AS date) = CURRENT_DATE
+            AND symbol = :symbol
 ) AS b
     ON a.date = b.date AND a.symbol = b.symbol
 WHERE a.symbol = :symbol
-  AND b.symbol = :symbol
-  AND a.contract_type = 'put'
-  AND a.date = CAST(:entry_date AS date)
   AND a.expiration_date::date > CAST(:entry_date AS date)
   AND (a.expiration_date::date - CAST(:entry_date AS date)) BETWEEN :dte_min AND :dte_max
 ORDER BY a.expiration_date ASC, a.strike_price DESC

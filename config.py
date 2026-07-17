@@ -12,6 +12,12 @@ MASSIVE_API_KEY = os.getenv('MASSIVE_API_KEY')
 MASSIVE_API_KEY_FLAT_FILES = os.getenv('MASSIVE_API_KEY_FLAT_FILES')
 TEST_KEY= os.getenv('TEST_KEY') # DEBUG
 
+# LLM / DeepSeek API
+DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY') or os.getenv('DEEP_SEEK')
+DEEPSEEK_BASE_URL = os.getenv('DEEPSEEK_BASE_URL', 'https://api.deepseek.com')
+DEEPSEEK_MODEL = os.getenv('DEEPSEEK_MODEL', 'deepseek-v4-flash')
+DEEPSEEK_TIMEOUT_SECONDS = int(os.getenv('DEEPSEEK_TIMEOUT_SECONDS', '120'))
+
 # PostgreSQL
 POSTGRES_HOST = os.getenv('POSTGRES_HOST')
 POSTGRES_PORT = os.getenv('POSTGRES_PORT')

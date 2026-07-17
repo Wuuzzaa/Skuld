@@ -2,13 +2,25 @@ import logging
 import os
 import streamlit as st
 import pandas as pd
-from config import PATH_DATABASE_QUERY_FOLDER, IV_CORRECTION_MODE, RISK_FREE_RATE
+from config import (
+    PATH_DATABASE_QUERY_FOLDER,
+    IV_CORRECTION_MODE,
+    RISK_FREE_RATE,
+    DEEPSEEK_MODEL,
+)
 from pages.backtesting.spreads_backtesting import display_spreads_backtesting
 from pages.documentation_text.spreads_page_doc import get_spreads_documentation
 from src.database import select_into_dataframe
 from src.historization import select_timetravel_into_dataframe
+from src.llm_client import LLMClient, LLMProviderError
+from src.live_market_research import build_live_research_bundle
 from src.logger_config import setup_logging
 from src.page_display_dataframe import page_display_dataframe, _create_claude_prompt_page_spreads
+from src.spreads_ai_analysis import (
+    build_bulk_spreads_prompt,
+    parse_spreads_ranking_table,
+    estimate_deepseek_cost,
+)
 from src.spreads_calculation import get_page_spreads
 from src.streamlit_helpers import render_date_filter
 from src.utils.option_utils import get_expiration_type
@@ -407,6 +419,23 @@ total_removed = total_before - total_after
 
 st.markdown(f"### {total_after} Results")
 
+if "spreads_deepseek_result" not in st.session_state:
+    st.session_state.spreads_deepseek_result = ""
+if "spreads_deepseek_error" not in st.session_state:
+    st.session_state.spreads_deepseek_error = ""
+if "spreads_deepseek_usage" not in st.session_state:
+    st.session_state.spreads_deepseek_usage = {}
+if "spreads_deepseek_model" not in st.session_state:
+    st.session_state.spreads_deepseek_model = DEEPSEEK_MODEL
+if "spreads_deepseek_ranking_rows" not in st.session_state:
+    st.session_state.spreads_deepseek_ranking_rows = []
+if "spreads_deepseek_summary" not in st.session_state:
+    st.session_state.spreads_deepseek_summary = ""
+if "spreads_deepseek_sources_rows" not in st.session_state:
+    st.session_state.spreads_deepseek_sources_rows = []
+if "spreads_deepseek_article_quality_rows" not in st.session_state:
+    st.session_state.spreads_deepseek_article_quality_rows = []
+
 # Export All button - downloads all filtered spreads with full details as CSV
 if not filtered_df.empty:
     export_columns = [
@@ -432,6 +461,184 @@ if not filtered_df.empty:
         file_name=f"spreads_{option_type}_{spread_width}w_{expiration_date}.csv",
         mime="text/csv",
     )
+
+if not filtered_df.empty:
+    with st.expander("DeepSeek Bulk Analyse (Test)", expanded=False):
+        st.caption(
+            "Sendet mehrere gefilterte Spreads in einem Request an DeepSeek. "
+            "Gut fuer einen ersten End-to-End Test."
+        )
+
+        max_spreads = st.number_input(
+            "Anzahl Spreads fuer Analyse",
+            min_value=1,
+            max_value=len(filtered_df),
+            value=min(25, len(filtered_df)),
+            step=1,
+            key="deepseek_spreads_limit",
+        )
+        model_name = st.text_input(
+            "DeepSeek Model",
+            value=st.session_state.spreads_deepseek_model,
+            key="deepseek_spreads_model",
+            help="Default kommt aus DEEPSEEK_MODEL in .env",
+        )
+        enable_live_research = st.checkbox(
+            "Live News + Live Price aus dem Internet einbeziehen",
+            value=True,
+            key="deepseek_enable_live_research",
+            help="Macht die Analyse realistischer, aber langsamer.",
+        )
+        deep_research_mode = st.checkbox(
+            "Deep Research Mode (mehr Web-Quellen)",
+            value=False,
+            key="deepseek_deep_research_mode",
+            help="Nutzt zusaetzlich breitere Web-News-Suche pro Symbol und mehr Marktkontext.",
+        )
+        include_article_content = st.checkbox(
+            "Artikel-Inhalte lesen (langsamer)",
+            value=False,
+            key="deepseek_include_article_content",
+            help="Liest den Inhalt von News-Links (nicht nur Headlines) und nutzt Auszuege im Prompt.",
+        )
+        headlines_per_symbol = st.number_input(
+            "News pro Symbol",
+            min_value=1,
+            max_value=5,
+            value=4 if deep_research_mode else 3,
+            step=1,
+            key="deepseek_headlines_per_symbol",
+        )
+        max_articles_per_symbol = st.number_input(
+            "Artikel pro Symbol lesen",
+            min_value=0,
+            max_value=3,
+            value=1 if include_article_content else 0,
+            step=1,
+            key="deepseek_max_articles_per_symbol",
+            help="Mehr Artikel = mehr Laufzeit und mehr Tokens.",
+        )
+
+        if st.button("DeepSeek Analyse starten", width="stretch"):
+            st.session_state.spreads_deepseek_error = ""
+            st.session_state.spreads_deepseek_ranking_rows = []
+            st.session_state.spreads_deepseek_summary = ""
+            st.session_state.spreads_deepseek_sources_rows = []
+            st.session_state.spreads_deepseek_article_quality_rows = []
+            with st.spinner("DeepSeek analysiert die Spreads..."):
+                try:
+                    df_for_ai = filtered_df.head(int(max_spreads)).copy()
+                    live_context = ""
+                    if enable_live_research:
+                        with st.status("Lade Live News und Preise...", expanded=False):
+                            live_context, source_rows, article_quality_rows = build_live_research_bundle(
+                                symbols=df_for_ai["symbol"].astype(str).tolist(),
+                                max_headlines=int(headlines_per_symbol),
+                                deep_research=deep_research_mode,
+                                include_article_content=include_article_content,
+                                max_articles_per_symbol=int(max_articles_per_symbol),
+                            )
+                            st.session_state.spreads_deepseek_sources_rows = source_rows
+                            st.session_state.spreads_deepseek_article_quality_rows = article_quality_rows
+
+                    prompt = build_bulk_spreads_prompt(
+                        df_for_ai,
+                        selected_date=selected_date,
+                        expiration_date=expiration_date,
+                        strategy_type=strategy_type,
+                        option_type=option_type,
+                        live_research_context=live_context,
+                    )
+                    system_prompt = (
+                        "Du bist ein institutioneller Aktien- und Optionsanalyst. "
+                        "Arbeite strukturiert, benenne Unsicherheiten klar und gib konkrete Handlungsentscheidungen."
+                    )
+
+                    response = LLMClient().chat_completion(
+                        provider="deepseek",
+                        system_prompt=system_prompt,
+                        user_prompt=prompt,
+                        model=model_name.strip() or DEEPSEEK_MODEL,
+                        temperature=0.15,
+                        max_tokens=7000,
+                    )
+
+                    st.session_state.spreads_deepseek_result = response.text
+                    st.session_state.spreads_deepseek_usage = response.usage
+                    st.session_state.spreads_deepseek_model = response.model
+
+                    ranking_df, overall_summary = parse_spreads_ranking_table(response.text)
+                    st.session_state.spreads_deepseek_ranking_rows = ranking_df.to_dict(orient="records")
+                    st.session_state.spreads_deepseek_summary = overall_summary
+                except LLMProviderError as exc:
+                    st.session_state.spreads_deepseek_error = str(exc)
+
+        if st.session_state.spreads_deepseek_error:
+            st.error(st.session_state.spreads_deepseek_error)
+
+        if st.session_state.spreads_deepseek_result:
+            usage = st.session_state.spreads_deepseek_usage or {}
+            prompt_tokens = usage.get("prompt_tokens", "N/A")
+            completion_tokens = usage.get("completion_tokens", "N/A")
+            total_tokens = usage.get("total_tokens", "N/A")
+            st.info(
+                f"Model: {st.session_state.spreads_deepseek_model} | "
+                f"Prompt Tokens: {prompt_tokens} | "
+                f"Completion Tokens: {completion_tokens} | "
+                f"Total: {total_tokens}"
+            )
+
+            cost = estimate_deepseek_cost(
+                usage=usage,
+                model=str(st.session_state.spreads_deepseek_model or ""),
+            )
+            st.caption(
+                "Kosten (geschaetzt): "
+                f"Cache-Hit ${cost['cost_cache_hit_usd']:.6f} | "
+                f"Cache-Miss ${cost['cost_cache_miss_usd']:.6f}"
+            )
+
+            if st.session_state.spreads_deepseek_summary:
+                st.markdown("#### Kurzfazit")
+                st.write(st.session_state.spreads_deepseek_summary)
+
+            if enable_live_research:
+                mode_text = "Deep" if deep_research_mode else "Light"
+                st.caption(f"Research Mode: {mode_text}")
+
+            ranking_rows = st.session_state.spreads_deepseek_ranking_rows or []
+            if ranking_rows:
+                st.markdown("#### Ranking")
+                ranking_df = pd.DataFrame(ranking_rows)
+                st.dataframe(ranking_df, hide_index=True, width="stretch")
+            else:
+                st.warning("Die DeepSeek-Antwort konnte nicht als Ranking-Tabelle geparst werden.")
+
+            source_rows = st.session_state.spreads_deepseek_sources_rows or []
+            if source_rows:
+                st.markdown("#### Quellen-Transparenz je Symbol")
+                quality_rows = st.session_state.spreads_deepseek_article_quality_rows or []
+                if quality_rows:
+                    st.caption("Artikel-Lesequalitaet je Symbol")
+                    quality_df = pd.DataFrame(quality_rows)
+                    st.dataframe(quality_df, hide_index=True, width="stretch")
+                with st.expander(f"Verwendete Quellen anzeigen ({len(source_rows)})", expanded=False):
+                    sources_df = pd.DataFrame(source_rows)
+                    st.dataframe(
+                        sources_df,
+                        hide_index=True,
+                        width="stretch",
+                        column_config={
+                            "URL": st.column_config.LinkColumn(
+                                "URL",
+                                help="Originalquelle",
+                                display_text="Open",
+                            )
+                        },
+                    )
+
+            with st.expander("Rohantwort (optional)", expanded=False):
+                st.markdown(st.session_state.spreads_deepseek_result)
 
 # Optionstrat URL configuration
 column_config = {

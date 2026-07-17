@@ -10,7 +10,9 @@
 -- bei Gleichstand höchstes Open Interest.
 --
 -- Params: :dte_min (z.B. 21), :dte_max (z.B. 45), :min_oi (>=100), :min_vol (>=100),
---         :price_min / :price_max (Aktienkurs-Fenster, Default Buch 15..80)
+--         :price_min / :price_max (Aktienkurs-Fenster, Default Buch 15..80),
+--         :min_premium_share (Mindestprämie je Aktie, z.B. 0.50 = 50$ pro Kontrakt),
+--         :min_market_cap (Mindest Market Cap in $, z.B. 2e9 = 2 Mrd.)
 -- Spaltennamen gegen dividend_screener.sql / covered_call_scanner.sql verifiziert.
 WITH puts AS (
     SELECT DISTINCT ON (o.symbol)
@@ -28,7 +30,7 @@ WITH puts AS (
     FROM "OptionDataMerged" o
     WHERE o.contract_type = 'put'
       AND o.days_to_expiration BETWEEN :dte_min AND :dte_max
-      AND o.premium_option_price > 0
+    AND o.premium_option_price >= :min_premium_share
       AND o.open_interest >= :min_oi
       AND o.day_volume    >= :min_vol
       AND o.live_stock_price BETWEEN :price_min AND :price_max
@@ -42,6 +44,7 @@ SELECT
     s.company_sector                                   AS sector,
     s.company_industry                                 AS industry,
     ROUND(p.live_stock_price::numeric, 2)              AS price,
+    ROUND(s."MarketCap"::numeric, 0)                   AS market_cap,
 
     -- Proxy-Kriterien "aktuell" (kein Mehrjahres-Trend verfügbar)
     ROUND(s."FinData_revenueGrowth"::numeric * 100, 2) AS revenue_growth_pct,
@@ -79,4 +82,6 @@ SELECT
 FROM "StockData" s
 JOIN puts p ON p.symbol = s.symbol
 WHERE s.live_stock_price IS NOT NULL
+  AND (s."MarketCap" IS NULL OR s."MarketCap" >= :min_market_cap)
+  AND p.strike_price < s.live_stock_price  -- Nur OTM Puts (nicht ITM!)
 ORDER BY s.symbol
