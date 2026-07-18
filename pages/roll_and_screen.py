@@ -516,6 +516,13 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
         st.info("Symbol wählen — erst dann werden Historie und Kurse geladen.")
         return
 
+    # Reset "Puts laden"-State bei Symbol-/Datum-Wechsel
+    prev_key = st.session_state.get("_roll_search_key")
+    curr_key = str(symbol)
+    if prev_key != curr_key:
+        st.session_state["roll_puts_searched"] = False
+        st.session_state["_roll_search_key"] = curr_key
+
     entry_date = render_date_filter(
         date_query=f"""select date from (
             select date from "DatesHistory" union select current_date
@@ -528,20 +535,28 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
     if not entry_date:
         return
 
-    sc1, sc2 = st.columns([3, 2])
-    dte_min, dte_max = sc1.slider(
-        "DTE-Bereich am Einstiegsdatum",
-        min_value=1, max_value=400, value=(30, 60), step=1,
-        help="Zeigt alle Puts, deren Restlaufzeit am Einstiegsdatum in diesem Bereich lag.",
-    )
-    with sc2:
+    sc1, sc2, sc3 = st.columns([2, 2, 2])
+    dte_min = sc1.number_input("DTE min (Einstieg)", min_value=1, max_value=400,
+                               value=st.session_state.get("roll_dte_min", 30), step=1,
+                               key="roll_dte_min")
+    dte_max = sc2.number_input("DTE max (Einstieg)", min_value=1, max_value=400,
+                               value=st.session_state.get("roll_dte_max", 60), step=1,
+                               key="roll_dte_max")
+    with sc3:
         st.caption("Verfallstyp")
         f1, f2, f3 = st.columns(3)
         show_monthly = f1.checkbox("Monthly", value=True, key="roll_monthly")
         show_weekly = f2.checkbox("Weekly", value=True, key="roll_weekly")
         show_daily = f3.checkbox("Daily", value=False, key="roll_daily")
 
-    hist_df = _load_put_history(symbol, entry_date, dte_min, dte_max)
+    if st.button("🔍 Puts laden", key="roll_load_puts"):
+        st.session_state["roll_puts_searched"] = True
+    if not st.session_state.get("roll_puts_searched"):
+        st.info("DTE-Bereich einstellen und 'Puts laden' klicken.")
+        return
+
+    with st.spinner("Lade Put-Historie…"):
+        hist_df = _load_put_history(symbol, entry_date, dte_min, dte_max)
     if hist_df is None or hist_df.empty:
         st.warning(f"Keine Puts für {symbol} am {entry_date} im DTE-Bereich {dte_min}–{dte_max} gefunden.")
         return
