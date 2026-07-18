@@ -347,21 +347,24 @@ def _render_iv_chart(symbol: str):
     fig = go.Figure()
 
     _dark = st.get_option("theme.base") != "light"
+    _ann_red   = "#ef4444"
+    _ann_green = "#22c55e" if _dark else "#16a34a"
+    _ann_mid   = "#94a3b8" if _dark else "#475569"
 
     # 75-Percentil-Band (rot-Zone: teuer zu kaufen, gut zum Verkaufen)
     fig.add_hrect(y0=p75, y1=100, fillcolor="rgba(239,68,68,0.07)",
                   line_width=0, annotation_text="Hohe IV (gut für Prämienverkäufer)",
                   annotation_position="top left",
-                  annotation_font=dict(color="#ef4444", size=10))
+                  annotation_font=dict(color=_ann_red, size=10))
 
     # 25-Percentil-Band (grün-Zone)
     fig.add_hrect(y0=0, y1=p25, fillcolor="rgba(34,197,94,0.07)",
                   line_width=0, annotation_text="Niedrige IV",
                   annotation_position="bottom left",
-                  annotation_font=dict(color="#22c55e", size=10))
+                  annotation_font=dict(color=_ann_green, size=10))
 
     # Percentil-Linien
-    for val, color, label in [(p25, "#22c55e", "P25"), (p50, "#64748b", "P50"), (p75, "#ef4444", "P75")]:
+    for val, color, label in [(p25, _ann_green, "P25"), (p50, _ann_mid, "P50"), (p75, _ann_red, "P75")]:
         fig.add_hline(y=val, line_dash="dash", line_color=color, line_width=1,
                       annotation_text=f"{label}: {val:.0f}",
                       annotation_font=dict(color=color, size=10))
@@ -1450,6 +1453,7 @@ Der Chart zeigt den **IV-Rank** der letzten ~12 Monate.
             put_rows.append({
                 "Ampel": ev["ampel"],
                 "Expiry": o["expiration_date"],
+                "Kurs ($)": round(float(o["live_stock_price"]), 2) if _num(o["live_stock_price"]) else None,
                 "Strike": round(float(o["strike_price"]), 2),
                 "DTE": int(o["days_to_expiration"]),
                 "Prämie ($)": round(float(o["premium_option_price"]), 2),
