@@ -808,12 +808,15 @@ def _render_endgame_hint():
 # Tab 1 — Screener
 # ---------------------------------------------------------------------------
 @st.cache_data(ttl=300)
-def _load_screener(dte_min, dte_max, min_oi, min_vol, price_min, price_max):
+def _load_screener(dte_min, dte_max, min_oi, min_vol, price_min, price_max,
+                   min_premium_share=0.0, min_market_cap=0):
     return select_into_dataframe(
         sql_file_path=PATH_DATABASE_QUERY_FOLDER / "put_screener.sql",
         params={"dte_min": int(dte_min), "dte_max": int(dte_max),
                 "min_oi": int(min_oi), "min_vol": int(min_vol),
-                "price_min": float(price_min), "price_max": float(price_max)},
+                "price_min": float(price_min), "price_max": float(price_max),
+                "min_premium_share": float(min_premium_share),
+                "min_market_cap": float(min_market_cap)},
     )
 
 
@@ -841,8 +844,17 @@ def render_screener_tab():
         pe_max = c2.slider("KGV-Obergrenze", 10, 200, int(DEFAULT_PE_MAX), 5)
         min_score = c3.slider("Mindest-Score", 0, 9, 5, 1)
         dte_min, dte_max = c4.slider("DTE-Fenster (Tage)", 7, 90, (21, 45), 1)
-        min_oi = c5.number_input("Min. Open Interest", min_value=100, value=100, step=50)
-        min_vol = c5.number_input("Min. Tagesvolumen", min_value=100, value=100, step=50)
+        min_market_cap_b = c5.slider("Min. Market Cap (Mrd. $)", 0.0, 50.0, 2.0, 0.5,
+                                     help="0 = kein Filter. Buch-Default: 2 Mrd. (keine Micro-Caps).")
+        min_market_cap_usd = min_market_cap_b * 1e9 if min_market_cap_b > 0 else 0
+
+        c6, c7, c8 = st.columns(3)
+        min_oi = c6.number_input("Min. Open Interest", min_value=100, value=100, step=50)
+        min_vol = c7.number_input("Min. Tagesvolumen", min_value=0, value=20, step=10)
+        min_premium_contract = c8.number_input("Min. Prämie ($/Kontrakt)", min_value=0.0,
+                                               value=50.0, step=10.0,
+                                               help="50 $/Kontrakt = 0.50 $/Aktie.")
+        min_premium_share = min_premium_contract / 100.0
 
         # Sektor-Filter (nur wenn Daten verfügbar)
         available_quadrants = sorted(set(sector_map.values())) if sector_map else []
@@ -876,7 +888,8 @@ def render_screener_tab():
         return
 
     with st.spinner("Screene Aktien + Puts …"):
-        raw = _load_screener(dte_min, dte_max, min_oi, min_vol, price_min, price_max)
+        raw = _load_screener(dte_min, dte_max, min_oi, min_vol, price_min, price_max,
+                             min_premium_share, min_market_cap_usd)
 
     if raw is None or raw.empty:
         st.warning("Keine Treffer. Filter lockern.")
