@@ -648,13 +648,13 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
             with col:
                 if is_sel:
                     st.markdown(f"""
-                    <div style="background:linear-gradient(135deg,#00704a,#00d4aa);
+                    <div style="background:linear-gradient(135deg,rgba(0,112,74,0.4),rgba(0,212,170,0.25));
                         border:2px solid #00d4aa;border-radius:10px;padding:14px;
-                        text-align:center;box-shadow:0 0 12px rgba(0,212,170,0.4);">
-                        <div style="font-size:19px;font-weight:700;color:#fff;font-family:'JetBrains Mono',monospace;">${strike:.2f}</div>
-                        <div style="font-size:11px;color:#b2f5e8;margin-top:4px;">Prämie ${premium:.2f}</div>
-                        <div style="font-size:11px;color:#b2f5e8;">DTE {dte_val}d</div>
-                        <div style="font-size:10px;color:#fff;margin-top:4px;font-weight:600;letter-spacing:0.05em;">✓ AUSGEWÄHLT</div>
+                        text-align:center;box-shadow:0 0 14px rgba(0,212,170,0.35);">
+                        <div style="font-size:19px;font-weight:700;color:#00d4aa;font-family:'JetBrains Mono',monospace;">${strike:.2f}</div>
+                        <div style="font-size:11px;color:#94a3b8;margin-top:4px;">Prämie ${premium:.2f}</div>
+                        <div style="font-size:11px;color:#94a3b8;">DTE {dte_val}d</div>
+                        <div style="font-size:10px;color:#00d4aa;margin-top:4px;font-weight:600;letter-spacing:0.08em;">✓ GEWÄHLT</div>
                     </div>""", unsafe_allow_html=True)
                 else:
                     if st.button(
@@ -758,6 +758,7 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
 
 
 def _render_stufe(stufe, df, K, P_eroeffnung, P_heute, n, breakeven_old, title):
+    """Roll-Kandidaten als horizontale Karten — Top-3 sofort sichtbar, Rest ausklappbar."""
     st.markdown(f"#### {title}")
     if df is None or df.empty:
         st.caption("Keine passenden Strikes in dieser Stufe.")
@@ -766,38 +767,120 @@ def _render_stufe(stufe, df, K, P_eroeffnung, P_heute, n, breakeven_old, title):
     df = df.sort_values(["expiration_date", "strike_price"],
                         ascending=[True, False]).reset_index(drop=True)
 
-    rows, calc_by_idx = [], {}
+    # Alle Kandidaten vorberechnen
+    candidates = []
     for i, (_, o) in enumerate(df.iterrows()):
         K2 = float(o["strike_price"])
         P_neu = float(o["premium_option_price"]) * 100.0
         r = roll_candidate(stufe=stufe, K=K, K2=K2, P_eroeffnung=P_eroeffnung,
                            P_heute=P_heute, P_neu=P_neu, n=n)
-        calc_by_idx[i] = dict(K2=K2, P_neu=P_neu)
-        rows.append({
-            "Ampel": r["ampel"],
-            "Neuer Strike": K2,
-            "Expiry": o["expiration_date"],
-            "DTE": int(o["days_to_expiration"]),
-            "Prämie neu ($)": float(o["premium_option_price"]),
-            "Netto absolut ($)": round(r["netto_abs"], 2),
-            "Neue GS": round(r["breakeven_new"], 2),
-            "Alte GS": round(breakeven_old, 2),
-            "Kapital nötig ($)": round(r["kapital_noetig"], 2),
-            "OI": int(o["open_interest"]),
-            "Vol": int(o["day_volume"]),
-        })
-    out = pd.DataFrame(rows)
-    event = st.dataframe(out, use_container_width=True, hide_index=True,
-                         on_select="rerun", selection_mode="single-row",
-                         key=f"stufe_{stufe}")
-    sel = event.selection.rows if hasattr(event, "selection") else []
-    if sel:
-        c = calc_by_idx[sel[0]]
-        exp = roll_candidate_explained(stufe=stufe, K=K, K2=c["K2"],
-                                       P_eroeffnung=P_eroeffnung, P_heute=P_heute,
-                                       P_neu=c["P_neu"], n=n)
-        _render_roll_explanation(exp, K, c["K2"], P_eroeffnung, P_heute, c["P_neu"], n, breakeven_old)
-    return (out["Ampel"] == "✅").any()
+        candidates.append({"idx": i, "K2": K2, "P_neu": P_neu,
+                            "expiry": o["expiration_date"],
+                            "dte": int(o["days_to_expiration"]),
+                            "oi": int(o["open_interest"]),
+                            "vol": int(o["day_volume"]),
+                            "result": r})
+
+    # Sortieren: ✅ zuerst, dann nach Netto-Prämie
+    ampel_rank = {"✅": 0, "⚠️": 1, "❌": 2}
+    candidates.sort(key=lambda c: (ampel_rank.get(c["result"]["ampel"], 3), -c["result"]["netto_abs"]))
+
+    any_green = any(c["result"]["ampel"] == "✅" for c in candidates)
+
+    # Top-3 als Karten + "Alle anzeigen" Expander
+    show_key = f"stufe_{stufe}_show_all"
+    top3 = candidates[:3]
+    rest = candidates[3:]
+
+    _render_candidate_cards(top3, stufe, K, P_eroeffnung, P_heute, n, breakeven_old)
+
+    if rest:
+        with st.expander(f"Alle {len(candidates)} Kandidaten anzeigen"):
+            _render_candidate_cards(rest, stufe, K, P_eroeffnung, P_heute, n, breakeven_old,
+                                    key_offset=3)
+
+    return any_green
+
+
+def _render_candidate_cards(candidates, stufe, K, P_eroeffnung, P_heute, n, breakeven_old, key_offset=0):
+    """Rendert Kandidaten als 3-spaltige Karten-Reihen mit Klick-Herleitung."""
+    sel_key = f"stufe_{stufe}_sel"
+
+    _AMPEL_BG = {"✅": ("rgba(0,212,170,0.12)", "#00d4aa"),
+                 "⚠️": ("rgba(245,158,11,0.12)", "#f59e0b"),
+                 "❌": ("rgba(239,68,68,0.10)", "#ef4444")}
+
+    cols_per_row = 3
+    for row_i in range(0, len(candidates), cols_per_row):
+        chunk = candidates[row_i:row_i + cols_per_row]
+        cols = st.columns(len(chunk), gap="small")
+        for col, cand in zip(cols, chunk):
+            r = cand["result"]
+            bg, border = _AMPEL_BG.get(r["ampel"], ("rgba(30,45,69,0.6)", "#1e2d45"))
+            gs_delta = breakeven_old - r["breakeven_new"]
+            gs_arrow = f"▼ ${gs_delta:.2f}" if gs_delta > 0 else (f"▲ ${abs(gs_delta):.2f}" if gs_delta < 0 else "=")
+            gs_color = "#00d4aa" if gs_delta > 0 else ("#ef4444" if gs_delta < 0 else "#64748b")
+            netto_color = "#00d4aa" if r["netto_abs"] > 0 else "#ef4444"
+            card_key = f"roll_cand_{stufe}_{cand['idx'] + key_offset}"
+            is_sel = st.session_state.get(sel_key) == card_key
+
+            with col:
+                # Karte als HTML
+                sel_border = "2px solid #00d4aa" if is_sel else f"1px solid {border}"
+                sel_shadow = "box-shadow:0 0 16px rgba(0,212,170,0.35);" if is_sel else ""
+                st.markdown(f"""
+                <div style="background:{bg};border:{sel_border};border-radius:10px;
+                    padding:14px 16px;margin-bottom:4px;{sel_shadow}">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                    <span style="font-family:'JetBrains Mono',monospace;font-size:18px;
+                        font-weight:700;color:#e2e8f0;">${cand['K2']:.2f}</span>
+                    <span style="font-size:18px;">{r['ampel']}</span>
+                  </div>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                    <div>
+                      <div style="font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:#64748b;">Netto</div>
+                      <div style="font-family:'JetBrains Mono',monospace;font-size:13px;
+                          font-weight:600;color:{netto_color};">${r['netto_abs']:+.2f}</div>
+                    </div>
+                    <div>
+                      <div style="font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:#64748b;">GS-Delta</div>
+                      <div style="font-family:'JetBrains Mono',monospace;font-size:13px;
+                          font-weight:600;color:{gs_color};">{gs_arrow}</div>
+                    </div>
+                    <div>
+                      <div style="font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:#64748b;">DTE</div>
+                      <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#94a3b8;">{cand['dte']}d</div>
+                    </div>
+                    <div>
+                      <div style="font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:#64748b;">Prämie</div>
+                      <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#94a3b8;">${cand['P_neu']/100:.2f}</div>
+                    </div>
+                  </div>
+                  <div style="font-size:9px;color:#475569;margin-top:8px;">
+                    Neue GS: ${r['breakeven_new']:.2f} &nbsp;·&nbsp; OI {cand['oi']} / Vol {cand['vol']}
+                  </div>
+                </div>""", unsafe_allow_html=True)
+
+                if st.button("Details →", key=card_key, use_container_width=True):
+                    st.session_state[sel_key] = card_key
+                    st.rerun()
+
+    # Herleitung für ausgewählte Karte
+    sel_card = st.session_state.get(sel_key)
+    if sel_card:
+        # Kandidat aus Key rekonstruieren
+        try:
+            parts = sel_card.split("_")
+            sel_idx = int(parts[-1]) - key_offset
+            if 0 <= sel_idx < len(candidates):
+                cand = candidates[sel_idx]
+                exp = roll_candidate_explained(stufe=stufe, K=K, K2=cand["K2"],
+                                               P_eroeffnung=P_eroeffnung, P_heute=P_heute,
+                                               P_neu=cand["P_neu"], n=n)
+                _render_roll_explanation(exp, K, cand["K2"], P_eroeffnung, P_heute,
+                                         cand["P_neu"], n, breakeven_old)
+        except (ValueError, IndexError):
+            pass
 
 
 def _render_roll_explanation(exp: dict, K: float, K2: float, P_eroeffnung: float,
@@ -1000,24 +1083,86 @@ def render_screener_tab():
     display_cols = [c for c in display_cols if c in scored.columns]
 
     st.success(f"{len(scored)} qualifizierte Aktien (Score ≥ {min_score}, max {scored.iloc[0]['score_max']}).")
-
-    # Legende wenn Sektor-Map vorhanden
     if sector_map:
         legend_parts = [f"{_QUADRANT_EMOJI[q]} {q}" for q in ["Leading", "Improving", "Weakening", "Lagging"]]
         st.caption("Sektor-Ampel: " + "  ·  ".join(legend_parts))
 
-    event = page_display_dataframe(
-        scored[display_cols],
-        symbol_column="symbol",
-        on_select="rerun",
-        selection_mode="single-row",
-    )
-    sel = event.selection.rows if hasattr(event, "selection") else []
-    if not sel:
-        st.info("Klicke eine Aktie an für Details.")
+    # Ticker-Cards: 3 pro Zeile, klickbar
+    sel_key = "screener_selected_symbol"
+    cols_per_row = 3
+    for row_i in range(0, len(scored), cols_per_row):
+        chunk = scored.iloc[row_i:row_i + cols_per_row]
+        cols = st.columns(len(chunk), gap="small")
+        for col, (_, r) in zip(cols, chunk.iterrows()):
+            sym = r["symbol"]
+            score_val = int(r["score"])
+            score_max_val = int(r["score_max"])
+            price_val = r.get("price", 0)
+            ann_val = r.get("annualized_pct", 0)
+            put_strike = r.get("put_strike", "—")
+            put_dte = r.get("put_dte", "—")
+            sector_v = r.get("sector", "")
+            quadrant_v = r.get("sektor_quadrant", "Unbekannt")
+            ampel_v = r.get("sektor_ampel", "⚪")
+            qcolor = _QUADRANT_COLOR.get(quadrant_v, "#64748b")
+            score_pct = score_val / score_max_val * 100 if score_max_val else 0
+            score_color = "#00d4aa" if score_pct >= 70 else ("#f59e0b" if score_pct >= 50 else "#ef4444")
+            is_sel = st.session_state.get(sel_key) == sym
+            sel_border = "2px solid #00d4aa" if is_sel else "1px solid #1e2d45"
+            sel_glow = "box-shadow:0 0 16px rgba(0,212,170,0.3);" if is_sel else ""
+
+            with col:
+                st.markdown(f"""
+                <div style="background:#0d1426;border:{sel_border};border-radius:12px;
+                    padding:16px;margin-bottom:2px;{sel_glow}cursor:pointer;">
+                  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
+                    <div>
+                      <div style="font-family:'JetBrains Mono',monospace;font-size:20px;
+                          font-weight:700;color:#e2e8f0;letter-spacing:0.04em;">{sym}</div>
+                      <div style="font-size:11px;color:#64748b;margin-top:2px;">${price_val:.2f}</div>
+                    </div>
+                    <div style="text-align:right;">
+                      <div style="font-family:'JetBrains Mono',monospace;font-size:18px;
+                          font-weight:700;color:{score_color};">{score_val}<span style="font-size:11px;color:#475569;">/{score_max_val}</span></div>
+                      <div style="font-size:10px;color:#475569;">Score</div>
+                    </div>
+                  </div>
+                  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
+                    <div>
+                      <div style="font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:#64748b;">Ann. Rendite</div>
+                      <div style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:600;color:#00d4aa;">{ann_val:.1f}%</div>
+                    </div>
+                    <div>
+                      <div style="font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:#64748b;">Put Strike</div>
+                      <div style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#94a3b8;">${put_strike}</div>
+                    </div>
+                    <div>
+                      <div style="font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:#64748b;">DTE</div>
+                      <div style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#94a3b8;">{put_dte}d</div>
+                    </div>
+                  </div>
+                  <div style="background:#080c17;border-radius:6px;height:3px;margin-bottom:10px;">
+                    <div style="background:{score_color};height:3px;border-radius:6px;width:{score_pct:.0f}%;transition:width .3s;"></div>
+                  </div>
+                  <div style="display:inline-flex;align-items:center;gap:5px;
+                      background:rgba(255,255,255,0.04);border:1px solid {qcolor}33;
+                      border-radius:20px;padding:2px 8px;font-size:10px;color:{qcolor};">
+                    {ampel_v} {sector_v}
+                  </div>
+                </div>""", unsafe_allow_html=True)
+
+                btn_label = "✓ Ausgewählt" if is_sel else "Analysieren →"
+                if st.button(btn_label, key=f"screener_card_{sym}", use_container_width=True):
+                    st.session_state[sel_key] = sym
+                    st.rerun()
+
+    # Ausgewählte Aktie ermitteln
+    sel_sym = st.session_state.get(sel_key)
+    if not sel_sym or sel_sym not in scored["symbol"].values:
+        st.info("Karte anklicken für Details.")
         return
 
-    row = scored.iloc[sel[0]]
+    row = scored[scored["symbol"] == sel_sym].iloc[0]
     sector_en = row.get("sector", "")
     quadrant = sector_map.get(sector_en, "Unbekannt")
 
