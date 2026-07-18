@@ -1089,85 +1089,67 @@ def render_screener_tab():
 
     sel_key = "screener_selected_symbol"
 
-    # Cards: 4 pro Zeile, bewusst reduziert auf 3 Kernwerte + Score + Sektor
-    cols_per_row = 4
+    # Kompakte Cards: 5 pro Zeile
+    cols_per_row = 5
     for row_i in range(0, len(scored), cols_per_row):
         chunk = scored.iloc[row_i:row_i + cols_per_row]
         cols = st.columns(len(chunk), gap="small")
         for col, (_, r) in zip(cols, chunk.iterrows()):
-            sym          = r["symbol"]
-            score_val    = int(r["score"])
-            score_max_v  = int(r["score_max"])
-            ann_val      = float(r.get("annualized_pct") or 0)
-            put_dte      = r.get("put_dte", "—")
-            put_strike   = r.get("put_strike", "—")
-            sector_v     = r.get("sector", "")
-            quadrant_v   = r.get("sektor_quadrant", "Unbekannt")
-            ampel_v      = _QUADRANT_EMOJI.get(quadrant_v, "⚪")
-            qcolor       = _QUADRANT_COLOR.get(quadrant_v, "#64748b")
-            score_pct    = score_val / score_max_v * 100 if score_max_v else 0
-            # Score-Farbe: klar lesbar auf hellem Kartengrund
-            score_color  = "#059669" if score_pct >= 70 else ("#d97706" if score_pct >= 50 else "#dc2626")
-            is_sel       = st.session_state.get(sel_key) == sym
-
-            # Heller Kartengrund (#1e293b = schieferblau) statt fast-schwarz
-            bg       = "#162032" if not is_sel else "#0f2a1e"
-            border   = "2px solid #00d4aa" if is_sel else "1px solid #2d3f55"
+            sym         = r["symbol"]
+            score_val   = int(r["score"])
+            score_max_v = int(r["score_max"])
+            ann_val     = float(r.get("annualized_pct") or 0)
+            put_dte     = r.get("put_dte", "—")
+            put_strike  = r.get("put_strike", "—")
+            sector_v    = r.get("sector", "")
+            quadrant_v  = r.get("sektor_quadrant", "Unbekannt")
+            ampel_v     = _QUADRANT_EMOJI.get(quadrant_v, "⚪")
+            qcolor      = _QUADRANT_COLOR.get(quadrant_v, "#64748b")
+            score_pct   = score_val / score_max_v * 100 if score_max_v else 0
+            score_color = "#059669" if score_pct >= 70 else ("#d97706" if score_pct >= 50 else "#dc2626")
+            is_sel      = st.session_state.get(sel_key) == sym
+            bg     = "#162032" if not is_sel else "#0f2a1e"
+            border = "2px solid #00d4aa" if is_sel else "1px solid #2d3f55"
 
             with col:
                 st.markdown(f"""
-                <div style="background:{bg};border:{border};border-radius:10px;
-                    padding:14px 14px 10px;margin-bottom:2px;">
-
-                  <!-- Zeile 1: Symbol links, Score rechts -->
+                <div style="background:{bg};border:{border};border-radius:8px;
+                    padding:9px 10px 7px;margin-bottom:2px;">
                   <div style="display:flex;justify-content:space-between;
-                      align-items:baseline;margin-bottom:10px;">
-                    <span style="font-family:'JetBrains Mono',monospace;font-size:17px;
-                        font-weight:700;color:#f1f5f9;letter-spacing:.03em;">{sym}</span>
-                    <span style="font-size:11px;font-weight:600;
-                        color:{score_color};background:{score_color}1a;
-                        border:1px solid {score_color}55;border-radius:5px;
-                        padding:1px 7px;">{score_val}/{score_max_v}</span>
+                      align-items:baseline;margin-bottom:6px;">
+                    <span style="font-family:'JetBrains Mono',monospace;font-size:14px;
+                        font-weight:700;color:#f1f5f9;">{sym}</span>
+                    <span style="font-size:10px;font-weight:600;color:{score_color};
+                        background:{score_color}1a;border:1px solid {score_color}55;
+                        border-radius:4px;padding:0px 5px;">{score_val}/{score_max_v}</span>
                   </div>
-
-                  <!-- Zeile 2: 3 Kennzahlen -->
-                  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;
-                      gap:0;margin-bottom:10px;">
-                    <div style="border-right:1px solid #2d3f55;padding-right:8px;">
-                      <div style="font-size:9px;color:#7c93ad;text-transform:uppercase;
-                          letter-spacing:.07em;margin-bottom:2px;">Ann.%</div>
-                      <div style="font-family:'JetBrains Mono',monospace;font-size:15px;
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;margin-bottom:6px;">
+                    <div style="border-right:1px solid #2d3f55;padding-right:6px;">
+                      <div style="font-size:8px;color:#7c93ad;text-transform:uppercase;letter-spacing:.06em;">Ann.%</div>
+                      <div style="font-family:'JetBrains Mono',monospace;font-size:13px;
                           font-weight:700;color:#34d399;">{ann_val:.1f}%</div>
                     </div>
-                    <div style="border-right:1px solid #2d3f55;padding:0 8px;">
-                      <div style="font-size:9px;color:#7c93ad;text-transform:uppercase;
-                          letter-spacing:.07em;margin-bottom:2px;">Strike</div>
-                      <div style="font-family:'JetBrains Mono',monospace;font-size:15px;
-                          font-weight:600;color:#cbd5e1;">${put_strike}</div>
-                    </div>
-                    <div style="padding-left:8px;">
-                      <div style="font-size:9px;color:#7c93ad;text-transform:uppercase;
-                          letter-spacing:.07em;margin-bottom:2px;">DTE</div>
-                      <div style="font-family:'JetBrains Mono',monospace;font-size:15px;
+                    <div style="padding-left:6px;">
+                      <div style="font-size:8px;color:#7c93ad;text-transform:uppercase;letter-spacing:.06em;">DTE</div>
+                      <div style="font-family:'JetBrains Mono',monospace;font-size:13px;
                           font-weight:600;color:#cbd5e1;">{put_dte}d</div>
                     </div>
                   </div>
-
-                  <!-- Zeile 3: Sektor-Badge -->
-                  <div style="font-size:10px;color:{qcolor};opacity:.85;">
-                    {ampel_v} {sector_v or "—"}
-                  </div>
+                  <div style="font-size:9px;color:{qcolor};opacity:.8;">{ampel_v} {sector_v or "—"}</div>
                 </div>""", unsafe_allow_html=True)
 
-                btn_label = "✓ Gewählt" if is_sel else "→"
+                btn_label = "✓" if is_sel else "→"
                 if st.button(btn_label, key=f"screener_card_{sym}", use_container_width=True):
                     st.session_state[sel_key] = sym
                     st.rerun()
 
+    # Scroll-Anker — wird nach Karten gerendert, Analyse folgt direkt danach
+    st.markdown('<div id="screener-detail"></div>', unsafe_allow_html=True)
+
     # Ausgewählte Aktie ermitteln
     sel_sym = st.session_state.get(sel_key)
     if not sel_sym or sel_sym not in scored["symbol"].values:
-        st.info("Karte anklicken für Details.")
+        st.info("→ Karte anklicken für Analyse.")
         return
 
     row = scored[scored["symbol"] == sel_sym].iloc[0]
@@ -1175,6 +1157,14 @@ def render_screener_tab():
     quadrant = sector_map.get(sector_en, "Unbekannt")
 
     st.divider()
+
+    # Auto-Scroll zum Analyse-Bereich
+    components.html("""
+    <script>
+    window.parent.document.getElementById('screener-detail')
+        ?.scrollIntoView({behavior:'smooth', block:'start'});
+    </script>
+    """, height=0)
 
     # Header mit Symbol + Sektor-Badge + Vollanalyse-Button
     h1, h2 = st.columns([3, 1])
