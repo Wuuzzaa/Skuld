@@ -1048,16 +1048,21 @@ def _render_screener_table(df: pd.DataFrame, sel_key: str, top_n: int = 5):
 
     st.markdown("""
     <style>
-    .sc-sym   { font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:700; }
-    .sc-mono  { font-family:'JetBrains Mono',monospace; font-size:14px; }
+    .sc-sym   { font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:700; color:var(--text-primary); }
+    .sc-mono  { font-family:'JetBrains Mono',monospace; font-size:14px; color:var(--text-primary); }
     .sc-badge {
         display:inline-block; padding:2px 8px; border-radius:4px;
         font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:600;
     }
     .sc-hdr {
         font-size:11px; font-weight:600; text-transform:uppercase;
-        letter-spacing:.08em; color:var(--text-muted,#94a3b8);
+        letter-spacing:.08em; color:var(--text-muted);
     }
+    .sc-cell { padding:10px 4px; color:var(--text-primary); }
+    .sc-muted { color:var(--text-muted); font-size:13px; }
+    .sc-hr-thick { margin:4px 0 0; border:none; border-top:2px solid var(--bg-border); }
+    .sc-hr-thin  { margin:0; border:none; border-top:1px solid var(--bg-border); }
+    .sc-bar-bg { width:50px; height:6px; border-radius:3px; background:var(--bg-border); }
     </style>
     """, unsafe_allow_html=True)
 
@@ -1065,10 +1070,7 @@ def _render_screener_table(df: pd.DataFrame, sel_key: str, top_n: int = 5):
     hcols = st.columns([2.5, 1.1, 0.9, 1.3, 2.2, 2.8, 0.6])
     for hc, h in zip(hcols, ["Symbol", "Ann.%", "DTE", "IV-Rank", "Score", "Sektor", ""]):
         hc.markdown(f'<span class="sc-hdr">{h}</span>', unsafe_allow_html=True)
-    st.markdown(
-        '<hr style="margin:4px 0 0;border:none;border-top:2px solid var(--bg-border,#e2e8f0);">',
-        unsafe_allow_html=True,
-    )
+    st.markdown('<hr class="sc-hr-thick">', unsafe_allow_html=True)
 
     for i, (_, r) in enumerate(df.iterrows()):
         sym         = r["symbol"]
@@ -1090,53 +1092,51 @@ def _render_screener_table(df: pd.DataFrame, sel_key: str, top_n: int = 5):
             iv_text = "#f87171" if iv_v >= 60 else ("#fbbf24" if iv_v >= 30 else "#94a3b8")
             iv_html = f'<span class="sc-badge" style="background:{iv_bg};color:{iv_text};">{iv_v:.0f}</span>'
         else:
-            iv_html = '<span style="color:var(--text-muted,#94a3b8)">--</span>'
+            iv_html = '<span class="sc-muted">--</span>'
 
         score_pct = score_val / score_max_v * 100 if score_max_v else 0
         bar_color = "#059669" if score_pct >= 70 else ("#d97706" if score_pct >= 50 else "#dc2626")
         score_html = (
             f'<div style="display:flex;align-items:center;gap:6px;">'
-            f'<div style="width:50px;height:6px;border-radius:3px;background:var(--bg-border,#e2e8f0);">'
+            f'<div class="sc-bar-bg">'
             f'<div style="width:{score_pct:.0f}%;height:6px;border-radius:3px;background:{bar_color};"></div></div>'
             f'<span style="font-family:\'JetBrains Mono\',monospace;font-size:12px;color:{bar_color};">'
             f'{score_val}/{score_max_v}</span></div>'
         )
 
         top_prefix = "★ " if is_top else ""
-        sym_color  = "color:#00d4aa;" if is_top else "color:var(--text-primary,#0f172a);"
+        sym_color  = "color:#00d4aa;" if is_top else ""
         left_border = "#00d4aa" if is_top else "transparent"
         row_bg = "background:rgba(0,212,170,.07);border-radius:4px;" if is_sel else ""
 
         rcols = st.columns([2.5, 1.1, 0.9, 1.3, 2.2, 2.8, 0.6])
         with rcols[0]:
             st.markdown(
-                f'<div style="{row_bg}padding:10px 4px 10px 8px;'
+                f'<div class="sc-cell" style="{row_bg}padding-left:8px;'
                 f'border-left:3px solid {left_border};">'
-                f'<span style="font-family:\'JetBrains Mono\',monospace;font-size:15px;font-weight:700;{sym_color}">'
+                f'<span class="sc-sym" style="{sym_color}">'
                 f'{top_prefix}{sym}</span></div>',
                 unsafe_allow_html=True,
             )
         with rcols[1]:
             st.markdown(
-                f'<div style="padding:10px 4px;">'
+                f'<div class="sc-cell">'
                 f'<span style="font-family:\'JetBrains Mono\',monospace;font-size:14px;font-weight:700;color:{ann_color};">'
                 f'{ann_val:.1f}%</span></div>',
                 unsafe_allow_html=True,
             )
         with rcols[2]:
             st.markdown(
-                f'<div style="padding:10px 4px;font-family:\'JetBrains Mono\',monospace;'
-                f'font-size:14px;color:var(--text-primary,#0f172a);">{put_dte}d</div>',
+                f'<div class="sc-cell"><span class="sc-mono">{put_dte}d</span></div>',
                 unsafe_allow_html=True,
             )
         with rcols[3]:
-            st.markdown(f'<div style="padding:10px 4px;">{iv_html}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="sc-cell">{iv_html}</div>', unsafe_allow_html=True)
         with rcols[4]:
-            st.markdown(f'<div style="padding:10px 4px;">{score_html}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="sc-cell">{score_html}</div>', unsafe_allow_html=True)
         with rcols[5]:
             st.markdown(
-                f'<div style="padding:10px 4px;font-size:13px;color:var(--text-muted,#64748b);">'
-                f'{ampel_v} {sector_v}</div>',
+                f'<div class="sc-cell sc-muted">{ampel_v} {sector_v}</div>',
                 unsafe_allow_html=True,
             )
         with rcols[6]:
@@ -1145,10 +1145,7 @@ def _render_screener_table(df: pd.DataFrame, sel_key: str, top_n: int = 5):
                 st.session_state[sel_key] = sym
                 st.rerun()
 
-        st.markdown(
-            '<hr style="margin:0;border:none;border-top:1px solid var(--bg-border,#e2e8f0);">',
-            unsafe_allow_html=True,
-        )
+        st.markdown('<hr class="sc-hr-thin">', unsafe_allow_html=True)
 
 
 def render_screener_tab():
