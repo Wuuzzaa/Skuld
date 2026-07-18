@@ -347,35 +347,59 @@ def _render_iv_chart(symbol: str):
     fig = go.Figure()
 
     _dark = st.get_option("theme.base") != "light"
-    _ann_red   = "#ef4444"
-    _ann_green = "#22c55e" if _dark else "#16a34a"
-    _ann_mid   = "#94a3b8" if _dark else "#475569"
+
+    # ── Theme-Palette ─────────────────────────────────────────────────────
+    if _dark:
+        _line_main   = "#00d4aa"
+        _line_sec    = "#f59e0b"
+        _fill_high   = "rgba(239,68,68,0.10)"
+        _fill_low    = "rgba(34,197,94,0.10)"
+        _p75_col     = "#f87171"
+        _p50_col     = "#64748b"
+        _p25_col     = "#4ade80"
+        _grid_col    = "#1e2d45"
+        _axis_col    = "#94a3b8"
+        _font_col    = "#94a3b8"
+        _plot_bg     = "rgba(13,20,38,0.6)"
+    else:
+        _line_main   = "#0369a1"
+        _line_sec    = "#d97706"
+        _fill_high   = "rgba(220,38,38,0.08)"
+        _fill_low    = "rgba(22,163,74,0.08)"
+        _p75_col     = "#dc2626"
+        _p50_col     = "#475569"
+        _p25_col     = "#16a34a"
+        _grid_col    = "#cbd5e1"
+        _axis_col    = "#334155"
+        _font_col    = "#334155"
+        _plot_bg     = "rgba(0,0,0,0)"
 
     # 75-Percentil-Band (rot-Zone: teuer zu kaufen, gut zum Verkaufen)
-    fig.add_hrect(y0=p75, y1=100, fillcolor="rgba(239,68,68,0.07)",
+    fig.add_hrect(y0=p75, y1=100, fillcolor=_fill_high,
                   line_width=0, annotation_text="Hohe IV (gut für Prämienverkäufer)",
                   annotation_position="top left",
-                  annotation_font=dict(color=_ann_red, size=10))
+                  annotation_font=dict(color=_p75_col, size=10))
 
     # 25-Percentil-Band (grün-Zone)
-    fig.add_hrect(y0=0, y1=p25, fillcolor="rgba(34,197,94,0.07)",
+    fig.add_hrect(y0=0, y1=p25, fillcolor=_fill_low,
                   line_width=0, annotation_text="Niedrige IV",
                   annotation_position="bottom left",
-                  annotation_font=dict(color=_ann_green, size=10))
+                  annotation_font=dict(color=_p25_col, size=10))
 
     # Percentil-Linien
-    for val, color, label in [(p25, _ann_green, "P25"), (p50, _ann_mid, "P50"), (p75, _ann_red, "P75")]:
+    for val, color, label in [(p25, _p25_col, "P25"), (p50, _p50_col, "P50"), (p75, _p75_col, "P75")]:
         fig.add_hline(y=val, line_dash="dash", line_color=color, line_width=1,
                       annotation_text=f"{label}: {val:.0f}",
                       annotation_font=dict(color=color, size=10))
 
     # IV-Rank Area
+    _fill_main = "rgba(0,212,170,0.12)" if _dark else "rgba(3,105,161,0.10)"
     fig.add_trace(go.Scatter(
         x=iv_df["date"], y=iv_df["iv_rank"],
         mode="lines", name="IV-Rank",
-        line=dict(color="#00d4aa", width=2),
+        line=dict(color=_line_main, width=2),
         fill="tozeroy",
-        fillcolor="rgba(0,212,170,0.12)",
+        fillcolor=_fill_main,
         hovertemplate="<b>%{x|%d.%m.%Y}</b><br>IV-Rank: %{y:.1f}<extra></extra>",
     ))
 
@@ -384,16 +408,10 @@ def _render_iv_chart(symbol: str):
         fig.add_trace(go.Scatter(
             x=iv_df["date"], y=iv_df["iv_percentile"],
             mode="lines", name="IV-Percentile",
-            line=dict(color="#f59e0b", width=1.5, dash="dot"),
+            line=dict(color=_line_sec, width=1.5, dash="dot"),
             opacity=0.7,
             hovertemplate="<b>%{x|%d.%m.%Y}</b><br>IV-%ile: %{y:.1f}<extra></extra>",
         ))
-
-    _dark = st.get_option("theme.base") != "light"
-    _plot_bg   = "rgba(13,20,38,0.6)"  if _dark else "rgba(241,245,249,0.6)"
-    _grid_col  = "#1e2d45"             if _dark else "#cbd5e1"
-    _axis_col  = "#64748b"             if _dark else "#475569"
-    _font_col  = "#94a3b8"             if _dark else "#334155"
 
     fig.update_layout(
         height=260,
