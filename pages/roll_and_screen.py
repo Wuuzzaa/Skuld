@@ -1613,14 +1613,225 @@ Der Chart zeigt den **IV-Rank** der letzten ~12 Monate.
                            "Tagesvolumen: heute gehandelte Kontrakte. "
                            "Beide sollten > 100 sein für faire Bid/Ask-Spreads.")
 
+            # ── Externe Links + interne Navigation ───────────────────────
+            st.divider()
+            _sym = row["symbol"]
+            lc1, lc2, lc3, lc4 = st.columns(4)
+            lc1.link_button(
+                "TradingView Chart",
+                f"https://www.tradingview.com/chart/?symbol={_sym}",
+                use_container_width=True,
+            )
+            lc2.link_button(
+                "Finviz Profil",
+                f"https://finviz.com/quote.ashx?t={_sym}",
+                use_container_width=True,
+            )
+            lc3.link_button(
+                "Yahoo Finance",
+                f"https://finance.yahoo.com/quote/{_sym}",
+                use_container_width=True,
+            )
+            with lc4:
+                if st.button(f"Vollanalyse {_sym} →", key="put_goto_symbol", use_container_width=True, type="secondary"):
+                    st.session_state["symbol_page_symbol"] = _sym
+                    st.switch_page("pages/symbolpage.py")
+
+
+# ---------------------------------------------------------------------------
+# Tab 3: Put-Browser
+# ---------------------------------------------------------------------------
+@st.cache_data(ttl=300)
+def _load_all_puts(dte_min, dte_max, min_oi, min_vol, min_premium_share,
+                   price_min, price_max, min_puffer_pct):
+    puffer_factor = 1.0 - min_puffer_pct / 100.0
+    return select_into_dataframe(
+        query=f"""
+        SELECT
+            o.symbol,
+            o.strike_price,
+            o.expiration_date,
+            o.days_to_expiration,
+            o.premium_option_price,
+            o.open_interest,
+            o.day_volume,
+            o.greeks_delta,
+            o.implied_volatility,
+            o.iv_rank,
+            o.live_stock_price,
+            ROUND(((o.live_stock_price - o.strike_price) / NULLIF(o.live_stock_price,0) * 100)::numeric, 1) AS puffer_pct,
+            ROUND((o.premium_option_price / NULLIF(o.strike_price,0) * 100)::numeric, 2)                    AS rendite_pct,
+            ROUND((o.premium_option_price / NULLIF(o.strike_price,0) * 365.0 / NULLIF(o.days_to_expiration,0) * 100)::numeric, 1) AS ann_pct
+        FROM "OptionDataMerged" o
+        WHERE o.contract_type = 'put'
+          AND o.days_to_expiration BETWEEN {int(dte_min)} AND {int(dte_max)}
+          AND o.open_interest >= {int(min_oi)}
+          AND o.day_volume >= {int(min_vol)}
+          AND o.premium_option_price >= {float(min_premium_share)}
+          AND o.live_stock_price BETWEEN {float(price_min)} AND {float(price_max)}
+          AND o.strike_price <= o.live_stock_price * {float(puffer_factor)}
+        ORDER BY ann_pct DESC NULLS LAST
+        LIMIT 500
+        """,
+    )
+
+
+def render_put_tab():
+    st.subheader("🎯 Put-Browser — alle handelbaren Puts")
+    st.caption("Puts direkt durchsuchen — unabhängig vom Aktien-Screener. Klick auf Zeile → Aktiendetails.")
+
+    fc1, fc2, fc3, fc4, fc5 = st.columns(5)
+    pt_dte_min, pt_dte_max = fc1.slider("DTE", 7, 90, (21, 45), 1, key="pt_dte")
+    pt_puffer   = fc2.slider("Min. Puffer %", 0, 30, 5, 1, key="pt_puffer")
+    pt_ann      = fc3.slider("Min. Ann. %", 0, 50, 12, 1, key="pt_ann")
+    pt_price_min, pt_price_max = fc4.slider("Kurs ($)", 1, 500, (15, 150), 1, key="pt_price")
+    pt_min_oi   = fc5.number_input("Min. OI", min_value=10, value=100, step=50, key="pt_oi")
+
+    if st.button("🔍 Puts laden", type="primary", key="run_put_tab"):
+        st.session_state["put_tab_ran"] = True
+    if not st.session_state.get("put_tab_ran"):
+        st.info("Filter einstellen und 'Puts laden' klicken.")
+        return
+
+    with st.spinner("Lade Puts …"):
+        puts = _load_all_puts(
+            pt_dte_min, pt_dte_max, int(pt_min_oi), 20,
+            0.10, pt_price_min, pt_price_max, pt_puffer,
+        )
+
+    if puts is None or puts.empty:
+        st.warning("Keine Puts gefunden. Filter lockern.")
+        return
+
+    puts = puts[puts["ann_pct"] >= pt_ann]
+    if puts.empty:
+        st.warning(f"Keine Puts mit Ann. ≥ {pt_ann}%.")
+        return
+
+    st.markdown(f"**{len(puts)} Puts** (max. 500, sortiert nach Ann.%)")
+
+    # Tabelle
+    sel_put_key = "put_tab_selected"
+    sel_put     = st.session_state.get(sel_put_key)
+
+    st.markdown("""
+    <style>
+    .pt-hdr { font-size:11px;font-weight:600;text-transform:uppercase;
+              letter-spacing:.08em;color:var(--text-muted); }
+    .pt-cell { padding:9px 4px; color:var(--text-primary); font-size:13px; }
+    .pt-mono { font-family:'JetBrains Mono',monospace; }
+    .pt-badge { display:inline-block;padding:1px 7px;border-radius:4px;
+                font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600; }
+    .pt-hr { margin:0;border:none;border-top:1px solid var(--bg-border); }
+    </style>
+    """, unsafe_allow_html=True)
+
+    hcols = st.columns([1.5, 1.0, 1.0, 0.8, 1.1, 1.1, 1.0, 1.0, 0.5])
+    for hc, h in zip(hcols, ["Symbol", "Kurs", "Strike", "DTE", "Puffer%", "Ann.%", "Prämie", "IV-Rank", ""]):
+        hc.markdown(f'<span class="pt-hdr">{h}</span>', unsafe_allow_html=True)
+    st.markdown('<hr style="margin:4px 0 0;border:none;border-top:2px solid var(--bg-border);">', unsafe_allow_html=True)
+
+    for _, r in puts.iterrows():
+        sym      = r["symbol"]
+        kurs     = float(r["live_stock_price"]) if pd.notna(r["live_stock_price"]) else 0
+        strike   = float(r["strike_price"])
+        dte      = int(r["days_to_expiration"])
+        puffer   = float(r["puffer_pct"]) if pd.notna(r["puffer_pct"]) else 0
+        ann      = float(r["ann_pct"]) if pd.notna(r["ann_pct"]) else 0
+        praemie  = float(r["premium_option_price"])
+        iv_rank  = r.get("iv_rank")
+        is_sel   = sel_put == f"{sym}_{strike}_{dte}"
+
+        ann_color = "#34d399" if ann >= 15 else ("#f59e0b" if ann >= 8 else "#ef4444")
+        puffer_color = "#34d399" if puffer >= 10 else ("#f59e0b" if puffer >= 5 else "#ef4444")
+        row_bg = "background:rgba(0,212,170,.07);border-radius:3px;" if is_sel else ""
+
+        if iv_rank is not None and pd.notna(iv_rank):
+            iv_v = float(iv_rank)
+            iv_bg   = "rgba(239,68,68,.15)" if iv_v >= 60 else ("rgba(245,158,11,.15)" if iv_v >= 30 else "rgba(148,163,184,.12)")
+            iv_text = "#f87171" if iv_v >= 60 else ("#fbbf24" if iv_v >= 30 else "#94a3b8")
+            iv_html = f'<span class="pt-badge" style="background:{iv_bg};color:{iv_text};">{iv_v:.0f}</span>'
+        else:
+            iv_html = '<span class="pt-cell" style="color:var(--text-muted);">--</span>'
+
+        rcols = st.columns([1.5, 1.0, 1.0, 0.8, 1.1, 1.1, 1.0, 1.0, 0.5])
+        with rcols[0]:
+            st.markdown(f'<div class="pt-cell pt-mono" style="{row_bg}font-weight:700;">{sym}</div>', unsafe_allow_html=True)
+        with rcols[1]:
+            st.markdown(f'<div class="pt-cell pt-mono">${kurs:.2f}</div>', unsafe_allow_html=True)
+        with rcols[2]:
+            st.markdown(f'<div class="pt-cell pt-mono">${strike:.2f}</div>', unsafe_allow_html=True)
+        with rcols[3]:
+            st.markdown(f'<div class="pt-cell pt-mono">{dte}d</div>', unsafe_allow_html=True)
+        with rcols[4]:
+            st.markdown(f'<div class="pt-cell pt-mono" style="color:{puffer_color};font-weight:600;">{puffer:.1f}%</div>', unsafe_allow_html=True)
+        with rcols[5]:
+            st.markdown(f'<div class="pt-cell pt-mono" style="color:{ann_color};font-weight:700;">{ann:.1f}%</div>', unsafe_allow_html=True)
+        with rcols[6]:
+            st.markdown(f'<div class="pt-cell pt-mono">${praemie:.2f}</div>', unsafe_allow_html=True)
+        with rcols[7]:
+            st.markdown(f'<div class="pt-cell">{iv_html}</div>', unsafe_allow_html=True)
+        with rcols[8]:
+            if st.button("→", key=f"pt_btn_{sym}_{strike}_{dte}"):
+                st.session_state[sel_put_key] = f"{sym}_{strike}_{dte}"
+                st.session_state["pt_scroll_n"] = st.session_state.get("pt_scroll_n", 0) + 1
+                st.rerun()
+
+        st.markdown('<hr class="pt-hr">', unsafe_allow_html=True)
+
+    # Detail-Bereich
+    if not sel_put:
+        return
+
+    parts = sel_put.split("_")
+    if len(parts) < 3:
+        return
+    sel_sym = parts[0]
+    sel_row = puts[(puts["symbol"] == sel_sym) &
+                   (puts["strike_price"].astype(str) == parts[1]) &
+                   (puts["days_to_expiration"].astype(str) == parts[2])]
+    if sel_row.empty:
+        return
+    p = sel_row.iloc[0]
+
+    _pt_scroll = st.session_state.get("pt_scroll_n", 0)
+    st.markdown(f'<div id="pt-detail-{_pt_scroll}"></div><script>(function(){{var e=document.getElementById("pt-detail-{_pt_scroll}");if(e)e.scrollIntoView({{behavior:"smooth",block:"start"}});}})();</script>', unsafe_allow_html=True)
+    st.divider()
+    st.markdown(f"### {sel_sym} — ${float(p['strike_price']):.2f} Put · {p['expiration_date']} · {int(p['days_to_expiration'])}d")
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Kurs", f"${float(p['live_stock_price']):.2f}")
+    m1.metric("Prämie", f"${float(p['premium_option_price']):.2f}")
+    m2.metric("Puffer", f"{float(p['puffer_pct']):.1f}%")
+    m2.metric("Rendite", f"{float(p['rendite_pct']):.2f}%")
+    m3.metric("Ann.%", f"{float(p['ann_pct']):.1f}%")
+    iv_disp = f"{float(p['implied_volatility'])*100:.1f}%" if pd.notna(p.get("implied_volatility")) else "--"
+    m3.metric("IV", iv_disp)
+    delta_disp = f"{float(p['greeks_delta']):.3f}" if pd.notna(p.get("greeks_delta")) else "--"
+    m4.metric("Delta", delta_disp)
+    iv_rank_disp = f"{float(p['iv_rank']):.0f}" if pd.notna(p.get("iv_rank")) else "--"
+    m4.metric("IV-Rank", iv_rank_disp)
+
+    st.divider()
+    lc1, lc2, lc3, lc4 = st.columns(4)
+    lc1.link_button("TradingView", f"https://www.tradingview.com/chart/?symbol={sel_sym}", use_container_width=True)
+    lc2.link_button("Finviz", f"https://finviz.com/quote.ashx?t={sel_sym}", use_container_width=True)
+    lc3.link_button("Yahoo Finance", f"https://finance.yahoo.com/quote/{sel_sym}", use_container_width=True)
+    with lc4:
+        if st.button(f"Vollanalyse {sel_sym} →", key="pt_goto_symbol", type="secondary", use_container_width=True):
+            st.session_state["symbol_page_symbol"] = sel_sym
+            st.switch_page("pages/symbolpage.py")
+
 
 # ---------------------------------------------------------------------------
 # Seite
 # ---------------------------------------------------------------------------
 _inject_css()
 
-tab_screener, tab_roller = st.tabs(["📈 Screener (Neuer Einstieg)", "🔄 Roller (Rollen)"])
+tab_screener, tab_roller, tab_puts = st.tabs(["📈 Screener (Neuer Einstieg)", "🔄 Roller (Rollen)", "🎯 Put-Browser"])
 with tab_screener:
     render_screener_tab()
 with tab_roller:
     render_roller_tab()
+with tab_puts:
+    render_put_tab()
