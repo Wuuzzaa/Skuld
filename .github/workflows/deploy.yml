@@ -30,6 +30,7 @@ on:
         type: choice
         options:
           - production
+          - hetzner
           - home
         default: production
       ref:

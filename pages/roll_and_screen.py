@@ -17,7 +17,9 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, date
 
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
+import streamlit.components.v1 as components
 
 from config import PATH_DATABASE_QUERY_FOLDER, RISK_FREE_RATE
 from src.database import select_into_dataframe
@@ -26,11 +28,76 @@ from src.page_display_dataframe import page_display_dataframe
 from src.ui_utils import filter_by_expiration_type
 from src.utils.option_utils import get_expiration_type
 from src.black_scholes import PutValue
-from src.roll_support_calc import (position_status, roll_candidate, roll_candidate_explained,
-                                    roll_trigger_score, time_value_percentage)
-from src.put_screener import score_candidates, score_breakdown, put_metrics, DEFAULT_PE_MAX
+from src.roll_support_calc import position_status, roll_candidate, roll_candidate_explained
+from src.put_screener import (
+    score_candidates, score_breakdown, put_metrics, put_evaluation,
+    DEFAULT_PE_MAX, DEFAULT_MIN_PUFFER_PCT,
+)
 
 logger = logging.getLogger(os.path.basename(__file__))
+
+
+# ---------------------------------------------------------------------------
+# Dark-Theme CSS — Bloomberg-Desk Aesthetic
+# ---------------------------------------------------------------------------
+def _inject_css():
+    st.markdown("""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+    :root {
+        --bg-base:      #080c17;
+        --bg-card:      #0d1426;
+        --bg-card2:     #111827;
+        --bg-border:    #1e2d45;
+        --teal:         #00d4aa;
+        --teal-dim:     rgba(0,212,170,0.15);
+        --amber:        #f59e0b;
+        --amber-dim:    rgba(245,158,11,0.15);
+        --red:          #ef4444;
+        --red-dim:      rgba(239,68,68,0.15);
+        --green:        #22c55e;
+        --text-primary: #e2e8f0;
+        --text-muted:   #64748b;
+        --text-dim:     #94a3b8;
+        --mono:         'JetBrains Mono', monospace;
+        --sans:         'DM Sans', sans-serif;
+    }
+
+    /* Base overrides */
+    .stApp { background: var(--bg-base) !important; font-family: var(--sans); }
+    .stTabs [data-baseweb="tab-list"] { background: var(--bg-card); border-radius: 8px; padding: 4px; gap: 4px; }
+    .stTabs [data-baseweb="tab"] { color: var(--text-muted) !important; border-radius: 6px; padding: 8px 20px; font-family: var(--sans); font-weight: 500; }
+    .stTabs [aria-selected="true"] { background: var(--bg-border) !important; color: var(--teal) !important; }
+
+    /* Metric overrides */
+    [data-testid="stMetric"] { background: var(--bg-card2); border: 1px solid var(--bg-border); border-radius: 8px; padding: 12px 16px; }
+    [data-testid="stMetricLabel"] { color: var(--text-muted) !important; font-size: 11px !important; text-transform: uppercase; letter-spacing: 0.08em; font-family: var(--sans); }
+    [data-testid="stMetricValue"] { color: var(--text-primary) !important; font-family: var(--mono) !important; font-size: 1.4rem !important; }
+
+    /* Dataframe */
+    .stDataFrame { border: 1px solid var(--bg-border) !important; border-radius: 8px; overflow: hidden; }
+
+    /* Buttons */
+    .stButton > button[kind="primary"] {
+        background: var(--teal) !important; color: #000 !important; font-weight: 600;
+        border: none; border-radius: 6px; font-family: var(--sans);
+    }
+    .stButton > button[kind="secondary"] {
+        background: var(--bg-card2) !important; color: var(--teal) !important;
+        border: 1px solid var(--teal) !important; border-radius: 6px; font-family: var(--sans);
+    }
+
+    /* Expander */
+    .streamlit-expanderHeader { background: var(--bg-card) !important; border: 1px solid var(--bg-border) !important; border-radius: 8px; color: var(--text-dim) !important; }
+
+    /* Mono numbers in tables */
+    .mono { font-family: var(--mono); }
+
+    /* Divider */
+    hr { border-color: var(--bg-border) !important; }
+    </style>
+    """, unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------------------
@@ -48,10 +115,11 @@ def _parse_date(value):
     return pd.to_datetime(value).date()
 
 
+# ---------------------------------------------------------------------------
+# DB-Loader (alle gecacht außer Live-Preise)
+# ---------------------------------------------------------------------------
 @st.cache_data(ttl=300)
 def _load_symbols():
-    """Symbol-Werthilfe aus der aktuellen Kette (OptionDataMerged) — schlank & schnell,
-    wie symbolpage/watchlist. Reiner DB-Read -> darf cachen."""
     df = select_into_dataframe(
         query='SELECT DISTINCT symbol FROM "OptionDataMerged" ORDER BY symbol ASC',
     )
@@ -60,9 +128,19 @@ def _load_symbols():
     return df["symbol"].dropna().astype(str).tolist()
 
 
+@st.cache_data(ttl=600)
+def _load_sector_quadrants() -> dict:
+    """Gibt {sector_en: quadrant} zurück, z.B. {'Technology': 'Leading'}."""
+    df = select_into_dataframe(
+        sql_file_path=PATH_DATABASE_QUERY_FOLDER / "sector_quadrants.sql",
+    )
+    if df is None or df.empty:
+        return {}
+    return dict(zip(df["sector_en"], df["quadrant"]))
+
+
 @st.cache_data(ttl=300)
 def _load_put_history(symbol, entry_date, dte_min, dte_max):
-    """Puts eines Symbols am Einstiegsdatum im DTE-Bereich. Reiner DB-Read -> darf cachen."""
     return select_into_dataframe(
         sql_file_path=PATH_DATABASE_QUERY_FOLDER / "roll_put_history.sql",
         params={"symbol": symbol, "entry_date": str(entry_date),
@@ -71,40 +149,43 @@ def _load_put_history(symbol, entry_date, dte_min, dte_max):
 
 
 @st.cache_data(ttl=300)
-def _load_roll_candidates(symbol, K, dte_min, dte_max, min_oi, min_vol, delta_min, delta_max):
-    """Aktuelle Put-Kette als Roll-Kandidaten. Reiner DB-Read -> darf cachen."""
+def _load_roll_candidates(symbol, K, dte_min, dte_max):
     return select_into_dataframe(
         sql_file_path=PATH_DATABASE_QUERY_FOLDER / "roll_candidates.sql",
-        params={
-            "symbol": symbol,
-            "K": float(K),
-            "dte_min": int(dte_min),
-            "dte_max": int(dte_max),
-            "min_oi": int(min_oi),
-            "min_vol": int(min_vol),
-            "delta_min": float(delta_min),
-            "delta_max": float(delta_max),
-        },
+        params={"symbol": symbol, "K": float(K), "dte_min": int(dte_min), "dte_max": int(dte_max)},
     )
 
 
-# NICHT gecacht: immer frisch (User-Wunsch), aber kein externer Call.
-def _current_put_price(option_osi, symbol):
-    """Heutiger Wert des bestehenden Puts = letzter verfügbarer day_close aus der DB.
+@st.cache_data(ttl=300)
+def _load_iv_history(symbol: str) -> pd.DataFrame | None:
+    """Historische IV + IV-Rank für den Chart — letztes Jahr direkt in SQL begrenzt."""
+    return select_into_dataframe(
+        query="""
+            SELECT date, symbol,
+                   ROUND(iv::numeric * 100, 2)         AS iv,
+                   ROUND(iv_rank::numeric, 2)           AS iv_rank,
+                   ROUND(iv_percentile::numeric, 2)     AS iv_percentile
+            FROM "StockImpliedVolatilityMassiveHistory"
+            WHERE symbol = :symbol
+              AND date >= CURRENT_DATE - INTERVAL '365 days'
+              AND date <= CURRENT_DATE
+            ORDER BY date ASC
+        """,
+        params={"symbol": symbol},
+    )
 
-    Kein Live-YahooQuery (User-Wunsch). Nimmt den jüngsten day_close bis heute.
-    Rückgabe: (preis_je_aktie, quelle_str) oder (None, grund).
-    """
+
+def _current_put_price(option_osi, symbol):
     sql = """
         SELECT a.day_close AS premium_option_price, a.date
         FROM (
             SELECT date, option_osi, symbol, day_close FROM "OptionDataMassiveHistory"
-            WHERE option_osi = :osi AND symbol = :symbol AND date <= CURRENT_DATE
+            WHERE date <> CURRENT_DATE
             UNION ALL
             SELECT CURRENT_DATE AS date, option_osi, symbol, day_close FROM "OptionDataMassive"
-            WHERE option_osi = :osi AND symbol = :symbol
         ) AS a
-        WHERE a.date <= CURRENT_DATE
+        WHERE a.option_osi = :osi AND a.symbol = :symbol
+          AND a.date <= CURRENT_DATE
         ORDER BY a.date DESC
         LIMIT 1
     """
@@ -116,19 +197,15 @@ def _current_put_price(option_osi, symbol):
 
 
 def _current_stock_price(symbol):
-    """Aktueller Aktienkurs: letzter Close aus der Historie (1-Wochen-Fenster). NICHT gecacht."""
     sql = """
         SELECT b.close, b.date
         FROM (
-                        SELECT close, date, symbol FROM "StockPricesYahooHistory"
-                        WHERE symbol = :symbol
-                            AND date <= CURRENT_DATE
-                            AND date >= CURRENT_DATE - INTERVAL '1 week'
+            SELECT * FROM "StockPricesYahooHistory" WHERE date <> CURRENT_DATE
             UNION ALL
-                        SELECT close, CURRENT_DATE AS date, symbol FROM "StockPricesYahoo"
-                        WHERE symbol = :symbol
+            SELECT CURRENT_DATE AS date, * FROM "StockPricesYahoo"
         ) AS b
-                WHERE b.date <= CURRENT_DATE
+        WHERE b.symbol = :symbol
+          AND b.date <= CURRENT_DATE
           AND b.date >= CURRENT_DATE - INTERVAL '1 week'
         ORDER BY b.date DESC
         LIMIT 1
@@ -140,14 +217,291 @@ def _current_stock_price(symbol):
 
 
 # ---------------------------------------------------------------------------
-# Tab 2 — Roller (Kern-Feature)
+# Quadrant-Helpers
+# ---------------------------------------------------------------------------
+_QUADRANT_EMOJI = {
+    "Leading":   "🟢",
+    "Improving": "🟡",
+    "Weakening": "🟠",
+    "Lagging":   "🔴",
+    "Unbekannt": "⚪",
+}
+_QUADRANT_COLOR = {
+    "Leading":   "#00d4aa",
+    "Improving": "#f59e0b",
+    "Weakening": "#f97316",
+    "Lagging":   "#ef4444",
+    "Unbekannt": "#64748b",
+}
+
+
+def _sector_badge_html(sector: str, quadrant: str) -> str:
+    emoji = _QUADRANT_EMOJI.get(quadrant, "⚪")
+    color = _QUADRANT_COLOR.get(quadrant, "#64748b")
+    return (
+        f'<span style="display:inline-flex;align-items:center;gap:6px;'
+        f'background:rgba(255,255,255,0.05);border:1px solid {color}44;'
+        f'border-radius:20px;padding:3px 10px;font-size:12px;color:{color};'
+        f'font-family:\'DM Sans\',sans-serif;font-weight:500;">'
+        f'{emoji} {sector} · {quadrant}</span>'
+    )
+
+
+# ---------------------------------------------------------------------------
+# IV-Rank Chart
+# ---------------------------------------------------------------------------
+def _render_iv_chart(symbol: str):
+    iv_df = _load_iv_history(symbol)
+    if iv_df is None or iv_df.empty:
+        st.caption("Keine IV-Rank-Historie verfügbar.")
+        return
+
+    iv_df = iv_df.sort_values("date")
+    iv_df["date"] = pd.to_datetime(iv_df["date"])
+
+    # Percentil-Bänder über den Zeitraum
+    iv_vals = iv_df["iv_rank"].dropna()
+    p25 = iv_vals.quantile(0.25)
+    p50 = iv_vals.quantile(0.50)
+    p75 = iv_vals.quantile(0.75)
+
+    fig = go.Figure()
+
+    # 75-Percentil-Band (rot-Zone: teuer zu kaufen, gut zum Verkaufen)
+    fig.add_hrect(y0=p75, y1=100, fillcolor="rgba(239,68,68,0.07)",
+                  line_width=0, annotation_text="Hohe IV (gut für Prämienverkäufer)",
+                  annotation_position="top left",
+                  annotation_font=dict(color="#ef4444", size=10))
+
+    # 25-Percentil-Band (grün-Zone)
+    fig.add_hrect(y0=0, y1=p25, fillcolor="rgba(34,197,94,0.07)",
+                  line_width=0, annotation_text="Niedrige IV",
+                  annotation_position="bottom left",
+                  annotation_font=dict(color="#22c55e", size=10))
+
+    # Percentil-Linien
+    for val, color, label in [(p25, "#22c55e", "P25"), (p50, "#64748b", "P50"), (p75, "#ef4444", "P75")]:
+        fig.add_hline(y=val, line_dash="dash", line_color=color, line_width=1,
+                      annotation_text=f"{label}: {val:.0f}",
+                      annotation_font=dict(color=color, size=10))
+
+    # IV-Rank Area
+    fig.add_trace(go.Scatter(
+        x=iv_df["date"], y=iv_df["iv_rank"],
+        mode="lines", name="IV-Rank",
+        line=dict(color="#00d4aa", width=2),
+        fill="tozeroy",
+        fillcolor="rgba(0,212,170,0.12)",
+        hovertemplate="<b>%{x|%d.%m.%Y}</b><br>IV-Rank: %{y:.1f}<extra></extra>",
+    ))
+
+    # IV-Percentile als zweite Linie (gedimmt)
+    if "iv_percentile" in iv_df.columns and iv_df["iv_percentile"].notna().any():
+        fig.add_trace(go.Scatter(
+            x=iv_df["date"], y=iv_df["iv_percentile"],
+            mode="lines", name="IV-Percentile",
+            line=dict(color="#f59e0b", width=1.5, dash="dot"),
+            opacity=0.7,
+            hovertemplate="<b>%{x|%d.%m.%Y}</b><br>IV-%ile: %{y:.1f}<extra></extra>",
+        ))
+
+    fig.update_layout(
+        height=260,
+        margin=dict(l=0, r=0, t=8, b=0),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(13,20,38,0.6)",
+        font=dict(family="JetBrains Mono, monospace", color="#94a3b8", size=11),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0,
+                    bgcolor="rgba(0,0,0,0)", font=dict(size=11)),
+        xaxis=dict(showgrid=False, zeroline=False, color="#64748b"),
+        yaxis=dict(showgrid=True, gridcolor="#1e2d45", zeroline=False,
+                   range=[0, 100], color="#64748b", title="IV-Rank"),
+        hovermode="x unified",
+    )
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+    # Aktueller Wert + Einordnung
+    latest = iv_df.iloc[-1]
+    rank_now = latest.get("iv_rank")
+    if rank_now is not None and pd.notna(rank_now):
+        if rank_now >= p75:
+            zone = "🔴 **hoch** — Prämien sind überdurchschnittlich hoch: guter Zeitpunkt für Prämienverkauf"
+        elif rank_now <= p25:
+            zone = "🟢 **niedrig** — IV im unteren Quartil: Prämien eher mager"
+        else:
+            zone = "🟡 **mittel** — IV im normalen Bereich"
+        st.caption(f"Aktueller IV-Rank: **{rank_now:.1f}** — {zone}")
+
+
+# ---------------------------------------------------------------------------
+# Position-Card HTML (Roller)
+# ---------------------------------------------------------------------------
+def _render_position_card(symbol: str, K: float, S: float, p_today_share: float,
+                           P_eroeffnung: float, P_heute: float, n: int,
+                           expiration_date, price_src: str):
+    pos = position_status(K=K, S=S, P_eroeffnung=P_eroeffnung, P_heute=P_heute, n=int(n))
+    dte_rest = (_parse_date(expiration_date) - date.today()).days
+
+    pnl_pct = pos["pnl_pct"]
+    pnl_abs = pos["pnl_abs"]
+    # Balken: 0% = neutral (grau), positiv = teal, negativ = rot
+    bar_pct = min(abs(pnl_pct), 100)
+    bar_color = "#00d4aa" if pnl_pct >= 0 else "#ef4444"
+    pnl_sign = "+" if pnl_pct >= 0 else ""
+    pnl_abs_sign = "+" if pnl_abs >= 0 else ""
+    status_label = "IM GEWINN" if pnl_pct >= 0 else "IM VERLUST"
+    status_color = "#00d4aa" if pnl_pct >= 0 else "#ef4444"
+
+    html = f"""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=DM+Sans:wght@300;400;500;600&display=swap');
+    .pos-card {{
+        background: linear-gradient(135deg, #0d1426 0%, #111827 100%);
+        border: 1px solid #1e2d45;
+        border-radius: 12px;
+        padding: 20px 24px;
+        font-family: 'DM Sans', sans-serif;
+        margin-bottom: 4px;
+    }}
+    .pos-header {{
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+    }}
+    .pos-symbol {{
+        font-size: 22px;
+        font-weight: 600;
+        color: #e2e8f0;
+        letter-spacing: 0.05em;
+    }}
+    .pos-status {{
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.12em;
+        padding: 4px 12px;
+        border-radius: 20px;
+        color: {status_color};
+        background: {status_color}22;
+        border: 1px solid {status_color}44;
+    }}
+    .pos-grid {{
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+        margin-bottom: 16px;
+    }}
+    .pos-cell {{ }}
+    .pos-label {{
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: #64748b;
+        margin-bottom: 4px;
+    }}
+    .pos-value {{
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 16px;
+        font-weight: 600;
+        color: #e2e8f0;
+    }}
+    .pos-value.teal {{ color: #00d4aa; }}
+    .pos-value.red {{ color: #ef4444; }}
+    .pos-bar-wrap {{
+        background: #1e2d45;
+        border-radius: 4px;
+        height: 6px;
+        overflow: hidden;
+        margin-top: 4px;
+    }}
+    .pos-bar {{
+        height: 6px;
+        border-radius: 4px;
+        background: {bar_color};
+        width: {bar_pct:.1f}%;
+        transition: width 0.4s ease;
+    }}
+    .pos-footer {{
+        font-size: 11px;
+        color: #64748b;
+        margin-top: 8px;
+    }}
+    </style>
+    <div class="pos-card">
+        <div class="pos-header">
+            <div class="pos-symbol">{symbol} · ${K:.2f} Put · {n}×</div>
+            <div class="pos-status">{status_label} {pnl_sign}{pnl_pct:.1f}%</div>
+        </div>
+        <div class="pos-grid">
+            <div class="pos-cell">
+                <div class="pos-label">Aktienkurs</div>
+                <div class="pos-value">${S:.2f}</div>
+            </div>
+            <div class="pos-cell">
+                <div class="pos-label">Put heute</div>
+                <div class="pos-value">${p_today_share:.2f}</div>
+            </div>
+            <div class="pos-cell">
+                <div class="pos-label">G/V absolut</div>
+                <div class="pos-value {'teal' if pnl_abs >= 0 else 'red'}">{pnl_abs_sign}${abs(pnl_abs):.2f}</div>
+            </div>
+            <div class="pos-cell">
+                <div class="pos-label">DTE Rest</div>
+                <div class="pos-value">{dte_rest} T</div>
+            </div>
+            <div class="pos-cell">
+                <div class="pos-label">Innerer Wert</div>
+                <div class="pos-value">${pos['inner_value']:.2f}</div>
+            </div>
+            <div class="pos-cell">
+                <div class="pos-label">Restzeitwert</div>
+                <div class="pos-value">${pos['time_value']:.2f}</div>
+            </div>
+            <div class="pos-cell">
+                <div class="pos-label">Gewinnschwelle</div>
+                <div class="pos-value">${pos['breakeven_old']:.2f}</div>
+            </div>
+            <div class="pos-cell">
+                <div class="pos-label">P/L-Balken</div>
+                <div class="pos-bar-wrap"><div class="pos-bar"></div></div>
+                <div style="font-size:10px;color:#64748b;margin-top:3px;">{pnl_sign}{pnl_pct:.1f}% von max. ±100%</div>
+            </div>
+        </div>
+        <div class="pos-footer">Kursquelle: {price_src}</div>
+    </div>
+    """
+    components.html(html, height=220)
+    return pos
+
+
+# ---------------------------------------------------------------------------
+# Tab 2 — Roller
 # ---------------------------------------------------------------------------
 def render_roller_tab():
     st.subheader("🔄 Roller — bestehenden Cash-Secured Put rollen")
-    st.caption("Wähle deinen historisch eröffneten Put, sieh Gewinn/Verlust und alle 3 Roll-Stufen "
-               "(Buch Kap. 3). Ampel: ✅ Basispreis gesenkt · ⚠️ Prämie positiv, GS nicht besser · ❌ Roll kostet drauf.")
 
-    # 1) Symbol (Werthilfe aus aktueller Kette — schnell, wie symbolpage/watchlist) + Kontrakte
+    with st.expander("ℹ️ Wie funktioniert das Rollen? (Konzept)", expanded=False):
+        st.markdown("""
+**Warum rollen?**
+Wenn dein Put im Verlust ist (der Kurs der Aktie ist unter deinen Strike gefallen),
+kannst du den alten Put zurückkaufen und gleichzeitig einen neuen verkaufen —
+idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle senkst.
+
+**Die 3 Stufen (Buch Kap. 3):**
+| Stufe | Was passiert | Ziel |
+|-------|-------------|------|
+| **1** | Niedrigerer Strike, gleiche Anzahl Kontrakte | GS senken, wenig Kapital |
+| **2** | Gleicher Strike, gleiche Anzahl | GS senken wenn kein tieferer Strike möglich |
+| **3** | Niedrigerer Strike, doppelte Kontrakte | GS maximal senken, mehr Kapital nötig |
+
+**Ampel-Logik:**
+- ✅ Netto-Prämie positiv UND neue Gewinnschwelle niedriger als alte
+- ⚠️ Netto-Prämie positiv, aber GS wird nicht besser
+- ❌ Roll kostet drauf (netto negativ) — kein sinnvoller Roll möglich
+
+**Netto-Prämie** = Eröffnungsprämie + neue Prämie × Kontrakte − Rückkaufpreis
+""")
+
     symbols = _load_symbols()
     if not symbols:
         st.error("Keine Symbole in der aktuellen Optionskette gefunden.")
@@ -174,10 +528,9 @@ def render_roller_tab():
     if not entry_date:
         return
 
-    # 2) DTE-Bereich am Einstiegsdatum + Verfallstyp-Filter + verfügbare Puts
     sc1, sc2 = st.columns([3, 2])
     dte_min, dte_max = sc1.slider(
-        "DTE-Bereich am Einstiegsdatum (Tage bis Verfall)",
+        "DTE-Bereich am Einstiegsdatum",
         min_value=1, max_value=400, value=(30, 60), step=1,
         help="Zeigt alle Puts, deren Restlaufzeit am Einstiegsdatum in diesem Bereich lag.",
     )
@@ -196,16 +549,13 @@ def render_roller_tab():
     hist_df = filter_by_expiration_type(hist_df, "expiration_date",
                                         show_monthly, show_weekly, show_daily)
     if hist_df.empty:
-        st.warning("Keine Puts für die gewählten Verfallstypen (Monthly/Weekly/Daily).")
+        st.warning("Keine Puts für die gewählten Verfallstypen.")
         return
-    # Nach Verfallsdatum, darin nach Strike (absteigend) ordnen — dann Index zurücksetzen,
-    # damit die Zeilenauswahl (hist_df.iloc[rows[0]]) exakt zur angezeigten Reihenfolge passt.
+
     hist_df = (hist_df
                .sort_values(["expiration_date", "strike_price"], ascending=[True, False])
                .reset_index(drop=True))
 
-    # Schritt A: Verfallsdatum wählen (Dropdown mit sprechendem Label) — schneller Überblick,
-    # statt aller Strikes über alle Verfälle in einer langen Liste.
     exp_options = (hist_df[["expiration_date", "days_to_expiration"]]
                    .drop_duplicates()
                    .sort_values("expiration_date"))
@@ -225,103 +575,52 @@ def render_roller_tab():
         return
     chosen_exp = exp_labels[chosen_label]
 
-    # Schritt B: nur die Strikes DIESES Verfalls, aufsteigend, ohne OSI-Ballast.
     exp_df = (hist_df[hist_df["expiration_date"] == chosen_exp]
               .sort_values("strike_price", ascending=True)
               .reset_index(drop=True))
 
     st.markdown("**2. Deinen Strike anklicken:**")
-    
-    # Initialisiere Session-State für Strike-Auswahl
-    if "roll_strike_selected_idx" not in st.session_state:
-        st.session_state.roll_strike_selected_idx = None
-    
-    # Kachel-Grid: 4 Kacheln pro Zeile
-    cols_per_row = 4
-    num_strikes = len(exp_df)
-    num_rows = (num_strikes + cols_per_row - 1) // cols_per_row
-    
-    selected_idx = None
-    for row_idx in range(num_rows):
-        cols = st.columns(cols_per_row, gap="small")
-        for col_idx, col in enumerate(cols):
-            strike_idx = row_idx * cols_per_row + col_idx
-            if strike_idx >= num_strikes:
-                break
-            
-            strike_row = exp_df.iloc[strike_idx]
-            strike = float(strike_row["strike_price"])
-            premium = float(strike_row["premium_option_price"])
-            dte = int(strike_row["days_to_expiration"])
-            
-            # Prüfe ob diese Kachel ausgewählt ist
-            is_selected = strike_idx == st.session_state.roll_strike_selected_idx
-            
-            with col:
-                # Conditional Styling für ausgewählte Kachel
-                if is_selected:
-                    # Grüne Hervorhebung für ausgewählte Kachel
-                    st.markdown(f"""
-                    <div style="
-                        background: linear-gradient(135deg, #00AA00 0%, #00DD00 100%);
-                        border: 3px solid #00FF00;
-                        border-radius: 10px;
-                        padding: 15px;
-                        text-align: center;
-                        box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
-                    ">
-                        <div style="font-size: 20px; font-weight: bold; color: white;">
-                            ${strike:.2f}
-                        </div>
-                        <div style="font-size: 12px; color: #e0e0e0; margin-top: 8px;">
-                            Prämie: ${premium:.2f}
-                        </div>
-                        <div style="font-size: 12px; color: #e0e0e0;">
-                            DTE: {dte}d
-                        </div>
-                        <div style="font-size: 11px; color: #ffff99; margin-top: 5px; font-weight: bold;">
-                            ✓ AUSGEWÄHLT
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                else:
-                    # Normale graue Kachel (clickbar)
-                    if st.button(
-                        f"${strike:.2f}\n\n"
-                        f"${premium:.2f}\n"
-                        f"{dte}d",
-                        key=f"roll_strike_{strike_idx}",
-                        use_container_width=True,
-                    ):
-                        st.session_state.roll_strike_selected_idx = strike_idx
-                        selected_idx = strike_idx
-                        st.rerun()
-    
-    # Wenn bereits eine Auswahl existiert, nutze sie
-    if selected_idx is None and st.session_state.roll_strike_selected_idx is not None:
-        selected_idx = st.session_state.roll_strike_selected_idx
-    
-    if selected_idx is None:
-        st.info("👆 Klicke eine Strike-Kachel an.")
+    strike_table = exp_df[["strike_price", "premium_option_price", "days_to_expiration",
+                           "stock_close"]].rename(columns={
+        "strike_price": "Strike",
+        "premium_option_price": "Prämie ($)",
+        "days_to_expiration": "DTE",
+        "stock_close": "Aktienkurs",
+    })
+    event = st.dataframe(
+        strike_table,
+        use_container_width=True,
+        hide_index=True,
+        on_select="rerun",
+        selection_mode="single-row",
+        key="roll_put_pick",
+    )
+    rows = event.selection.rows if hasattr(event, "selection") else []
+    if not rows:
+        st.info("Klicke oben die Zeile deines Strikes an.")
         return
-    
-    put = exp_df.iloc[selected_idx]
+    put = exp_df.iloc[rows[0]]
 
     K = float(put["strike_price"])
     option_osi = put["option_osi"]
     expiration_date = put["expiration_date"]
 
-    # 3) Eröffnungsprämie (Vorschlag + Override) — Muster spreads_backtesting.py
-    p_open_suggest = float(put["premium_option_price"])  # $ je Aktie
-    st.markdown("### 🛠️ Echte Ausführungskurse (Optional)")
-    override = st.checkbox("Tatsächlichen Eröffnungs-Fill manuell eintragen", value=False,
-                           help="Ersetzt den historischen day_close durch deinen realen Verkaufspreis.")
+    p_open_suggest = float(put["premium_option_price"])
+    st.markdown("### 🛠️ Tatsächliche Ausführungskurse (Optional)")
+    override = st.checkbox(
+        "Echten Eröffnungs-Fill manuell eintragen",
+        value=False,
+        help="Ersetzt den historischen Tagesschluss durch deinen realen Verkaufspreis. "
+             "Relevant wenn dein Fill deutlich vom day_close abwich.",
+    )
     if override:
-        p_open_suggest = st.number_input("Eröffnungsprämie je Aktie ($)", min_value=0.0,
-                                         value=p_open_suggest, step=0.01, format="%.2f")
-    P_eroeffnung = p_open_suggest * 100.0  # absolut $/Kontrakt für die Rechenlogik
+        p_open_suggest = st.number_input(
+            "Eröffnungsprämie je Aktie ($)", min_value=0.0,
+            value=p_open_suggest, step=0.01, format="%.2f",
+            help="Was hast du beim Verkauf des Puts erhalten? (je Aktie, nicht je Kontrakt)",
+        )
+    P_eroeffnung = p_open_suggest * 100.0
 
-    # 4) Heutiger Wert desselben Puts + aktueller Aktienkurs (immer frisch)
     with ThreadPoolExecutor(max_workers=3) as ex:
         f_price = ex.submit(_current_put_price, option_osi, symbol)
         f_stock = ex.submit(_current_stock_price, symbol)
@@ -329,256 +628,39 @@ def render_roller_tab():
         S = f_stock.result()
 
     if p_today_share is None:
-        st.error("Aktueller Put-Preis nicht ermittelbar (weder Live noch DB).")
+        st.error("Aktueller Put-Preis nicht ermittelbar.")
         return
     if S is None:
         st.error("Aktueller Aktienkurs nicht ermittelbar.")
         return
     P_heute = p_today_share * 100.0
 
-    # 5) Block "Aktuelle Position"
     st.divider()
     st.markdown("### 📊 Aktuelle Position")
-    pos = position_status(K=K, S=S, P_eroeffnung=P_eroeffnung, P_heute=P_heute, n=int(n_contracts))
-    dte_rest = (_parse_date(expiration_date) - date.today()).days
+    pos = _render_position_card(symbol, K, S, p_today_share, P_eroeffnung, P_heute,
+                                int(n_contracts), expiration_date, price_src)
 
-    m = st.columns(4)
-    m[0].metric("Aktienkurs S", f"${S:.2f}")
-    m[1].metric("Strike K", f"${K:.2f}")
-    m[2].metric("Put heute", f"${p_today_share:.2f}", help=f"Quelle: {price_src}")
-    m[3].metric("DTE (Rest)", f"{dte_rest} T")
-    m2 = st.columns(4)
-    m2[0].metric("G/V %", f"{pos['pnl_pct']:+.1f}%")
-    m2[1].metric("G/V absolut", f"${pos['pnl_abs']:+.2f}")
-    m2[2].metric("Innerer Wert", f"${pos['inner_value']:.2f}")
-    m2[3].metric("Restzeitwert", f"${pos['time_value']:.2f}")
-    st.caption(f"Alte Gewinnschwelle: **${pos['breakeven_old']:.2f}** (= K − Eröffnungsprämie).")
-
-    # 5a) LUDWIG-SCHWELLEN: Oben definieren, damit sie für Roll-Logik verfügbar sind
+    # Roll-Kandidaten
     st.divider()
-    st.markdown("### ⚙️ Deine Ludwig-Schwellen konfigurieren")
-    
-    with st.expander("📋 Schwellen-Konfiguration", expanded=False):
-        c1, c2, c3 = st.columns(3)
-        tv_threshold = c1.slider(
-            "TV%-Schwelle zum Rollen",
-            min_value=5,
-            max_value=50,
-            value=15,
-            step=1,
-            key="roll_tv_threshold",
-            help="Ludwig-Default: 15%. Bei TV% ≤ dieser Schwelle: Roll empfohlen.\n"
-                 "Aggressive Trader: 10% | Conservative: 20–25%",
-        )
-        roll_score_threshold = c2.slider(
-            "Roll-Score Trigger",
-            min_value=0.5,
-            max_value=1.0,
-            value=0.7,
-            step=0.05,
-            key="roll_score_threshold",
-            help="Score ≥ dieser Wert: Roll empfohlen (70% = Ludwig-Default)",
-        )
-        c3.metric("Deine TV%-Schwelle", f"{tv_threshold}%", help="Wird für alle Roll-Empfehlungen genutzt")
-
-    # 5b) Eric Ludwig Roll-Trigger-Score (Zeitwert + DTE-Fenster)
-    st.divider()
-    
     im_verlust = P_heute > P_eroeffnung
-    
     if im_verlust:
-        # ❌ IM VERLUST: Roll-Logik ist relevant
-        st.markdown("### 🎯 Eric Ludwig Roll-Trigger-Score (VERLUST-SZENARIO)")
-        st.error("🔴 **Position im Verlust** — Rollen ist relevant (Basispreis senken nach Buch-Regel).")
-        
-        with st.expander("❓ Wie funktioniert dieser Score?", expanded=False):
-            st.markdown("""
-            **Eric Ludwigs Roll-Logik basiert auf 2 Faktoren:**
-            
-            1. **Restzeitwert-Prozentsatz (70% Gewicht):**
-               - Zeigt: Wie viel deiner ursprünglichen Prämie ist noch übrig?
-               - **Formel:** `(Put heute / Eröffnung) × 100`
-               - **Ludwigs Regel (im Verlust!):**
-                 - **≤ 10 %** → 🟢 **JETZT ROLLEN** (optimale Zeit)
-                 - **≤ 15 %** → 🟡 **Roll sinnvoll** (gute Zeit)
-                 - **> 15 %** → ⏳ **Noch warten** (zu teuer zum Rückkauf)
-            
-            2. **DTE-Fenster (30% Gewicht):**
-               - Optimales Roll-Zeitfenster nach Theta-Gamma-Balance:
-               - **7–14 Tage** → ✅ **Optimal** (Theta maximal, Gamma moderat)
-               - **≥ 14 Tage** → ⚠️ **Noch zu früh** (Theta-Verfall zu langsam)
-               - **< 3 Tage** → 🔴 **Zu spät** (Gamma-Explosion)
-            
-            **Kombinierter Score = 70% × TV-Score + 30% × DTE-Score**
-            - **≥ 70%** → 🚀 **ROLL TRIGGERN** (TV ≤ 15% UND gutes DTE-Fenster)
-            - **< 70%** → ⏳ **Noch warten** (TV noch zu hoch oder falsches DTE)
-            """)
-        
-        trigger = roll_trigger_score(P_heute=P_heute, P_eroeffnung=P_eroeffnung, dte=dte_rest)
-        tv_pct = time_value_percentage(P_heute, P_eroeffnung)
-        
-        t1, t2, t3, t4 = st.columns(4)
-        t1.metric(
-            "Restzeitwert %",
-            f"{tv_pct:.1f}%",
-            help="Aktueller Put-Preis als % der Eröffnungsprämie.\nLudwig-Regel (Verlust): < 10% = JETZT ROLLEN | < 15% = Roll sinnvoll",
-            delta=f"Trigger bei ≤ 10–15%" if tv_pct <= 15 else None,
-        )
-        t2.metric("DTE Restlaufzeit", f"{dte_rest}d", help=trigger["dte_label"])
-        t3.metric("Roll-Score", f"{trigger['score']:.0%}", help="70% Zeitwert + 30% DTE-Fenster")
-        
-        # Ampel basierend auf Trigger
-        if trigger['trigger']:
-            t4.metric("⚠️ Empfehlung", "🚀 ROLLEN", help=trigger['empfehlung'])
-            st.success(f"**{trigger['tv_label']}** · {trigger['dte_label']}")
-        else:
-            t4.metric("Status", "Warten", help=trigger['empfehlung'])
-            st.info(trigger['empfehlung'])
-    
+        st.error("🔴 Position im Verlust — Rollen sinnvoll, um die Gewinnschwelle zu senken.")
     else:
-        # ✅ IM GEWINN: Nicht rollen, sondern schließen!
-        st.markdown("### 🎯 Handlungs-Empfehlung (GEWINN-SZENARIO)")
-        st.success("🟢 **Position im Gewinn** — SCHLIESSE den Trade statt zu rollen!")
-        
-        with st.expander("❓ Warum nicht rollen?", expanded=False):
-            st.markdown(f"""
-            **Du bist im Gewinn (+{pos['pnl_pct']:.1f}%)** — Die beste Aktion ist:
-            
-            ✅ **HANDEL SCHLIESSEN:**
-            1. Rückkaufe den Put heute
-            2. Realisiere deinen Gewinn: **${pos['pnl_abs']:+.2f}**
-            3. Freie Kapital für neuen Trade
-            
-            **Warum ist das besser als rollen?**
-            - ❌ Rollen = höhere Kommissionen, mehr Komplexität
-            - ✅ Schließen = klare Gewinne, schneller zur nächsten Opportunity
-            - ✅ Weniger Kapital gebunden
-            - ✅ Bessere ROI durch häufigere Zyklen
-            
-            **Falls du noch rollen möchtest:** (selten sinnvoll)
-            - Nur wenn noch lange bis Verfall (z.B. > 21 DTE)
-            - Und du willst noch mehr Prämie verdienen
-            - Dann nutze die Roll-Kandidaten unten (Stufe 1–3)
-            """)
-        
-        # Zeige trotzdem optional die Roll-Kandidaten an (falls User will)
-        with st.expander("📊 Optional: Roll-Kandidaten (falls du dennoch rollen willst)", expanded=False):
-            trigger = roll_trigger_score(P_heute=P_heute, P_eroeffnung=P_eroeffnung, dte=dte_rest)
-            tv_pct = time_value_percentage(P_heute, P_eroeffnung)
-            
-            t1, t2, t3, t4 = st.columns(4)
-            t1.metric("Restzeitwert %", f"{tv_pct:.1f}%", help="Für Gewinn-Rollen: Egal, da du ohnehin gewinnen wirst")
-            t2.metric("DTE Restlaufzeit", f"{dte_rest}d", help=trigger["dte_label"])
-            t3.metric("Roll-Score", f"{trigger['score']:.0%}", help="Nur informatisch")
-            t4.metric("Status", "Optional")
-    
-    # 5c) Detaillierte Erklärung der aktuellen Kennzahlen
-    with st.expander("📐 Berechnung der Positionen-Kennzahlen", expanded=False):
-        st.markdown(f"""
-        **Innerer Wert** (Intrinsic Value)
-        - Formel: `max(0, Strike − Aktienkurs) × 100`
-        - = `max(0, ${K:.2f} − ${S:.2f}) × 100`
-        - = `${pos['inner_value']:.2f}`
-        - **Bedeutung:** Gewinn, wenn Option sofort ausgeübt würde (bei ITM, sonst 0)
-        
-        **Restzeitwert** (Time Value)
-        - Formel: `Put-Preis heute − Innerer Wert` (min. 0)
-        - = `${p_today_share*100:.2f} − ${pos['inner_value']:.2f}`
-        - = `${pos['time_value']:.2f}`
-        - **Bedeutung:** Überschuss durch Zeitwertverfall (Theta); sinkt täglich
-        
-        **Zeitwert-Prozentsatz**
-        - Formel: `(Put heute / Eröffnung) × 100`
-        - = `(${p_today_share:.2f} / ${P_eroeffnung/100:.2f}) × 100`
-        - = `{tv_pct:.1f}%`
-        - **Bedeutung:** Wie viel Prämie hast du noch zurückzuzahlen? (Ludwigs KPI!)
-        """)
-    
-    # 6) Roll-Kandidaten: alle 3 Stufen gleichzeitig
-    st.divider()
-    st.markdown("### 🎯 Roll-Kandidaten (alle 3 Stufen)")
-    
-    if not im_verlust:
-        st.info("💡 **Erinnerung:** Du bist im Gewinn! Die Roll-Kandidaten unten sind optional. "
-                "Empfehlung: Einfach schließen und Gewinn realisieren.")
-    
-    with st.expander("❓ Was sind Roll-Stufen?", expanded=False):
-        st.markdown("""
-        **Buch-Konzept (Kap. 3): 3 verbindliche Stufen zum Rollen**
-        
-        🟢 **Stufe 1 — Niedrigerer Basispreis, gleiche Kontrakte**
-        - Neuer Strike < alter Strike
-        - Kontrakte: 1 bleibt 1
-        - **Ziel:** Gewinnschwelle senken, Kapital sparen
-        
-        🟡 **Stufe 2 — Gleicher Basispreis, gleiche Kontrakte**
-        - Neuer Strike = alter Strike
-        - Kontrakte: 1 bleibt 1
-        - **Ziel:** Laufzeit verlängern, Prämie aufladen
-        
-        🔴 **Stufe 3 — Niedrigerer Basispreis, Kontrakte verdoppelt**
-        - Neuer Strike < alter Strike
-        - Kontrakte: 1 wird 2
-        - **Ziel:** Aggressive Gewinnschwellensenkung, höheres Kapital
-        
-        **Oberstes Ziel:** Immer die Gewinnschwelle (Breakeven) senken! 📉
-        """)
-    
-    with st.expander("Kandidaten-Filter", expanded=True):
-        st.subheader("Liquiditäts-Filter")
-        
-        rf1, rf2, rf3, rf4 = st.columns(4)
-        roll_dte_min, roll_dte_max = rf1.slider(
-            "DTE (Roll-Kandidaten)",
-            min_value=7,
-            max_value=120,
-            value=(30, 45),
-            step=1,
-            key="roll_candidates_dte",
-            help="Filter: Neue Puts müssen in diesem DTE-Fenster liegen.",
-        )
-        roll_min_oi = rf2.number_input(
-            "Min OI",
-            min_value=0,
-            value=100,
-            step=50,
-            key="roll_candidates_min_oi",
-            help="Liquidität: OI = wie viele Kontrakte sind offen? Höher = liquider.",
-        )
-        roll_min_vol = rf3.number_input(
-            "Min Vol",
-            min_value=0,
-            value=100,
-            step=10,
-            key="roll_candidates_min_vol",
-            help="Volumen: Tagesumsatz in Kontrakten. Höher = leichter tradebar.",
-        )
-        roll_delta_min, roll_delta_max = rf4.slider(
-            "Delta-Bereich (Put)",
-            min_value=-1.0,
-            max_value=0.0,
-            value=(-0.35, -0.10),
-            step=0.01,
-            key="roll_candidates_delta",
-            help="Typischer CSP-Bereich: etwa -0.35 bis -0.10.",
-        )
+        st.success("🟢 Position im Gewinn — Rollen optional (z. B. Laufzeit verlängern für mehr Prämie).")
 
-    cand = _load_roll_candidates(
-        symbol,
-        K,
-        roll_dte_min,
-        roll_dte_max,
-        roll_min_oi,
-        roll_min_vol,
-        roll_delta_min,
-        roll_delta_max,
-    )
+    st.markdown("### 🎯 Roll-Kandidaten (alle 3 Stufen)")
+    with st.expander("ℹ️ Wie lese ich die Tabelle?", expanded=False):
+        st.markdown("""
+- **Netto absolut**: Gesamtprämie nach dem Roll — positiv heißt du nimmst Geld ein
+- **Neue GS**: Deine neue Gewinnschwelle nach dem Roll (je niedriger, desto besser)
+- **Alte GS**: Deine aktuelle Gewinnschwelle (Vergleichswert)
+- **Kapital nötig**: Cash der als Sicherheit hinterlegt werden muss (Strike × Kontrakte × 100)
+- **Klick auf eine Zeile** → Plain-Language Erklärung was genau passiert
+""")
+
+    cand = _load_roll_candidates(symbol, K, 30, 90)
     if cand is None or cand.empty:
-        st.warning(
-            "Keine Roll-Kandidaten gefunden. "
-            f"Filter: DTE {roll_dte_min}–{roll_dte_max}, OI ≥ {roll_min_oi}, "
-            f"Vol ≥ {roll_min_vol}, Delta {roll_delta_min:.2f} bis {roll_delta_max:.2f}."
-        )
+        st.warning("Keine aktuellen Put-Kandidaten (DTE 30–90, liquide) gefunden.")
         _render_endgame_hint()
         return
 
@@ -589,136 +671,128 @@ def render_roller_tab():
     any_green = False
     breakeven_old = pos["breakeven_old"]
 
-    # Stufe 1: niedrigerer Strike (< K), n Kontrakte
     st1 = cand[cand["strike_price"] < K]
     any_green |= _render_stufe(1, st1, K, P_eroeffnung, P_heute, int(n_contracts), breakeven_old,
                                "Stufe 1 — niedrigerer Basispreis, gleiche Kontrakte")
 
-    # Stufe 2: gleicher Strike (= K), n Kontrakte
     st2 = cand[cand["strike_price"] == K]
     any_green |= _render_stufe(2, st2, K, P_eroeffnung, P_heute, int(n_contracts), breakeven_old,
                                "Stufe 2 — gleicher Basispreis, gleiche Kontrakte")
 
-    # Stufe 3: niedrigerer Strike (< K), 2n Kontrakte
     st3 = cand[cand["strike_price"] < K]
     any_green |= _render_stufe(3, st3, K, P_eroeffnung, P_heute, 2 * int(n_contracts), breakeven_old,
                                "Stufe 3 — niedrigerer Basispreis, Kontrakte verdoppelt")
 
-    # 7) Endspiel-Hinweis wenn keine ✅
     if not any_green:
         _render_endgame_hint()
 
 
 def _render_stufe(stufe, df, K, P_eroeffnung, P_heute, n, breakeven_old, title):
-    """Rendert eine Stufen-Tabelle mit Klick-Herleitung. True wenn mind. ein ✅ existiert."""
     st.markdown(f"#### {title}")
-    
-    # Spalten-Erklärung (Expander, pro Stufe einmal)
-    with st.expander("❓ Spalten-Erklärung", expanded=False):
-        st.markdown("""
-        | Spalte | Bedeutung |
-        |--------|-----------|
-        | **Ampel** | ✅ = GS sinkt + netto Credit | ⚠️ = netto Credit, aber GS nicht besser | ❌ = kostet drauf |
-        | **Neuer Strike** | Der neue Basispreis (neuer Put zum Verkaufen) |
-        | **Expiry** | Verfallsdatum des neuen Puts |
-        | **DTE** | Days to Expiration (Restlaufzeit bis Verfall) |
-        | **Prämie neu** | Was du für den neuen Put erhältst (je Aktie, $) |
-        | **Delta** | Wahrscheinlichkeit, dass Put ITM verfällt. -0.30 = 30% ITM-Chance |
-        | **Netto absolut** | Eröffnung + (n × Neu) − Rückkauf = dein Gesamtkredit ($) |
-        | **Neue GS** | Neue Gewinnschwelle nach dem Roll (je Aktie, $) |
-        | **Alte GS** | Deine ursprüngliche Gewinnschwelle (zum Vergleich) |
-        | **Kapital nötig** | Wie viel Cash-Reserve brauchst du? (K2 × n × 100) |
-        | **OI / Vol** | Open Interest / Tagesvolumen = Liquidität |
-        | **TV% nach Roll** | Zeitwert des neuen Puts als % der urspr. Prämie |
-        | **DTE-Score** | Wie gut ist das DTE-Fenster für Roll? (7–14d optimal) |
-        """)
-    
     if df is None or df.empty:
         st.caption("Keine passenden Strikes in dieser Stufe.")
         return False
 
-    # Nach Verfallsdatum, darin nach Strike (absteigend) ordnen. reset_index hält die
-    # calc_by_idx-Zuordnung (unten) synchron mit der angezeigten Reihenfolge.
     df = df.sort_values(["expiration_date", "strike_price"],
                         ascending=[True, False]).reset_index(drop=True)
 
     rows, calc_by_idx = [], {}
     for i, (_, o) in enumerate(df.iterrows()):
         K2 = float(o["strike_price"])
-        P_neu = float(o["premium_option_price"]) * 100.0  # $/Kontrakt
+        P_neu = float(o["premium_option_price"]) * 100.0
         r = roll_candidate(stufe=stufe, K=K, K2=K2, P_eroeffnung=P_eroeffnung,
                            P_heute=P_heute, P_neu=P_neu, n=n)
-        
-        # Eric Ludwig Roll-Trigger-Score für DIESEN Kandidaten
-        dte_new = int(o["days_to_expiration"])
-        trigger_new = roll_trigger_score(P_heute=P_neu, P_eroeffnung=P_eroeffnung, dte=dte_new)
-        tv_pct_new = time_value_percentage(P_neu, P_eroeffnung)
-        
-        calc_by_idx[i] = dict(K2=K2, P_neu=P_neu, dte_new=dte_new, trigger_new=trigger_new)
+        calc_by_idx[i] = dict(K2=K2, P_neu=P_neu)
         rows.append({
             "Ampel": r["ampel"],
             "Neuer Strike": K2,
             "Expiry": o["expiration_date"],
             "DTE": int(o["days_to_expiration"]),
             "Prämie neu ($)": float(o["premium_option_price"]),
-            "Delta": round(float(o["greeks_delta"]), 3) if pd.notna(o["greeks_delta"]) else None,
             "Netto absolut ($)": round(r["netto_abs"], 2),
             "Neue GS": round(r["breakeven_new"], 2),
             "Alte GS": round(breakeven_old, 2),
             "Kapital nötig ($)": round(r["kapital_noetig"], 2),
             "OI": int(o["open_interest"]),
             "Vol": int(o["day_volume"]),
-            "TV% nach Roll": f"{tv_pct_new:.0f}%",
-            "DTE-Score": f"{trigger_new['dte_score']:.0%}",
         })
     out = pd.DataFrame(rows)
-    
-    # Sortierung: erst Ampel (✅ zuerst), dann nach Roll-Quality (TV% niedrig ist besser)
-    # Das hilft, die besten Kandidaten oben zu finden
-    ampel_order = {"✅": 0, "⚠️": 1, "❌": 2}
-    out["ampel_sort"] = out["Ampel"].map(ampel_order)
-    out["tv_sort"] = out["TV% nach Roll"].str.rstrip("%").astype(int)
-    out = out.sort_values(["ampel_sort", "tv_sort"], ascending=[True, True]).drop(
-        columns=["ampel_sort", "tv_sort"]
-    ).reset_index(drop=True)
-    
     event = st.dataframe(out, use_container_width=True, hide_index=True,
                          on_select="rerun", selection_mode="single-row",
                          key=f"stufe_{stufe}")
     sel = event.selection.rows if hasattr(event, "selection") else []
     if sel:
-        # row_number bezieht sich auf die sortierte Tabelle, nicht auf original df/calc_by_idx
-        # Daher müssen wir neu mappen
-        sorted_indices = (
-            pd.DataFrame(rows)
-            .assign(idx=range(len(rows)))
-            .assign(ampel_sort=pd.DataFrame(rows)["Ampel"].map(ampel_order))
-            .assign(tv_sort=pd.DataFrame(rows)["TV% nach Roll"].str.rstrip("%").astype(int))
-            .sort_values(["ampel_sort", "tv_sort"], ascending=[True, True])
-            .reset_index(drop=True)
-            ["idx"]
-            .tolist()
-        )
-        original_idx = sorted_indices[sel[0]] if sel[0] < len(sorted_indices) else 0
-        c = calc_by_idx[original_idx]
+        c = calc_by_idx[sel[0]]
         exp = roll_candidate_explained(stufe=stufe, K=K, K2=c["K2"],
                                        P_eroeffnung=P_eroeffnung, P_heute=P_heute,
                                        P_neu=c["P_neu"], n=n)
-        with st.container(border=True):
-            st.markdown(f"**Herleitung — Strike {c['K2']:.2f}** ({exp['ampel']})")
-            for s in exp["steps"]:
-                st.write(f"- **{s['label']}:** {s['formel']} = **{s['wert']:.2f}**")
-            
-            # Zusätzliche Eric Ludwig Insights
-            st.divider()
-            st.markdown("**Eric Ludwig Roll-Qualität (nach Roll):**")
-            trigger_info = c["trigger_new"]
-            st.write(f"- **Restzeitwert %:** {trigger_info['tv_pct']:.1f}% {trigger_info['tv_label']}")
-            st.write(f"- **DTE-Fenster:** {trigger_info['dte']}d → {trigger_info['dte_label']}")
-            st.write(f"- **Roll-Score:** {trigger_info['score']:.0%} → {trigger_info['empfehlung']}")
-            
-            st.caption("🔶 Prämien = day_close (Näherung; echter Bid/Ask im Broker prüfen).")
+        _render_roll_explanation(exp, K, c["K2"], P_eroeffnung, P_heute, c["P_neu"], n, breakeven_old)
     return (out["Ampel"] == "✅").any()
+
+
+def _render_roll_explanation(exp: dict, K: float, K2: float, P_eroeffnung: float,
+                             P_heute: float, P_neu: float, n: int, breakeven_old: float):
+    """Plain-Language Roll-Erklärung statt Formel-Strings."""
+    p_open_per_share = P_eroeffnung / 100
+    p_today_per_share = P_heute / 100
+    p_neu_per_share = P_neu / 100
+    netto = exp["netto_abs"]
+    netto_per_share = netto / (n * 100)
+    gs_new = exp["breakeven_new"]
+    gs_delta = breakeven_old - gs_new  # positiv = GS gesunken = gut
+    ampel = exp["ampel"]
+
+    with st.container(border=True):
+        st.markdown(f"**{ampel} Was passiert bei diesem Roll?**")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("**Schritt 1 — Alten Put schließen:**")
+            st.markdown(
+                f"Du kaufst deinen bestehenden Put (Strike **${K:.2f}**) zurück. "
+                f"Du hast ihn damals für **${p_open_per_share:.2f}** verkauft, "
+                f"jetzt kostet er **${p_today_per_share:.2f}**. "
+                + ("Das ist ein **Gewinn** für dich." if p_today_per_share < p_open_per_share
+                   else "Das ist ein **Verlust** (Put ist teurer geworden).")
+            )
+        with col2:
+            st.markdown(f"**Schritt 2 — Neuen Put eröffnen ({n}× Kontrakt{'e' if n > 1 else ''}):**")
+            st.markdown(
+                f"Du verkaufst {'je ' if n > 1 else ''}**{n}×** einen neuen Put "
+                f"(Strike **${K2:.2f}**) und nimmst dafür **${p_neu_per_share:.2f}** je Aktie ein."
+            )
+
+        st.divider()
+
+        if netto > 0:
+            st.markdown(
+                f"**Ergebnis:** Unterm Strich nimmst du **+${netto:.2f}** zusätzlich ein "
+                f"(= ${netto_per_share:.2f} je Aktie × {n * 100} Aktien)."
+            )
+        else:
+            st.markdown(
+                f"**Ergebnis:** Dieser Roll **kostet dich ${abs(netto):.2f}** — "
+                f"du musst draufzahlen. Kein sinnvoller Roll."
+            )
+
+        if gs_delta > 0:
+            st.success(
+                f"✅ Deine Gewinnschwelle sinkt von **${breakeven_old:.2f}** auf **${gs_new:.2f}** "
+                f"(−${gs_delta:.2f}). Die Aktie darf nun weiter fallen, bevor du ins Minus gerätst."
+            )
+        elif gs_delta == 0:
+            st.warning("⚠️ Gewinnschwelle bleibt gleich — Roll bringt keinen strukturellen Vorteil.")
+        else:
+            st.error(
+                f"❌ Gewinnschwelle steigt von ${breakeven_old:.2f} auf ${gs_new:.2f} — "
+                f"das ist schlechter als vorher."
+            )
+
+        st.caption(
+            f"Kapital das als Sicherheit hinterlegt werden muss: **${exp['kapital_noetig']:.0f}** "
+            f"(= ${K2:.2f} Strike × {n} × 100). "
+            "🔶 Prämien = Tagesschluss (Näherung; echter Bid/Ask im Broker prüfen)."
+        )
 
 
 def _render_endgame_hint():
@@ -731,74 +805,70 @@ def _render_endgame_hint():
 
 
 # ---------------------------------------------------------------------------
-# Tab 1 — Screener (Buch Kap. 4+5)
+# Tab 1 — Screener
 # ---------------------------------------------------------------------------
 @st.cache_data(ttl=300)
-def _load_screener(dte_min, dte_max, min_oi, min_vol, price_min, price_max, min_premium_share, min_market_cap_usd):
-    """StockData ⋈ OptionDataMerged, harte Filter in SQL. Reiner DB-Read -> darf cachen."""
+def _load_screener(dte_min, dte_max, min_oi, min_vol, price_min, price_max):
     return select_into_dataframe(
         sql_file_path=PATH_DATABASE_QUERY_FOLDER / "put_screener.sql",
         params={"dte_min": int(dte_min), "dte_max": int(dte_max),
                 "min_oi": int(min_oi), "min_vol": int(min_vol),
-                "price_min": float(price_min), "price_max": float(price_max),
-                "min_premium_share": float(min_premium_share),
-                "min_market_cap": float(min_market_cap_usd)},
+                "price_min": float(price_min), "price_max": float(price_max)},
     )
 
 
 @st.cache_data(ttl=300)
-def _load_symbol_puts(symbol, dte_min, dte_max, min_oi, min_vol, min_premium_share):
-    """Aktuell verkaufbare Puts eines Symbols. Reiner DB-Read -> darf cachen."""
+def _load_symbol_puts(symbol, dte_min, dte_max):
     return select_into_dataframe(
         sql_file_path=PATH_DATABASE_QUERY_FOLDER / "screener_symbol_puts.sql",
-        params={
-            "symbol": symbol,
-            "dte_min": int(dte_min),
-            "dte_max": int(dte_max),
-            "min_oi": int(min_oi),
-            "min_vol": int(min_vol),
-            "min_premium_share": float(min_premium_share),
-        },
+        params={"symbol": symbol, "dte_min": int(dte_min), "dte_max": int(dte_max)},
     )
 
 
 def render_screener_tab():
     st.subheader("📈 Screener — neuer Cash-Secured-Put-Einstieg")
-    st.caption("Qualifizierte Aktien nach Buch-Checkliste (Kap. 4+5) mit dem besten Put am Geld. "
-               "Harte Filter: Preis 15–80 $, OI/Vol und Mindestprämie konfigurierbar. "
-               "Kriterien mit '(aktuell)' sind Momentaufnahmen, kein Mehrjahres-Trend.")
+    st.caption(
+        "Qualifizierte Aktien nach Buch-Checkliste (Kap. 4+5) + Sektor-Kontext aus der RRG-Rotation. "
+        "Harte Filter: Preis 15–80 $, OI/Vol ≥ 100. Kriterien mit '(aktuell)' sind Momentaufnahmen."
+    )
+
+    # Sektor-Quadrant-Map laden (im Hintergrund, kein Spinner)
+    sector_map = _load_sector_quadrants()
 
     with st.expander("🔍 Filter", expanded=True):
-        # Reihe 1: Hauptfilter
         c1, c2, c3, c4, c5 = st.columns(5)
-        price_min, price_max = c1.slider("Aktienkurs ($)", 1, 500, (15, 80), 1,
-                                         help="Buch-Default 15–80 $ (Kapitaleinsatz für 200 Aktien).")
-        pe_max = c2.slider("KGV-Obergrenze", 10, 200, int(DEFAULT_PE_MAX), 5,
-                           help="Tech-Werte dürfen höher liegen.")
+        price_min, price_max = c1.slider("Aktienkurs ($)", 1, 500, (15, 80), 1)
+        pe_max = c2.slider("KGV-Obergrenze", 10, 200, int(DEFAULT_PE_MAX), 5)
         min_score = c3.slider("Mindest-Score", 0, 9, 5, 1)
         dte_min, dte_max = c4.slider("DTE-Fenster (Tage)", 7, 90, (21, 45), 1)
-        min_market_cap_b = c5.slider("Min. Market Cap (Mrd. $)", 0.0, 50.0, 2.0, 0.5,
-                                     help="Buch-Default: 2 Mrd. (keine Micro-Caps). 0 = kein Filter.")
-        min_market_cap_usd = min_market_cap_b * 1e9 if min_market_cap_b > 0 else 0
-        
-        # Reihe 2: Liquiditätsfilter
-        c6, c7, c8 = st.columns(3)
-        min_oi = c6.number_input("Min. Open Interest", min_value=100, value=100, step=50)
-        min_vol = c7.number_input("Min. Tagesvolumen", min_value=0, value=20, step=10,
-                                  help="Default wie Spreads.")
-        min_premium_abs = c8.number_input(
-            "Min. Prämie ($/Kontrakt)",
-            min_value=0.0,
-            value=50.0,
-            step=5.0,
-            format="%.2f",
-            help="50 entspricht 0.50 Prämie je Aktie.",
-        )
-        min_premium_share = float(min_premium_abs) / 100.0
+        min_oi = c5.number_input("Min. Open Interest", min_value=100, value=100, step=50)
+        min_vol = c5.number_input("Min. Tagesvolumen", min_value=100, value=100, step=50)
 
-    # Button setzt ein Flag im Session-State. Sonst wäre st.button nur EINEN Rerun lang
-    # True — ein Klick auf eine Ergebniszeile (neuer Rerun) würde die Anzeige sonst
-    # abbrechen lassen und das Detail-Panel verschwinden.
+        # Sektor-Filter (nur wenn Daten verfügbar)
+        available_quadrants = sorted(set(sector_map.values())) if sector_map else []
+        all_sectors = sorted(set(sector_map.keys())) if sector_map else []
+        col_sq1, col_sq2 = st.columns(2)
+        with col_sq1:
+            sector_filter = st.multiselect(
+                "Sektor-Filter",
+                options=all_sectors,
+                default=[],
+                placeholder="Alle Sektoren",
+                help="Nur Aktien aus diesen Sektoren anzeigen.",
+            )
+        with col_sq2:
+            if available_quadrants:
+                quadrant_filter = st.multiselect(
+                    "RRG-Quadrant Filter",
+                    options=available_quadrants,
+                    default=[],
+                    placeholder="Alle Quadranten",
+                    help="Nur Aktien aus Sektoren mit diesem RRG-Status (aus der Sector-Rotation-Seite).",
+                )
+            else:
+                quadrant_filter = []
+                st.caption("⚪ Sektor-Rotation-Daten nicht verfügbar")
+
     if st.button("🔍 Screener starten", type="primary", key="run_screener"):
         st.session_state["screener_ran"] = True
     if not st.session_state.get("screener_ran"):
@@ -806,38 +876,51 @@ def render_screener_tab():
         return
 
     with st.spinner("Screene Aktien + Puts …"):
-        raw = _load_screener(
-            dte_min,
-            dte_max,
-            min_oi,
-            min_vol,
-            price_min,
-            price_max,
-            min_premium_share,
-            min_market_cap_usd,
-        )
+        raw = _load_screener(dte_min, dte_max, min_oi, min_vol, price_min, price_max)
 
     if raw is None or raw.empty:
-        st.warning(
-            f"Keine Treffer. Filter lockern (Preis {price_min}–{price_max} $, "
-            f"OI ≥ {min_oi}, Vol ≥ {min_vol}, Min-Prämie ≥ ${min_premium_abs:.0f}/Kontrakt)."
-        )
+        st.warning("Keine Treffer. Filter lockern.")
         return
 
     scored = score_candidates(raw, pe_max=pe_max)
     scored = scored[scored["score"] >= min_score]
     if scored.empty:
-        st.warning(f"Keine Aktie erreicht Score ≥ {min_score}. Schwelle senken.")
+        st.warning(f"Keine Aktie erreicht Score ≥ {min_score}.")
+        return
+
+    # Sektor-Ampel anfügen
+    if sector_map:
+        scored["sektor_quadrant"] = scored["sector"].map(sector_map).fillna("Unbekannt")
+        scored["sektor_ampel"] = scored["sektor_quadrant"].map(_QUADRANT_EMOJI).fillna("⚪")
+    else:
+        scored["sektor_quadrant"] = "Unbekannt"
+        scored["sektor_ampel"] = "⚪"
+
+    # Sektor-Filter anwenden
+    if sector_filter:
+        scored = scored[scored["sector"].isin(sector_filter)]
+    if quadrant_filter:
+        scored = scored[scored["sektor_quadrant"].isin(quadrant_filter)]
+
+    if scored.empty:
+        st.warning("Keine Treffer nach Sektor-/Quadrant-Filter.")
         return
 
     display_cols = [
-        "symbol", "price", "score",
+        "sektor_ampel", "symbol", "price", "score",
         "put_strike", "put_expiry", "put_dte", "put_premium",
         "premium_pct", "annualized_pct", "breakeven", "capital_required",
         "sector",
     ]
     display_cols = [c for c in display_cols if c in scored.columns]
+
     st.success(f"{len(scored)} qualifizierte Aktien (Score ≥ {min_score}, max {scored.iloc[0]['score_max']}).")
+
+    # Legende wenn Sektor-Map vorhanden
+    if sector_map:
+        legend_parts = [f"{_QUADRANT_EMOJI[q]} {q}" for q in ["Leading", "Improving", "Weakening", "Lagging"]]
+        st.caption("Sektor-Ampel: " + "  ·  ".join(legend_parts))
+
     event = page_display_dataframe(
         scored[display_cols],
         symbol_column="symbol",
@@ -846,13 +929,35 @@ def render_screener_tab():
     )
     sel = event.selection.rows if hasattr(event, "selection") else []
     if not sel:
-        st.info("Klicke eine Aktie an, um die Score-Herleitung zu sehen.")
+        st.info("Klicke eine Aktie an für Details.")
         return
 
     row = scored.iloc[sel[0]]
-    st.divider()
-    st.markdown(f"### 🔬 Score-Herleitung — {row['symbol']}  ({int(row['score'])}/{int(row['score_max'])})")
+    sector_en = row.get("sector", "")
+    quadrant = sector_map.get(sector_en, "Unbekannt")
 
+    st.divider()
+
+    # Header mit Symbol + Sektor-Badge + Vollanalyse-Button
+    h1, h2 = st.columns([3, 1])
+    with h1:
+        st.markdown(f"### 🔬 {row['symbol']}  ({int(row['score'])}/{int(row['score_max'])} Punkte)")
+        if sector_en:
+            st.markdown(_sector_badge_html(sector_en, quadrant), unsafe_allow_html=True)
+            if quadrant in ("Leading", "Improving"):
+                st.caption(f"✅ Sektor **{sector_en}** ist aktuell im RRG-Quadrant **{quadrant}** — tendenziell günstiger Zeitpunkt.")
+            elif quadrant == "Weakening":
+                st.caption(f"⚠️ Sektor **{sector_en}** ist im Quadrant **Weakening** — Momentum dreht ab, erhöhte Vorsicht.")
+            elif quadrant == "Lagging":
+                st.caption(f"🔴 Sektor **{sector_en}** ist im Quadrant **Lagging** — relativer Stärke-Nachteil.")
+    with h2:
+        st.markdown("")
+        st.markdown("")
+        if st.button(f"🔗 Vollanalyse {row['symbol']}", key="goto_symbol", type="secondary"):
+            st.session_state["symbol_page_symbol"] = row["symbol"]
+            st.switch_page("pages/symbolpage.py")
+
+    # Score-Herleitung
     bd = score_breakdown(row, pe_max=pe_max)
     ann_map = {"aktuell": "🔶 (aktuell)", "Näherung": "🔶 (Näherung)", "day_close": "🔶 (day_close)", "": ""}
     detail = pd.DataFrame([{
@@ -868,49 +973,51 @@ def render_screener_tab():
     if getroffene:
         with st.expander("⚠️ Getroffene Annahmen", expanded=False):
             texte = {
-                "aktuell": "**(aktuell):** Momentaufnahme statt Mehrjahres-Trend — Yahoo liefert nur den jüngsten Abschluss, kein 10-Jahres-Verlauf.",
+                "aktuell": "**(aktuell):** Momentaufnahme statt Mehrjahres-Trend.",
                 "Näherung": "**(Näherung):** Ersatzgröße statt echtem Wert (z. B. Support ≈ 52W-Tief + SMA200).",
                 "day_close": "**(day_close):** Prämie = Tagesschluss statt echtem Bid/Ask.",
             }
             for a in getroffene:
                 st.markdown("- " + texte.get(a, a))
 
-    # Verkaufbare Puts für die gewählte Aktie (DTE 30-45, verstellbar)
+    # IV-Rank Chart
+    st.divider()
+    st.markdown(f"### 📊 IV-Rank Verlauf — {row['symbol']}")
+    with st.expander("ℹ️ Was zeigt dieser Chart?", expanded=False):
+        st.markdown("""
+Der Chart zeigt den **IV-Rank** der letzten ~12 Monate.
+
+- **IV-Rank** = Wo liegt die aktuelle IV im Vergleich zum Jahres-Hoch/Tief? 0 = historisches Tief, 100 = historisches Hoch.
+- **Rote Zone (P75+)** = IV historisch hoch → Prämien sind überdurchschnittlich hoch → guter Zeitpunkt für Prämienverkäufer.
+- **Grüne Zone (P25−)** = IV niedrig → Prämien eher mager → schlechterer Zeitpunkt für CSP.
+- **IV-Percentile** (gestrichelt) = Wie viele der letzten Tage hatte eine niedrigere IV? Ähnlich wie IV-Rank, aber robuster bei Ausreißern.
+""")
+    _render_iv_chart(row["symbol"])
+
+    # Verkaufbare Puts
     st.divider()
     st.markdown("### Verkaufbare Puts — jetzt")
-    pc1, pc2, pc3, pc4 = st.columns(4)
+    pc1, pc2, _pc3 = st.columns([1, 1, 2])
     p_dte_min, p_dte_max = pc1.slider("DTE-Fenster", 7, 90, (30, 45), 1, key="screener_put_dte")
-    p_min_oi = pc2.number_input("Min OI (Puts)", min_value=0, value=int(min_oi), step=50,
-                                key="screener_put_min_oi")
-    p_min_vol = pc3.number_input("Min Vol (Puts)", min_value=0, value=int(min_vol), step=10,
-                                 key="screener_put_min_vol")
-    p_min_premium_abs = pc4.number_input(
-        "Min Prämie ($/Kontrakt)",
-        min_value=0.0,
-        value=float(min_premium_abs),
-        step=5.0,
-        format="%.2f",
-        key="screener_put_min_premium_abs",
-    )
-    puts = _load_symbol_puts(
-        row["symbol"],
-        p_dte_min,
-        p_dte_max,
-        p_min_oi,
-        p_min_vol,
-        float(p_min_premium_abs) / 100.0,
-    )
-    if puts is None or puts.empty:
-        st.info(
-            f"Keine Puts für {row['symbol']} im DTE-Fenster {p_dte_min}–{p_dte_max} "
-            f"mit OI ≥ {p_min_oi}, Vol ≥ {p_min_vol}, Min-Prämie ≥ ${p_min_premium_abs:.0f}/Kontrakt."
+    min_puffer = pc2.slider("Min. Puffer % (für ✅)", 0, 30, int(DEFAULT_MIN_PUFFER_PCT), 1,
+                            key="screener_min_puffer",
+                            help="Abstand Aktienkurs → Strike, ab dem ein Put grün wird.")
+    with st.expander("ℹ️ Wie wird bewertet?", expanded=False):
+        st.markdown(
+            f"- **✅** = annualisierte Rendite ≥ **12 %** UND Puffer ≥ **{min_puffer} %** UND Prämie über Black-Scholes-Preis.\n"
+            f"- **⚠️** = Rendite ≥ 12 %, aber Puffer oder BS-Edge nicht erfüllt.\n"
+            f"- **❌** = annualisierte Rendite < 12 %.\n"
+            f"- **Puffer** = wie weit die Aktie fallen darf, bis sie den Strike erreicht.\n"
+            f"- **BS-Preis grün** = Markt-Prämie > Black-Scholes-Preis → gut für Verkäufer."
         )
+    puts = _load_symbol_puts(row["symbol"], p_dte_min, p_dte_max)
+    if puts is None or puts.empty:
+        st.info(f"Keine liquiden Puts für {row['symbol']} im DTE-Fenster {p_dte_min}–{p_dte_max}.")
     else:
         def _num(v):
             return float(v) if v is not None and pd.notna(v) else None
 
         def _bs_put(S, K, iv, dte):
-            """Black-Scholes-Put-Preis; None wenn Eingaben unbrauchbar."""
             S, K, iv = _num(S), _num(K), _num(iv)
             dte = int(dte) if dte is not None and pd.notna(dte) else 0
             if not S or not K or not iv or iv <= 0 or dte <= 0:
@@ -927,7 +1034,11 @@ def render_screener_tab():
             bs = _bs_put(o["live_stock_price"], o["strike_price"], iv, o["days_to_expiration"])
             delta, theta = _num(o["greeks_delta"]), _num(o["greeks_theta"])
             exp_move = _num(o.get("expected_move"))
+            ev = put_evaluation(kurs=o["live_stock_price"], strike=o["strike_price"],
+                                praemie=o["premium_option_price"], dte=o["days_to_expiration"],
+                                iv=iv, delta=delta, bs_preis=bs, min_puffer_pct=min_puffer)
             put_rows.append({
+                "Ampel": ev["ampel"],
                 "Expiry": o["expiration_date"],
                 "Strike": round(float(o["strike_price"]), 2),
                 "DTE": int(o["days_to_expiration"]),
@@ -935,6 +1046,8 @@ def render_screener_tab():
                 "BS-Preis ($)": bs,
                 "Rendite %": round(m["premium_pct"], 2),
                 "Annualisiert %": round(m["annualized_pct"], 1),
+                "Puffer %": round(ev["puffer_pct"], 1),
+                "Prob. Zuw. %": round(ev["prob_assignment_pct"], 1) if ev["prob_assignment_pct"] is not None else None,
                 "Gewinnschwelle": round(m["breakeven"], 2),
                 "Kapital ($)": round(m["capital_required"], 0),
                 "Delta": round(delta, 3) if delta is not None else None,
@@ -944,11 +1057,13 @@ def render_screener_tab():
                 "OI": int(o["open_interest"]),
                 "Vol": int(o["day_volume"]),
             })
-        put_df = (pd.DataFrame(put_rows)
-                  .sort_values(["Expiry", "Strike"], ascending=[True, True])
-                  .reset_index(drop=True))
 
-        # BS-Vergleich einfärben: grün wenn Markt-Prämie > BS-Preis (überteuert -> gut für Verkäufer).
+        ampel_rank = {"✅": 0, "⚠️": 1, "❌": 2}
+        put_df = pd.DataFrame(put_rows)
+        put_df["_a"] = put_df["Ampel"].map(ampel_rank).fillna(3)
+        put_df = (put_df.sort_values(["_a", "Annualisiert %"], ascending=[True, False])
+                  .drop(columns=["_a"]).reset_index(drop=True))
+
         def _highlight_bs(r):
             styles = [""] * len(r)
             bs_v, pr_v = r.get("BS-Preis ($)"), r.get("Prämie ($)")
@@ -962,15 +1077,16 @@ def render_screener_tab():
                                  use_container_width=True, hide_index=True,
                                  on_select="rerun", selection_mode="single-row",
                                  key="screener_put_pick")
-        st.caption("🔶 Prämie = day_close (Näherung; echter Bid/Ask im Broker prüfen). "
-                   "BS-Preis grün = Markt teurer als Black-Scholes (gut für Verkäufer). "
-                   "Sortiert nach Verfallsdatum, darin nach Strike (aufsteigend). "
-                   "**Klicke einen Put für Details.**")
+        st.caption(
+            "🔶 Prämie = day_close (Näherung). "
+            "BS-Preis grün = Markt teurer als Black-Scholes. "
+            "Sortiert: ✅ oben, dann höchste annualisierte Rendite. **Klick für Details.**"
+        )
 
         psel = put_event.selection.rows if hasattr(put_event, "selection") else []
         if psel:
             p = put_df.iloc[psel[0]]
-            st.markdown(f"#### 🔍 Put-Detail — {row['symbol']} {p['Strike']:.2f} · {p['Expiry']}")
+            st.markdown(f"#### {p['Ampel']} Put-Detail — {row['symbol']} {p['Strike']:.2f} · {p['Expiry']}")
             d1, d2, d3, d4 = st.columns(4)
             d1.metric("Prämie", f"${p['Prämie ($)']:.2f}")
             bs_txt = f"${p['BS-Preis ($)']:.2f}" if pd.notna(p["BS-Preis ($)"]) else "—"
@@ -980,22 +1096,26 @@ def render_screener_tab():
             d1.metric("BS-Preis", bs_txt, help=fair)
             d2.metric("Rendite", f"{p['Rendite %']:.2f}%")
             d2.metric("Annualisiert", f"{p['Annualisiert %']:.1f}%")
-            d3.metric("Gewinnschwelle", f"${p['Gewinnschwelle']:.2f}")
-            d3.metric("Kapital (CSP)", f"${p['Kapital ($)']:.0f}")
+            d3.metric("Puffer bis Strike", f"{p['Puffer %']:.1f}%")
+            prob_txt = f"{p['Prob. Zuw. %']:.1f}%" if pd.notna(p["Prob. Zuw. %"]) else "—"
+            d3.metric("Prob. Zuweisung", prob_txt,
+                      help="Wahrscheinlichkeit (BS), dass der Kurs bei Verfall unter dem Strike liegt.")
             d4.metric("DTE", f"{int(p['DTE'])} T")
             d4.metric("Delta", f"{p['Delta']:.3f}" if pd.notna(p["Delta"]) else "—")
             g1, g2, g3, g4 = st.columns(4)
-            g1.metric("Theta", f"{p['Theta']:.4f}" if pd.notna(p["Theta"]) else "—")
+            g1.metric("Gewinnschwelle", f"${p['Gewinnschwelle']:.2f}")
+            g1.metric("Kapital (CSP)", f"${p['Kapital ($)']:.0f}")
+            g2.metric("Theta", f"{p['Theta']:.4f}" if pd.notna(p["Theta"]) else "—")
             g2.metric("IV", f"{p['IV %']:.1f}%" if pd.notna(p["IV %"]) else "—")
             g3.metric("Exp. Move", f"±{p['Exp. Move']:.2f}" if pd.notna(p["Exp. Move"]) else "—")
             g4.metric("OI / Vol", f"{int(p['OI'])} / {int(p['Vol'])}")
-            if fair:
-                st.caption(f"Bewertung: Markt-Prämie **{fair}**.")
 
 
 # ---------------------------------------------------------------------------
 # Seite
 # ---------------------------------------------------------------------------
+_inject_css()
+
 tab_screener, tab_roller = st.tabs(["📈 Screener (Neuer Einstieg)", "🔄 Roller (Rollen)"])
 with tab_screener:
     render_screener_tab()
