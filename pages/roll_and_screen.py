@@ -1096,13 +1096,14 @@ def _render_screener_table(df: pd.DataFrame, sel_key: str, top_n: int = 5):
     """, unsafe_allow_html=True)
 
     # Header-Zeile
-    hcols = st.columns([2.5, 1.1, 0.9, 1.3, 2.2, 2.8, 0.6])
-    for hc, h in zip(hcols, ["Symbol", "Ann.%", "DTE", "IV-Rank", "Score", "Sektor", ""]):
+    hcols = st.columns([2.2, 1.0, 1.1, 0.9, 1.3, 2.2, 2.8, 0.6])
+    for hc, h in zip(hcols, ["Symbol", "Kurs", "Ann.%", "DTE", "IV-Rank", "Score", "Sektor", ""]):
         hc.markdown(f'<span class="sc-hdr">{h}</span>', unsafe_allow_html=True)
     st.markdown('<hr class="sc-hr-thick">', unsafe_allow_html=True)
 
     for i, (_, r) in enumerate(df.iterrows()):
         sym         = r["symbol"]
+        price_v     = r.get("price")
         score_val   = int(r["score"])
         score_max_v = int(r["score_max"])
         ann_val     = float(r.get("annualized_pct") or 0)
@@ -1138,7 +1139,7 @@ def _render_screener_table(df: pd.DataFrame, sel_key: str, top_n: int = 5):
         left_border = "#00d4aa" if is_top else "transparent"
         row_bg = "background:rgba(0,212,170,.07);border-radius:4px;" if is_sel else ""
 
-        rcols = st.columns([2.5, 1.1, 0.9, 1.3, 2.2, 2.8, 0.6])
+        rcols = st.columns([2.2, 1.0, 1.1, 0.9, 1.3, 2.2, 2.8, 0.6])
         with rcols[0]:
             st.markdown(
                 f'<div class="sc-cell" style="{row_bg}padding-left:8px;'
@@ -1148,27 +1149,33 @@ def _render_screener_table(df: pd.DataFrame, sel_key: str, top_n: int = 5):
                 unsafe_allow_html=True,
             )
         with rcols[1]:
+            price_str = f"${float(price_v):.2f}" if price_v is not None and pd.notna(price_v) else "--"
+            st.markdown(
+                f'<div class="sc-cell"><span class="sc-mono">{price_str}</span></div>',
+                unsafe_allow_html=True,
+            )
+        with rcols[2]:
             st.markdown(
                 f'<div class="sc-cell">'
                 f'<span style="font-family:\'JetBrains Mono\',monospace;font-size:14px;font-weight:700;color:{ann_color};">'
                 f'{ann_val:.1f}%</span></div>',
                 unsafe_allow_html=True,
             )
-        with rcols[2]:
+        with rcols[3]:
             st.markdown(
                 f'<div class="sc-cell"><span class="sc-mono">{put_dte}d</span></div>',
                 unsafe_allow_html=True,
             )
-        with rcols[3]:
-            st.markdown(f'<div class="sc-cell">{iv_html}</div>', unsafe_allow_html=True)
         with rcols[4]:
-            st.markdown(f'<div class="sc-cell">{score_html}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="sc-cell">{iv_html}</div>', unsafe_allow_html=True)
         with rcols[5]:
+            st.markdown(f'<div class="sc-cell">{score_html}</div>', unsafe_allow_html=True)
+        with rcols[6]:
             st.markdown(
                 f'<div class="sc-cell sc-muted">{ampel_v} {sector_v}</div>',
                 unsafe_allow_html=True,
             )
-        with rcols[6]:
+        with rcols[7]:
             btn_label = "✓" if is_sel else "→"
             if st.button(btn_label, key=f"screener_btn_{sym}"):
                 st.session_state[sel_key] = sym
