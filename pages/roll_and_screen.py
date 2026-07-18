@@ -1267,13 +1267,53 @@ def render_screener_tab():
 
     sel_key = "screener_selected_symbol"
 
+    # ── Tabellen-Filter ───────────────────────────────────────────────────
+    all_sectors   = sorted(scored["sector"].dropna().unique().tolist())
+    all_quadrants = sorted(scored["sektor_quadrant"].dropna().unique().tolist())
+
+    tf1, tf2, tf3, tf4 = st.columns([2.5, 2, 1.2, 1.2])
+    tbl_sectors = tf1.multiselect(
+        "Sektor", options=all_sectors, default=[],
+        placeholder="Alle Sektoren", label_visibility="collapsed",
+    )
+    tbl_quadrants = tf2.multiselect(
+        "Quadrant", options=all_quadrants, default=[],
+        placeholder="Alle RRG-Quadranten", label_visibility="collapsed",
+    )
+    tbl_min_ann = tf3.selectbox(
+        "Min. Ann.%", options=[0, 8, 15, 20], index=0,
+        format_func=lambda x: f"Ann. ≥ {x}%" if x > 0 else "Alle Ann.%",
+        label_visibility="collapsed",
+    )
+    tbl_min_score = tf4.selectbox(
+        "Min. Score", options=[0, 4, 5, 6, 7], index=0,
+        format_func=lambda x: f"Score ≥ {x}" if x > 0 else "Alle Scores",
+        label_visibility="collapsed",
+    )
+
+    # Filter anwenden
+    view = scored.copy()
+    if tbl_sectors:
+        view = view[view["sector"].isin(tbl_sectors)]
+    if tbl_quadrants:
+        view = view[view["sektor_quadrant"].isin(tbl_quadrants)]
+    if tbl_min_ann > 0:
+        view = view[view["annualized_pct"] >= tbl_min_ann]
+    if tbl_min_score > 0:
+        view = view[view["score"] >= tbl_min_score]
+
     # Header
-    st.markdown(f"**{len(scored)} Kandidaten** -- Top 5 nach IV-Rank · Sektor · Rendite")
+    filtered_note = f"{len(view)} von {len(scored)}" if len(view) != len(scored) else str(len(scored))
+    st.markdown(f"**{filtered_note} Kandidaten** -- Top 5 nach IV-Rank · Sektor · Rendite")
     if sector_map:
         legend_parts = [f"{_QUADRANT_EMOJI[q]} {q}" for q in ["Leading", "Improving", "Weakening", "Lagging"]]
         st.caption("Sektor: " + "  ·  ".join(legend_parts))
 
-    _render_screener_table(scored, sel_key, top_n=5)
+    if view.empty:
+        st.warning("Keine Treffer für die gewählten Tabellen-Filter.")
+        return
+
+    _render_screener_table(view, sel_key, top_n=5)
 
     # Scroll-Anker
     st.markdown('<div id="screener-detail"></div>', unsafe_allow_html=True)
