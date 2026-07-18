@@ -346,6 +346,8 @@ def _render_iv_chart(symbol: str):
 
     fig = go.Figure()
 
+    _dark = st.get_option("theme.base") != "light"
+
     # 75-Percentil-Band (rot-Zone: teuer zu kaufen, gut zum Verkaufen)
     fig.add_hrect(y0=p75, y1=100, fillcolor="rgba(239,68,68,0.07)",
                   line_width=0, annotation_text="Hohe IV (gut für Prämienverkäufer)",
@@ -384,17 +386,23 @@ def _render_iv_chart(symbol: str):
             hovertemplate="<b>%{x|%d.%m.%Y}</b><br>IV-%ile: %{y:.1f}<extra></extra>",
         ))
 
+    _dark = st.get_option("theme.base") != "light"
+    _plot_bg   = "rgba(13,20,38,0.6)"  if _dark else "rgba(241,245,249,0.6)"
+    _grid_col  = "#1e2d45"             if _dark else "#cbd5e1"
+    _axis_col  = "#64748b"             if _dark else "#475569"
+    _font_col  = "#94a3b8"             if _dark else "#334155"
+
     fig.update_layout(
         height=260,
         margin=dict(l=0, r=0, t=8, b=0),
         paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(13,20,38,0.6)",
-        font=dict(family="JetBrains Mono, monospace", color="#94a3b8", size=11),
+        plot_bgcolor=_plot_bg,
+        font=dict(family="JetBrains Mono, monospace", color=_font_col, size=11),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0,
                     bgcolor="rgba(0,0,0,0)", font=dict(size=11)),
-        xaxis=dict(showgrid=False, zeroline=False, color="#64748b"),
-        yaxis=dict(showgrid=True, gridcolor="#1e2d45", zeroline=False,
-                   range=[0, 100], color="#64748b", title="IV-Rank"),
+        xaxis=dict(showgrid=False, zeroline=False, color=_axis_col),
+        yaxis=dict(showgrid=True, gridcolor=_grid_col, zeroline=False,
+                   range=[0, 100], color=_axis_col, title="IV-Rank"),
         hovermode="x unified",
     )
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
