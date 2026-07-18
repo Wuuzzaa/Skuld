@@ -33,6 +33,10 @@ from src.put_screener import (
     score_candidates, score_breakdown, put_metrics, put_evaluation,
     DEFAULT_PE_MAX, DEFAULT_MIN_PUFFER_PCT,
 )
+from src.sector_rotation import (
+    RotationParameters, load_sector_rotation_price_history,
+    calculate_sector_rotation, build_latest_sector_snapshot, SECTOR_ETFS,
+)
 
 logger = logging.getLogger(os.path.basename(__file__))
 
@@ -130,13 +134,35 @@ def _load_symbols():
 
 @st.cache_data(ttl=600)
 def _load_sector_quadrants() -> dict:
-    """Gibt {sector_en: quadrant} zurück, z.B. {'Technology': 'Leading'}."""
-    df = select_into_dataframe(
-        sql_file_path=PATH_DATABASE_QUERY_FOLDER / "sector_quadrants.sql",
-    )
-    if df is None or df.empty:
+    """Gibt {sector_en: quadrant} zurück — identisch zur Sektor-Rotation-Seite."""
+    try:
+        params = RotationParameters()
+        today = date.today().isoformat()
+        price_history = load_sector_rotation_price_history(today, params)
+        if price_history is None or price_history.empty:
+            return {}
+        rotation_data = calculate_sector_rotation(price_history, params)
+        if rotation_data.empty:
+            return {}
+        snapshot = build_latest_sector_snapshot(rotation_data)
+        # SECTOR_ETFS: {ETF: sector_name_de} — wir brauchen EN-Namen für den Match mit StockData
+        etf_to_en = {
+            "XLC": "Communication Services", "XLY": "Consumer Cyclical",
+            "XLP": "Consumer Defensive",     "XLE": "Energy",
+            "XLF": "Financial Services",     "XLV": "Healthcare",
+            "XLI": "Industrials",            "XLB": "Basic Materials",
+            "XLRE": "Real Estate",           "XLK": "Technology",
+            "XLU": "Utilities",
+        }
+        result = {}
+        for _, row in snapshot.iterrows():
+            etf = row["symbol"]
+            en = etf_to_en.get(etf)
+            if en:
+                result[en] = row["quadrant"]
+        return result
+    except Exception:
         return {}
-    return dict(zip(df["sector_en"], df["quadrant"]))
 
 
 @st.cache_data(ttl=300)
@@ -149,10 +175,14 @@ def _load_put_history(symbol, entry_date, dte_min, dte_max):
 
 
 @st.cache_data(ttl=300)
-def _load_roll_candidates(symbol, K, dte_min, dte_max):
+def _load_roll_candidates(symbol, K, dte_min, dte_max,
+                          min_oi=50, min_vol=10, delta_min=-1.0, delta_max=-0.05):
     return select_into_dataframe(
         sql_file_path=PATH_DATABASE_QUERY_FOLDER / "roll_candidates.sql",
-        params={"symbol": symbol, "K": float(K), "dte_min": int(dte_min), "dte_max": int(dte_max)},
+        params={"symbol": symbol, "K": float(K),
+                "dte_min": int(dte_min), "dte_max": int(dte_max),
+                "min_oi": int(min_oi), "min_vol": int(min_vol),
+                "delta_min": float(delta_min), "delta_max": float(delta_max)},
     )
 
 
@@ -523,36 +553,33 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
         st.session_state["roll_puts_searched"] = False
         st.session_state["_roll_search_key"] = curr_key
 
-    entry_date = render_date_filter(
-        date_query=f"""select date from (
-            select date from "DatesHistory" union select current_date
-        ) as sub order by date desc""",
-        date_label="Einstiegsdatum (Eröffnung des Puts):",
-        date_session_key="roll_entry_date",
-        date_list_session_key="roll_date_list",
-        date_index=0,
+    col_date, col_dte1, col_dte2 = st.columns([2, 1, 1])
+    entry_date = col_date.date_input(
+        "Einstiegsdatum (Eröffnung des Puts)",
+        value=st.session_state.get("roll_entry_date_val", date.today()),
+        max_value=date.today(),
+        key="roll_entry_date_val",
+        help="Wähle den Tag an dem du den Put verkauft hast.",
     )
     if not entry_date:
         return
 
-    sc1, sc2, sc3 = st.columns([2, 2, 2])
-    dte_min = sc1.number_input("DTE min (Einstieg)", min_value=1, max_value=400,
+    sc2, sc3 = col_dte1, col_dte2
+    dte_min = sc2.number_input("DTE min", min_value=1, max_value=400,
                                value=st.session_state.get("roll_dte_min", 30), step=1,
                                key="roll_dte_min")
-    dte_max = sc2.number_input("DTE max (Einstieg)", min_value=1, max_value=400,
+    dte_max = sc3.number_input("DTE max", min_value=1, max_value=400,
                                value=st.session_state.get("roll_dte_max", 60), step=1,
                                key="roll_dte_max")
-    with sc3:
-        st.caption("Verfallstyp")
-        f1, f2, f3 = st.columns(3)
-        show_monthly = f1.checkbox("Monthly", value=True, key="roll_monthly")
-        show_weekly = f2.checkbox("Weekly", value=True, key="roll_weekly")
-        show_daily = f3.checkbox("Daily", value=False, key="roll_daily")
-
-    if st.button("🔍 Puts laden", key="roll_load_puts"):
-        st.session_state["roll_puts_searched"] = True
+    fc1, fc2, fc3, fc4 = st.columns([1, 1, 1, 2])
+    show_monthly = fc1.checkbox("Monthly", value=True, key="roll_monthly")
+    show_weekly  = fc2.checkbox("Weekly",  value=True, key="roll_weekly")
+    show_daily   = fc3.checkbox("Daily",   value=False, key="roll_daily")
+    with fc4:
+        if st.button("🔍 Puts laden", key="roll_load_puts", type="primary"):
+            st.session_state["roll_puts_searched"] = True
     if not st.session_state.get("roll_puts_searched"):
-        st.info("DTE-Bereich einstellen und 'Puts laden' klicken.")
+        st.info("Datum + DTE einstellen und 'Puts laden' klicken.")
         return
 
     with st.spinner("Lade Put-Historie…"):
@@ -595,26 +622,54 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
               .reset_index(drop=True))
 
     st.markdown("**2. Deinen Strike anklicken:**")
-    strike_table = exp_df[["strike_price", "premium_option_price", "days_to_expiration",
-                           "stock_close"]].rename(columns={
-        "strike_price": "Strike",
-        "premium_option_price": "Prämie ($)",
-        "days_to_expiration": "DTE",
-        "stock_close": "Aktienkurs",
-    })
-    event = st.dataframe(
-        strike_table,
-        use_container_width=True,
-        hide_index=True,
-        on_select="rerun",
-        selection_mode="single-row",
-        key="roll_put_pick",
-    )
-    rows = event.selection.rows if hasattr(event, "selection") else []
-    if not rows:
-        st.info("Klicke oben die Zeile deines Strikes an.")
+
+    if "roll_strike_selected_idx" not in st.session_state:
+        st.session_state.roll_strike_selected_idx = None
+
+    # Reset Strike-Auswahl wenn Verfall wechselt
+    prev_exp = st.session_state.get("_roll_prev_exp")
+    if prev_exp != str(chosen_exp):
+        st.session_state.roll_strike_selected_idx = None
+        st.session_state["_roll_prev_exp"] = str(chosen_exp)
+
+    cols_per_row = 4
+    num_strikes = len(exp_df)
+    for row_idx in range((num_strikes + cols_per_row - 1) // cols_per_row):
+        cols = st.columns(cols_per_row, gap="small")
+        for col_idx, col in enumerate(cols):
+            strike_idx = row_idx * cols_per_row + col_idx
+            if strike_idx >= num_strikes:
+                break
+            sr = exp_df.iloc[strike_idx]
+            strike  = float(sr["strike_price"])
+            premium = float(sr["premium_option_price"])
+            dte_val = int(sr["days_to_expiration"])
+            is_sel  = strike_idx == st.session_state.roll_strike_selected_idx
+            with col:
+                if is_sel:
+                    st.markdown(f"""
+                    <div style="background:linear-gradient(135deg,#00704a,#00d4aa);
+                        border:2px solid #00d4aa;border-radius:10px;padding:14px;
+                        text-align:center;box-shadow:0 0 12px rgba(0,212,170,0.4);">
+                        <div style="font-size:19px;font-weight:700;color:#fff;font-family:'JetBrains Mono',monospace;">${strike:.2f}</div>
+                        <div style="font-size:11px;color:#b2f5e8;margin-top:4px;">Prämie ${premium:.2f}</div>
+                        <div style="font-size:11px;color:#b2f5e8;">DTE {dte_val}d</div>
+                        <div style="font-size:10px;color:#fff;margin-top:4px;font-weight:600;letter-spacing:0.05em;">✓ AUSGEWÄHLT</div>
+                    </div>""", unsafe_allow_html=True)
+                else:
+                    if st.button(
+                        f"${strike:.2f}\n\n${premium:.2f} · {dte_val}d",
+                        key=f"roll_strike_{strike_idx}",
+                        use_container_width=True,
+                    ):
+                        st.session_state.roll_strike_selected_idx = strike_idx
+                        st.rerun()
+
+    selected_idx = st.session_state.roll_strike_selected_idx
+    if selected_idx is None:
+        st.info("👆 Strike-Kachel anklicken.")
         return
-    put = exp_df.iloc[rows[0]]
+    put = exp_df.iloc[selected_idx]
 
     K = float(put["strike_price"])
     option_osi = put["option_osi"]
@@ -1119,27 +1174,49 @@ Der Chart zeigt den **IV-Rank** der letzten ~12 Monate.
             p = put_df.iloc[psel[0]]
             st.markdown(f"#### {p['Ampel']} Put-Detail — {row['symbol']} {p['Strike']:.2f} · {p['Expiry']}")
             d1, d2, d3, d4 = st.columns(4)
-            d1.metric("Prämie", f"${p['Prämie ($)']:.2f}")
+            d1.metric("Prämie", f"${p['Prämie ($)']:.2f}",
+                      help="Markt-Prämie (day_close) je Aktie. Kontrakt = ×100.")
             bs_txt = f"${p['BS-Preis ($)']:.2f}" if pd.notna(p["BS-Preis ($)"]) else "—"
-            fair = ""
+            bs_help = ("Black-Scholes Put-Preis: fairer theoretischer Wert basierend auf S, K, IV, DTE, r. "
+                       "Markt > BS = Prämie ist 'teuer' → gut für Verkäufer.")
             if pd.notna(p["BS-Preis ($)"]):
-                fair = "über BS (gut für Verkäufer)" if p["Prämie ($)"] > p["BS-Preis ($)"] else "unter BS"
-            d1.metric("BS-Preis", bs_txt, help=fair)
-            d2.metric("Rendite", f"{p['Rendite %']:.2f}%")
-            d2.metric("Annualisiert", f"{p['Annualisiert %']:.1f}%")
-            d3.metric("Puffer bis Strike", f"{p['Puffer %']:.1f}%")
+                bs_help += f" Aktuell: {'über BS ✅' if p['Prämie ($)'] > p['BS-Preis ($)'] else 'unter BS ⚠️'}"
+            d1.metric("BS-Preis", bs_txt, help=bs_help)
+            d2.metric("Rendite", f"{p['Rendite %']:.2f}%",
+                      help="Prämie / Strike × 100. Zeigt wie viel % des eingesetzten Kapitals die Prämie ausmacht.")
+            d2.metric("Annualisiert", f"{p['Annualisiert %']:.1f}%",
+                      help="Rendite % × (365 / DTE). Vergleichbar mit Jahreszins — normiert auf 1 Jahr.")
+            d3.metric("Puffer bis Strike", f"{p['Puffer %']:.1f}%",
+                      help="(Kurs − Strike) / Kurs × 100. Wie weit darf die Aktie fallen bevor du angedient wirst?")
             prob_txt = f"{p['Prob. Zuw. %']:.1f}%" if pd.notna(p["Prob. Zuw. %"]) else "—"
             d3.metric("Prob. Zuweisung", prob_txt,
-                      help="Wahrscheinlichkeit (BS), dass der Kurs bei Verfall unter dem Strike liegt.")
-            d4.metric("DTE", f"{int(p['DTE'])} T")
-            d4.metric("Delta", f"{p['Delta']:.3f}" if pd.notna(p["Delta"]) else "—")
+                      help="Black-Scholes N(−d2): Wahrscheinlichkeit dass der Kurs bei Verfall UNTER dem Strike liegt. "
+                           "Fallback: |Delta| wenn IV fehlt. Je niedriger, desto sicherer.")
+            d4.metric("DTE", f"{int(p['DTE'])} T",
+                      help="Days to Expiration — verbleibende Tage bis zum Verfallstag.")
+            d4.metric("Delta", f"{p['Delta']:.3f}" if pd.notna(p["Delta"]) else "—",
+                      help="Sensitivität des Put-Preises auf ±1$ Kursbewegung. "
+                           "Delta −0.30 = Put steigt ~0.30$ wenn Aktie 1$ fällt. "
+                           "Betrag ≈ grobe Zuweis.-Wahrscheinlichkeit.")
             g1, g2, g3, g4 = st.columns(4)
-            g1.metric("Gewinnschwelle", f"${p['Gewinnschwelle']:.2f}")
-            g1.metric("Kapital (CSP)", f"${p['Kapital ($)']:.0f}")
-            g2.metric("Theta", f"{p['Theta']:.4f}" if pd.notna(p["Theta"]) else "—")
-            g2.metric("IV", f"{p['IV %']:.1f}%" if pd.notna(p["IV %"]) else "—")
-            g3.metric("Exp. Move", f"±{p['Exp. Move']:.2f}" if pd.notna(p["Exp. Move"]) else "—")
-            g4.metric("OI / Vol", f"{int(p['OI'])} / {int(p['Vol'])}")
+            g1.metric("Gewinnschwelle", f"${p['Gewinnschwelle']:.2f}",
+                      help="Strike − Prämie. Unterhalb dieser Schwelle verlierst du Geld bei Andienung.")
+            g1.metric("Kapital (CSP)", f"${p['Kapital ($)']:.0f}",
+                      help="Strike × 100. Cash der als Sicherheit geblockt wird (Cash-Secured Put).")
+            g2.metric("Theta", f"{p['Theta']:.4f}" if pd.notna(p["Theta"]) else "—",
+                      help="Zeitwertverlust pro Tag in $. Als Verkäufer ist positives Theta dein Freund — "
+                           "der Put verliert täglich an Wert auch ohne Kursbewegung.")
+            g2.metric("IV", f"{p['IV %']:.1f}%" if pd.notna(p["IV %"]) else "—",
+                      help="Implizite Volatilität: die vom Markt eingepreiste erwartete Schwankungsbreite (annualisiert). "
+                           "Hohe IV = höhere Prämien, aber auch höheres Risiko.")
+            g3.metric("Exp. Move", f"±{p['Exp. Move']:.2f}" if pd.notna(p["Exp. Move"]) else "—",
+                      help="Expected Move: erwartete Kursbewegung bis Verfall (±1σ). "
+                           "Berechnung: Kurs × IV × √(DTE/365). "
+                           "68% Wahrscheinlichkeit dass der Kurs innerhalb dieser Spanne bleibt.")
+            g4.metric("OI / Vol", f"{int(p['OI'])} / {int(p['Vol'])}",
+                      help="Open Interest: offene Kontrakte (Liquiditäts-Indikator). "
+                           "Tagesvolumen: heute gehandelte Kontrakte. "
+                           "Beide sollten > 100 sein für faire Bid/Ask-Spreads.")
 
 
 # ---------------------------------------------------------------------------
