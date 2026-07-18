@@ -441,7 +441,7 @@ def _render_iv_chart(symbol: str):
                    range=[0, 100], color=_axis_col, title="IV-Rank"),
         hovermode="x unified",
     )
-    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 
     # Aktueller Wert + Einordnung
     latest = iv_df.iloc[-1]
@@ -753,7 +753,7 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
                     if st.button(
                         f"${strike:.2f}\n\n${premium:.2f} · {dte_val}d",
                         key=f"roll_strike_{strike_idx}",
-                        use_container_width=True,
+                        width="stretch",
                     ):
                         st.session_state.roll_strike_selected_idx = strike_idx
                         st.rerun()
@@ -959,7 +959,7 @@ def _render_candidate_cards(candidates, stufe, K, P_eroeffnung, P_heute, n, brea
                   </div>
                 </div>""", unsafe_allow_html=True)
 
-                if st.button("Details →", key=card_key, use_container_width=True):
+                if st.button("Details →", key=card_key, width="stretch"):
                     st.session_state[sel_key] = card_key
                     st.rerun()
 
@@ -1407,7 +1407,7 @@ def render_screener_tab():
     sc_ai1, sc_ai2 = st.columns([2, 5])
     with sc_ai1:
         run_sc_ai = st.button("🤖 AI Analyse starten", type="primary",
-                              key="sc_run_ai", use_container_width=True)
+                              key="sc_run_ai", width="stretch")
     with sc_ai2:
         st.caption(
             f"Analysiert alle **{len(view)} sichtbaren Kandidaten** inkl. Finviz-Fundamentals + besten Put je Aktie. "
@@ -1507,10 +1507,10 @@ def render_screener_tab():
         "Kriterium": i["label"],
         "Erreicht": "✅" if i["erreicht"] else "❌",
         "Möglich": i["moeglich"],
-        "Ist-Wert": i["ist_wert"],
+        "Ist-Wert": str(i["ist_wert"]) if i["ist_wert"] is not None else "--",
         "Annahme": ann_map.get(i["annahme"], ""),
     } for i in bd])
-    st.dataframe(detail, use_container_width=True, hide_index=True)
+    st.dataframe(detail, width="stretch", hide_index=True)
 
     getroffene = sorted({i["annahme"] for i in bd if i["annahme"]})
     if getroffene:
@@ -1625,7 +1625,7 @@ Der Chart zeigt den **IV-Rank** der letzten ~12 Monate.
             return styles
 
         put_event = st.dataframe(put_df.style.apply(_highlight_bs, axis=1),
-                                 use_container_width=True, hide_index=True,
+                                 width="stretch", hide_index=True,
                                  on_select="rerun", selection_mode="single-row",
                                  key="screener_put_pick")
         st.caption(
@@ -1690,20 +1690,20 @@ Der Chart zeigt den **IV-Rank** der letzten ~12 Monate.
             lc1.link_button(
                 "TradingView Chart",
                 f"https://www.tradingview.com/chart/?symbol={_sym}",
-                use_container_width=True,
+                width="stretch",
             )
             lc2.link_button(
                 "Finviz Profil",
                 f"https://finviz.com/quote.ashx?t={_sym}",
-                use_container_width=True,
+                width="stretch",
             )
             lc3.link_button(
                 "Yahoo Finance",
                 f"https://finance.yahoo.com/quote/{_sym}",
-                use_container_width=True,
+                width="stretch",
             )
             with lc4:
-                if st.button(f"Vollanalyse {_sym} →", key="put_goto_symbol", use_container_width=True, type="secondary"):
+                if st.button(f"Vollanalyse {_sym} →", key="put_goto_symbol", width="stretch", type="secondary"):
                     st.session_state["symbol_page_symbol"] = _sym
                     st.switch_page("pages/symbolpage.py")
 
@@ -1859,7 +1859,7 @@ def render_put_tab():
             key="pt_ai_n",
         )
         run_ai = st.button("🤖 AI Analyse starten", type="primary", key="pt_run_ai",
-                           use_container_width=True)
+                           width="stretch")
     with ai_col2:
         st.caption(
             f"Analysiert die Top {ai_n} Puts (nach Ann.%) inkl. Finviz-Fundamentaldaten. "
@@ -1928,11 +1928,11 @@ def render_put_tab():
 
     st.divider()
     lc1, lc2, lc3, lc4 = st.columns(4)
-    lc1.link_button("TradingView", f"https://www.tradingview.com/chart/?symbol={sel_sym}", use_container_width=True)
-    lc2.link_button("Finviz", f"https://finviz.com/quote.ashx?t={sel_sym}", use_container_width=True)
-    lc3.link_button("Yahoo Finance", f"https://finance.yahoo.com/quote/{sel_sym}", use_container_width=True)
+    lc1.link_button("TradingView", f"https://www.tradingview.com/chart/?symbol={sel_sym}", width="stretch")
+    lc2.link_button("Finviz", f"https://finviz.com/quote.ashx?t={sel_sym}", width="stretch")
+    lc3.link_button("Yahoo Finance", f"https://finance.yahoo.com/quote/{sel_sym}", width="stretch")
     with lc4:
-        if st.button(f"Vollanalyse {sel_sym} →", key="pt_goto_symbol", type="secondary", use_container_width=True):
+        if st.button(f"Vollanalyse {sel_sym} →", key="pt_goto_symbol", type="secondary", width="stretch"):
             st.session_state["symbol_page_symbol"] = sel_sym
             st.switch_page("pages/symbolpage.py")
 
