@@ -1330,11 +1330,12 @@ def render_screener_tab():
 
     st.divider()
 
-    # Auto-Scroll zum Analyse-Bereich
-    components.html("""
+    # Auto-Scroll zum Analyse-Bereich (sel_sym im Script erzwingt Re-Render bei Symbolwechsel)
+    components.html(f"""
     <script>
+    /* trigger={sel_sym} */
     window.parent.document.getElementById('screener-detail')
-        ?.scrollIntoView({behavior:'smooth', block:'start'});
+        ?.scrollIntoView({{behavior:'smooth', block:'start'}});
     </script>
     """, height=0)
 
