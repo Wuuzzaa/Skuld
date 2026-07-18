@@ -346,7 +346,21 @@ def _render_iv_chart(symbol: str):
 
     fig = go.Figure()
 
-    _dark = st.get_option("theme.base") != "light"
+    # theme.base ist None wenn kein Custom-Theme → Fallback über backgroundColor
+    _theme_base = st.get_option("theme.base")
+    _theme_bg   = st.get_option("theme.backgroundColor") or ""
+    if _theme_base == "light":
+        _dark = False
+    elif _theme_base == "dark":
+        _dark = True
+    else:
+        # Kein explizites Theme: hellen Hintergrund erkennen via Hex-Helligkeit
+        _bg = _theme_bg.lstrip("#")
+        if len(_bg) == 6:
+            r, g, b = int(_bg[0:2],16), int(_bg[2:4],16), int(_bg[4:6],16)
+            _dark = (r * 0.299 + g * 0.587 + b * 0.114) < 128
+        else:
+            _dark = True  # safe default
 
     # ── Theme-Palette ─────────────────────────────────────────────────────
     if _dark:
