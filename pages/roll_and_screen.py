@@ -1,5 +1,6 @@
+# -*- coding: utf-8 -*-
 """
-Roll & Screen — Wheel-Ablauf für Cash-Secured Puts.
+Roll & Screen -- Wheel-Ablauf für Cash-Secured Puts.
 
 Zwei Tabs:
   * Screener (Neuer Einstieg): qualifizierte Aktie + bester Put  [Task Schritt 5]
@@ -42,7 +43,7 @@ logger = logging.getLogger(os.path.basename(__file__))
 
 
 # ---------------------------------------------------------------------------
-# Dark-Theme CSS — Bloomberg-Desk Aesthetic
+# Dark-Theme CSS -- Bloomberg-Desk Aesthetic
 # ---------------------------------------------------------------------------
 def _inject_css():
     st.markdown("""
@@ -50,56 +51,82 @@ def _inject_css():
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=DM+Sans:wght@300;400;500;600&display=swap');
 
     :root {
-        --bg-base:      #080c17;
-        --bg-card:      #0d1426;
-        --bg-card2:     #111827;
-        --bg-border:    #1e2d45;
+        --bg-base:      #0b1120;
+        --bg-card:      #131e30;
+        --bg-card2:     #172136;
+        --bg-border:    #243549;
         --teal:         #00d4aa;
-        --teal-dim:     rgba(0,212,170,0.15);
         --amber:        #f59e0b;
-        --amber-dim:    rgba(245,158,11,0.15);
         --red:          #ef4444;
-        --red-dim:      rgba(239,68,68,0.15);
-        --green:        #22c55e;
-        --text-primary: #e2e8f0;
-        --text-muted:   #64748b;
-        --text-dim:     #94a3b8;
+        --green:        #34d399;
+        /* Lesbarer: text-muted auf #94a3b8 statt #64748b */
+        --text-primary: #f1f5f9;
+        --text-muted:   #94a3b8;
+        --text-dim:     #b0c4d8;
         --mono:         'JetBrains Mono', monospace;
         --sans:         'DM Sans', sans-serif;
     }
 
-    /* Base overrides */
-    .stApp { background: var(--bg-base) !important; font-family: var(--sans); }
+    /* Base */
+    .stApp { background: var(--bg-base) !important; font-family: var(--sans); color: var(--text-primary) !important; }
+
+    /* Alle p, span, div im App -- Basis-Kontrast sicherstellen */
+    .stApp p, .stApp span, .stApp label, .stApp div { color: inherit; }
+    .stMarkdown p { color: var(--text-primary) !important; }
+    .stCaption p  { color: var(--text-muted) !important; }
+
+    /* Tabs */
     .stTabs [data-baseweb="tab-list"] { background: var(--bg-card); border-radius: 8px; padding: 4px; gap: 4px; }
     .stTabs [data-baseweb="tab"] { color: var(--text-muted) !important; border-radius: 6px; padding: 8px 20px; font-family: var(--sans); font-weight: 500; }
     .stTabs [aria-selected="true"] { background: var(--bg-border) !important; color: var(--teal) !important; }
 
-    /* Metric overrides */
+    /* Metrics -- heller Hintergrund, klarer Text */
     [data-testid="stMetric"] { background: var(--bg-card2); border: 1px solid var(--bg-border); border-radius: 8px; padding: 12px 16px; }
-    [data-testid="stMetricLabel"] { color: var(--text-muted) !important; font-size: 11px !important; text-transform: uppercase; letter-spacing: 0.08em; font-family: var(--sans); }
-    [data-testid="stMetricValue"] { color: var(--text-primary) !important; font-family: var(--mono) !important; font-size: 1.4rem !important; }
+    [data-testid="stMetricLabel"] { color: var(--text-muted) !important; font-size: 11px !important; text-transform: uppercase; letter-spacing: 0.08em; }
+    [data-testid="stMetricValue"] { color: var(--text-primary) !important; font-family: var(--mono) !important; font-size: 1.35rem !important; }
 
     /* Dataframe */
     .stDataFrame { border: 1px solid var(--bg-border) !important; border-radius: 8px; overflow: hidden; }
+    /* Dataframe-Text lesbar */
+    .stDataFrame td, .stDataFrame th { color: var(--text-primary) !important; }
 
     /* Buttons */
+    .stButton > button { font-family: var(--sans); border-radius: 6px; }
     .stButton > button[kind="primary"] {
-        background: var(--teal) !important; color: #000 !important; font-weight: 600;
-        border: none; border-radius: 6px; font-family: var(--sans);
+        background: var(--teal) !important; color: #000 !important; font-weight: 600; border: none;
     }
     .stButton > button[kind="secondary"] {
         background: var(--bg-card2) !important; color: var(--teal) !important;
-        border: 1px solid var(--teal) !important; border-radius: 6px; font-family: var(--sans);
+        border: 1px solid var(--teal) !important;
+    }
+    /* Default buttons (die kleinen →/Details-Buttons auf Karten) */
+    .stButton > button[kind="tertiary"], .stButton > button:not([kind]) {
+        background: var(--bg-card2) !important; color: var(--text-dim) !important;
+        border: 1px solid var(--bg-border) !important;
     }
 
     /* Expander */
     .streamlit-expanderHeader { background: var(--bg-card) !important; border: 1px solid var(--bg-border) !important; border-radius: 8px; color: var(--text-dim) !important; }
+    details summary { color: var(--text-dim) !important; }
 
-    /* Mono numbers in tables */
-    .mono { font-family: var(--mono); }
+    /* Info/Warning/Error boxes -- Text lesbar */
+    [data-testid="stAlert"] { border-radius: 8px; }
+    [data-testid="stAlert"] p { color: inherit !important; font-weight: 500; }
+
+    /* Selectbox, number_input, date_input */
+    [data-baseweb="select"] div, [data-baseweb="input"] input {
+        background: var(--bg-card2) !important; color: var(--text-primary) !important;
+        border-color: var(--bg-border) !important;
+    }
+
+    /* Checkbox label */
+    .stCheckbox label span { color: var(--text-dim) !important; }
 
     /* Divider */
     hr { border-color: var(--bg-border) !important; }
+
+    /* Success/info text */
+    .stSuccess, .stInfo, .stWarning, .stError { border-radius: 8px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -134,7 +161,7 @@ def _load_symbols():
 
 @st.cache_data(ttl=600)
 def _load_sector_quadrants() -> dict:
-    """Gibt {sector_en: quadrant} zurück — identisch zur Sektor-Rotation-Seite."""
+    """Gibt {sector_en: quadrant} zurück -- identisch zur Sektor-Rotation-Seite."""
     try:
         params = RotationParameters()
         today = date.today().isoformat()
@@ -145,7 +172,7 @@ def _load_sector_quadrants() -> dict:
         if rotation_data.empty:
             return {}
         snapshot = build_latest_sector_snapshot(rotation_data)
-        # SECTOR_ETFS: {ETF: sector_name_de} — wir brauchen EN-Namen für den Match mit StockData
+        # SECTOR_ETFS: {ETF: sector_name_de} -- wir brauchen EN-Namen für den Match mit StockData
         etf_to_en = {
             "XLC": "Communication Services", "XLY": "Consumer Cyclical",
             "XLP": "Consumer Defensive",     "XLE": "Energy",
@@ -188,7 +215,7 @@ def _load_roll_candidates(symbol, K, dte_min, dte_max,
 
 @st.cache_data(ttl=300)
 def _load_iv_history(symbol: str) -> pd.DataFrame | None:
-    """Historische IV + IV-Rank für den Chart — letztes Jahr direkt in SQL begrenzt."""
+    """Historische IV + IV-Rank für den Chart -- letztes Jahr direkt in SQL begrenzt."""
     return select_into_dataframe(
         query="""
             SELECT date, symbol,
@@ -355,12 +382,12 @@ def _render_iv_chart(symbol: str):
     rank_now = latest.get("iv_rank")
     if rank_now is not None and pd.notna(rank_now):
         if rank_now >= p75:
-            zone = "🔴 **hoch** — Prämien sind überdurchschnittlich hoch: guter Zeitpunkt für Prämienverkauf"
+            zone = "🔴 **hoch** -- Prämien sind überdurchschnittlich hoch: guter Zeitpunkt für Prämienverkauf"
         elif rank_now <= p25:
-            zone = "🟢 **niedrig** — IV im unteren Quartil: Prämien eher mager"
+            zone = "🟢 **niedrig** -- IV im unteren Quartil: Prämien eher mager"
         else:
-            zone = "🟡 **mittel** — IV im normalen Bereich"
-        st.caption(f"Aktueller IV-Rank: **{rank_now:.1f}** — {zone}")
+            zone = "🟡 **mittel** -- IV im normalen Bereich"
+        st.caption(f"Aktueller IV-Rank: **{rank_now:.1f}** -- {zone}")
 
 
 # ---------------------------------------------------------------------------
@@ -386,8 +413,8 @@ def _render_position_card(symbol: str, K: float, S: float, p_today_share: float,
     <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=DM+Sans:wght@300;400;500;600&display=swap');
     .pos-card {{
-        background: linear-gradient(135deg, #0d1426 0%, #111827 100%);
-        border: 1px solid #1e2d45;
+        background: #131e30;
+        border: 1px solid #243549;
         border-radius: 12px;
         padding: 20px 24px;
         font-family: 'DM Sans', sans-serif;
@@ -426,7 +453,7 @@ def _render_position_card(symbol: str, K: float, S: float, p_today_share: float,
         font-size: 10px;
         text-transform: uppercase;
         letter-spacing: 0.1em;
-        color: #64748b;
+        color: #8faabf;
         margin-bottom: 4px;
     }}
     .pos-value {{
@@ -505,16 +532,16 @@ def _render_position_card(symbol: str, K: float, S: float, p_today_share: float,
 
 
 # ---------------------------------------------------------------------------
-# Tab 2 — Roller
+# Tab 2 -- Roller
 # ---------------------------------------------------------------------------
 def render_roller_tab():
-    st.subheader("🔄 Roller — bestehenden Cash-Secured Put rollen")
+    st.subheader("🔄 Roller -- bestehenden Cash-Secured Put rollen")
 
     with st.expander("ℹ️ Wie funktioniert das Rollen? (Konzept)", expanded=False):
         st.markdown("""
 **Warum rollen?**
 Wenn dein Put im Verlust ist (der Kurs der Aktie ist unter deinen Strike gefallen),
-kannst du den alten Put zurückkaufen und gleichzeitig einen neuen verkaufen —
+kannst du den alten Put zurückkaufen und gleichzeitig einen neuen verkaufen --
 idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle senkst.
 
 **Die 3 Stufen (Buch Kap. 3):**
@@ -527,7 +554,7 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
 **Ampel-Logik:**
 - ✅ Netto-Prämie positiv UND neue Gewinnschwelle niedriger als alte
 - ⚠️ Netto-Prämie positiv, aber GS wird nicht besser
-- ❌ Roll kostet drauf (netto negativ) — kein sinnvoller Roll möglich
+- ❌ Roll kostet drauf (netto negativ) -- kein sinnvoller Roll möglich
 
 **Netto-Prämie** = Eröffnungsprämie + neue Prämie × Kontrakte − Rückkaufpreis
 """)
@@ -543,7 +570,7 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
     n_contracts = col_n.number_input("Kontrakte (n)", min_value=1, value=1, step=1)
 
     if not symbol:
-        st.info("Symbol wählen — erst dann werden Historie und Kurse geladen.")
+        st.info("Symbol wählen -- erst dann werden Historie und Kurse geladen.")
         return
 
     # Reset "Puts laden"-State bei Symbol-/Datum-Wechsel
@@ -585,7 +612,7 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
     with st.spinner("Lade Put-Historie…"):
         hist_df = _load_put_history(symbol, entry_date, dte_min, dte_max)
     if hist_df is None or hist_df.empty:
-        st.warning(f"Keine Puts für {symbol} am {entry_date} im DTE-Bereich {dte_min}–{dte_max} gefunden.")
+        st.warning(f"Keine Puts für {symbol} am {entry_date} im DTE-Bereich {dte_min}-{dte_max} gefunden.")
         return
 
     hist_df = filter_by_expiration_type(hist_df, "expiration_date",
@@ -613,7 +640,7 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
                                 index=None, placeholder="Verfall wählen…",
                                 key="roll_expiry_pick", label_visibility="collapsed")
     if not chosen_label:
-        st.info("Verfallsdatum wählen — dann erscheinen die Strikes.")
+        st.info("Verfallsdatum wählen -- dann erscheinen die Strikes.")
         return
     chosen_exp = exp_labels[chosen_label]
 
@@ -714,14 +741,14 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
     st.divider()
     im_verlust = P_heute > P_eroeffnung
     if im_verlust:
-        st.error("🔴 Position im Verlust — Rollen sinnvoll, um die Gewinnschwelle zu senken.")
+        st.error("🔴 Position im Verlust -- Rollen sinnvoll, um die Gewinnschwelle zu senken.")
     else:
-        st.success("🟢 Position im Gewinn — Rollen optional (z. B. Laufzeit verlängern für mehr Prämie).")
+        st.success("🟢 Position im Gewinn -- Rollen optional (z. B. Laufzeit verlängern für mehr Prämie).")
 
     st.markdown("### 🎯 Roll-Kandidaten (alle 3 Stufen)")
     with st.expander("ℹ️ Wie lese ich die Tabelle?", expanded=False):
         st.markdown("""
-- **Netto absolut**: Gesamtprämie nach dem Roll — positiv heißt du nimmst Geld ein
+- **Netto absolut**: Gesamtprämie nach dem Roll -- positiv heißt du nimmst Geld ein
 - **Neue GS**: Deine neue Gewinnschwelle nach dem Roll (je niedriger, desto besser)
 - **Alte GS**: Deine aktuelle Gewinnschwelle (Vergleichswert)
 - **Kapital nötig**: Cash der als Sicherheit hinterlegt werden muss (Strike × Kontrakte × 100)
@@ -730,7 +757,7 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
 
     cand = _load_roll_candidates(symbol, K, 30, 90)
     if cand is None or cand.empty:
-        st.warning("Keine aktuellen Put-Kandidaten (DTE 30–90, liquide) gefunden.")
+        st.warning("Keine aktuellen Put-Kandidaten (DTE 30-90, liquide) gefunden.")
         _render_endgame_hint()
         return
 
@@ -743,22 +770,22 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
 
     st1 = cand[cand["strike_price"] < K]
     any_green |= _render_stufe(1, st1, K, P_eroeffnung, P_heute, int(n_contracts), breakeven_old,
-                               "Stufe 1 — niedrigerer Basispreis, gleiche Kontrakte")
+                               "Stufe 1 -- niedrigerer Basispreis, gleiche Kontrakte")
 
     st2 = cand[cand["strike_price"] == K]
     any_green |= _render_stufe(2, st2, K, P_eroeffnung, P_heute, int(n_contracts), breakeven_old,
-                               "Stufe 2 — gleicher Basispreis, gleiche Kontrakte")
+                               "Stufe 2 -- gleicher Basispreis, gleiche Kontrakte")
 
     st3 = cand[cand["strike_price"] < K]
     any_green |= _render_stufe(3, st3, K, P_eroeffnung, P_heute, 2 * int(n_contracts), breakeven_old,
-                               "Stufe 3 — niedrigerer Basispreis, Kontrakte verdoppelt")
+                               "Stufe 3 -- niedrigerer Basispreis, Kontrakte verdoppelt")
 
     if not any_green:
         _render_endgame_hint()
 
 
 def _render_stufe(stufe, df, K, P_eroeffnung, P_heute, n, breakeven_old, title):
-    """Roll-Kandidaten als horizontale Karten — Top-3 sofort sichtbar, Rest ausklappbar."""
+    """Roll-Kandidaten als horizontale Karten -- Top-3 sofort sichtbar, Rest ausklappbar."""
     st.markdown(f"#### {title}")
     if df is None or df.empty:
         st.caption("Keine passenden Strikes in dieser Stufe.")
@@ -767,28 +794,24 @@ def _render_stufe(stufe, df, K, P_eroeffnung, P_heute, n, breakeven_old, title):
     df = df.sort_values(["expiration_date", "strike_price"],
                         ascending=[True, False]).reset_index(drop=True)
 
-    # Alle Kandidaten vorberechnen
     candidates = []
     for i, (_, o) in enumerate(df.iterrows()):
         K2 = float(o["strike_price"])
         P_neu = float(o["premium_option_price"]) * 100.0
         r = roll_candidate(stufe=stufe, K=K, K2=K2, P_eroeffnung=P_eroeffnung,
                            P_heute=P_heute, P_neu=P_neu, n=n)
-        candidates.append({"idx": i, "K2": K2, "P_neu": P_neu,
+        # global_idx: eindeutig pro Stufe über Top-3 und Rest hinweg
+        candidates.append({"global_idx": i, "K2": K2, "P_neu": P_neu,
                             "expiry": o["expiration_date"],
                             "dte": int(o["days_to_expiration"]),
                             "oi": int(o["open_interest"]),
                             "vol": int(o["day_volume"]),
                             "result": r})
 
-    # Sortieren: ✅ zuerst, dann nach Netto-Prämie
     ampel_rank = {"✅": 0, "⚠️": 1, "❌": 2}
     candidates.sort(key=lambda c: (ampel_rank.get(c["result"]["ampel"], 3), -c["result"]["netto_abs"]))
-
     any_green = any(c["result"]["ampel"] == "✅" for c in candidates)
 
-    # Top-3 als Karten + "Alle anzeigen" Expander
-    show_key = f"stufe_{stufe}_show_all"
     top3 = candidates[:3]
     rest = candidates[3:]
 
@@ -796,19 +819,21 @@ def _render_stufe(stufe, df, K, P_eroeffnung, P_heute, n, breakeven_old, title):
 
     if rest:
         with st.expander(f"Alle {len(candidates)} Kandidaten anzeigen"):
-            _render_candidate_cards(rest, stufe, K, P_eroeffnung, P_heute, n, breakeven_old,
-                                    key_offset=3)
+            _render_candidate_cards(rest, stufe, K, P_eroeffnung, P_heute, n, breakeven_old)
 
     return any_green
 
 
-def _render_candidate_cards(candidates, stufe, K, P_eroeffnung, P_heute, n, breakeven_old, key_offset=0):
-    """Rendert Kandidaten als 3-spaltige Karten-Reihen mit Klick-Herleitung."""
+def _render_candidate_cards(candidates, stufe, K, P_eroeffnung, P_heute, n, breakeven_old):
+    """Rendert Kandidaten als 3-spaltige Karten-Reihen."""
     sel_key = f"stufe_{stufe}_sel"
 
-    _AMPEL_BG = {"✅": ("rgba(0,212,170,0.12)", "#00d4aa"),
-                 "⚠️": ("rgba(245,158,11,0.12)", "#f59e0b"),
-                 "❌": ("rgba(239,68,68,0.10)", "#ef4444")}
+    # Hellere Hintergründe -- lesbar auf dunklem Theme
+    _AMPEL_STYLE = {
+        "✅": ("#162a1e", "#00d4aa", "#00d4aa"),   # bg, border, accent
+        "⚠️": ("#261e0d", "#f59e0b", "#f59e0b"),
+        "❌": ("#200e0e", "#ef4444", "#ef4444"),
+    }
 
     cols_per_row = 3
     for row_i in range(0, len(candidates), cols_per_row):
@@ -816,48 +841,55 @@ def _render_candidate_cards(candidates, stufe, K, P_eroeffnung, P_heute, n, brea
         cols = st.columns(len(chunk), gap="small")
         for col, cand in zip(cols, chunk):
             r = cand["result"]
-            bg, border = _AMPEL_BG.get(r["ampel"], ("rgba(30,45,69,0.6)", "#1e2d45"))
+            bg, border_c, accent = _AMPEL_STYLE.get(r["ampel"], ("#162032", "#2d3f55", "#64748b"))
             gs_delta = breakeven_old - r["breakeven_new"]
             gs_arrow = f"▼ ${gs_delta:.2f}" if gs_delta > 0 else (f"▲ ${abs(gs_delta):.2f}" if gs_delta < 0 else "=")
-            gs_color = "#00d4aa" if gs_delta > 0 else ("#ef4444" if gs_delta < 0 else "#64748b")
-            netto_color = "#00d4aa" if r["netto_abs"] > 0 else "#ef4444"
-            card_key = f"roll_cand_{stufe}_{cand['idx'] + key_offset}"
+            gs_color = "#34d399" if gs_delta > 0 else ("#f87171" if gs_delta < 0 else "#94a3b8")
+            netto_color = "#34d399" if r["netto_abs"] > 0 else "#f87171"
+            # Key: stufe + global_idx = garantiert eindeutig
+            card_key = f"roll_cand_{stufe}_{cand['global_idx']}"
             is_sel = st.session_state.get(sel_key) == card_key
+            border = f"2px solid {accent}" if is_sel else f"1px solid {border_c}66"
+            shadow = f"box-shadow:0 0 14px {accent}44;" if is_sel else ""
 
             with col:
-                # Karte als HTML
-                sel_border = "2px solid #00d4aa" if is_sel else f"1px solid {border}"
-                sel_shadow = "box-shadow:0 0 16px rgba(0,212,170,0.35);" if is_sel else ""
                 st.markdown(f"""
-                <div style="background:{bg};border:{sel_border};border-radius:10px;
-                    padding:14px 16px;margin-bottom:4px;{sel_shadow}">
-                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-                    <span style="font-family:'JetBrains Mono',monospace;font-size:18px;
-                        font-weight:700;color:#e2e8f0;">${cand['K2']:.2f}</span>
-                    <span style="font-size:18px;">{r['ampel']}</span>
+                <div style="background:{bg};border:{border};border-radius:10px;
+                    padding:12px 14px;margin-bottom:4px;{shadow}">
+                  <div style="display:flex;justify-content:space-between;
+                      align-items:center;margin-bottom:8px;">
+                    <span style="font-family:'JetBrains Mono',monospace;font-size:17px;
+                        font-weight:700;color:#f1f5f9;">${cand['K2']:.2f}</span>
+                    <span style="font-size:16px;">{r['ampel']}</span>
                   </div>
                   <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
                     <div>
-                      <div style="font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:#64748b;">Netto</div>
+                      <div style="font-size:9px;text-transform:uppercase;letter-spacing:.07em;
+                          color:#8faabf;margin-bottom:1px;">Netto</div>
                       <div style="font-family:'JetBrains Mono',monospace;font-size:13px;
-                          font-weight:600;color:{netto_color};">${r['netto_abs']:+.2f}</div>
+                          font-weight:700;color:{netto_color};">${r['netto_abs']:+.2f}</div>
                     </div>
                     <div>
-                      <div style="font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:#64748b;">GS-Delta</div>
+                      <div style="font-size:9px;text-transform:uppercase;letter-spacing:.07em;
+                          color:#8faabf;margin-bottom:1px;">GS-Delta</div>
                       <div style="font-family:'JetBrains Mono',monospace;font-size:13px;
-                          font-weight:600;color:{gs_color};">{gs_arrow}</div>
+                          font-weight:700;color:{gs_color};">{gs_arrow}</div>
                     </div>
                     <div>
-                      <div style="font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:#64748b;">DTE</div>
-                      <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#94a3b8;">{cand['dte']}d</div>
+                      <div style="font-size:9px;text-transform:uppercase;letter-spacing:.07em;
+                          color:#8faabf;margin-bottom:1px;">DTE</div>
+                      <div style="font-family:'JetBrains Mono',monospace;font-size:12px;
+                          color:#cbd5e1;">{cand['dte']}d</div>
                     </div>
                     <div>
-                      <div style="font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:#64748b;">Prämie</div>
-                      <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#94a3b8;">${cand['P_neu']/100:.2f}</div>
+                      <div style="font-size:9px;text-transform:uppercase;letter-spacing:.07em;
+                          color:#8faabf;margin-bottom:1px;">Prämie</div>
+                      <div style="font-family:'JetBrains Mono',monospace;font-size:12px;
+                          color:#cbd5e1;">${cand['P_neu']/100:.2f}</div>
                     </div>
                   </div>
-                  <div style="font-size:9px;color:#475569;margin-top:8px;">
-                    Neue GS: ${r['breakeven_new']:.2f} &nbsp;·&nbsp; OI {cand['oi']} / Vol {cand['vol']}
+                  <div style="font-size:9px;color:#5a7a8a;margin-top:7px;">
+                    GS neu: ${r['breakeven_new']:.2f} · OI {cand['oi']} / Vol {cand['vol']}
                   </div>
                 </div>""", unsafe_allow_html=True)
 
@@ -868,19 +900,20 @@ def _render_candidate_cards(candidates, stufe, K, P_eroeffnung, P_heute, n, brea
     # Herleitung für ausgewählte Karte
     sel_card = st.session_state.get(sel_key)
     if sel_card:
-        # Kandidat aus Key rekonstruieren
-        try:
-            parts = sel_card.split("_")
-            sel_idx = int(parts[-1]) - key_offset
-            if 0 <= sel_idx < len(candidates):
-                cand = candidates[sel_idx]
-                exp = roll_candidate_explained(stufe=stufe, K=K, K2=cand["K2"],
-                                               P_eroeffnung=P_eroeffnung, P_heute=P_heute,
-                                               P_neu=cand["P_neu"], n=n)
-                _render_roll_explanation(exp, K, cand["K2"], P_eroeffnung, P_heute,
-                                         cand["P_neu"], n, breakeven_old)
-        except (ValueError, IndexError):
-            pass
+        prefix = f"roll_cand_{stufe}_"
+        if sel_card.startswith(prefix):
+            try:
+                sel_global = int(sel_card[len(prefix):])
+                match = [c for c in candidates if c["global_idx"] == sel_global]
+                if match:
+                    cand = match[0]
+                    exp = roll_candidate_explained(stufe=stufe, K=K, K2=cand["K2"],
+                                                   P_eroeffnung=P_eroeffnung, P_heute=P_heute,
+                                                   P_neu=cand["P_neu"], n=n)
+                    _render_roll_explanation(exp, K, cand["K2"], P_eroeffnung, P_heute,
+                                             cand["P_neu"], n, breakeven_old)
+            except (ValueError, IndexError):
+                pass
 
 
 def _render_roll_explanation(exp: dict, K: float, K2: float, P_eroeffnung: float,
@@ -900,7 +933,7 @@ def _render_roll_explanation(exp: dict, K: float, K2: float, P_eroeffnung: float
 
         col1, col2 = st.columns(2)
         with col1:
-            st.markdown("**Schritt 1 — Alten Put schließen:**")
+            st.markdown("**Schritt 1 -- Alten Put schließen:**")
             st.markdown(
                 f"Du kaufst deinen bestehenden Put (Strike **${K:.2f}**) zurück. "
                 f"Du hast ihn damals für **${p_open_per_share:.2f}** verkauft, "
@@ -909,7 +942,7 @@ def _render_roll_explanation(exp: dict, K: float, K2: float, P_eroeffnung: float
                    else "Das ist ein **Verlust** (Put ist teurer geworden).")
             )
         with col2:
-            st.markdown(f"**Schritt 2 — Neuen Put eröffnen ({n}× Kontrakt{'e' if n > 1 else ''}):**")
+            st.markdown(f"**Schritt 2 -- Neuen Put eröffnen ({n}× Kontrakt{'e' if n > 1 else ''}):**")
             st.markdown(
                 f"Du verkaufst {'je ' if n > 1 else ''}**{n}×** einen neuen Put "
                 f"(Strike **${K2:.2f}**) und nimmst dafür **${p_neu_per_share:.2f}** je Aktie ein."
@@ -924,7 +957,7 @@ def _render_roll_explanation(exp: dict, K: float, K2: float, P_eroeffnung: float
             )
         else:
             st.markdown(
-                f"**Ergebnis:** Dieser Roll **kostet dich ${abs(netto):.2f}** — "
+                f"**Ergebnis:** Dieser Roll **kostet dich ${abs(netto):.2f}** -- "
                 f"du musst draufzahlen. Kein sinnvoller Roll."
             )
 
@@ -934,10 +967,10 @@ def _render_roll_explanation(exp: dict, K: float, K2: float, P_eroeffnung: float
                 f"(−${gs_delta:.2f}). Die Aktie darf nun weiter fallen, bevor du ins Minus gerätst."
             )
         elif gs_delta == 0:
-            st.warning("⚠️ Gewinnschwelle bleibt gleich — Roll bringt keinen strukturellen Vorteil.")
+            st.warning("⚠️ Gewinnschwelle bleibt gleich -- Roll bringt keinen strukturellen Vorteil.")
         else:
             st.error(
-                f"❌ Gewinnschwelle steigt von ${breakeven_old:.2f} auf ${gs_new:.2f} — "
+                f"❌ Gewinnschwelle steigt von ${breakeven_old:.2f} auf ${gs_new:.2f} -- "
                 f"das ist schlechter als vorher."
             )
 
@@ -958,7 +991,7 @@ def _render_endgame_hint():
 
 
 # ---------------------------------------------------------------------------
-# Tab 1 — Screener
+# Tab 1 -- Screener
 # ---------------------------------------------------------------------------
 @st.cache_data(ttl=300)
 def _load_screener(dte_min, dte_max, min_oi, min_vol, price_min, price_max,
@@ -984,10 +1017,10 @@ def _load_symbol_puts(symbol, dte_min, dte_max, min_oi=100, min_vol=20, min_prem
 
 
 def render_screener_tab():
-    st.subheader("📈 Screener — neuer Cash-Secured-Put-Einstieg")
+    st.subheader("📈 Screener -- neuer Cash-Secured-Put-Einstieg")
     st.caption(
         "Qualifizierte Aktien nach Buch-Checkliste (Kap. 4+5) + Sektor-Kontext aus der RRG-Rotation. "
-        "Harte Filter: Preis 15–80 $, OI/Vol ≥ 100. Kriterien mit '(aktuell)' sind Momentaufnahmen."
+        "Harte Filter: Preis 15-80 $, OI/Vol ≥ 100. Kriterien mit '(aktuell)' sind Momentaufnahmen."
     )
 
     # Sektor-Quadrant-Map laden (im Hintergrund, kein Spinner)
@@ -1099,8 +1132,8 @@ def render_screener_tab():
             score_val   = int(r["score"])
             score_max_v = int(r["score_max"])
             ann_val     = float(r.get("annualized_pct") or 0)
-            put_dte     = r.get("put_dte", "—")
-            put_strike  = r.get("put_strike", "—")
+            put_dte     = r.get("put_dte", "--")
+            put_strike  = r.get("put_strike", "--")
             sector_v    = r.get("sector", "")
             quadrant_v  = r.get("sektor_quadrant", "Unbekannt")
             ampel_v     = _QUADRANT_EMOJI.get(quadrant_v, "⚪")
@@ -1135,7 +1168,7 @@ def render_screener_tab():
                           font-weight:600;color:#cbd5e1;">{put_dte}d</div>
                     </div>
                   </div>
-                  <div style="font-size:9px;color:{qcolor};opacity:.8;">{ampel_v} {sector_v or "—"}</div>
+                  <div style="font-size:9px;color:{qcolor};opacity:.8;">{ampel_v} {sector_v or "--"}</div>
                 </div>""", unsafe_allow_html=True)
 
                 btn_label = "✓" if is_sel else "→"
@@ -1143,7 +1176,7 @@ def render_screener_tab():
                     st.session_state[sel_key] = sym
                     st.rerun()
 
-    # Scroll-Anker — wird nach Karten gerendert, Analyse folgt direkt danach
+    # Scroll-Anker -- wird nach Karten gerendert, Analyse folgt direkt danach
     st.markdown('<div id="screener-detail"></div>', unsafe_allow_html=True)
 
     # Ausgewählte Aktie ermitteln
@@ -1173,11 +1206,11 @@ def render_screener_tab():
         if sector_en:
             st.markdown(_sector_badge_html(sector_en, quadrant), unsafe_allow_html=True)
             if quadrant in ("Leading", "Improving"):
-                st.caption(f"✅ Sektor **{sector_en}** ist aktuell im RRG-Quadrant **{quadrant}** — tendenziell günstiger Zeitpunkt.")
+                st.caption(f"✅ Sektor **{sector_en}** ist aktuell im RRG-Quadrant **{quadrant}** -- tendenziell günstiger Zeitpunkt.")
             elif quadrant == "Weakening":
-                st.caption(f"⚠️ Sektor **{sector_en}** ist im Quadrant **Weakening** — Momentum dreht ab, erhöhte Vorsicht.")
+                st.caption(f"⚠️ Sektor **{sector_en}** ist im Quadrant **Weakening** -- Momentum dreht ab, erhöhte Vorsicht.")
             elif quadrant == "Lagging":
-                st.caption(f"🔴 Sektor **{sector_en}** ist im Quadrant **Lagging** — relativer Stärke-Nachteil.")
+                st.caption(f"🔴 Sektor **{sector_en}** ist im Quadrant **Lagging** -- relativer Stärke-Nachteil.")
     with h2:
         st.markdown("")
         st.markdown("")
@@ -1210,7 +1243,7 @@ def render_screener_tab():
 
     # IV-Rank Chart
     st.divider()
-    st.markdown(f"### 📊 IV-Rank Verlauf — {row['symbol']}")
+    st.markdown(f"### 📊 IV-Rank Verlauf -- {row['symbol']}")
     with st.expander("ℹ️ Was zeigt dieser Chart?", expanded=False):
         st.markdown("""
 Der Chart zeigt den **IV-Rank** der letzten ~12 Monate.
@@ -1224,7 +1257,7 @@ Der Chart zeigt den **IV-Rank** der letzten ~12 Monate.
 
     # Verkaufbare Puts
     st.divider()
-    st.markdown("### Verkaufbare Puts — jetzt")
+    st.markdown("### Verkaufbare Puts -- jetzt")
     pc1, pc2, _pc3 = st.columns([1, 1, 2])
     p_dte_min, p_dte_max = pc1.slider("DTE-Fenster", 7, 90, (30, 45), 1, key="screener_put_dte")
     min_puffer = pc2.slider("Min. Puffer % (für ✅)", 0, 30, int(DEFAULT_MIN_PUFFER_PCT), 1,
@@ -1241,7 +1274,7 @@ Der Chart zeigt den **IV-Rank** der letzten ~12 Monate.
     puts = _load_symbol_puts(row["symbol"], p_dte_min, p_dte_max,
                              min_oi=min_oi, min_vol=min_vol, min_premium_share=min_premium_share)
     if puts is None or puts.empty:
-        st.info(f"Keine liquiden Puts für {row['symbol']} im DTE-Fenster {p_dte_min}–{p_dte_max}.")
+        st.info(f"Keine liquiden Puts für {row['symbol']} im DTE-Fenster {p_dte_min}-{p_dte_max}.")
     else:
         def _num(v):
             return float(v) if v is not None and pd.notna(v) else None
@@ -1315,11 +1348,11 @@ Der Chart zeigt den **IV-Rank** der letzten ~12 Monate.
         psel = put_event.selection.rows if hasattr(put_event, "selection") else []
         if psel:
             p = put_df.iloc[psel[0]]
-            st.markdown(f"#### {p['Ampel']} Put-Detail — {row['symbol']} {p['Strike']:.2f} · {p['Expiry']}")
+            st.markdown(f"#### {p['Ampel']} Put-Detail -- {row['symbol']} {p['Strike']:.2f} · {p['Expiry']}")
             d1, d2, d3, d4 = st.columns(4)
             d1.metric("Prämie", f"${p['Prämie ($)']:.2f}",
                       help="Markt-Prämie (day_close) je Aktie. Kontrakt = ×100.")
-            bs_txt = f"${p['BS-Preis ($)']:.2f}" if pd.notna(p["BS-Preis ($)"]) else "—"
+            bs_txt = f"${p['BS-Preis ($)']:.2f}" if pd.notna(p["BS-Preis ($)"]) else "--"
             bs_help = ("Black-Scholes Put-Preis: fairer theoretischer Wert basierend auf S, K, IV, DTE, r. "
                        "Markt > BS = Prämie ist 'teuer' → gut für Verkäufer.")
             if pd.notna(p["BS-Preis ($)"]):
@@ -1328,16 +1361,16 @@ Der Chart zeigt den **IV-Rank** der letzten ~12 Monate.
             d2.metric("Rendite", f"{p['Rendite %']:.2f}%",
                       help="Prämie / Strike × 100. Zeigt wie viel % des eingesetzten Kapitals die Prämie ausmacht.")
             d2.metric("Annualisiert", f"{p['Annualisiert %']:.1f}%",
-                      help="Rendite % × (365 / DTE). Vergleichbar mit Jahreszins — normiert auf 1 Jahr.")
+                      help="Rendite % × (365 / DTE). Vergleichbar mit Jahreszins -- normiert auf 1 Jahr.")
             d3.metric("Puffer bis Strike", f"{p['Puffer %']:.1f}%",
                       help="(Kurs − Strike) / Kurs × 100. Wie weit darf die Aktie fallen bevor du angedient wirst?")
-            prob_txt = f"{p['Prob. Zuw. %']:.1f}%" if pd.notna(p["Prob. Zuw. %"]) else "—"
+            prob_txt = f"{p['Prob. Zuw. %']:.1f}%" if pd.notna(p["Prob. Zuw. %"]) else "--"
             d3.metric("Prob. Zuweisung", prob_txt,
                       help="Black-Scholes N(−d2): Wahrscheinlichkeit dass der Kurs bei Verfall UNTER dem Strike liegt. "
                            "Fallback: |Delta| wenn IV fehlt. Je niedriger, desto sicherer.")
             d4.metric("DTE", f"{int(p['DTE'])} T",
-                      help="Days to Expiration — verbleibende Tage bis zum Verfallstag.")
-            d4.metric("Delta", f"{p['Delta']:.3f}" if pd.notna(p["Delta"]) else "—",
+                      help="Days to Expiration -- verbleibende Tage bis zum Verfallstag.")
+            d4.metric("Delta", f"{p['Delta']:.3f}" if pd.notna(p["Delta"]) else "--",
                       help="Sensitivität des Put-Preises auf ±1$ Kursbewegung. "
                            "Delta −0.30 = Put steigt ~0.30$ wenn Aktie 1$ fällt. "
                            "Betrag ≈ grobe Zuweis.-Wahrscheinlichkeit.")
@@ -1346,13 +1379,13 @@ Der Chart zeigt den **IV-Rank** der letzten ~12 Monate.
                       help="Strike − Prämie. Unterhalb dieser Schwelle verlierst du Geld bei Andienung.")
             g1.metric("Kapital (CSP)", f"${p['Kapital ($)']:.0f}",
                       help="Strike × 100. Cash der als Sicherheit geblockt wird (Cash-Secured Put).")
-            g2.metric("Theta", f"{p['Theta']:.4f}" if pd.notna(p["Theta"]) else "—",
-                      help="Zeitwertverlust pro Tag in $. Als Verkäufer ist positives Theta dein Freund — "
+            g2.metric("Theta", f"{p['Theta']:.4f}" if pd.notna(p["Theta"]) else "--",
+                      help="Zeitwertverlust pro Tag in $. Als Verkäufer ist positives Theta dein Freund -- "
                            "der Put verliert täglich an Wert auch ohne Kursbewegung.")
-            g2.metric("IV", f"{p['IV %']:.1f}%" if pd.notna(p["IV %"]) else "—",
+            g2.metric("IV", f"{p['IV %']:.1f}%" if pd.notna(p["IV %"]) else "--",
                       help="Implizite Volatilität: die vom Markt eingepreiste erwartete Schwankungsbreite (annualisiert). "
                            "Hohe IV = höhere Prämien, aber auch höheres Risiko.")
-            g3.metric("Exp. Move", f"±{p['Exp. Move']:.2f}" if pd.notna(p["Exp. Move"]) else "—",
+            g3.metric("Exp. Move", f"±{p['Exp. Move']:.2f}" if pd.notna(p["Exp. Move"]) else "--",
                       help="Expected Move: erwartete Kursbewegung bis Verfall (±1σ). "
                            "Berechnung: Kurs × IV × √(DTE/365). "
                            "68% Wahrscheinlichkeit dass der Kurs innerhalb dieser Spanne bleibt.")
