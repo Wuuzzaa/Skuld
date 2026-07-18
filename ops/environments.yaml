@@ -13,6 +13,33 @@
 # Workflow_dispatch menus are generated from the keys in this file.
 
 production:
+  # Cutover 2026-07-18: production zeigt jetzt auf IONOS (war Hetzner 91.98.156.116).
+  # HTTPS via CloudFlare Wildcard Origin Cert (default cert) → certresolver-Labels = tls=true
+  # (NICHT letsencrypt — IONOS nutzt Origin-Cert, LE-Label würde 404 verursachen).
+  host: 82.165.128.161
+  user: deploy
+  runner: ubuntu-latest
+  domain: app.skuld-options.com
+  auth_domain: auth.skuld-options.com
+  telegram_chat_id: "-1003610692224"
+  db_container: postgres_setup-db-1
+  compose_args: "-f docker-compose.yml"
+  traefik_entrypoint: websecure
+  certresolver_skuld: "traefik.http.routers.skuld.tls=true"
+  certresolver_authelia: "traefik.http.routers.authelia.tls=true"
+  auth_scheme: https
+  authelia: "true"
+  skuld_middlewares: "authelia"
+  skuld_env: Production
+  deploy_services: ""
+  skip_compose_down: "false"
+  postgres_host: postgres_setup-db-1
+  postgres_db: Skuld
+  postgres_user: admin
+  postgres_port: "5432"
+
+# Alter Hetzner-Prod-Server als Fallback (nicht mehr auto-deployed, aber referenzierbar).
+hetzner:
   host: 91.98.156.116
   user: deploy
   runner: ubuntu-latest
