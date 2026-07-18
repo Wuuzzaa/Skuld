@@ -50,25 +50,47 @@ def _inject_css():
     <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=DM+Sans:wght@300;400;500;600&display=swap');
 
-    :root {
+    /* ── Dark theme ─────────────────────────────────────────────── */
+    [data-theme="dark"] {
         --bg-base:      #0b1120;
         --bg-card:      #131e30;
         --bg-card2:     #172136;
         --bg-border:    #243549;
-        --teal:         #00d4aa;
-        --amber:        #f59e0b;
-        --red:          #ef4444;
-        --green:        #34d399;
-        /* Lesbarer: text-muted auf #94a3b8 statt #64748b */
         --text-primary: #f1f5f9;
         --text-muted:   #94a3b8;
         --text-dim:     #b0c4d8;
-        --mono:         'JetBrains Mono', monospace;
-        --sans:         'DM Sans', sans-serif;
+        --row-hover:    rgba(255,255,255,0.04);
+        --row-selected: rgba(0,212,170,0.08);
     }
 
-    /* Base */
-    .stApp { background: var(--bg-base) !important; font-family: var(--sans); color: var(--text-primary) !important; }
+    /* ── Light theme ─────────────────────────────────────────────── */
+    [data-theme="light"] {
+        --bg-base:      #f8fafc;
+        --bg-card:      #ffffff;
+        --bg-card2:     #f1f5f9;
+        --bg-border:    #e2e8f0;
+        --text-primary: #0f172a;
+        --text-muted:   #64748b;
+        --text-dim:     #475569;
+        --row-hover:    rgba(0,0,0,0.04);
+        --row-selected: rgba(0,180,140,0.10);
+    }
+
+    /* Shared accent colors — same in both themes */
+    :root {
+        --teal:  #00d4aa;
+        --amber: #f59e0b;
+        --red:   #ef4444;
+        --green: #34d399;
+        --mono:  'JetBrains Mono', monospace;
+        --sans:  'DM Sans', sans-serif;
+    }
+
+    /* Base — background via theme variable, no hardcoded dark color */
+    .stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
+        background: var(--bg-base) !important;
+    }
+    .stApp { font-family: var(--sans); color: var(--text-primary) !important; }
 
     /* Alle p, span, div im App -- Basis-Kontrast sicherstellen */
     .stApp p, .stApp span, .stApp label, .stApp div { color: inherit; }
@@ -1016,97 +1038,117 @@ def _load_symbol_puts(symbol, dte_min, dte_max, min_oi=100, min_vol=20, min_prem
     )
 
 
-def _render_screener_cards(df, sel_key, large=True):
-    """Rendert Screener-Kacheln. large=True: 3/Zeile mit IV-Rank. large=False: 5/Zeile kompakt."""
-    cols_per_row = 3 if large else 5
-    for row_i in range(0, len(df), cols_per_row):
-        chunk = df.iloc[row_i:row_i + cols_per_row]
-        cols = st.columns(len(chunk), gap="small")
-        for col, (_, r) in zip(cols, chunk.iterrows()):
-            sym        = r["symbol"]
-            score_val  = int(r["score"])
-            score_max_v= int(r["score_max"])
-            ann_val    = float(r.get("annualized_pct") or 0)
-            put_dte    = r.get("put_dte", "--")
-            iv_rank    = r.get("iv_rank")
-            sector_v   = r.get("sector", "")
-            quadrant_v = r.get("sektor_quadrant", "Unbekannt")
-            ampel_v    = _QUADRANT_EMOJI.get(quadrant_v, "⚪")
-            qcolor     = _QUADRANT_COLOR.get(quadrant_v, "#94a3b8")
-            score_pct  = score_val / score_max_v * 100 if score_max_v else 0
-            score_color= "#059669" if score_pct >= 70 else ("#d97706" if score_pct >= 50 else "#dc2626")
-            is_sel     = st.session_state.get(sel_key) == sym
-            bg     = "#0f2a1e" if is_sel else "#131e30"
-            border = "2px solid #00d4aa" if is_sel else "1px solid #243549"
+def _render_screener_table(df: pd.DataFrame, sel_key: str, top_n: int = 5):
+    """Custom Tabellen-Layout für alle Screener-Kandidaten via st.columns.
 
-            # IV-Rank Farbe + Balken
-            iv_str, iv_color, iv_bar_pct = "--", "#94a3b8", 0
-            if iv_rank is not None and pd.notna(iv_rank):
-                iv_v = float(iv_rank)
-                iv_bar_pct = min(iv_v, 100)
-                if iv_v >= 60:
-                    iv_color = "#f87171"  # hoch = gut für Verkäufer
-                    iv_str = f"{iv_v:.0f}"
-                elif iv_v >= 30:
-                    iv_color = "#fbbf24"
-                    iv_str = f"{iv_v:.0f}"
-                else:
-                    iv_color = "#94a3b8"
-                    iv_str = f"{iv_v:.0f}"
+    top_n erste Zeilen erhalten teal-Akzentlinie links + ★-Prefix.
+    Klick auf → setzt session_state[sel_key] = symbol und rerun().
+    """
+    sel_sym = st.session_state.get(sel_key)
 
-            with col:
-                if large:
-                    st.markdown(f"""
-                    <div style="background:{bg};border:{border};border-radius:10px;
-                        padding:14px 14px 10px;margin-bottom:2px;">
-                      <div style="display:flex;justify-content:space-between;
-                          align-items:baseline;margin-bottom:10px;">
-                        <span style="font-family:'JetBrains Mono',monospace;font-size:18px;
-                            font-weight:700;color:#f1f5f9;">{sym}</span>
-                        <span style="font-size:11px;font-weight:600;color:{score_color};
-                            background:{score_color}1a;border:1px solid {score_color}44;
-                            border-radius:4px;padding:1px 7px;">{score_val}/{score_max_v}</span>
-                      </div>
-                      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;margin-bottom:10px;">
-                        <div style="border-right:1px solid #243549;padding-right:8px;">
-                          <div style="font-size:8px;color:#8faabf;text-transform:uppercase;letter-spacing:.07em;margin-bottom:2px;">Ann.%</div>
-                          <div style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:#34d399;">{ann_val:.1f}%</div>
-                        </div>
-                        <div style="border-right:1px solid #243549;padding:0 8px;">
-                          <div style="font-size:8px;color:#8faabf;text-transform:uppercase;letter-spacing:.07em;margin-bottom:2px;">DTE</div>
-                          <div style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:600;color:#cbd5e1;">{put_dte}d</div>
-                        </div>
-                        <div style="padding-left:8px;">
-                          <div style="font-size:8px;color:#8faabf;text-transform:uppercase;letter-spacing:.07em;margin-bottom:2px;">IV-Rank</div>
-                          <div style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:{iv_color};">{iv_str}</div>
-                        </div>
-                      </div>
-                      <div style="background:#0b1120;border-radius:3px;height:3px;margin-bottom:8px;">
-                        <div style="background:{iv_color};height:3px;border-radius:3px;width:{iv_bar_pct:.0f}%;"></div>
-                      </div>
-                      <div style="font-size:10px;color:{qcolor};">{ampel_v} {sector_v or "--"}</div>
-                    </div>""", unsafe_allow_html=True)
-                else:
-                    st.markdown(f"""
-                    <div style="background:{bg};border:{border};border-radius:7px;
-                        padding:8px 9px 6px;margin-bottom:2px;">
-                      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px;">
-                        <span style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:#f1f5f9;">{sym}</span>
-                        <span style="font-size:9px;font-weight:600;color:{score_color};">{score_val}/{score_max_v}</span>
-                      </div>
-                      <div style="display:flex;gap:8px;margin-bottom:4px;">
-                        <div><div style="font-size:7px;color:#8faabf;text-transform:uppercase;">Ann.%</div>
-                          <div style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:#34d399;">{ann_val:.1f}%</div></div>
-                        <div><div style="font-size:7px;color:#8faabf;text-transform:uppercase;">IV</div>
-                          <div style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;color:{iv_color};">{iv_str}</div></div>
-                      </div>
-                      <div style="font-size:8px;color:{qcolor};">{ampel_v} {sector_v or "--"}</div>
-                    </div>""", unsafe_allow_html=True)
+    st.markdown("""
+    <style>
+    .sc-sym   { font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:700; }
+    .sc-mono  { font-family:'JetBrains Mono',monospace; font-size:14px; }
+    .sc-badge {
+        display:inline-block; padding:2px 8px; border-radius:4px;
+        font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:600;
+    }
+    .sc-hdr {
+        font-size:11px; font-weight:600; text-transform:uppercase;
+        letter-spacing:.08em; color:var(--text-muted,#94a3b8);
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
-                btn_label = "✓" if is_sel else "→"
-                if st.button(btn_label, key=f"screener_card_{sym}", use_container_width=True):
-                    st.session_state[sel_key] = sym
-                    st.rerun()
+    # Header-Zeile
+    hcols = st.columns([2.5, 1.1, 0.9, 1.3, 2.2, 2.8, 0.6])
+    for hc, h in zip(hcols, ["Symbol", "Ann.%", "DTE", "IV-Rank", "Score", "Sektor", ""]):
+        hc.markdown(f'<span class="sc-hdr">{h}</span>', unsafe_allow_html=True)
+    st.markdown(
+        '<hr style="margin:4px 0 0;border:none;border-top:2px solid var(--bg-border,#e2e8f0);">',
+        unsafe_allow_html=True,
+    )
+
+    for i, (_, r) in enumerate(df.iterrows()):
+        sym         = r["symbol"]
+        score_val   = int(r["score"])
+        score_max_v = int(r["score_max"])
+        ann_val     = float(r.get("annualized_pct") or 0)
+        put_dte     = r.get("put_dte", "--")
+        iv_rank     = r.get("iv_rank")
+        sector_v    = r.get("sector", "") or ""
+        ampel_v     = r.get("sektor_ampel", "⚪")
+        is_top      = i < top_n
+        is_sel      = sel_sym == sym
+
+        ann_color = "#34d399" if ann_val >= 15 else ("#f59e0b" if ann_val >= 8 else "#ef4444")
+
+        if iv_rank is not None and pd.notna(iv_rank):
+            iv_v    = float(iv_rank)
+            iv_bg   = "rgba(239,68,68,.15)" if iv_v >= 60 else ("rgba(245,158,11,.15)" if iv_v >= 30 else "rgba(148,163,184,.12)")
+            iv_text = "#f87171" if iv_v >= 60 else ("#fbbf24" if iv_v >= 30 else "#94a3b8")
+            iv_html = f'<span class="sc-badge" style="background:{iv_bg};color:{iv_text};">{iv_v:.0f}</span>'
+        else:
+            iv_html = '<span style="color:var(--text-muted,#94a3b8)">--</span>'
+
+        score_pct = score_val / score_max_v * 100 if score_max_v else 0
+        bar_color = "#059669" if score_pct >= 70 else ("#d97706" if score_pct >= 50 else "#dc2626")
+        score_html = (
+            f'<div style="display:flex;align-items:center;gap:6px;">'
+            f'<div style="width:50px;height:6px;border-radius:3px;background:var(--bg-border,#e2e8f0);">'
+            f'<div style="width:{score_pct:.0f}%;height:6px;border-radius:3px;background:{bar_color};"></div></div>'
+            f'<span style="font-family:\'JetBrains Mono\',monospace;font-size:12px;color:{bar_color};">'
+            f'{score_val}/{score_max_v}</span></div>'
+        )
+
+        top_prefix = "★ " if is_top else ""
+        sym_color  = "color:#00d4aa;" if is_top else "color:var(--text-primary,#0f172a);"
+        left_border = "#00d4aa" if is_top else "transparent"
+        row_bg = "background:rgba(0,212,170,.07);border-radius:4px;" if is_sel else ""
+
+        rcols = st.columns([2.5, 1.1, 0.9, 1.3, 2.2, 2.8, 0.6])
+        with rcols[0]:
+            st.markdown(
+                f'<div style="{row_bg}padding:10px 4px 10px 8px;'
+                f'border-left:3px solid {left_border};">'
+                f'<span style="font-family:\'JetBrains Mono\',monospace;font-size:15px;font-weight:700;{sym_color}">'
+                f'{top_prefix}{sym}</span></div>',
+                unsafe_allow_html=True,
+            )
+        with rcols[1]:
+            st.markdown(
+                f'<div style="padding:10px 4px;">'
+                f'<span style="font-family:\'JetBrains Mono\',monospace;font-size:14px;font-weight:700;color:{ann_color};">'
+                f'{ann_val:.1f}%</span></div>',
+                unsafe_allow_html=True,
+            )
+        with rcols[2]:
+            st.markdown(
+                f'<div style="padding:10px 4px;font-family:\'JetBrains Mono\',monospace;'
+                f'font-size:14px;color:var(--text-primary,#0f172a);">{put_dte}d</div>',
+                unsafe_allow_html=True,
+            )
+        with rcols[3]:
+            st.markdown(f'<div style="padding:10px 4px;">{iv_html}</div>', unsafe_allow_html=True)
+        with rcols[4]:
+            st.markdown(f'<div style="padding:10px 4px;">{score_html}</div>', unsafe_allow_html=True)
+        with rcols[5]:
+            st.markdown(
+                f'<div style="padding:10px 4px;font-size:13px;color:var(--text-muted,#64748b);">'
+                f'{ampel_v} {sector_v}</div>',
+                unsafe_allow_html=True,
+            )
+        with rcols[6]:
+            btn_label = "✓" if is_sel else "→"
+            if st.button(btn_label, key=f"screener_btn_{sym}"):
+                st.session_state[sel_key] = sym
+                st.rerun()
+
+        st.markdown(
+            '<hr style="margin:0;border:none;border-top:1px solid var(--bg-border,#e2e8f0);">',
+            unsafe_allow_html=True,
+        )
 
 
 def render_screener_tab():
@@ -1218,9 +1260,6 @@ def render_screener_tab():
     scored["shortlist_score"] = scored.apply(_shortlist_score, axis=1)
     scored = scored.sort_values(["shortlist_score", "score"], ascending=[False, False]).reset_index(drop=True)
 
-    shortlist = scored.head(5)
-    rest = scored.iloc[5:]
-
     sel_key = "screener_selected_symbol"
 
     # Header
@@ -1229,11 +1268,7 @@ def render_screener_tab():
         legend_parts = [f"{_QUADRANT_EMOJI[q]} {q}" for q in ["Leading", "Improving", "Weakening", "Lagging"]]
         st.caption("Sektor: " + "  ·  ".join(legend_parts))
 
-    _render_screener_cards(shortlist, sel_key, large=True)
-
-    if not rest.empty:
-        with st.expander(f"Alle {len(rest)} weiteren Kandidaten"):
-            _render_screener_cards(rest, sel_key, large=False)
+    _render_screener_table(scored, sel_key, top_n=5)
 
     # Scroll-Anker
     st.markdown('<div id="screener-detail"></div>', unsafe_allow_html=True)
