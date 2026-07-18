@@ -1082,76 +1082,84 @@ def render_screener_tab():
     ]
     display_cols = [c for c in display_cols if c in scored.columns]
 
-    st.success(f"{len(scored)} qualifizierte Aktien (Score ≥ {min_score}, max {scored.iloc[0]['score_max']}).")
+    st.success(f"{len(scored)} qualifizierte Aktien (Score ≥ {min_score}).")
     if sector_map:
         legend_parts = [f"{_QUADRANT_EMOJI[q]} {q}" for q in ["Leading", "Improving", "Weakening", "Lagging"]]
         st.caption("Sektor-Ampel: " + "  ·  ".join(legend_parts))
 
-    # Ticker-Cards: 3 pro Zeile, klickbar
     sel_key = "screener_selected_symbol"
-    cols_per_row = 3
+
+    # Cards: 4 pro Zeile, bewusst reduziert auf 3 Kernwerte + Score + Sektor
+    cols_per_row = 4
     for row_i in range(0, len(scored), cols_per_row):
         chunk = scored.iloc[row_i:row_i + cols_per_row]
         cols = st.columns(len(chunk), gap="small")
         for col, (_, r) in zip(cols, chunk.iterrows()):
-            sym = r["symbol"]
-            score_val = int(r["score"])
-            score_max_val = int(r["score_max"])
-            price_val = r.get("price", 0)
-            ann_val = r.get("annualized_pct", 0)
-            put_strike = r.get("put_strike", "—")
-            put_dte = r.get("put_dte", "—")
-            sector_v = r.get("sector", "")
-            quadrant_v = r.get("sektor_quadrant", "Unbekannt")
-            ampel_v = r.get("sektor_ampel", "⚪")
-            qcolor = _QUADRANT_COLOR.get(quadrant_v, "#64748b")
-            score_pct = score_val / score_max_val * 100 if score_max_val else 0
-            score_color = "#00d4aa" if score_pct >= 70 else ("#f59e0b" if score_pct >= 50 else "#ef4444")
-            is_sel = st.session_state.get(sel_key) == sym
-            sel_border = "2px solid #00d4aa" if is_sel else "1px solid #1e2d45"
-            sel_glow = "box-shadow:0 0 16px rgba(0,212,170,0.3);" if is_sel else ""
+            sym          = r["symbol"]
+            score_val    = int(r["score"])
+            score_max_v  = int(r["score_max"])
+            ann_val      = float(r.get("annualized_pct") or 0)
+            put_dte      = r.get("put_dte", "—")
+            put_strike   = r.get("put_strike", "—")
+            sector_v     = r.get("sector", "")
+            quadrant_v   = r.get("sektor_quadrant", "Unbekannt")
+            ampel_v      = _QUADRANT_EMOJI.get(quadrant_v, "⚪")
+            qcolor       = _QUADRANT_COLOR.get(quadrant_v, "#64748b")
+            score_pct    = score_val / score_max_v * 100 if score_max_v else 0
+            # Score-Farbe: klar lesbar auf hellem Kartengrund
+            score_color  = "#059669" if score_pct >= 70 else ("#d97706" if score_pct >= 50 else "#dc2626")
+            is_sel       = st.session_state.get(sel_key) == sym
+
+            # Heller Kartengrund (#1e293b = schieferblau) statt fast-schwarz
+            bg       = "#162032" if not is_sel else "#0f2a1e"
+            border   = "2px solid #00d4aa" if is_sel else "1px solid #2d3f55"
 
             with col:
                 st.markdown(f"""
-                <div style="background:#0d1426;border:{sel_border};border-radius:12px;
-                    padding:16px;margin-bottom:2px;{sel_glow}cursor:pointer;">
-                  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
-                    <div>
-                      <div style="font-family:'JetBrains Mono',monospace;font-size:20px;
-                          font-weight:700;color:#e2e8f0;letter-spacing:0.04em;">{sym}</div>
-                      <div style="font-size:11px;color:#64748b;margin-top:2px;">${price_val:.2f}</div>
+                <div style="background:{bg};border:{border};border-radius:10px;
+                    padding:14px 14px 10px;margin-bottom:2px;">
+
+                  <!-- Zeile 1: Symbol links, Score rechts -->
+                  <div style="display:flex;justify-content:space-between;
+                      align-items:baseline;margin-bottom:10px;">
+                    <span style="font-family:'JetBrains Mono',monospace;font-size:17px;
+                        font-weight:700;color:#f1f5f9;letter-spacing:.03em;">{sym}</span>
+                    <span style="font-size:11px;font-weight:600;
+                        color:{score_color};background:{score_color}1a;
+                        border:1px solid {score_color}55;border-radius:5px;
+                        padding:1px 7px;">{score_val}/{score_max_v}</span>
+                  </div>
+
+                  <!-- Zeile 2: 3 Kennzahlen -->
+                  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;
+                      gap:0;margin-bottom:10px;">
+                    <div style="border-right:1px solid #2d3f55;padding-right:8px;">
+                      <div style="font-size:9px;color:#7c93ad;text-transform:uppercase;
+                          letter-spacing:.07em;margin-bottom:2px;">Ann.%</div>
+                      <div style="font-family:'JetBrains Mono',monospace;font-size:15px;
+                          font-weight:700;color:#34d399;">{ann_val:.1f}%</div>
                     </div>
-                    <div style="text-align:right;">
-                      <div style="font-family:'JetBrains Mono',monospace;font-size:18px;
-                          font-weight:700;color:{score_color};">{score_val}<span style="font-size:11px;color:#475569;">/{score_max_val}</span></div>
-                      <div style="font-size:10px;color:#475569;">Score</div>
+                    <div style="border-right:1px solid #2d3f55;padding:0 8px;">
+                      <div style="font-size:9px;color:#7c93ad;text-transform:uppercase;
+                          letter-spacing:.07em;margin-bottom:2px;">Strike</div>
+                      <div style="font-family:'JetBrains Mono',monospace;font-size:15px;
+                          font-weight:600;color:#cbd5e1;">${put_strike}</div>
+                    </div>
+                    <div style="padding-left:8px;">
+                      <div style="font-size:9px;color:#7c93ad;text-transform:uppercase;
+                          letter-spacing:.07em;margin-bottom:2px;">DTE</div>
+                      <div style="font-family:'JetBrains Mono',monospace;font-size:15px;
+                          font-weight:600;color:#cbd5e1;">{put_dte}d</div>
                     </div>
                   </div>
-                  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
-                    <div>
-                      <div style="font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:#64748b;">Ann. Rendite</div>
-                      <div style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:600;color:#00d4aa;">{ann_val:.1f}%</div>
-                    </div>
-                    <div>
-                      <div style="font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:#64748b;">Put Strike</div>
-                      <div style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#94a3b8;">${put_strike}</div>
-                    </div>
-                    <div>
-                      <div style="font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:#64748b;">DTE</div>
-                      <div style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#94a3b8;">{put_dte}d</div>
-                    </div>
-                  </div>
-                  <div style="background:#080c17;border-radius:6px;height:3px;margin-bottom:10px;">
-                    <div style="background:{score_color};height:3px;border-radius:6px;width:{score_pct:.0f}%;transition:width .3s;"></div>
-                  </div>
-                  <div style="display:inline-flex;align-items:center;gap:5px;
-                      background:rgba(255,255,255,0.04);border:1px solid {qcolor}33;
-                      border-radius:20px;padding:2px 8px;font-size:10px;color:{qcolor};">
-                    {ampel_v} {sector_v}
+
+                  <!-- Zeile 3: Sektor-Badge -->
+                  <div style="font-size:10px;color:{qcolor};opacity:.85;">
+                    {ampel_v} {sector_v or "—"}
                   </div>
                 </div>""", unsafe_allow_html=True)
 
-                btn_label = "✓ Ausgewählt" if is_sel else "Analysieren →"
+                btn_label = "✓ Gewählt" if is_sel else "→"
                 if st.button(btn_label, key=f"screener_card_{sym}", use_container_width=True):
                     st.session_state[sel_key] = sym
                     st.rerun()
