@@ -30,6 +30,7 @@ from src.ui_utils import filter_by_expiration_type
 from src.utils.option_utils import get_expiration_type
 from src.black_scholes import PutValue
 from src.roll_support_calc import position_status, roll_candidate, roll_candidate_explained
+from src.put_ai_ranker import rank_puts, LLMProviderError
 from src.put_screener import (
     score_candidates, score_breakdown, put_metrics, put_evaluation,
     DEFAULT_PE_MAX, DEFAULT_MIN_PUFFER_PCT,
@@ -1792,6 +1793,50 @@ def render_put_tab():
                 st.rerun()
 
         st.markdown('<hr class="pt-hr">', unsafe_allow_html=True)
+
+    # ── AI-Analyse ────────────────────────────────────────────────────────
+    st.divider()
+    ai_col1, ai_col2 = st.columns([2, 5])
+    with ai_col1:
+        ai_n = ai_col1.number_input(
+            "Max. Kandidaten für AI", min_value=5, max_value=50, value=20, step=5,
+            help="Nur die ersten N Puts (sortiert nach Ann.%) werden analysiert. Mehr = mehr Tokens.",
+            key="pt_ai_n",
+        )
+        run_ai = st.button("🤖 AI Analyse starten", type="primary", key="pt_run_ai",
+                           use_container_width=True)
+    with ai_col2:
+        st.caption(
+            f"Analysiert die Top {ai_n} Puts (nach Ann.%) inkl. Finviz-Fundamentaldaten. "
+            "**Achtung: kostet DeepSeek-Tokens.** Erst filtern, dann starten."
+        )
+
+    if run_ai:
+        with st.spinner(f"Scrape Finviz + DeepSeek analysiert {min(int(ai_n), len(puts))} Puts …"):
+            try:
+                ai_text, ai_meta = rank_puts(puts, max_candidates=int(ai_n))
+                st.session_state["pt_ai_result"] = ai_text
+                st.session_state["pt_ai_meta"]   = ai_meta
+            except LLMProviderError as e:
+                st.error(f"AI-Fehler: {e}")
+            except Exception as e:
+                st.error(f"Unerwarteter Fehler: {e}")
+
+    if st.session_state.get("pt_ai_result"):
+        st.markdown("### 🤖 AI Rangliste")
+        meta = st.session_state.get("pt_ai_meta", {})
+        if meta:
+            usage = meta.get("token_usage", {})
+            st.caption(
+                f"Modell: {meta.get('model','?')} · "
+                f"Tokens: {usage.get('prompt_tokens','?')} input / {usage.get('completion_tokens','?')} output · "
+                f"Symbole: {', '.join(meta.get('symbols',[]))}"
+            )
+        st.markdown(st.session_state["pt_ai_result"])
+        if st.button("Ergebnis löschen", key="pt_ai_clear"):
+            del st.session_state["pt_ai_result"]
+            del st.session_state["pt_ai_meta"]
+            st.rerun()
 
     # Detail-Bereich
     if not sel_put:
