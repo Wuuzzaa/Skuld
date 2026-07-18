@@ -1402,6 +1402,61 @@ def render_screener_tab():
 
     _render_screener_table(view, sel_key, top_n=5)
 
+    # ── AI-Analyse ────────────────────────────────────────────────────────
+    st.divider()
+    sc_ai1, sc_ai2 = st.columns([2, 5])
+    with sc_ai1:
+        run_sc_ai = st.button("🤖 AI Analyse starten", type="primary",
+                              key="sc_run_ai", use_container_width=True)
+    with sc_ai2:
+        st.caption(
+            f"Analysiert alle **{len(view)} sichtbaren Kandidaten** inkl. Finviz-Fundamentals + besten Put je Aktie. "
+            "Erst filtern, dann starten."
+        )
+
+    if run_sc_ai:
+        with st.spinner(f"Scrape Finviz + DeepSeek analysiert {len(view)} Aktien …"):
+            try:
+                # view hat bereits put_strike, annualized_pct etc. aus put_screener.sql
+                # rank_puts erwartet puts_df mit symbol, strike_price, live_stock_price,
+                # days_to_expiration, premium_option_price, puffer_pct, ann_pct, iv_rank, greeks_delta
+                _sc_puts = view.rename(columns={
+                    "put_strike": "strike_price",
+                    "put_dte": "days_to_expiration",
+                    "put_premium": "premium_option_price",
+                    "price": "live_stock_price",
+                    "annualized_pct": "ann_pct",
+                }).copy()
+                # puffer_pct berechnen falls nicht vorhanden
+                if "puffer_pct" not in _sc_puts.columns:
+                    _sc_puts["puffer_pct"] = (
+                        (_sc_puts["live_stock_price"] - _sc_puts["strike_price"])
+                        / _sc_puts["live_stock_price"] * 100
+                    ).round(1)
+                ai_text, ai_meta = rank_puts(_sc_puts, max_candidates=len(view))
+                st.session_state["sc_ai_result"] = ai_text
+                st.session_state["sc_ai_meta"]   = ai_meta
+            except LLMProviderError as e:
+                st.error(f"AI-Fehler: {e}")
+            except Exception as e:
+                st.error(f"Unerwarteter Fehler: {e}")
+
+    if st.session_state.get("sc_ai_result"):
+        st.markdown("### 🤖 AI Rangliste")
+        meta = st.session_state.get("sc_ai_meta", {})
+        if meta:
+            usage = meta.get("token_usage", {})
+            st.caption(
+                f"Modell: {meta.get('model','?')} · "
+                f"Tokens: {usage.get('prompt_tokens','?')} input / "
+                f"{usage.get('completion_tokens','?')} output"
+            )
+        st.markdown(st.session_state["sc_ai_result"])
+        if st.button("Ergebnis löschen", key="sc_ai_clear"):
+            del st.session_state["sc_ai_result"]
+            del st.session_state["sc_ai_meta"]
+            st.rerun()
+
     # Ausgewählte Aktie ermitteln
     sel_sym = st.session_state.get(sel_key)
     if not sel_sym or sel_sym not in scored["symbol"].values:
