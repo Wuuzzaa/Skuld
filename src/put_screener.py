@@ -128,3 +128,67 @@ def put_metrics(strike: float, premium: float, dte: int) -> dict:
         "breakeven": strike - premium,
         "capital_required": strike * 100.0,
     }
+
+
+# ---------------------------------------------------------------------------
+# Ampel-Bewertung für verkaufbare Puts (genutzt von roll_and_screen.py)
+# ---------------------------------------------------------------------------
+DEFAULT_MIN_PUFFER_PCT = 10.0
+MIN_ANNUAL_RETURN_PCT = 12.0
+_RISK_FREE_RATE_EVAL = 0.03
+
+
+def _f(v):
+    if v is None:
+        return None
+    try:
+        f = float(v)
+    except (ValueError, TypeError):
+        return None
+    return None if f != f else f
+
+
+def put_evaluation(kurs, strike, praemie, dte, iv, delta, bs_preis,
+                   min_puffer_pct: float = DEFAULT_MIN_PUFFER_PCT) -> dict:
+    """Bewertet einen verkaufbaren Put mit fester Ampel-Logik.
+
+    ✅  annualisierte Rendite >= 12% UND Puffer >= min_puffer_pct UND BS-Edge > 0
+    ⚠️  Rendite >= 12%, aber Puffer ODER BS-Edge verletzt
+    ❌  Rendite < 12%
+    """
+    from src.black_scholes import ProbLessThan  # lokaler Import verhindert Zirkel
+
+    kurs, strike, praemie = _f(kurs), _f(strike), _f(praemie)
+    iv, delta, bs_preis = _f(iv), _f(delta), _f(bs_preis)
+    dte = int(dte) if dte not in (None, "") and _f(dte) is not None else 0
+
+    puffer_pct = ((kurs - strike) / kurs * 100.0) if kurs and kurs > 0 else 0.0
+    annualized_pct = put_metrics(strike or 0, praemie or 0, dte)["annualized_pct"]
+    bs_edge_pct = ((praemie - bs_preis) / bs_preis * 100.0) if (praemie is not None and bs_preis and bs_preis > 0) else None
+
+    prob_assignment_pct, prob_source = None, "none"
+    if kurs and kurs > 0 and iv and iv > 0 and dte > 0 and strike and strike > 0:
+        try:
+            prob_assignment_pct = ProbLessThan(strike, kurs, iv, dte, _RISK_FREE_RATE_EVAL) * 100.0
+            prob_source = "bs"
+        except (ValueError, ZeroDivisionError):
+            pass
+    if prob_assignment_pct is None and delta is not None:
+        prob_assignment_pct = abs(delta) * 100.0
+        prob_source = "delta"
+
+    if annualized_pct < MIN_ANNUAL_RETURN_PCT:
+        ampel = "❌"
+    else:
+        puffer_ok = puffer_pct >= min_puffer_pct
+        bs_ok = (bs_edge_pct is not None and bs_edge_pct > 0)
+        ampel = "✅" if (puffer_ok and bs_ok) else "⚠️"
+
+    return {
+        "puffer_pct": puffer_pct,
+        "annualized_pct": annualized_pct,
+        "bs_edge_pct": bs_edge_pct,
+        "prob_assignment_pct": prob_assignment_pct,
+        "prob_source": prob_source,
+        "ampel": ampel,
+    }
