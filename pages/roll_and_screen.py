@@ -821,10 +821,12 @@ def _load_screener(dte_min, dte_max, min_oi, min_vol, price_min, price_max,
 
 
 @st.cache_data(ttl=300)
-def _load_symbol_puts(symbol, dte_min, dte_max):
+def _load_symbol_puts(symbol, dte_min, dte_max, min_oi=100, min_vol=20, min_premium_share=0.0):
     return select_into_dataframe(
         sql_file_path=PATH_DATABASE_QUERY_FOLDER / "screener_symbol_puts.sql",
-        params={"symbol": symbol, "dte_min": int(dte_min), "dte_max": int(dte_max)},
+        params={"symbol": symbol, "dte_min": int(dte_min), "dte_max": int(dte_max),
+                "min_oi": int(min_oi), "min_vol": int(min_vol),
+                "min_premium_share": float(min_premium_share)},
     )
 
 
@@ -1023,7 +1025,8 @@ Der Chart zeigt den **IV-Rank** der letzten ~12 Monate.
             f"- **Puffer** = wie weit die Aktie fallen darf, bis sie den Strike erreicht.\n"
             f"- **BS-Preis grün** = Markt-Prämie > Black-Scholes-Preis → gut für Verkäufer."
         )
-    puts = _load_symbol_puts(row["symbol"], p_dte_min, p_dte_max)
+    puts = _load_symbol_puts(row["symbol"], p_dte_min, p_dte_max,
+                             min_oi=min_oi, min_vol=min_vol, min_premium_share=min_premium_share)
     if puts is None or puts.empty:
         st.info(f"Keine liquiden Puts für {row['symbol']} im DTE-Fenster {p_dte_min}–{p_dte_max}.")
     else:
