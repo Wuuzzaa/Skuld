@@ -1151,6 +1151,7 @@ def _render_screener_table(df: pd.DataFrame, sel_key: str, top_n: int = 5):
             btn_label = "✓" if is_sel else "→"
             if st.button(btn_label, key=f"screener_btn_{sym}"):
                 st.session_state[sel_key] = sym
+                st.session_state["screener_scroll_n"] = st.session_state.get("screener_scroll_n", 0) + 1
                 st.rerun()
 
         st.markdown('<hr class="sc-hr-thin">', unsafe_allow_html=True)
@@ -1330,10 +1331,11 @@ def render_screener_tab():
 
     st.divider()
 
-    # Auto-Scroll zum Analyse-Bereich (sel_sym im Script erzwingt Re-Render bei Symbolwechsel)
+    # Auto-Scroll — Counter + Symbol garantieren Re-Render bei jedem Klick
+    _scroll_n = st.session_state.get("screener_scroll_n", 0)
     components.html(f"""
     <script>
-    /* trigger={sel_sym} */
+    /* n={_scroll_n} sym={sel_sym} */
     window.parent.document.getElementById('screener-detail')
         ?.scrollIntoView({{behavior:'smooth', block:'start'}});
     </script>
@@ -1395,10 +1397,16 @@ Der Chart zeigt den **IV-Rank** der letzten ~12 Monate.
 """)
     _render_iv_chart(row["symbol"])
 
-    # Verkaufbare Puts
+    # Verkaufbare Puts -- jetzt
     st.divider()
     st.markdown("### Verkaufbare Puts -- jetzt")
-    pc1, pc2, _pc3 = st.columns([1, 1, 2])
+
+    # Aktienpreis prominent anzeigen
+    _S = _current_stock_price(row["symbol"])
+    if _S:
+        sp1, sp2 = st.columns([1, 3])
+        sp1.metric("Aktueller Aktienkurs", f"${_S:.2f}")
+    pc1, pc2, _pc3 = sp2.columns([1, 1, 2]) if _S else st.columns([1, 1, 2])
     p_dte_min, p_dte_max = pc1.slider("DTE-Fenster", 7, 90, (30, 45), 1, key="screener_put_dte")
     min_puffer = pc2.slider("Min. Puffer % (für ✅)", 0, 30, int(DEFAULT_MIN_PUFFER_PCT), 1,
                             key="screener_min_puffer",
