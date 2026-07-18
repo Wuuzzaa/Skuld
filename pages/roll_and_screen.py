@@ -1337,9 +1337,6 @@ def render_screener_tab():
 
     _render_screener_table(view, sel_key, top_n=5)
 
-    # Scroll-Anker
-    st.markdown('<div id="screener-detail"></div>', unsafe_allow_html=True)
-
     # Ausgewählte Aktie ermitteln
     sel_sym = st.session_state.get(sel_key)
     if not sel_sym or sel_sym not in scored["symbol"].values:
@@ -1352,15 +1349,17 @@ def render_screener_tab():
 
     st.divider()
 
-    # Auto-Scroll — Counter + Symbol garantieren Re-Render bei jedem Klick
+    # Auto-Scroll — unique ID pro Klick erzwingt Browser-Ausführung
     _scroll_n = st.session_state.get("screener_scroll_n", 0)
-    components.html(f"""
+    st.markdown(f"""
+    <div id="screener-detail-{_scroll_n}"></div>
     <script>
-    /* n={_scroll_n} sym={sel_sym} */
-    window.parent.document.getElementById('screener-detail')
-        ?.scrollIntoView({{behavior:'smooth', block:'start'}});
+    (function(){{
+        var el = document.getElementById('screener-detail-{_scroll_n}');
+        if(el) el.scrollIntoView({{behavior:'smooth', block:'start'}});
+    }})();
     </script>
-    """, height=0)
+    """, unsafe_allow_html=True)
 
     # Header mit Symbol + Sektor-Badge + Vollanalyse-Button
     h1, h2 = st.columns([3, 1])
