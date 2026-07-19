@@ -820,11 +820,25 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
 - **Alte GS**: Deine aktuelle Gewinnschwelle (Vergleichswert)
 - **Kapital nötig**: Cash der als Sicherheit hinterlegt werden muss (Strike × Kontrakte × 100)
 - **Klick auf eine Zeile** → Plain-Language Erklärung was genau passiert
+- 🟢 DTE-Farbe = 30–60 Tage (Buch-Optimum), 🟡 = 61–90 Tage (Ausnahme)
 """)
 
-    cand = _load_roll_candidates(symbol, K, 30, 90)
+    # DTE-Bereich: Standard 30-60, Checkbox für bis zu 90
+    _roll_90 = st.checkbox(
+        "Bis 90 DTE einbeziehen",
+        value=False,
+        key="roll_cand_90dte",
+        help="Standardmäßig werden nur Kandidaten mit 30–60 DTE gezeigt (Buch-Empfehlung). "
+             "Aktiviere diese Option wenn kein passender Kandidat in 30–60 DTE gefunden wird.",
+    )
+    _dte_max_cand = 90 if _roll_90 else 60
+
+    cand = _load_roll_candidates(symbol, K, 30, _dte_max_cand)
     if cand is None or cand.empty:
-        st.warning("Keine aktuellen Put-Kandidaten (DTE 30-90, liquide) gefunden.")
+        if not _roll_90:
+            st.warning("Keine Kandidaten in 30–60 DTE gefunden. Versuche 'Bis 90 DTE einbeziehen'.")
+        else:
+            st.warning("Keine aktuellen Put-Kandidaten (DTE 30-90, liquide) gefunden.")
         _render_endgame_hint()
         return
 
@@ -835,17 +849,35 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
     any_green = False
     breakeven_old = pos["breakeven_old"]
 
-    st1 = cand[cand["strike_price"] < K]
+    # Stufe 1: niedrigerer Strike als K, sortiert nach Strike DESC + DTE ASC (Buch: näher am Kurs + kürzer)
+    st1 = cand[cand["strike_price"] < K].sort_values(
+        ["strike_price", "days_to_expiration"], ascending=[False, True]
+    )
     any_green |= _render_stufe(1, st1, K, P_eroeffnung, P_heute, int(n_contracts), breakeven_old,
-                               "Stufe 1 -- niedrigerer Basispreis, gleiche Kontrakte")
+                               "Stufe 1 — niedrigerer Basispreis, gleiche Kontrakte")
 
-    st2 = cand[cand["strike_price"] == K]
+    # Stufe 2: gleicher Strike wie K — nur sinnvoll wenn Strike nicht zu tief im Geld
+    # (max 15% ITM, sonst kaum Zeitwert und GS verbessert sich nicht)
+    st2_raw = cand[cand["strike_price"] == K]
+    S_current = float(cand["live_stock_price"].iloc[0]) if not cand.empty and "live_stock_price" in cand.columns else K
+    itm_pct = (K - S_current) / K * 100 if K > 0 else 0
+    if itm_pct > 15:
+        st.caption(
+            f"⚠️ Stufe 2 übersprungen: Strike ${K:.2f} ist {itm_pct:.1f}% im Geld bei Kurs ${S_current:.2f} — "
+            f"kaum Zeitwert vorhanden, GS-Verbesserung unwahrscheinlich."
+        )
+        st2 = st2_raw.iloc[0:0]  # leerer DataFrame
+    else:
+        st2 = st2_raw
     any_green |= _render_stufe(2, st2, K, P_eroeffnung, P_heute, int(n_contracts), breakeven_old,
-                               "Stufe 2 -- gleicher Basispreis, gleiche Kontrakte")
+                               "Stufe 2 — gleicher Basispreis, gleiche Kontrakte")
 
-    st3 = cand[cand["strike_price"] < K]
+    # Stufe 3: niedrigerer Strike, doppelte Kontrakte
+    st3 = cand[cand["strike_price"] < K].sort_values(
+        ["strike_price", "days_to_expiration"], ascending=[False, True]
+    )
     any_green |= _render_stufe(3, st3, K, P_eroeffnung, P_heute, 2 * int(n_contracts), breakeven_old,
-                               "Stufe 3 -- niedrigerer Basispreis, Kontrakte verdoppelt")
+                               "Stufe 3 — niedrigerer Basispreis, Kontrakte verdoppelt")
 
     if not any_green:
         _render_endgame_hint()
@@ -921,6 +953,9 @@ def _render_candidate_cards(candidates, stufe, K, P_eroeffnung, P_heute, n, brea
             gs_arrow = f"▼ ${gs_delta:.2f}" if gs_delta > 0 else (f"▲ ${abs(gs_delta):.2f}" if gs_delta < 0 else "=")
             gs_color = "#34d399" if gs_delta > 0 else ("#f87171" if gs_delta < 0 else "#94a3b8")
             netto_color = "#34d399" if r["netto_abs"] > 0 else "#f87171"
+            dte_val = cand['dte']
+            dte_color = "#94a3b8" if dte_val <= 60 else "#f59e0b"
+            dte_label = f"{dte_val}d" if dte_val <= 60 else f"{dte_val}d ⚠️"
             # Key: stufe + global_idx = garantiert eindeutig
             card_key = f"roll_cand_{stufe}_{cand['global_idx']}"
             is_sel = st.session_state.get(sel_key) == card_key
@@ -954,7 +989,7 @@ def _render_candidate_cards(candidates, stufe, K, P_eroeffnung, P_heute, n, brea
                       <div style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;
                           color:#8faabf;margin-bottom:3px;">DTE</div>
                       <div style="font-family:'JetBrains Mono',monospace;font-size:16px;
-                          font-weight:600;color:#cbd5e1;">{cand['dte']}d</div>
+                          font-weight:600;color:{dte_color};">{dte_label}</div>
                     </div>
                     <div>
                       <div style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;
