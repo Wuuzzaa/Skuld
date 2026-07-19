@@ -850,6 +850,14 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
     if not any_green:
         _render_endgame_hint()
 
+    # DeepSeek Roll-Assistent (unterhalb aller Stufen)
+    _render_roll_ai_chat(
+        symbol=symbol, K=K, S=S,
+        P_eroeffnung=P_eroeffnung, P_heute=P_heute,
+        n_contracts=int(n_contracts), breakeven_old=breakeven_old,
+        cand_st1=st1, cand_st2=st2, cand_st3=st3,
+    )
+
 
 def _render_stufe(stufe, df, K, P_eroeffnung, P_heute, n, breakeven_old, title):
     """Roll-Kandidaten als horizontale Karten -- Top-3 sofort sichtbar, Rest ausklappbar."""
@@ -1057,9 +1065,153 @@ def _render_endgame_hint():
     )
 
 
-# ---------------------------------------------------------------------------
-# Tab 1 -- Screener
-# ---------------------------------------------------------------------------
+def _build_roll_ai_prompt(
+    symbol: str, K: float, S: float,
+    P_eroeffnung: float, P_heute: float,
+    n_contracts: int, breakeven_old: float,
+    cand_st1, cand_st2, cand_st3,
+    roll_count: int, prev_netto: float,
+) -> str:
+    """Baut den vollständigen Kontext-Prompt für den Roll-Assistenten."""
+    im_verlust = P_heute > P_eroeffnung
+    pnl_abs = P_eroeffnung - P_heute
+    pnl_pct = pnl_abs / P_eroeffnung * 100
+
+    def fmt_cands(df, stufe_label):
+        if df is None or df.empty:
+            return f"  {stufe_label}: Keine Kandidaten verfügbar.\n"
+        lines = [f"  {stufe_label}:"]
+        for _, r in df.head(5).iterrows():
+            lines.append(
+                f"    Strike ${float(r['strike_price']):.2f} | "
+                f"Verfall {r['expiration_date']} | "
+                f"DTE {int(r['days_to_expiration'])}d | "
+                f"Prämie ${float(r['premium_option_price']):.2f}/Aktie"
+            )
+        return "\n".join(lines) + "\n"
+
+    gesamtnetto = prev_netto + P_eroeffnung / 100
+    gs_real = K - gesamtnetto / n_contracts if n_contracts > 0 else breakeven_old
+
+    lines = [
+        "Du bist ein erfahrener Optionshändler und kennst die folgende Rollstrategie aus dem Buch genau:",
+        "",
+        "STRATEGIE-KONTEXT:",
+        "- Wir haben einen Cash-Secured-Put am Geld verkauft (~30 DTE, monatliche Option).",
+        "- Ziel: Prämien sammeln, Andienung der Aktie so lange wie möglich hinauszögern.",
+        "- Wenn 5 Tage vor Verfall der Put im Geld ist und nicht mit Gewinn schließbar: ROLLEN.",
+        "- Rollreihenfolge (immer Stufe 1 zuerst prüfen):",
+        "  Stufe 1: Neuer Put, niedrigerer Strike, 30-60 DTE — neue Prämie ≥ Schließungskosten",
+        "  Stufe 2: Neuer Put, GLEICHER Strike, 30-60 DTE — neue Prämie ≥ Schließungskosten + GS verbessert",
+        "  Stufe 3: Neuer Put, niedrigerer Strike, 30-60 DTE, 2× Kontrakte — wenn Stufe 1+2 nicht greifen",
+        "  Stufe 3 nur wenn Kapital vorhanden. Wenn nicht → Endspiel (Aktien andienen lassen).",
+        "- Nach jedem Roll: zurück zu Schritt 3 (5 Tage vor neuem Verfall wieder prüfen).",
+        "- Bevorzuge immer niedrigeren Strike gegenüber längerer Laufzeit (höherer Zeitwert > innerer Wert).",
+        "",
+        "AKTUELLE POSITION:",
+        f"  Symbol: {symbol}",
+        f"  Bestehender Strike: ${K:.2f}",
+        f"  Aktueller Aktienkurs: ${S:.2f}",
+        f"  Eröffnungsprämie: ${P_eroeffnung/100:.2f}/Aktie (${P_eroeffnung:.0f} gesamt bei {n_contracts} Kontrakt{'e' if n_contracts>1 else ''})",
+        f"  Aktueller Put-Preis: ${P_heute/100:.2f}/Aktie",
+        f"  Position: {'📉 IM VERLUST' if im_verlust else '📈 IM GEWINN'} — P&L: {'+' if pnl_abs>=0 else ''}{pnl_abs/100:.2f}$/Aktie ({pnl_pct:+.1f}%)",
+        f"  Aktuelle Gewinnschwelle: ${breakeven_old:.2f}",
+        f"  Bereits {roll_count}× gerollt. Gesammelte Netto-Prämien aus allen bisherigen Rolls: ${prev_netto:.2f}",
+        f"  Realer durchschn. Einstiegskurs nach allen Prämien: ${gs_real:.2f}",
+        "",
+        "VERFÜGBARE ROLL-KANDIDATEN AUS DER DB (aktuelle Optionskette, DTE 30-90):",
+    ]
+    lines.append(fmt_cands(cand_st1, "Stufe 1 (niedrigerer Strike)"))
+    lines.append(fmt_cands(cand_st2, "Stufe 2 (gleicher Strike)"))
+    lines.append(fmt_cands(cand_st3, "Stufe 3 (niedrigerer Strike, 2× Kontrakte)"))
+
+    lines += [
+        "",
+        "DEINE AUFGABE:",
+        "1. Lageanalyse (2-3 Sätze): Wo steht der Trade? Ist Rollen nötig/sinnvoll?",
+        "2. Empfehlung welche Stufe und welchen konkreten Kandidaten (Strike, Verfall, Begründung mit Zahlen).",
+        "   Berechne die Netto-Prämie nach dem Roll und die neue Gewinnschwelle.",
+        "3. Falls keine Stufe greift: klare Aussage 'Endspiel — Aktien andienen lassen'.",
+        "4. Eine kurze Warnung falls Earnings in <14 Tagen oder die Aktie unter wichtigen Unterstützungen.",
+        "",
+        "Antworte auf Deutsch, strukturiert, mit konkreten Zahlen. Maximal 300 Wörter.",
+    ]
+    return "\n".join(lines)
+
+
+def _render_roll_ai_chat(
+    symbol: str, K: float, S: float,
+    P_eroeffnung: float, P_heute: float,
+    n_contracts: int, breakeven_old: float,
+    cand_st1, cand_st2, cand_st3,
+):
+    """DeepSeek Chat-Assistent für die Roll-Entscheidung."""
+    st.divider()
+    st.markdown("### 🤖 Roll-Assistent (DeepSeek)")
+    st.caption(
+        "DeepSeek analysiert deine Position und die verfügbaren Roll-Kandidaten. "
+        "Beantworte die zwei kurzen Fragen und erhalte eine konkrete Empfehlung."
+    )
+
+    chat_key = f"roll_ai_{symbol}_{K:.2f}"
+
+    with st.form(key=f"roll_ai_form_{chat_key}"):
+        fc1, fc2 = st.columns(2)
+        roll_count = fc1.number_input(
+            "Wie oft hast du diesen Trade bereits gerollt?",
+            min_value=0, max_value=20, value=0, step=1,
+            help="0 = das wäre der erste Roll."
+        )
+        prev_netto = fc2.number_input(
+            "Gesammelte Netto-Prämien aus bisherigen Rolls ($ gesamt)",
+            min_value=0.0, value=0.0, step=10.0, format="%.2f",
+            help="Summe aller Netto-Prämien aus bisherigen Rolls. 0 wenn erster Roll.",
+        )
+        submitted = st.form_submit_button("🤖 Empfehlung anfordern", type="primary")
+
+    if submitted:
+        prompt = _build_roll_ai_prompt(
+            symbol=symbol, K=K, S=S,
+            P_eroeffnung=P_eroeffnung, P_heute=P_heute,
+            n_contracts=n_contracts, breakeven_old=breakeven_old,
+            cand_st1=cand_st1, cand_st2=cand_st2, cand_st3=cand_st3,
+            roll_count=int(roll_count), prev_netto=float(prev_netto),
+        )
+        with st.spinner("DeepSeek analysiert deinen Trade …"):
+            try:
+                client = LLMClient()
+                response = client.chat_completion(
+                    "deepseek",
+                    system_prompt=(
+                        "Du bist ein erfahrener Optionshändler spezialisiert auf die systematische "
+                        "Rollstrategie für Cash-Secured Puts. Du kennst die Buchstrategie genau. "
+                        "Antworte präzise, strukturiert, auf Deutsch. Nutze konkrete Zahlen."
+                    ),
+                    user_prompt=prompt,
+                    temperature=0.2,
+                    max_tokens=1200,
+                )
+                st.session_state[f"{chat_key}_result"] = response.text
+                st.session_state[f"{chat_key}_usage"] = response.usage
+                st.session_state[f"{chat_key}_model"] = response.model
+            except LLMProviderError as e:
+                st.error(f"DeepSeek-Fehler: {e}")
+            except Exception as e:
+                st.error(f"Fehler: {e}")
+
+    if st.session_state.get(f"{chat_key}_result"):
+        usage = st.session_state.get(f"{chat_key}_usage", {})
+        model = st.session_state.get(f"{chat_key}_model", "?")
+        st.caption(
+            f"Modell: {model} · "
+            f"Tokens: {usage.get('prompt_tokens','?')} input / {usage.get('completion_tokens','?')} output"
+        )
+        st.markdown(st.session_state[f"{chat_key}_result"])
+        if st.button("Ergebnis löschen", key=f"{chat_key}_clear"):
+            del st.session_state[f"{chat_key}_result"]
+            st.rerun()
+
+
 @st.cache_data(ttl=300)
 def _load_screener(dte_min, dte_max, min_oi, min_vol, price_min, price_max,
                    min_premium_share=0.0, min_market_cap=0):
@@ -1336,29 +1488,39 @@ def render_screener_tab():
         label_visibility="collapsed",
     )
 
-    # Put-Puffer-Filter (zweite Zeile)
-    pf1, pf2, pf3, pf4 = st.columns([1.8, 1.4, 1.4, 4])
+    # Put-Puffer/ATM-Filter (zweite Zeile)
+    pf1, pf2, pf3, pf4, pf5 = st.columns([1.5, 1.2, 1.2, 1.2, 3])
     tbl_put_filter = pf1.checkbox(
         "Nur mit handelbarem Put",
         value=True,
-        help="Blendet Aktien aus, bei denen kein Put im DTE-Fenster den Mindest-Puffer erfüllt.",
+        help="Blendet Aktien aus, bei denen kein Put im DTE-Fenster die Bedingung erfüllt.",
     )
-    _put_dte_min_f, _put_dte_max_f = pf2.select_slider(
+    tbl_atm_mode = pf2.checkbox(
+        "ATM-Modus",
+        value=False,
+        key="tbl_atm_mode",
+        help="Zeigt nur Puts die ≤ 3% vom aktuellen Kurs entfernt sind (am Geld, Buch-Strategie: maximaler Zeitwert).",
+        disabled=not tbl_put_filter,
+    )
+    _put_dte_min_f, _put_dte_max_f = pf3.select_slider(
         "Put DTE", options=list(range(7, 91, 1)),
         value=(st.session_state.get("screener_put_dte", (30, 45))),
         key="tbl_put_dte",
         label_visibility="collapsed",
         disabled=not tbl_put_filter,
     )
-    _put_puffer_f = pf3.number_input(
+    _put_puffer_f = pf4.number_input(
         "Puffer %", min_value=0, max_value=30,
         value=int(st.session_state.get("screener_min_puffer", int(DEFAULT_MIN_PUFFER_PCT))),
         key="tbl_put_puffer",
         label_visibility="collapsed",
-        disabled=not tbl_put_filter,
+        disabled=not tbl_put_filter or tbl_atm_mode,
     )
     if tbl_put_filter:
-        pf4.caption(f"Nur Aktien mit Put im DTE {_put_dte_min_f}–{_put_dte_max_f}d · Puffer ≥ {_put_puffer_f}%")
+        if tbl_atm_mode:
+            pf5.caption(f"ATM-Modus: nur Puts ≤ 3% vom Kurs · DTE {_put_dte_min_f}–{_put_dte_max_f}d")
+        else:
+            pf5.caption(f"Nur Aktien mit Put im DTE {_put_dte_min_f}–{_put_dte_max_f}d · Puffer ≥ {_put_puffer_f}%")
 
     # Filter anwenden
     view = scored.copy()
@@ -1371,7 +1533,7 @@ def render_screener_tab():
     if tbl_min_score > 0:
         view = view[view["score"] >= tbl_min_score]
 
-    # Put-Puffer-Filter: nur Aktien behalten wo mind. 1 Put den Puffer erfüllt
+    # Put-Puffer/ATM-Filter: nur Aktien behalten wo mind. 1 Put die Bedingung erfüllt
     if tbl_put_filter and not view.empty:
         def _has_valid_put(sym):
             puts = _load_symbol_puts(sym, _put_dte_min_f, _put_dte_max_f,
@@ -1382,9 +1544,13 @@ def render_screener_tab():
             kurs = puts["live_stock_price"].iloc[0]
             if kurs is None or pd.isna(kurs):
                 return False
-            puffer = (puts["strike_price"] / kurs - 1).abs() * 100  # Puffer % = (Kurs-Strike)/Kurs
-            puffer = ((kurs - puts["strike_price"]) / kurs * 100)
-            return (puffer >= _put_puffer_f).any()
+            if tbl_atm_mode:
+                # ATM: Strike muss innerhalb ±3% des aktuellen Kurses liegen
+                abstand_pct = ((kurs - puts["strike_price"]) / kurs * 100).abs()
+                return (abstand_pct <= 3.0).any()
+            else:
+                puffer = ((kurs - puts["strike_price"]) / kurs * 100)
+                return (puffer >= _put_puffer_f).any()
 
         with st.spinner("Prüfe Puts …"):
             mask = view["symbol"].apply(_has_valid_put)
