@@ -804,6 +804,56 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
     pos = _render_position_card(symbol, K, S, p_today_share, P_eroeffnung, P_heute,
                                 int(n_contracts), expiration_date, price_src)
 
+    # ── Ludwig Restzeitwert-Analyse ──────────────────────────────────────────
+    innerer_wert_share = max(0.0, K - S)
+    restzeitwert_share = max(0.0, p_today_share - innerer_wert_share)
+    restzeitwert_pct = (restzeitwert_share / (P_eroeffnung / 100) * 100) if P_eroeffnung > 0 else 0
+
+    dte_rest = (_parse_date(expiration_date) - date.today()).days if expiration_date else None
+
+    with st.container():
+        cols_lw = st.columns(3)
+        cols_lw[0].metric(
+            "Restzeitwert",
+            f"${restzeitwert_share:.2f}/Aktie",
+            help="Aktueller Put-Preis minus innerer Wert (max(0, Strike − Kurs)). Sinkt auf 0 bis Verfall.",
+        )
+        cols_lw[1].metric(
+            "Zeitwert % von Eröffnung",
+            f"{restzeitwert_pct:.1f}%",
+            help="Restzeitwert als % der ursprünglichen Eröffnungsprämie. Ludwig: Rollen wenn ≤10–15%.",
+        )
+        if dte_rest is not None:
+            cols_lw[2].metric(
+                "DTE noch",
+                f"{dte_rest}d",
+                help="Tage bis Verfall. Ludwig: optimales Roll-Fenster 7–14 Tage vor Verfall.",
+            )
+
+    # Ludwig Roll-Trigger Warnungen
+    if restzeitwert_pct <= 15 and P_heute > 0:
+        st.warning(
+            f"⚡ **Ludwig Roll-Trigger:** Restzeitwert nur noch **{restzeitwert_pct:.1f}%** der Eröffnungsprämie "
+            f"(${restzeitwert_share:.2f}/Aktie). Laut Ludwig idealer Rollzeitpunkt bei ≤ 10–15%. "
+            f"Zeitwert geht ohnehin auf null — jetzt rollen kostet wenig Zeitwert."
+        )
+    elif restzeitwert_pct <= 30:
+        st.info(
+            f"⏱️ Restzeitwert bei **{restzeitwert_pct:.1f}%** — Ludwig empfiehlt Rollen wenn ≤ 15%. "
+            f"Fenster nähert sich."
+        )
+
+    if dte_rest is not None and 7 <= dte_rest <= 14:
+        st.warning(
+            f"📅 **Ludwig Zeitfenster:** Noch **{dte_rest} Tage** bis Verfall — "
+            f"Ludwig's optimales Roll-Fenster (7–14 Tage). Gamma-Explosion der letzten Tage noch vermeiden."
+        )
+    elif dte_rest is not None and dte_rest <= 6:
+        st.error(
+            f"🚨 Nur noch **{dte_rest} Tage** bis Verfall — letzte Tage: Gamma sehr hoch, "
+            f"kleine Kursbewegungen können den Put-Preis stark bewegen. Sofort handeln oder laufen lassen."
+        )
+
     # Roll-Kandidaten
     st.divider()
     im_verlust = P_heute > P_eroeffnung
@@ -1112,6 +1162,11 @@ def _build_roll_ai_prompt(
     pnl_abs = P_eroeffnung - P_heute
     pnl_pct = pnl_abs / P_eroeffnung * 100
 
+    # Restzeitwert berechnen
+    innerer_wert = max(0.0, K - S)
+    restzeitwert = max(0.0, P_heute / 100 - innerer_wert)
+    restzeitwert_pct = (restzeitwert / (P_eroeffnung / 100) * 100) if P_eroeffnung > 0 else 0
+
     def fmt_cands(df, stufe_label):
         if df is None or df.empty:
             return f"  {stufe_label}: Keine Kandidaten verfügbar.\n"
@@ -1129,32 +1184,41 @@ def _build_roll_ai_prompt(
     gs_real = K - gesamtnetto / n_contracts if n_contracts > 0 else breakeven_old
 
     lines = [
-        "Du bist ein erfahrener Optionshändler und kennst die folgende Rollstrategie aus dem Buch genau:",
+        "Du bist ein erfahrener Optionshändler. Du kennst zwei Quellen für die Rollstrategie:",
         "",
-        "STRATEGIE-KONTEXT:",
-        "- Wir haben einen Cash-Secured-Put am Geld verkauft (~30 DTE, monatliche Option).",
-        "- Ziel: Prämien sammeln, Andienung der Aktie so lange wie möglich hinauszögern.",
-        "- Wenn 5 Tage vor Verfall der Put im Geld ist und nicht mit Gewinn schließbar: ROLLEN.",
-        "- Rollreihenfolge (immer Stufe 1 zuerst prüfen):",
-        "  Stufe 1: Neuer Put, niedrigerer Strike, 30-60 DTE — neue Prämie ≥ Schließungskosten",
-        "  Stufe 2: Neuer Put, GLEICHER Strike, 30-60 DTE — neue Prämie ≥ Schließungskosten + GS verbessert",
-        "  Stufe 3: Neuer Put, niedrigerer Strike, 30-60 DTE, 2× Kontrakte — wenn Stufe 1+2 nicht greifen",
-        "  Stufe 3 nur wenn Kapital vorhanden. Wenn nicht → Endspiel (Aktien andienen lassen).",
-        "- Nach jedem Roll: zurück zu Schritt 3 (5 Tage vor neuem Verfall wieder prüfen).",
-        "- Bevorzuge immer niedrigeren Strike gegenüber längerer Laufzeit (höherer Zeitwert > innerer Wert).",
+        "QUELLE 1 — BUCH 'Optionen unschlagbar handeln' (Hauptstrategie):",
+        "- CSP am Geld (~30 DTE), Ziel: Prämien sammeln, Andienung hinauszögern.",
+        "- Rollen wenn 5 Tage vor Verfall der Put im Geld ist und nicht mit Gewinn schließbar.",
+        "- Rollreihenfolge (immer Stufe 1 zuerst):",
+        "  Stufe 1: Neuer Put, NIEDRIGERER Strike, 30–60 DTE, neue Prämie ≥ Schließungskosten.",
+        "           Strike muss nicht unter Aktienkurs — nur näher dran als alter Strike.",
+        "           Bevorzuge: niedrigerer Strike > kürzere Laufzeit (mehr Zeitwert = besser).",
+        "  Stufe 2: Neuer Put, GLEICHER Strike, 30–60 DTE, Prämie ≥ Kosten + GS verbessert sich.",
+        "  Stufe 3: Neuer Put, niedrigerer Strike, 30–60 DTE, 2× Kontrakte (bei Kapital).",
+        "  Kein Kapital für Stufe 3 → Endspiel (Aktien andienen + asymm. Covered Call).",
+        "- Nach jedem Roll: 5 Tage vor neuem Verfall wieder prüfen (ggf. Stufe 1 wieder möglich).",
+        "",
+        "QUELLE 2 — ERIC LUDWIG (Tradehelden) — ergänzende Roll-Trigger:",
+        "- Rollen wenn Restzeitwert ≤ 10–15% der Eröffnungsprämie (Zeitwert geht ohnehin auf null).",
+        "- Optimales Roll-Fenster: 7–14 Tage vor Verfall (Zeitwert niedrig, Gamma noch handhaben).",
+        "- Bei IV-Spike (schlechte News): 1–2 Tage warten bis IV sich beruhigt, dann rollen.",
+        "- Kein Stop-Loss — rollen ist besser als Verlust realisieren (Statistik: alle gerollten Trades +$1.365 vs. Stop-Loss -$2.000 über 2 Jahre).",
+        "- Kontrakt-Anzahl erhöhen + Spread-Breite enger = Einsatz konstant halten trotz mehr Kontrakte.",
+        "- Niedrigpreisige Basiswerte (<$50) bevorzugen — leichteres Rollen mit mehr Kontrakten.",
         "",
         "AKTUELLE POSITION:",
         f"  Symbol: {symbol}",
         f"  Bestehender Strike: ${K:.2f}",
         f"  Aktueller Aktienkurs: ${S:.2f}",
-        f"  Eröffnungsprämie: ${P_eroeffnung/100:.2f}/Aktie (${P_eroeffnung:.0f} gesamt bei {n_contracts} Kontrakt{'e' if n_contracts>1 else ''})",
+        f"  Eröffnungsprämie: ${P_eroeffnung/100:.2f}/Aktie (${P_eroeffnung:.0f} gesamt, {n_contracts} Kontrakt{'e' if n_contracts>1 else ''})",
         f"  Aktueller Put-Preis: ${P_heute/100:.2f}/Aktie",
-        f"  Position: {'📉 IM VERLUST' if im_verlust else '📈 IM GEWINN'} — P&L: {'+' if pnl_abs>=0 else ''}{pnl_abs/100:.2f}$/Aktie ({pnl_pct:+.1f}%)",
+        f"  Innerer Wert: ${innerer_wert:.2f}/Aktie | Restzeitwert: ${restzeitwert:.2f}/Aktie ({restzeitwert_pct:.1f}% der Eröffnungsprämie)",
+        f"  Position: {'📉 IM VERLUST' if im_verlust else '📈 IM GEWINN'} — P&L: {pnl_abs/100:+.2f}$/Aktie ({pnl_pct:+.1f}%)",
         f"  Aktuelle Gewinnschwelle: ${breakeven_old:.2f}",
-        f"  Bereits {roll_count}× gerollt. Gesammelte Netto-Prämien aus allen bisherigen Rolls: ${prev_netto:.2f}",
-        f"  Realer durchschn. Einstiegskurs nach allen Prämien: ${gs_real:.2f}",
+        f"  Bereits {roll_count}× gerollt. Gesammelte Netto-Prämien bisher: ${prev_netto:.2f}",
+        f"  Realer Einstiegskurs nach allen Prämien: ${gs_real:.2f}",
         "",
-        "VERFÜGBARE ROLL-KANDIDATEN AUS DER DB (aktuelle Optionskette, DTE 30-90):",
+        "VERFÜGBARE ROLL-KANDIDATEN AUS DER DB (aktuelle Optionskette, DTE 30–90):",
     ]
     lines.append(fmt_cands(cand_st1, "Stufe 1 (niedrigerer Strike)"))
     lines.append(fmt_cands(cand_st2, "Stufe 2 (gleicher Strike)"))
@@ -1424,20 +1488,56 @@ def _render_screener_table(df: pd.DataFrame, sel_key: str, top_n: int = 5):
 
 def render_screener_tab():
     st.subheader("📈 Screener -- neuer Cash-Secured-Put-Einstieg")
+
+    # ── Strategie-Modus ──────────────────────────────────────────────────────
+    modus_col1, modus_col2 = st.columns([2, 5])
+    with modus_col1:
+        strategie_modus = st.radio(
+            "Strategie-Modus",
+            options=["🎯 Aggressiv (ATM, Buch)", "🛡️ Defensiv (OTM, Ludwig)"],
+            index=0,
+            horizontal=True,
+            key="screener_modus",
+            help=(
+                "**Aggressiv (Buch):** Put am Geld (~0% Puffer), ~30 DTE, maximaler Zeitwert. "
+                "Höhere Prämie, aber öfter rollen nötig.\n\n"
+                "**Defensiv (Ludwig 5-Star):** Put aus dem Geld (Delta <20, Puffer ~10–15%), "
+                "30–60 DTE, Trefferquote ≥80%. Weniger Prämie, aber geringeres Zuteilungsrisiko."
+            ),
+        )
+    with modus_col2:
+        if "Aggressiv" in strategie_modus:
+            st.caption(
+                "📖 **Buch-Strategie:** CSP am Geld für maximalen Zeitwert. "
+                "Strike ≈ aktueller Kurs, ~30 DTE (bevorzugt 3. Freitag). "
+                "ATM-Filter aktiv → Puffer-Filter automatisch auf ATM gestellt."
+            )
+        else:
+            st.caption(
+                "📊 **Ludwig 5-Star:** OTM-Put mit Puffer ≥10%, Delta <20, DTE 30–60. "
+                "Backtest-Trefferquote ≥80% angestrebt. Keine Earnings in der Laufzeit. "
+                "Stabiler, weniger Rollen nötig — dafür weniger Prämie."
+            )
+    st.divider()
+
     st.caption(
         "Qualifizierte Aktien nach Buch-Checkliste (Kap. 4+5) + Sektor-Kontext aus der RRG-Rotation. "
-        "Harte Filter: Preis 15-80 $, OI/Vol ≥ 100. Kriterien mit '(aktuell)' sind Momentaufnahmen."
+        "Harte Filter: Preis 10-40 $, OI/Vol ≥ 100. Kriterien mit '(aktuell)' sind Momentaufnahmen."
     )
 
     # Sektor-Quadrant-Map laden (im Hintergrund, kein Spinner)
     sector_map = _load_sector_quadrants()
+
+    # Modus-abhängige Defaults
+    _is_aggressiv = "Aggressiv" in strategie_modus
+    _dte_default = (25, 35) if _is_aggressiv else (30, 60)
 
     with st.expander("🔍 Filter", expanded=True):
         c1, c2, c3, c4, c5 = st.columns(5)
         price_min, price_max = c1.slider("Aktienkurs ($)", 1, 500, (10, 40), 1)
         pe_max = c2.slider("KGV-Obergrenze", 10, 200, int(DEFAULT_PE_MAX), 5)
         min_score = c3.slider("Mindest-Score", 0, 9, 5, 1)
-        dte_min, dte_max = c4.slider("DTE-Fenster (Tage)", 7, 90, (21, 45), 1)
+        dte_min, dte_max = c4.slider("DTE-Fenster (Tage)", 7, 90, _dte_default, 1)
         min_market_cap_b = c5.slider("Min. Market Cap (Mrd. $)", 0.0, 50.0, 2.0, 0.5,
                                      help="0 = kein Filter. Buch-Default: 2 Mrd. (keine Micro-Caps).")
         min_market_cap_usd = min_market_cap_b * 1e9 if min_market_cap_b > 0 else 0
@@ -1564,9 +1664,11 @@ def render_screener_tab():
         value=True,
         help="Blendet Aktien aus, bei denen kein Put im DTE-Fenster die Bedingung erfüllt.",
     )
+    # ATM-Modus default = Aggressiv; Defensiv default = OTM (kein ATM)
+    _atm_default = _is_aggressiv
     tbl_atm_mode = pf2.checkbox(
         "ATM-Modus",
-        value=False,
+        value=_atm_default,
         key="tbl_atm_mode",
         help="Zeigt nur Puts die ≤ 3% vom aktuellen Kurs entfernt sind (am Geld, Buch-Strategie: maximaler Zeitwert).",
         disabled=not tbl_put_filter,
@@ -1578,9 +1680,11 @@ def render_screener_tab():
         label_visibility="collapsed",
         disabled=not tbl_put_filter,
     )
+    # Defensiv-Modus: Puffer default 10%
+    _puffer_default = 0 if _is_aggressiv else 10
     _put_puffer_f = pf4.number_input(
         "Puffer %", min_value=0, max_value=30,
-        value=int(st.session_state.get("screener_min_puffer", int(DEFAULT_MIN_PUFFER_PCT))),
+        value=int(st.session_state.get("screener_min_puffer", _puffer_default)),
         key="tbl_put_puffer",
         label_visibility="collapsed",
         disabled=not tbl_put_filter or tbl_atm_mode,
