@@ -33,44 +33,51 @@ def _fmt_large(val):
 
 
 def _build_prompt(puts_df: pd.DataFrame) -> str:
+    # Sektor-Übersicht für Quervergleich
+    sectors = puts_df.get("sector", pd.Series(dtype=str)).dropna().unique().tolist() if "sector" in puts_df.columns else []
+    sector_summary = ", ".join(sorted(set(sectors))) if sectors else "k.A."
+
     lines = [
-        "Du bist ein erfahrener Options-Trader spezialisiert auf Cash-Secured Puts (Prämienverkauf).",
-        "Ziel: Aktien identifizieren bei denen das Risiko einer ungewollten Zuteilung (Assignment) minimal ist.",
-        "Eine Zuteilung ist unerwünscht, wenn die Aktie stark unter den Strike fällt und man die Aktie",
-        "zu überhöhtem Preis halten muss. Bewerte daher primär die STABILITÄT und KURSRISIKEN.",
+        "## Strategie-Kontext",
+        "Du analysierst Kandidaten für eine **Cash-Secured-Put-Prämienverkaufs-Strategie**.",
+        "Das Ziel ist NICHT, die Aktien zu besitzen. Das Ziel ist:",
+        "1. Einen Put verkaufen und die Prämie kassieren.",
+        "2. Den Put möglichst günstig zurückkaufen (idealerweise bei 50–80 % Gewinn).",
+        "3. Eine ungewollte Zuteilung (Assignment) vermeiden, wenn der Kurs stark fällt.",
         "",
-        "Bewertungskriterien (Priorität: Stabilitätsrisiko zuerst):",
-        "1. Kursrisiko / Zuteilungsrisiko:",
-        "   - Beta: >1.5 = hohes Kursrisiko, <0.8 = defensiv",
-        "   - Days to Earnings: <14 Tage = gefährlich (Earnings-Gap-Risiko)",
-        "   - Short % Float: >15% = erhöhtes Squeeze/Crash-Risiko",
-        "   - RSI: >75 überkauft (Korrekturrisiko), <30 überverkauft (Bounce möglich)",
-        "   - Abstand zum SMA200: Kurs weit darüber = Rückschlagsrisiko",
-        "2. Unternehmensqualität (Überlebt die Aktie einen Abschwung?):",
-        "   - FCF positiv = Unternehmen zahlt aus eigener Kraft",
-        "   - Debt/Equity: >2.0 = Verschuldungsrisiko",
-        "   - Gross Margin: >40% = Pricing-Power",
-        "   - Return on Equity: >15% = effizientes Kapital",
-        "3. Bewertung (faire Aktie fällt weniger):",
-        "   - Forward PE vs. Trailing PE: Wachstum sichtbar?",
-        "   - Revenue Growth und EPS Growth positiv?",
-        "4. Options-Attraktivität (Prämie lohnt sich?):",
-        "   - IV-Rank hoch = hohe Prämie",
-        "   - Ann. Rendite und Puffer",
+        "Ein idealer Kandidat hat:",
+        "- **Hohe IV** (= hohe Prämie, gut für den Verkäufer)",
+        "- **Stabilen Kurs** (geringe Zuteilungswahrscheinlichkeit: niedriges Beta, kein Earnings-Risiko)",
+        "- **Fundamentale Qualität** (FCF positiv, geringe Verschuldung, Gross Margin solide)",
+        "- **Ausreichend Puffer** zwischen Kurs und Strike (mind. 5–10 %)",
         "",
-        "Antworte auf Deutsch. Format:",
-        "**Platz X: SYMBOL $STRIKE (DTE d)** — 2-3 prägnante Sätze. Nenne konkrete Zahlen.",
-        "Erkläre explizit warum das Zuteilungsrisiko gering/hoch ist.",
-        "Am Ende: 2 Sätze Gesamteinschätzung welche 1-2 Kandidaten am sichersten sind.",
+        "## Aufgabe",
+        "Vergleiche die folgenden Kandidaten **miteinander** (kein isolierter Einzelkommentar).",
+        "Berücksichtige dabei auch den **Sektor-Kontext**: Welche Sektoren sind im Vergleich stabiler?",
+        f"Vertretene Sektoren: {sector_summary}",
         "",
-        "=== KANDIDATEN ===",
+        "Antworte auf Deutsch in zwei Teilen:",
+        "",
+        "**Teil 1 — Ranking-Tabelle** (Markdown-Tabelle, alle Kandidaten, sortiert nach Gesamtbewertung):",
+        "| Platz | Symbol | Sektor | Strike | DTE | Ann.% | Puffer% | IV-Rank | Beta | Ø Earnings | Fazit (1 Satz) |",
+        "Fülle jede Spalte mit dem konkreten Wert aus den Daten. Fazit = Stärke ODER Hauptrisiko in 1 Satz.",
+        "",
+        "**Teil 2 — Top-3 Empfehlungen** (je 3–4 Sätze):",
+        "Erkläre für Platz 1, 2, 3 warum diese Aktien die besten CSP-Kandidaten sind.",
+        "Gehe explizit auf Zuteilungsrisiko, Prämienqualität und Sektor-Einschätzung ein.",
+        "Nenne konkrete Zahlen aus den Daten.",
+        "",
+        "**Teil 3 — Warnung** (optional, nur wenn relevant):",
+        "Gibt es Kandidaten mit erhöhtem Risiko (Earnings <14 Tage, Beta >1.5, Short-Float >15 %, negativer FCF)?",
+        "Liste diese kurz mit Begründung.",
+        "",
+        "=== KANDIDATEN-DATEN ===",
     ]
 
     for _, r in puts_df.iterrows():
         sym  = r.get("symbol", "?")
         name = r.get("company_name", "")
         sec  = r.get("sector", "")
-        ind  = r.get("industry", "")
 
         # Options-Kennzahlen
         strike  = _fmt(r.get("strike_price"), "$", decimals=2)
@@ -104,7 +111,11 @@ def _build_prompt(puts_df: pd.DataFrame) -> str:
         eps_g   = _fmt(r.get("eps_growth_pct"), "%", decimals=1)
         mcap    = _fmt_large(r.get("market_cap") or r.get("MarketCap"))
 
-        lines.append(f"\n{sym} ({name}) | {sec} / {ind} | MarketCap: {mcap}")
+        lines.append(f"\n--- {sym} ({name}) | Sektor: {sec} | MarketCap: {mcap} ---")
+        lines.append(
+            f"  Put:        Strike {strike} | Kurs {kurs} | DTE {dte} | "
+            f"Puffer {puffer} | Ann. {ann} | Prämie {praemie} | IV-Rank {iv_rank} | Delta {delta}"
+        )
         lines.append(
             f"  Kursrisiko: Beta {beta} | Earnings in {dte_earnings} | "
             f"Short-Float {short_float} | RSI {rsi} | SMA200 {sma200} | 52W-Tief {w52low}"
@@ -115,10 +126,6 @@ def _build_prompt(puts_df: pd.DataFrame) -> str:
         )
         lines.append(
             f"  Bewertung:  P/E {pe} | Fwd P/E {fwd_pe} | Rev-Wachstum {rev_g} | EPS-Wachstum {eps_g}"
-        )
-        lines.append(
-            f"  Put:        Strike {strike} | Kurs {kurs} | DTE {dte} | "
-            f"Puffer {puffer} | Ann. {ann} | Prämie {praemie} | IV-Rank {iv_rank} | Delta {delta}"
         )
 
     return "\n".join(lines)
@@ -143,10 +150,11 @@ def rank_puts(
     response = client.chat_completion(
         "deepseek",
         system_prompt=(
-            "Du bist ein erfahrener Optionshändler spezialisiert auf Cash-Secured Puts. "
-            "Dein Hauptziel ist es, Aktien zu identifizieren bei denen das Zuteilungsrisiko minimal ist. "
-            "Antworte präzise, strukturiert und auf Deutsch. "
-            "Nutze die gegebenen Zahlen explizit in deiner Begründung."
+            "Du bist ein erfahrener Optionshändler spezialisiert auf Cash-Secured-Put-Prämienverkauf. "
+            "Du vergleichst Kandidaten miteinander und gibst strukturierte, tabellarische Antworten. "
+            "Antworte auf Deutsch. Nutze Markdown-Tabellen für das Ranking. "
+            "Nenne immer konkrete Zahlen aus den gegebenen Daten. "
+            "Sei präzise — kein allgemeines Finanzwissen, nur Analyse der gegebenen Kandidaten."
         ),
         user_prompt=prompt,
         temperature=0.3,

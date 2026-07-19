@@ -1213,7 +1213,7 @@ def render_screener_tab():
 
     with st.expander("🔍 Filter", expanded=True):
         c1, c2, c3, c4, c5 = st.columns(5)
-        price_min, price_max = c1.slider("Aktienkurs ($)", 1, 500, (15, 80), 1)
+        price_min, price_max = c1.slider("Aktienkurs ($)", 1, 500, (10, 40), 1)
         pe_max = c2.slider("KGV-Obergrenze", 10, 200, int(DEFAULT_PE_MAX), 5)
         min_score = c3.slider("Mindest-Score", 0, 9, 5, 1)
         dte_min, dte_max = c4.slider("DTE-Fenster (Tage)", 7, 90, (21, 45), 1)
@@ -1336,29 +1336,21 @@ def render_screener_tab():
         label_visibility="collapsed",
     )
 
-    # Put-Puffer-Filter (zweite Zeile)
-    pf1, pf2, pf3, pf4 = st.columns([1.5, 1.2, 1.2, 5])
-    tbl_put_filter = pf1.checkbox(
-        "Nur mit handelbarem Put",
-        value=False,
-        help="Blendet Aktien aus, bei denen kein Put im DTE-Fenster den Mindest-Puffer erfüllt.",
-    )
-    _put_dte_min_f, _put_dte_max_f = pf2.select_slider(
-        "DTE", options=list(range(7, 91, 1)),
+    # Put-Puffer-Filter (zweite Zeile) — immer aktiv
+    pf1, pf2, pf3 = st.columns([1.5, 1.5, 5])
+    _put_dte_min_f, _put_dte_max_f = pf1.select_slider(
+        "Put DTE", options=list(range(7, 91, 1)),
         value=(st.session_state.get("screener_put_dte", (30, 45))),
         key="tbl_put_dte",
         label_visibility="collapsed",
-        disabled=not tbl_put_filter,
     )
-    _put_puffer_f = pf3.number_input(
+    _put_puffer_f = pf2.number_input(
         "Puffer %", min_value=0, max_value=30,
         value=int(st.session_state.get("screener_min_puffer", int(DEFAULT_MIN_PUFFER_PCT))),
         key="tbl_put_puffer",
         label_visibility="collapsed",
-        disabled=not tbl_put_filter,
     )
-    if tbl_put_filter:
-        pf4.caption(f"DTE {_put_dte_min_f}–{_put_dte_max_f}d · Puffer ≥ {_put_puffer_f}%")
+    pf3.caption(f"Nur Aktien mit Put im DTE-Fenster {_put_dte_min_f}–{_put_dte_max_f}d · Puffer ≥ {_put_puffer_f}%")
 
     # Filter anwenden
     view = scored.copy()
@@ -1371,8 +1363,8 @@ def render_screener_tab():
     if tbl_min_score > 0:
         view = view[view["score"] >= tbl_min_score]
 
-    # Put-Puffer-Filter: nur Aktien behalten wo mind. 1 Put den Puffer erfüllt
-    if tbl_put_filter and not view.empty:
+    # Put-Puffer-Filter: nur Aktien behalten wo mind. 1 Put den Puffer erfüllt (immer aktiv)
+    if not view.empty:
         def _has_valid_put(sym):
             puts = _load_symbol_puts(sym, _put_dte_min_f, _put_dte_max_f,
                                      min_oi=int(min_oi), min_vol=int(min_vol),
