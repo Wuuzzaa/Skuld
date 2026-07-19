@@ -30,7 +30,7 @@ from src.ui_utils import filter_by_expiration_type
 from src.utils.option_utils import get_expiration_type
 from src.black_scholes import PutValue
 from src.roll_support_calc import position_status, roll_candidate, roll_candidate_explained
-from src.put_ai_ranker import rank_puts, LLMProviderError
+from src.put_ai_ranker import rank_puts, LLMProviderError, LLMClient
 from src.put_screener import (
     score_candidates, score_breakdown, put_metrics, put_evaluation,
     DEFAULT_PE_MAX, DEFAULT_MIN_PUFFER_PCT,
