@@ -39,37 +39,47 @@ def _build_prompt(puts_df: pd.DataFrame) -> str:
 
     lines = [
         "## Strategie-Kontext",
-        "Du analysierst Kandidaten für eine **Cash-Secured-Put-Prämienverkaufs-Strategie**.",
-        "Das Ziel ist NICHT, die Aktien zu besitzen. Das Ziel ist:",
-        "1. Einen Put verkaufen und die Prämie kassieren.",
-        "2. Den Put möglichst günstig zurückkaufen (idealerweise bei 50–80 % Gewinn).",
-        "3. Eine ungewollte Zuteilung (Assignment) vermeiden, wenn der Kurs stark fällt.",
+        "Wir suchen Aktien für Cash-Secured-Put-Prämienverkauf (~30 DTE, am Geld).",
+        "Ziel: Prämien kassieren und Zuteilung vermeiden. Dafür brauchen wir fundamental",
+        "solide Unternehmen deren Kurs stabil bleibt — die Put-Kennzahlen sind sekundär.",
         "",
-        "Ein idealer Kandidat hat:",
-        "- **Hohe IV** (= hohe Prämie, gut für den Verkäufer)",
-        "- **Stabilen Kurs** (geringe Zuteilungswahrscheinlichkeit: niedriges Beta, kein Earnings-Risiko)",
-        "- **Fundamentale Qualität** (FCF positiv, geringe Verschuldung, Gross Margin solide)",
-        "- **Ausreichend Puffer** zwischen Kurs und Strike (mind. 5–10 %)",
+        "## Deine Aufgabe: ZWEISTUFIGE BEWERTUNG",
         "",
-        "## Aufgabe",
-        "Vergleiche die folgenden Kandidaten **miteinander** (kein isolierter Einzelkommentar).",
-        "Berücksichtige dabei auch den **Sektor-Kontext**: Welche Sektoren sind im Vergleich stabiler?",
+        "**Stufe 1 — Unternehmensqualität (Hauptkriterium, 60% Gewicht):**",
+        "Bewerte jedes Unternehmen als eigenständige Investition. Kernfragen:",
+        "- Ist das Unternehmen profitabel und wächst es? (FCF positiv, Revenue/EPS-Wachstum)",
+        "- Ist die Bilanz solide? (Debt/Equity <2, Gross Margin >30%)",
+        "- Ist die Bewertung fair? (KGV nicht extrem überhöht für den Sektor)",
+        "- Ist der Kurs technisch stabil? (RSI nicht überkauft, über SMA200)",
+        "- Gibt es Kursrisiken? (Beta hoch, Earnings in <14 Tagen, Short-Float >15%)",
+        "",
+        "**Stufe 2 — Put-Attraktivität (Sekundärkriterium, 40% Gewicht):**",
+        "Nur wenn das Unternehmen fundamental überzeugt — lohnt sich der Put?",
+        "- IV-Rank hoch = gute Prämie zum Zeitpunkt des Verkaufs",
+        "- Annualisierte Rendite attraktiv?",
+        "- Puffer zwischen Strike und Kurs ausreichend?",
+        "",
+        "**Wichtig:** Ein Put mit hoher Prämie bei einem schwachen Unternehmen ist KEIN guter Kandidat.",
+        "Ein Put mit moderater Prämie bei einem qualitativ hochwertigen Unternehmen ist BESSER.",
+        "",
         f"Vertretene Sektoren: {sector_summary}",
+        "Beachte Sektor-Unterschiede: Tech-Wachstum rechtfertigt höhere KGVs, defensive Sektoren",
+        "punkten durch Stabilität und Cashflow.",
         "",
-        "Antworte auf Deutsch in zwei Teilen:",
+        "## Output-Format",
         "",
-        "**Teil 1 — Ranking-Tabelle** (Markdown-Tabelle, alle Kandidaten, sortiert nach Gesamtbewertung):",
-        "| Platz | Symbol | Sektor | Strike | DTE | Ann.% | Puffer% | IV-Rank | Beta | Ø Earnings | Fazit (1 Satz) |",
-        "Fülle jede Spalte mit dem konkreten Wert aus den Daten. Fazit = Stärke ODER Hauptrisiko in 1 Satz.",
+        "**Teil 1 — Ranking-Tabelle** (alle Kandidaten, sortiert nach Gesamtbewertung):",
+        "| Platz | Symbol | Sektor | Fundamental-Note | Put-Note | IV-Rank | Ann.% | Fazit (1 Satz) |",
+        "Fundamental-Note: A/B/C/D. Put-Note: A/B/C/D. Fazit: wichtigste Stärke ODER Risiko.",
         "",
-        "**Teil 2 — Top-3 Empfehlungen** (je 3–4 Sätze):",
-        "Erkläre für Platz 1, 2, 3 warum diese Aktien die besten CSP-Kandidaten sind.",
-        "Gehe explizit auf Zuteilungsrisiko, Prämienqualität und Sektor-Einschätzung ein.",
-        "Nenne konkrete Zahlen aus den Daten.",
+        "**Teil 2 — Top-3 Empfehlungen** (je 4-5 Sätze):",
+        "Für jeden Top-3-Kandidaten:",
+        "1. Warum ist das Unternehmen fundamental stark? (konkrete Zahlen: FCF, KGV, Wachstum)",
+        "2. Warum ist der Put attraktiv? (IV-Rank, Rendite, Puffer)",
+        "3. Was ist das Hauptrisiko?",
         "",
-        "**Teil 3 — Warnung** (optional, nur wenn relevant):",
-        "Gibt es Kandidaten mit erhöhtem Risiko (Earnings <14 Tage, Beta >1.5, Short-Float >15 %, negativer FCF)?",
-        "Liste diese kurz mit Begründung.",
+        "**Teil 3 — Warnungen** (nur wenn relevant):",
+        "Kandidaten mit erhöhtem Risiko: Earnings <14 Tage, Beta >1.5, negativer FCF, Debt/Eq >3.",
         "",
         "=== KANDIDATEN-DATEN ===",
     ]
@@ -97,35 +107,31 @@ def _build_prompt(puts_df: pd.DataFrame) -> str:
         sma200       = _fmt(r.get("sma_200"), "$", decimals=2)
         w52low       = _fmt(r.get("week_52_low"), "$", decimals=2)
 
-        # Unternehmensqualität
+        # Unternehmensqualität (Hauptkriterium)
         fcf     = _fmt_large(r.get("free_cashflow") or r.get("FreeCashFlow"))
         ocf     = _fmt_large(r.get("operating_cashflow") or r.get("OperatingCashFlow"))
         debt_eq = _fmt(r.get("debt_to_equity"), decimals=2)
         gm      = _fmt(r.get("gross_margin_pct"), "%", decimals=1)
         roe     = _fmt(r.get("return_on_equity_pct"), "%", decimals=1)
-
-        # Bewertung
-        pe      = _fmt(r.get("trailing_pe"), decimals=1)
-        fwd_pe  = _fmt(r.get("forward_pe"), decimals=1)
         rev_g   = _fmt(r.get("revenue_growth_pct"), "%", decimals=1)
         eps_g   = _fmt(r.get("eps_growth_pct"), "%", decimals=1)
+        pe      = _fmt(r.get("trailing_pe"), decimals=1)
+        fwd_pe  = _fmt(r.get("forward_pe"), decimals=1)
         mcap    = _fmt_large(r.get("market_cap") or r.get("MarketCap"))
 
-        lines.append(f"\n--- {sym} ({name}) | Sektor: {sec} | MarketCap: {mcap} ---")
+        lines.append(f"\n--- {sym} ({name}) | {sec} | MarketCap: {mcap} ---")
         lines.append(
-            f"  Put:        Strike {strike} | Kurs {kurs} | DTE {dte} | "
-            f"Puffer {puffer} | Ann. {ann} | Prämie {praemie} | IV-Rank {iv_rank} | Delta {delta}"
+            f"  [FUNDAMENTAL] FCF {fcf} | OCF {ocf} | Debt/Eq {debt_eq} | "
+            f"Gross Margin {gm} | ROE {roe} | Rev-Wachstum {rev_g} | EPS-Wachstum {eps_g} | "
+            f"P/E {pe} | Fwd P/E {fwd_pe}"
         )
         lines.append(
-            f"  Kursrisiko: Beta {beta} | Earnings in {dte_earnings} | "
+            f"  [KURSRISIKO]  Beta {beta} | Earnings in {dte_earnings} | "
             f"Short-Float {short_float} | RSI {rsi} | SMA200 {sma200} | 52W-Tief {w52low}"
         )
         lines.append(
-            f"  Qualität:   FCF {fcf} | OCF {ocf} | Debt/Eq {debt_eq} | "
-            f"Gross Margin {gm} | ROE {roe}"
-        )
-        lines.append(
-            f"  Bewertung:  P/E {pe} | Fwd P/E {fwd_pe} | Rev-Wachstum {rev_g} | EPS-Wachstum {eps_g}"
+            f"  [PUT]         Strike {strike} | Kurs {kurs} | DTE {dte} | "
+            f"Puffer {puffer} | Ann. {ann} | Prämie {praemie} | IV-Rank {iv_rank} | Delta {delta}"
         )
 
     return "\n".join(lines)

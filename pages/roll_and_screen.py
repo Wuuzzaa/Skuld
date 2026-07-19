@@ -930,41 +930,41 @@ def _render_candidate_cards(candidates, stufe, K, P_eroeffnung, P_heute, n, brea
             with col:
                 st.markdown(f"""
                 <div style="background:{bg};border:{border};border-radius:10px;
-                    padding:12px 14px;margin-bottom:4px;{shadow}">
+                    padding:16px 18px;margin-bottom:4px;{shadow}">
                   <div style="display:flex;justify-content:space-between;
-                      align-items:center;margin-bottom:8px;">
-                    <span style="font-family:'JetBrains Mono',monospace;font-size:17px;
+                      align-items:center;margin-bottom:12px;">
+                    <span style="font-family:'JetBrains Mono',monospace;font-size:22px;
                         font-weight:700;color:#f1f5f9;">${cand['K2']:.2f}</span>
-                    <span style="font-size:16px;">{r['ampel']}</span>
+                    <span style="font-size:22px;">{r['ampel']}</span>
                   </div>
-                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
                     <div>
-                      <div style="font-size:9px;text-transform:uppercase;letter-spacing:.07em;
-                          color:#8faabf;margin-bottom:1px;">Netto</div>
-                      <div style="font-family:'JetBrains Mono',monospace;font-size:13px;
+                      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;
+                          color:#8faabf;margin-bottom:3px;">Netto</div>
+                      <div style="font-family:'JetBrains Mono',monospace;font-size:18px;
                           font-weight:700;color:{netto_color};">${r['netto_abs']:+.2f}</div>
                     </div>
                     <div>
-                      <div style="font-size:9px;text-transform:uppercase;letter-spacing:.07em;
-                          color:#8faabf;margin-bottom:1px;">GS-Delta</div>
-                      <div style="font-family:'JetBrains Mono',monospace;font-size:13px;
+                      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;
+                          color:#8faabf;margin-bottom:3px;">GS-Delta</div>
+                      <div style="font-family:'JetBrains Mono',monospace;font-size:18px;
                           font-weight:700;color:{gs_color};">{gs_arrow}</div>
                     </div>
                     <div>
-                      <div style="font-size:9px;text-transform:uppercase;letter-spacing:.07em;
-                          color:#8faabf;margin-bottom:1px;">DTE</div>
-                      <div style="font-family:'JetBrains Mono',monospace;font-size:12px;
-                          color:#cbd5e1;">{cand['dte']}d</div>
+                      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;
+                          color:#8faabf;margin-bottom:3px;">DTE</div>
+                      <div style="font-family:'JetBrains Mono',monospace;font-size:16px;
+                          font-weight:600;color:#cbd5e1;">{cand['dte']}d</div>
                     </div>
                     <div>
-                      <div style="font-size:9px;text-transform:uppercase;letter-spacing:.07em;
-                          color:#8faabf;margin-bottom:1px;">Prämie</div>
-                      <div style="font-family:'JetBrains Mono',monospace;font-size:12px;
-                          color:#cbd5e1;">${cand['P_neu']/100:.2f}</div>
+                      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;
+                          color:#8faabf;margin-bottom:3px;">Prämie</div>
+                      <div style="font-family:'JetBrains Mono',monospace;font-size:16px;
+                          font-weight:600;color:#cbd5e1;">${cand['P_neu']/100:.2f}</div>
                     </div>
                   </div>
-                  <div style="font-size:9px;color:#5a7a8a;margin-top:7px;">
-                    GS neu: ${r['breakeven_new']:.2f} · OI {cand['oi']} / Vol {cand['vol']}
+                  <div style="font-size:11px;color:#5a7a8a;margin-top:10px;">
+                    GS neu: <b style="color:#94a3b8">${r['breakeven_new']:.2f}</b> · OI {cand['oi']} / Vol {cand['vol']}
                   </div>
                 </div>""", unsafe_allow_html=True)
 
