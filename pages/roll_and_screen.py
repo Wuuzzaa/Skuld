@@ -871,17 +871,31 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
 - **Kapital nötig**: Cash der als Sicherheit hinterlegt werden muss (Strike × Kontrakte × 100)
 - **Klick auf eine Zeile** → Plain-Language Erklärung was genau passiert
 - 🟢 DTE-Farbe = 30–60 Tage (Buch-Optimum), 🟡 = 61–90 Tage (Ausnahme)
+- Stufe 1+3: nur OTM-Kandidaten (Strike < aktueller Kurs)
 """)
 
-    # DTE-Bereich: Standard 30-60, Checkbox für bis zu 90
-    _roll_90 = st.checkbox(
+    # Filter-Zeile für Roll-Kandidaten
+    _fc1, _fc2, _fc3 = st.columns([1.5, 1.5, 4])
+    _roll_90 = _fc1.checkbox(
         "Bis 90 DTE einbeziehen",
         value=False,
         key="roll_cand_90dte",
         help="Standardmäßig werden nur Kandidaten mit 30–60 DTE gezeigt (Buch-Empfehlung). "
-             "Aktiviere diese Option wenn kein passender Kandidat in 30–60 DTE gefunden wird.",
+             "Aktiviere wenn kein passender Kandidat in 30–60 DTE gefunden wird.",
+    )
+    _roll_puffer = _fc2.number_input(
+        "Min. Puffer % zum Kurs",
+        min_value=0, max_value=30, value=0, step=1,
+        key="roll_cand_puffer",
+        help="Nur Roll-Kandidaten anzeigen deren Strike mindestens X% unter dem aktuellen Kurs liegt. "
+             "0 = kein Filter (alle OTM-Strikes). 5% bei Kurs $141 → max Strike $134.",
     )
     _dte_max_cand = 90 if _roll_90 else 60
+    if _roll_puffer > 0:
+        _fc3.caption(f"Puffer-Filter aktiv: Strike ≤ ${S * (1 - _roll_puffer/100):.2f} (= Kurs ${S:.2f} − {_roll_puffer}%)")
+    else:
+        _fc3.caption("Puffer-Filter inaktiv — alle OTM-Strikes (< aktueller Kurs) werden angezeigt.")
+
 
     cand = _load_roll_candidates(symbol, K, 30, _dte_max_cand)
     if cand is None or cand.empty:
@@ -899,35 +913,36 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
     any_green = False
     breakeven_old = pos["breakeven_old"]
 
-    # Stufe 1: niedrigerer Strike als K, sortiert nach Strike DESC + DTE ASC (Buch: näher am Kurs + kürzer)
-    st1 = cand[cand["strike_price"] < K].sort_values(
+    # Puffer-Grenze berechnen: Strike muss ≤ S * (1 - puffer/100)
+    _strike_max_otm = S * (1 - _roll_puffer / 100) if _roll_puffer > 0 else S
+
+    # Stufe 1: OTM-Strikes (< aktueller Kurs S), mit optionalem Puffer
+    st1 = cand[cand["strike_price"] < _strike_max_otm].sort_values(
         ["strike_price", "days_to_expiration"], ascending=[False, True]
     )
     any_green |= _render_stufe(1, st1, K, P_eroeffnung, P_heute, int(n_contracts), breakeven_old,
-                               "Stufe 1 — niedrigerer Basispreis, gleiche Kontrakte")
+                               f"Stufe 1 — niedrigerer Basispreis (OTM), gleiche Kontrakte")
 
-    # Stufe 2: gleicher Strike wie K — nur sinnvoll wenn Strike nicht zu tief im Geld
-    # (max 15% ITM, sonst kaum Zeitwert und GS verbessert sich nicht)
+    # Stufe 2: gleicher Strike wie K — nur wenn K selbst OTM oder max 15% ITM
     st2_raw = cand[cand["strike_price"] == K]
-    S_current = float(cand["live_stock_price"].iloc[0]) if not cand.empty and "live_stock_price" in cand.columns else K
-    itm_pct = (K - S_current) / K * 100 if K > 0 else 0
+    itm_pct = (K - S) / K * 100 if K > 0 else 0
     if itm_pct > 15:
         st.caption(
-            f"⚠️ Stufe 2 übersprungen: Strike ${K:.2f} ist {itm_pct:.1f}% im Geld bei Kurs ${S_current:.2f} — "
+            f"⚠️ Stufe 2 übersprungen: Strike ${K:.2f} ist {itm_pct:.1f}% im Geld bei Kurs ${S:.2f} — "
             f"kaum Zeitwert vorhanden, GS-Verbesserung unwahrscheinlich."
         )
-        st2 = st2_raw.iloc[0:0]  # leerer DataFrame
+        st2 = st2_raw.iloc[0:0]
     else:
         st2 = st2_raw
     any_green |= _render_stufe(2, st2, K, P_eroeffnung, P_heute, int(n_contracts), breakeven_old,
                                "Stufe 2 — gleicher Basispreis, gleiche Kontrakte")
 
-    # Stufe 3: niedrigerer Strike, doppelte Kontrakte
-    st3 = cand[cand["strike_price"] < K].sort_values(
+    # Stufe 3: OTM-Strikes mit Puffer, doppelte Kontrakte
+    st3 = cand[cand["strike_price"] < _strike_max_otm].sort_values(
         ["strike_price", "days_to_expiration"], ascending=[False, True]
     )
     any_green |= _render_stufe(3, st3, K, P_eroeffnung, P_heute, 2 * int(n_contracts), breakeven_old,
-                               "Stufe 3 — niedrigerer Basispreis, Kontrakte verdoppelt")
+                               "Stufe 3 — niedrigerer Basispreis (OTM), Kontrakte verdoppelt")
 
     if not any_green:
         _render_endgame_hint()
