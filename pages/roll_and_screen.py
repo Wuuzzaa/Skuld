@@ -1127,14 +1127,45 @@ def _build_roll_ai_prompt(
 
     lines += [
         "",
-        "DEINE AUFGABE:",
-        "1. Lageanalyse (2-3 Sätze): Wo steht der Trade? Ist Rollen nötig/sinnvoll?",
-        "2. Empfehlung welche Stufe und welchen konkreten Kandidaten (Strike, Verfall, Begründung mit Zahlen).",
-        "   Berechne die Netto-Prämie nach dem Roll und die neue Gewinnschwelle.",
-        "3. Falls keine Stufe greift: klare Aussage 'Endspiel — Aktien andienen lassen'.",
-        "4. Eine kurze Warnung falls Earnings in <14 Tagen oder die Aktie unter wichtigen Unterstützungen.",
+        "ANTWORTE EXAKT IN DIESEM FORMAT (kein anderes Format akzeptiert):",
         "",
-        "Antworte auf Deutsch, strukturiert, mit konkreten Zahlen. Maximal 300 Wörter.",
+        "## 📊 Lageanalyse",
+        "| Kennzahl | Wert |",
+        "|---|---|",
+        "| Symbol | {symbol} |",
+        "| Strike | ${K:.2f} |",
+        "| Aktienkurs | ${S:.2f} |",
+        "| Put-Preis heute | ${P_heute/100:.2f}/Aktie |",
+        "| P&L | +X.XX$ / -X.XX$ (XX.X%) |",
+        "| Gewinnschwelle aktuell | $XX.XX |",
+        "| Realer Einstiegskurs | $XX.XX |",
+        "| Bewertung | ✅ Gewinn mitnehmen ODER 🔴 Rollen nötig ODER ⚠️ Prüfen |",
+        "",
+        "2-3 Sätze: Warum ist Rollen nötig/nicht nötig?",
+        "",
+        "## 🎯 Empfehlung",
+        "**Stufe X — [Bezeichnung]**",
+        "",
+        "Empfohlener Kandidat: Strike $XX.XX | Verfall TT.MM.JJJJ | DTE XXd",
+        "",
+        "**Berechnung:**",
+        "| Schritt | Betrag |",
+        "|---|---|",
+        "| Eröffnungsprämie (ursprünglich) | +$XX.XX |",
+        "| Rückkauf alter Put | -$XX.XX |",
+        "| Neue Prämie (XX Kontrakte × $XX.XX × 100) | +$XX.XX |",
+        "| **Netto-Prämie nach Roll** | **+$XX.XX** |",
+        "| Neue Gewinnschwelle | $XX.XX = Strike $XX.XX − Netto $XX.XX / (Kontrakte × 100) |",
+        "| Verbesserung GS | −$XX.XX (besser) ODER +$XX.XX (schlechter) |",
+        "",
+        "Begründung: 2-3 Sätze warum dieser Kandidat empfohlen wird.",
+        "",
+        "## ⚠️ Warnungen (nur wenn relevant)",
+        "- Earnings in XX Tagen — erhöhtes Gap-Risiko",
+        "- oder: Keine besonderen Warnungen.",
+        "",
+        "Fülle alle XX-Platzhalter mit den echten Zahlen aus den Kandidaten-Daten.",
+        "Wenn keine Stufe greift: schreibe statt Empfehlung '🚨 Endspiel: Aktien andienen lassen' + Begründung.",
     ]
     return "\n".join(lines)
 
@@ -1184,8 +1215,11 @@ def _render_roll_ai_chat(
                     "deepseek",
                     system_prompt=(
                         "Du bist ein erfahrener Optionshändler spezialisiert auf die systematische "
-                        "Rollstrategie für Cash-Secured Puts. Du kennst die Buchstrategie genau. "
-                        "Antworte präzise, strukturiert, auf Deutsch. Nutze konkrete Zahlen."
+                        "Rollstrategie für Cash-Secured Puts. "
+                        "Du antwortest IMMER exakt im vorgegebenen Markdown-Format mit Tabellen. "
+                        "Fülle alle Platzhalter mit echten Zahlen. Keine Abweichung vom Format. "
+                        "Berechnungen müssen nachvollziehbar als Tabelle dargestellt werden. "
+                        "Antworte auf Deutsch."
                     ),
                     user_prompt=prompt,
                     temperature=0.2,
