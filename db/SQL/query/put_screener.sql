@@ -57,6 +57,12 @@ SELECT
     ROUND(s."Summary_trailingPE"::numeric, 2)          AS trailing_pe,
     ROUND(s."KeyStats_forwardPE"::numeric, 2)          AS forward_pe,
 
+    -- Zusätzliche Felder für KI-Zuteilungsrisiko-Analyse
+    ROUND(s."FinData_debtToEquity"::numeric, 2)        AS debt_to_equity,
+    ROUND(s."FinData_grossMargins"::numeric * 100, 2)  AS gross_margin_pct,
+    ROUND(s."FinData_returnOnEquity"::numeric * 100, 2) AS return_on_equity_pct,
+    ROUND(s."KeyStats_shortPercentOfFloat"::numeric * 100, 2) AS short_percent_float,
+
     -- Timing (Kap. 5)
     ROUND(s."RSI_14"::numeric, 2)                      AS rsi_14,
     ROUND(s."MACDh_12_26_9"::numeric, 4)               AS macd_histogram,

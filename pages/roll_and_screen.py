@@ -378,16 +378,16 @@ def _render_iv_chart(symbol: str):
         _plot_bg     = "rgba(13,20,38,0.6)"
     else:
         _line_main   = "#0369a1"
-        _line_sec    = "#d97706"
-        _fill_high   = "rgba(220,38,38,0.08)"
-        _fill_low    = "rgba(22,163,74,0.08)"
+        _line_sec    = "#b45309"
+        _fill_high   = "rgba(220,38,38,0.10)"
+        _fill_low    = "rgba(22,163,74,0.10)"
         _p75_col     = "#dc2626"
-        _p50_col     = "#475569"
+        _p50_col     = "#334155"
         _p25_col     = "#16a34a"
-        _grid_col    = "#cbd5e1"
+        _grid_col    = "#e2e8f0"
         _axis_col    = "#334155"
         _font_col    = "#334155"
-        _plot_bg     = "rgba(0,0,0,0)"
+        _plot_bg     = "#ffffff"
 
     # 75-Percentil-Band (rot-Zone: teuer zu kaufen, gut zum Verkaufen)
     fig.add_hrect(y0=p75, y1=100, fillcolor=_fill_high,
@@ -428,10 +428,11 @@ def _render_iv_chart(symbol: str):
             hovertemplate="<b>%{x|%d.%m.%Y}</b><br>IV-%ile: %{y:.1f}<extra></extra>",
         ))
 
+    _paper_bg = "rgba(13,20,38,0.6)" if _dark else "#ffffff"
     fig.update_layout(
         height=260,
         margin=dict(l=0, r=0, t=8, b=0),
-        paper_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor=_paper_bg,
         plot_bgcolor=_plot_bg,
         font=dict(family="JetBrains Mono, monospace", color=_font_col, size=11),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0,
@@ -1410,12 +1411,12 @@ def render_screener_tab():
                               key="sc_run_ai", width="stretch")
     with sc_ai2:
         st.caption(
-            f"Analysiert alle **{len(view)} sichtbaren Kandidaten** inkl. Finviz-Fundamentals + besten Put je Aktie. "
+            f"Analysiert alle **{len(view)} sichtbaren Kandidaten** mit DB-Fundamentaldaten (Zuteilungsrisiko-Fokus). "
             "Erst filtern, dann starten."
         )
 
     if run_sc_ai:
-        with st.spinner(f"Scrape Finviz + DeepSeek analysiert {len(view)} Aktien …"):
+        with st.spinner(f"DeepSeek analysiert {len(view)} Aktien (DB-Fundamentaldaten) …"):
             try:
                 # view hat bereits put_strike, annualized_pct etc. aus put_screener.sql
                 # rank_puts erwartet puts_df mit symbol, strike_price, live_stock_price,
@@ -1862,12 +1863,12 @@ def render_put_tab():
                            width="stretch")
     with ai_col2:
         st.caption(
-            f"Analysiert die Top {ai_n} Puts (nach Ann.%) inkl. Finviz-Fundamentaldaten. "
+            f"Analysiert die Top {ai_n} Puts (nach Ann.%) mit DB-Fundamentaldaten — Fokus Zuteilungsrisiko. "
             "**Achtung: kostet DeepSeek-Tokens.** Erst filtern, dann starten."
         )
 
     if run_ai:
-        with st.spinner(f"Scrape Finviz + DeepSeek analysiert {min(int(ai_n), len(puts))} Puts …"):
+        with st.spinner(f"DeepSeek analysiert {min(int(ai_n), len(puts))} Puts (DB-Fundamentaldaten) …"):
             try:
                 ai_text, ai_meta = rank_puts(puts, max_candidates=int(ai_n))
                 st.session_state["pt_ai_result"] = ai_text

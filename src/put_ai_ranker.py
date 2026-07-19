@@ -34,19 +34,34 @@ def _fmt_large(val):
 
 def _build_prompt(puts_df: pd.DataFrame) -> str:
     lines = [
-        "Du bist ein erfahrener Options-Trader und Finanzanalyst.",
-        "Analysiere folgende Cash-Secured-Put-Kandidaten auf Basis der bereitgestellten",
-        "Fundamentaldaten und Options-Kennzahlen aus unserer Datenbank.",
+        "Du bist ein erfahrener Options-Trader spezialisiert auf Cash-Secured Puts (Prämienverkauf).",
+        "Ziel: Aktien identifizieren bei denen das Risiko einer ungewollten Zuteilung (Assignment) minimal ist.",
+        "Eine Zuteilung ist unerwünscht, wenn die Aktie stark unter den Strike fällt und man die Aktie",
+        "zu überhöhtem Preis halten muss. Bewerte daher primär die STABILITÄT und KURSRISIKEN.",
         "",
-        "Bewerte jeden Put nach diesen Kriterien:",
-        "1. Unternehmensqualität: Profitabilität (FCF, Operating Cashflow), Wachstum (Revenue, EPS), Bewertung (KGV, Fwd-KGV)",
-        "2. Technische Lage: RSI (Überkauft/Überverkauft), Abstand zum SMA200, 52W-Tief",
-        "3. Options-Attraktivität: IV-Rank (hohe IV = bessere Prämien), Ann. Rendite, Puffer",
-        "4. Risiko: Beta, Earnings-Nähe, Verschuldung (Debt/Eq)",
+        "Bewertungskriterien (Priorität: Stabilitätsrisiko zuerst):",
+        "1. Kursrisiko / Zuteilungsrisiko:",
+        "   - Beta: >1.5 = hohes Kursrisiko, <0.8 = defensiv",
+        "   - Days to Earnings: <14 Tage = gefährlich (Earnings-Gap-Risiko)",
+        "   - Short % Float: >15% = erhöhtes Squeeze/Crash-Risiko",
+        "   - RSI: >75 überkauft (Korrekturrisiko), <30 überverkauft (Bounce möglich)",
+        "   - Abstand zum SMA200: Kurs weit darüber = Rückschlagsrisiko",
+        "2. Unternehmensqualität (Überlebt die Aktie einen Abschwung?):",
+        "   - FCF positiv = Unternehmen zahlt aus eigener Kraft",
+        "   - Debt/Equity: >2.0 = Verschuldungsrisiko",
+        "   - Gross Margin: >40% = Pricing-Power",
+        "   - Return on Equity: >15% = effizientes Kapital",
+        "3. Bewertung (faire Aktie fällt weniger):",
+        "   - Forward PE vs. Trailing PE: Wachstum sichtbar?",
+        "   - Revenue Growth und EPS Growth positiv?",
+        "4. Options-Attraktivität (Prämie lohnt sich?):",
+        "   - IV-Rank hoch = hohe Prämie",
+        "   - Ann. Rendite und Puffer",
         "",
         "Antworte auf Deutsch. Format:",
-        "**Platz X: SYMBOL $STRIKE (DTE d)** — 2-3 prägnante Sätze mit konkreten Zahlen.",
-        "Am Ende 2 Sätze Gesamteinschätzung.",
+        "**Platz X: SYMBOL $STRIKE (DTE d)** — 2-3 prägnante Sätze. Nenne konkrete Zahlen.",
+        "Erkläre explizit warum das Zuteilungsrisiko gering/hoch ist.",
+        "Am Ende: 2 Sätze Gesamteinschätzung welche 1-2 Kandidaten am sichersten sind.",
         "",
         "=== KANDIDATEN ===",
     ]
@@ -57,7 +72,7 @@ def _build_prompt(puts_df: pd.DataFrame) -> str:
         sec  = r.get("sector", "")
         ind  = r.get("industry", "")
 
-        # Options
+        # Options-Kennzahlen
         strike  = _fmt(r.get("strike_price"), "$", decimals=2)
         kurs    = _fmt(r.get("live_stock_price"), "$", decimals=2)
         dte     = _fmt(r.get("days_to_expiration"), "d", decimals=0)
@@ -67,31 +82,43 @@ def _build_prompt(puts_df: pd.DataFrame) -> str:
         iv_rank = _fmt(r.get("iv_rank"), decimals=0)
         delta   = _fmt(r.get("greeks_delta") or r.get("put_delta"), decimals=3)
 
-        # Fundamentals
+        # Kursrisiko
+        beta         = _fmt(r.get("KeyStats_beta") or r.get("beta"), decimals=2)
+        dte_earnings = _fmt(r.get("days_to_earnings"), "d", decimals=0)
+        short_float  = _fmt(r.get("short_percent_float"), "%", decimals=1)
+        rsi          = _fmt(r.get("rsi_14"), decimals=1)
+        sma200       = _fmt(r.get("sma_200"), "$", decimals=2)
+        w52low       = _fmt(r.get("week_52_low"), "$", decimals=2)
+
+        # Unternehmensqualität
+        fcf     = _fmt_large(r.get("free_cashflow") or r.get("FreeCashFlow"))
+        ocf     = _fmt_large(r.get("operating_cashflow") or r.get("OperatingCashFlow"))
+        debt_eq = _fmt(r.get("debt_to_equity"), decimals=2)
+        gm      = _fmt(r.get("gross_margin_pct"), "%", decimals=1)
+        roe     = _fmt(r.get("return_on_equity_pct"), "%", decimals=1)
+
+        # Bewertung
         pe      = _fmt(r.get("trailing_pe"), decimals=1)
         fwd_pe  = _fmt(r.get("forward_pe"), decimals=1)
         rev_g   = _fmt(r.get("revenue_growth_pct"), "%", decimals=1)
         eps_g   = _fmt(r.get("eps_growth_pct"), "%", decimals=1)
-        fcf     = _fmt_large(r.get("free_cashflow"))
-        ocf     = _fmt_large(r.get("operating_cashflow"))
-        mcap    = _fmt_large(r.get("market_cap"))
-        rsi     = _fmt(r.get("rsi_14"), decimals=1)
-        sma200  = _fmt(r.get("sma_200"), "$", decimals=2)
-        w52low  = _fmt(r.get("week_52_low"), "$", decimals=2)
+        mcap    = _fmt_large(r.get("market_cap") or r.get("MarketCap"))
 
+        lines.append(f"\n{sym} ({name}) | {sec} / {ind} | MarketCap: {mcap}")
         lines.append(
-            f"\n{sym} ({name}) | {sec} / {ind} | MarketCap: {mcap}"
+            f"  Kursrisiko: Beta {beta} | Earnings in {dte_earnings} | "
+            f"Short-Float {short_float} | RSI {rsi} | SMA200 {sma200} | 52W-Tief {w52low}"
         )
         lines.append(
-            f"  Put: Strike {strike} | Kurs {kurs} | DTE {dte} | "
+            f"  Qualität:   FCF {fcf} | OCF {ocf} | Debt/Eq {debt_eq} | "
+            f"Gross Margin {gm} | ROE {roe}"
+        )
+        lines.append(
+            f"  Bewertung:  P/E {pe} | Fwd P/E {fwd_pe} | Rev-Wachstum {rev_g} | EPS-Wachstum {eps_g}"
+        )
+        lines.append(
+            f"  Put:        Strike {strike} | Kurs {kurs} | DTE {dte} | "
             f"Puffer {puffer} | Ann. {ann} | Prämie {praemie} | IV-Rank {iv_rank} | Delta {delta}"
-        )
-        lines.append(
-            f"  Fundamental: P/E {pe} | Fwd P/E {fwd_pe} | Rev-Wachstum {rev_g} | "
-            f"EPS-Wachstum {eps_g} | FCF {fcf} | OCF {ocf}"
-        )
-        lines.append(
-            f"  Technisch: RSI {rsi} | SMA200 {sma200} | 52W-Tief {w52low}"
         )
 
     return "\n".join(lines)
@@ -104,7 +131,8 @@ def rank_puts(
 ) -> tuple[str, dict[str, Any]]:
     """Baut Prompt aus DB-Daten und fragt DeepSeek nach einer Rangliste.
 
-    Kein externer API-Call — alle Fundamentaldaten kommen aus puts_df (DB).
+    Alle Daten kommen aus der eigenen DB (put_screener.sql + StockData).
+    Kein externer Scraping-Call.
     """
     df = puts_df.head(max_candidates).copy()
     symbols = df["symbol"].unique().tolist()
@@ -115,7 +143,8 @@ def rank_puts(
     response = client.chat_completion(
         "deepseek",
         system_prompt=(
-            "Du bist ein erfahrener Optionshändler und Finanzanalyst. "
+            "Du bist ein erfahrener Optionshändler spezialisiert auf Cash-Secured Puts. "
+            "Dein Hauptziel ist es, Aktien zu identifizieren bei denen das Zuteilungsrisiko minimal ist. "
             "Antworte präzise, strukturiert und auf Deutsch. "
             "Nutze die gegebenen Zahlen explizit in deiner Begründung."
         ),
