@@ -1172,7 +1172,10 @@ def _build_roll_ai_prompt(
     cand_st1, cand_st2, cand_st3,
     roll_count: int, prev_netto: float,
 ) -> str:
-    """Baut den vollständigen Kontext-Prompt für den Roll-Assistenten."""
+    """Baut den System-Kontext für den Roll-Assistenten (Position + Kandidaten +
+    Strategie-Wissen). Das gewünschte Antwortformat der ersten Empfehlung steht
+    separat in _ROLL_AI_FORMAT_INSTRUCTION und wird als erste User-Nachricht
+    geschickt — so bleibt die erste Antwort strukturiert, Rückfragen aber frei."""
     im_verlust = P_heute > P_eroeffnung
     pnl_abs = P_eroeffnung - P_heute
     pnl_pct = pnl_abs / P_eroeffnung * 100
@@ -1239,49 +1242,68 @@ def _build_roll_ai_prompt(
     lines.append(fmt_cands(cand_st2, "Stufe 2 (gleicher Strike)"))
     lines.append(fmt_cands(cand_st3, "Stufe 3 (niedrigerer Strike, 2× Kontrakte)"))
 
-    lines += [
-        "",
-        "ANTWORTE EXAKT IN DIESEM FORMAT (kein anderes Format akzeptiert):",
-        "",
-        "## 📊 Lageanalyse",
-        "| Kennzahl | Wert |",
-        "|---|---|",
-        "| Symbol | {symbol} |",
-        "| Strike | ${K:.2f} |",
-        "| Aktienkurs | ${S:.2f} |",
-        "| Put-Preis heute | ${P_heute/100:.2f}/Aktie |",
-        "| P&L | +X.XX$ / -X.XX$ (XX.X%) |",
-        "| Gewinnschwelle aktuell | $XX.XX |",
-        "| Realer Einstiegskurs | $XX.XX |",
-        "| Bewertung | ✅ Gewinn mitnehmen ODER 🔴 Rollen nötig ODER ⚠️ Prüfen |",
-        "",
-        "2-3 Sätze: Warum ist Rollen nötig/nicht nötig?",
-        "",
-        "## 🎯 Empfehlung",
-        "**Stufe X — [Bezeichnung]**",
-        "",
-        "Empfohlener Kandidat: Strike $XX.XX | Verfall TT.MM.JJJJ | DTE XXd",
-        "",
-        "**Berechnung:**",
-        "| Schritt | Betrag |",
-        "|---|---|",
-        "| Eröffnungsprämie (ursprünglich) | +$XX.XX |",
-        "| Rückkauf alter Put | -$XX.XX |",
-        "| Neue Prämie (XX Kontrakte × $XX.XX × 100) | +$XX.XX |",
-        "| **Netto-Prämie nach Roll** | **+$XX.XX** |",
-        "| Neue Gewinnschwelle | $XX.XX = Strike $XX.XX − Netto $XX.XX / (Kontrakte × 100) |",
-        "| Verbesserung GS | −$XX.XX (besser) ODER +$XX.XX (schlechter) |",
-        "",
-        "Begründung: 2-3 Sätze warum dieser Kandidat empfohlen wird.",
-        "",
-        "## ⚠️ Warnungen (nur wenn relevant)",
-        "- Earnings in XX Tagen — erhöhtes Gap-Risiko",
-        "- oder: Keine besonderen Warnungen.",
-        "",
-        "Fülle alle XX-Platzhalter mit den echten Zahlen aus den Kandidaten-Daten.",
-        "Wenn keine Stufe greift: schreibe statt Empfehlung '🚨 Endspiel: Aktien andienen lassen' + Begründung.",
-    ]
     return "\n".join(lines)
+
+
+# Format-Vorgabe für die ERSTE Empfehlung. Wird als erste User-Nachricht
+# geschickt (nicht als System-Prompt) — damit gilt der Formatzwang nur für
+# die Empfehlung, Folge-Rückfragen werden frei beantwortet.
+_ROLL_AI_FORMAT_INSTRUCTION = "\n".join([
+    "Gib mir deine Roll-Empfehlung. ANTWORTE EXAKT IN DIESEM FORMAT:",
+    "",
+    "## 📊 Lageanalyse",
+    "| Kennzahl | Wert |",
+    "|---|---|",
+    "| Symbol | ... |",
+    "| Strike | $XX.XX |",
+    "| Aktienkurs | $XX.XX |",
+    "| Put-Preis heute | $XX.XX/Aktie |",
+    "| P&L | +X.XX$ / -X.XX$ (XX.X%) |",
+    "| Gewinnschwelle aktuell | $XX.XX |",
+    "| Realer Einstiegskurs | $XX.XX |",
+    "| Bewertung | ✅ Gewinn mitnehmen ODER 🔴 Rollen nötig ODER ⚠️ Prüfen |",
+    "",
+    "2-3 Sätze: Warum ist Rollen nötig/nicht nötig?",
+    "",
+    "## 🎯 Empfehlung",
+    "**Stufe X — [Bezeichnung]**",
+    "",
+    "Empfohlener Kandidat: Strike $XX.XX | Verfall TT.MM.JJJJ | DTE XXd",
+    "",
+    "**Berechnung:**",
+    "| Schritt | Betrag |",
+    "|---|---|",
+    "| Eröffnungsprämie (ursprünglich) | +$XX.XX |",
+    "| Rückkauf alter Put | -$XX.XX |",
+    "| Neue Prämie (XX Kontrakte × $XX.XX × 100) | +$XX.XX |",
+    "| **Netto-Prämie nach Roll** | **+$XX.XX** |",
+    "| Neue Gewinnschwelle | $XX.XX = Strike $XX.XX − Netto $XX.XX / (Kontrakte × 100) |",
+    "| Verbesserung GS | −$XX.XX (besser) ODER +$XX.XX (schlechter) |",
+    "",
+    "Begründung: 2-3 Sätze warum dieser Kandidat empfohlen wird.",
+    "",
+    "## ⚠️ Warnungen (nur wenn relevant)",
+    "- Earnings in XX Tagen — erhöhtes Gap-Risiko",
+    "- oder: Keine besonderen Warnungen.",
+    "",
+    "Fülle alle XX-Platzhalter mit den echten Zahlen aus den Kandidaten-Daten.",
+    "Wenn keine Stufe greift: schreibe statt Empfehlung '🚨 Endspiel: Aktien andienen lassen' + Begründung.",
+])
+
+
+# System-Prompt für den Chat: Kontext bleibt bei jeder Runde erhalten. Der
+# Formatzwang der ersten Empfehlung kommt aus der User-Nachricht, daher hier
+# nur die Rolle + die Regel "Tabellen nur beim Rechnen".
+_ROLL_AI_SYSTEM_PROMPT = (
+    "Du bist ein erfahrener Optionshändler spezialisiert auf die systematische "
+    "Rollstrategie für Cash-Secured Puts (Buch 'Optionen unschlagbar handeln' + "
+    "Eric Ludwig). Du analysierst ausschließlich die im Kontext gegebene Position "
+    "und die dort gelisteten Roll-Kandidaten — kein allgemeines Finanzwissen, immer "
+    "konkrete Zahlen aus den Daten. "
+    "Wenn du rechnest (Netto-Prämie, neue Gewinnschwelle), stelle die Rechnung als "
+    "Markdown-Tabelle dar. Für erklärende Rückfragen antworte in normalem Fließtext, "
+    "kurz und präzise. Antworte auf Deutsch."
+)
 
 
 def _render_roll_ai_chat(
@@ -1290,74 +1312,117 @@ def _render_roll_ai_chat(
     n_contracts: int, breakeven_old: float,
     cand_st1, cand_st2, cand_st3,
 ):
-    """DeepSeek Chat-Assistent für die Roll-Entscheidung."""
+    """DeepSeek Roll-Assistent: erst strukturierte Empfehlung (Formular), danach
+    freier Chat mit Rückfragen. State ist an die Position (chat_key) gebunden."""
     st.divider()
     st.markdown("### 🤖 Roll-Assistent (DeepSeek)")
     st.caption(
         "DeepSeek analysiert deine Position und die verfügbaren Roll-Kandidaten. "
-        "Beantworte die zwei kurzen Fragen und erhalte eine konkrete Empfehlung."
+        "Erst die Empfehlung anfordern — danach kannst du frei nachfragen "
+        "(z. B. »Warum nicht Stufe 3?« oder »Was wäre bei 90 DTE?«)."
     )
 
+    # chat_key bindet den gesamten Chat-State an genau diese Position.
+    # Symbol- oder Strike-Wechsel -> neuer key -> automatisch frischer Chat.
     chat_key = f"roll_ai_{symbol}_{K:.2f}"
+    msgs_key = f"{chat_key}_messages"      # Liste [{role, content}, ...] (ohne System)
+    ctx_key = f"{chat_key}_context"        # eingefrorener System-Kontext (Snapshot)
 
-    with st.form(key=f"roll_ai_form_{chat_key}"):
-        fc1, fc2 = st.columns(2)
-        roll_count = fc1.number_input(
-            "Wie oft hast du diesen Trade bereits gerollt?",
-            min_value=0, max_value=20, value=0, step=1,
-            help="0 = das wäre der erste Roll."
-        )
-        prev_netto = fc2.number_input(
-            "Gesammelte Netto-Prämien aus bisherigen Rolls ($ gesamt)",
-            min_value=0.0, value=0.0, step=10.0, format="%.2f",
-            help="Summe aller Netto-Prämien aus bisherigen Rolls. 0 wenn erster Roll.",
-        )
-        submitted = st.form_submit_button("🤖 Empfehlung anfordern", type="primary")
+    started = bool(st.session_state.get(msgs_key))
 
-    if submitted:
-        prompt = _build_roll_ai_prompt(
-            symbol=symbol, K=K, S=S,
-            P_eroeffnung=P_eroeffnung, P_heute=P_heute,
-            n_contracts=n_contracts, breakeven_old=breakeven_old,
-            cand_st1=cand_st1, cand_st2=cand_st2, cand_st3=cand_st3,
-            roll_count=int(roll_count), prev_netto=float(prev_netto),
-        )
-        with st.spinner("DeepSeek analysiert deinen Trade …"):
-            try:
-                client = LLMClient()
-                response = client.chat_completion(
-                    "deepseek",
-                    system_prompt=(
-                        "Du bist ein erfahrener Optionshändler spezialisiert auf die systematische "
-                        "Rollstrategie für Cash-Secured Puts. "
-                        "Du antwortest IMMER exakt im vorgegebenen Markdown-Format mit Tabellen. "
-                        "Fülle alle Platzhalter mit echten Zahlen. Keine Abweichung vom Format. "
-                        "Berechnungen müssen nachvollziehbar als Tabelle dargestellt werden. "
-                        "Antworte auf Deutsch."
-                    ),
-                    user_prompt=prompt,
-                    temperature=0.2,
-                    max_tokens=1200,
-                )
-                st.session_state[f"{chat_key}_result"] = response.text
-                st.session_state[f"{chat_key}_usage"] = response.usage
-                st.session_state[f"{chat_key}_model"] = response.model
-            except LLMProviderError as e:
-                st.error(f"DeepSeek-Fehler: {e}")
-            except Exception as e:
-                st.error(f"Fehler: {e}")
+    # ── Phase 1: Erste Empfehlung anfordern (nur solange noch kein Chat läuft) ──
+    if not started:
+        with st.form(key=f"roll_ai_form_{chat_key}"):
+            fc1, fc2 = st.columns(2)
+            roll_count = fc1.number_input(
+                "Wie oft hast du diesen Trade bereits gerollt?",
+                min_value=0, max_value=20, value=0, step=1,
+                help="0 = das wäre der erste Roll.",
+            )
+            prev_netto = fc2.number_input(
+                "Gesammelte Netto-Prämien aus bisherigen Rolls ($ gesamt)",
+                min_value=0.0, value=0.0, step=10.0, format="%.2f",
+                help="Summe aller Netto-Prämien aus bisherigen Rolls. 0 wenn erster Roll.",
+            )
+            submitted = st.form_submit_button("🤖 Empfehlung anfordern", type="primary")
 
-    if st.session_state.get(f"{chat_key}_result"):
-        usage = st.session_state.get(f"{chat_key}_usage", {})
-        model = st.session_state.get(f"{chat_key}_model", "?")
-        st.caption(
-            f"Modell: {model} · "
-            f"Tokens: {usage.get('prompt_tokens','?')} input / {usage.get('completion_tokens','?')} output"
+        if submitted:
+            # Kontext EINMAL einfrieren (Snapshot: Position + Kandidaten + Zahlen).
+            context = _build_roll_ai_prompt(
+                symbol=symbol, K=K, S=S,
+                P_eroeffnung=P_eroeffnung, P_heute=P_heute,
+                n_contracts=n_contracts, breakeven_old=breakeven_old,
+                cand_st1=cand_st1, cand_st2=cand_st2, cand_st3=cand_st3,
+                roll_count=int(roll_count), prev_netto=float(prev_netto),
+            )
+            with st.spinner("DeepSeek analysiert deinen Trade …"):
+                try:
+                    client = LLMClient()
+                    response = client.chat_completion_messages(
+                        "deepseek",
+                        messages=[
+                            {"role": "system", "content": f"{_ROLL_AI_SYSTEM_PROMPT}\n\n{context}"},
+                            {"role": "user", "content": _ROLL_AI_FORMAT_INSTRUCTION},
+                        ],
+                        temperature=0.2,
+                        max_tokens=1200,
+                    )
+                    st.session_state[ctx_key] = context
+                    st.session_state[msgs_key] = [
+                        {"role": "user", "content": _ROLL_AI_FORMAT_INSTRUCTION},
+                        {"role": "assistant", "content": response.text},
+                    ]
+                    st.session_state[f"{chat_key}_model"] = response.model
+                    st.rerun()
+                except LLMProviderError as e:
+                    st.error(f"DeepSeek-Fehler: {e}")
+                except Exception as e:
+                    st.error(f"Fehler: {e}")
+        return
+
+    # ── Phase 2: Chat läuft — Verlauf + freie Rückfragen ──────────────────────
+    model = st.session_state.get(f"{chat_key}_model", "?")
+    st.caption(f"Modell: {model} · Kontext eingefroren auf Kurs ${S:.2f} / Put ${P_heute/100:.2f}")
+
+    # Erste User-Nachricht ist die interne Format-Instruktion — nicht anzeigen.
+    for m in st.session_state[msgs_key]:
+        if m["role"] == "user" and m["content"] == _ROLL_AI_FORMAT_INSTRUCTION:
+            continue
+        with st.chat_message(m["role"]):
+            st.markdown(m["content"])
+
+    if user_msg := st.chat_input("Rückfrage an DeepSeek …", key=f"{chat_key}_input"):
+        # Optimistisch anzeigen, aber erst NACH Erfolg dauerhaft in die History.
+        with st.chat_message("user"):
+            st.markdown(user_msg)
+        context = st.session_state.get(ctx_key, "")
+        history = st.session_state[msgs_key]
+        api_messages = (
+            [{"role": "system", "content": f"{_ROLL_AI_SYSTEM_PROMPT}\n\n{context}"}]
+            + history
+            + [{"role": "user", "content": user_msg}]
         )
-        st.markdown(st.session_state[f"{chat_key}_result"])
-        if st.button("Ergebnis löschen", key=f"{chat_key}_clear"):
-            del st.session_state[f"{chat_key}_result"]
-            st.rerun()
+        with st.chat_message("assistant"):
+            with st.spinner("DeepSeek denkt nach …"):
+                try:
+                    response = LLMClient().chat_completion_messages(
+                        "deepseek", messages=api_messages,
+                        temperature=0.3, max_tokens=1200,
+                    )
+                    st.markdown(response.text)
+                    # Beide Turns erst jetzt committen (fehlgeschlagene Runde -> nichts gespeichert).
+                    history.append({"role": "user", "content": user_msg})
+                    history.append({"role": "assistant", "content": response.text})
+                    st.session_state[msgs_key] = history
+                except LLMProviderError as e:
+                    st.error(f"DeepSeek-Fehler: {e} — Frage nicht gespeichert, bitte erneut senden.")
+                except Exception as e:
+                    st.error(f"Fehler: {e} — Frage nicht gespeichert, bitte erneut senden.")
+
+    if st.button("🗑️ Chat zurücksetzen", key=f"{chat_key}_reset"):
+        for k in (msgs_key, ctx_key, f"{chat_key}_model"):
+            st.session_state.pop(k, None)
+        st.rerun()
 
 
 @st.cache_data(ttl=300)

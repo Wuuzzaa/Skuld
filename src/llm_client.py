@@ -45,12 +45,35 @@ class LLMClient:
         temperature: float = 0.2,
         max_tokens: int = 3500,
     ) -> LLMResponse:
+        """Single-shot completion (system + user). Thin wrapper over
+        chat_completion_messages() — kept for existing call-sites."""
+        return self.chat_completion_messages(
+            provider,
+            messages=[
+                {"role": "system", "content": system_prompt.strip()},
+                {"role": "user", "content": user_prompt.strip()},
+            ],
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+
+    def chat_completion_messages(
+        self,
+        provider: str,
+        *,
+        messages: list[dict[str, str]],
+        model: str | None = None,
+        temperature: float = 0.2,
+        max_tokens: int = 3500,
+    ) -> LLMResponse:
+        """Multi-turn completion: pass a full message history (system/user/
+        assistant) that is sent to the provider verbatim."""
         provider_key = provider.strip().lower()
 
         if provider_key == "deepseek":
             return self._chat_completion_deepseek(
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
+                messages=messages,
                 model=model or DEEPSEEK_MODEL,
                 temperature=temperature,
                 max_tokens=max_tokens,
@@ -61,8 +84,7 @@ class LLMClient:
     def _chat_completion_deepseek(
         self,
         *,
-        system_prompt: str,
-        user_prompt: str,
+        messages: list[dict[str, str]],
         model: str,
         temperature: float,
         max_tokens: int,
@@ -77,10 +99,7 @@ class LLMClient:
 
         payload = {
             "model": model,
-            "messages": [
-                {"role": "system", "content": system_prompt.strip()},
-                {"role": "user", "content": user_prompt.strip()},
-            ],
+            "messages": messages,
             # Prefer non-thinking mode for stable structured output parsing.
             "thinking": {"type": "disabled"},
             "temperature": temperature,
