@@ -39,6 +39,7 @@ data_logs = st.Page("pages/data_change_logs.py", title="Data Logs")
 iron_condors = st.Page("pages/iron_condors.py", title="Iron Condors")
 earnings_put_scanner = st.Page("pages/earnings_put_scanner.py", title="Earnings Put Scanner")
 covered_call_scanner = st.Page("pages/covered_call_scanner.py", title="ITM Covered Call Scanner")
+roll_and_screen = st.Page("pages/roll_and_screen.py", title="Roll & Screen")
 symbolpage = st.Page("pages/symbolpage.py", title="Symbol Page")
 admin_jobs = st.Page("pages/admin_jobs.py", title="Admin - Jobs")
 
@@ -51,6 +52,7 @@ page = st.navigation(
         iron_condors,
         earnings_put_scanner,
         covered_call_scanner,
+        roll_and_screen,
         marrieds,
         position_insurance,
         multifactor_swingtrading,
