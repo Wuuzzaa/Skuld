@@ -21,7 +21,6 @@ production:
   runner: ubuntu-latest
   domain: app.skuld-options.com
   auth_domain: auth.skuld-options.com
-  auth_domain: auth.skuld-options.com
   # Prod-Chat-ID kommt aus GitHub Secret PROD_TELEGRAM_CHAT_ID (geheim, nicht im Repo).
   # Leer lassen: deploy.yml nutzt ${SECRET_PROD_TELEGRAM_CHAT_ID:-$CFG_TELEGRAM_CHAT_ID}.
   telegram_chat_id: ""

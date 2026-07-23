@@ -466,7 +466,6 @@ jobs:
           SKULD_VERSION: ${{ steps.get_version.outputs.VERSION }}
           SKULD_BRANCH: ${{ steps.get_version.outputs.BRANCH }}
           SECRET_TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          SECRET_TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           SECRET_PROD_TELEGRAM_CHAT_ID: ${{ secrets.PROD_TELEGRAM_CHAT_ID }}
           SECRET_MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY }}
           SECRET_MASSIVE_API_KEY_FLAT_FILES: ${{ secrets.MASSIVE_API_KEY_FLAT_FILES }}
