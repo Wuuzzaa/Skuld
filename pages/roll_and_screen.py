@@ -30,6 +30,10 @@ from src.ui_utils import filter_by_expiration_type
 from src.utils.option_utils import get_expiration_type
 from src.black_scholes import PutValue
 from src.roll_support_calc import position_status, roll_candidate, roll_candidate_explained
+from src.roll_support_calc import time_value_percentage
+from src.spread_roll_calc import (
+    spread_position_status, spread_roll_candidate,
+)
 from src.put_ai_ranker import rank_puts, LLMProviderError, LLMClient
 from src.put_screener import (
     score_candidates, score_breakdown, put_metrics, put_evaluation,
@@ -234,6 +238,19 @@ def _load_roll_candidates(symbol, K, dte_min, dte_max,
                 "dte_min": int(dte_min), "dte_max": int(dte_max),
                 "min_oi": int(min_oi), "min_vol": int(min_vol),
                 "delta_min": float(delta_min), "delta_max": float(delta_max)},
+    )
+
+
+@st.cache_data(ttl=300)
+def _load_spread_roll_candidates(symbol, short_strike, width, dte_min, dte_max,
+                                 min_oi=50, min_vol=10):
+    """Roll-Kandidaten für einen Bull-Put-Spread: Short-Puts ≤ short_strike + Long-Bein."""
+    return select_into_dataframe(
+        sql_file_path=PATH_DATABASE_QUERY_FOLDER / "spread_roll_candidates.sql",
+        params={"symbol": symbol, "short_strike": float(short_strike),
+                "spread_width": float(width),
+                "dte_min": int(dte_min), "dte_max": int(dte_max),
+                "min_oi": int(min_oi), "min_vol": int(min_vol)},
     )
 
 
@@ -2438,14 +2455,171 @@ def render_put_tab():
 
 
 # ---------------------------------------------------------------------------
+# Spread-Roller (Bull-Put-Spread rollen) — beide Beine, Breite fix
+# ---------------------------------------------------------------------------
+def render_spread_roller_tab():
+    st.subheader("🔄 Spread-Roller -- Bull-Put-Spread rollen")
+
+    with st.expander("ℹ️ Wie funktioniert das Spread-Rollen? (Konzept)", expanded=False):
+        st.markdown("""
+**Bull-Put-Spread** = Short-Put (verkauft) + Long-Put (gekauft, tiefer). Der Long-Put
+begrenzt den Verlust. Beim Rollen werden **beide Beine gemeinsam** auf eine neue
+Laufzeit/tiefere Strikes gerollt — die **Breite bleibt konstant**.
+
+**Die 3 Stufen (analog Buch Kap. 3):**
+| Stufe | Was passiert | Ziel |
+|-------|-------------|------|
+| **1** | Short-Strike tiefer, Breite fix, gleiche Kontrakte | GS senken |
+| **2** | Gleicher Short-Strike | GS senken wenn kein tieferer Short möglich |
+| **3** | Short tiefer, doppelte Kontrakte | GS maximal senken |
+
+**Ampel** (auf den Netto-Credit des ganzen Spreads):
+- ✅ Netto-Credit positiv UND neue Gewinnschwelle niedriger als alte
+- ⚠️ Netto-Credit positiv, aber GS nicht besser
+- ❌ Netto-Credit ≤ 0 (Roll kostet drauf)
+
+**Max-Loss** = (Breite − Gesamt-Credit/Aktie) × Kontrakte × 100 — als Risiko-Kennzahl.
+""")
+
+    symbols = _load_symbols()
+    if not symbols:
+        st.error("Keine Symbole in der aktuellen Optionskette gefunden.")
+        return
+
+    c1, c2, c3 = st.columns([2, 1, 1])
+    symbol = c1.selectbox("Symbol", symbols, index=None,
+                          placeholder="Symbol wählen…", key="spread_symbol")
+    n_contracts = c2.number_input("Kontrakte (n)", min_value=1, value=1, step=1,
+                                  key="spread_n")
+    width = c3.number_input("Spread-Breite ($)", min_value=1.0, value=5.0, step=1.0,
+                            key="spread_width_in",
+                            help="Abstand Short − Long. Bleibt beim Rollen konstant.")
+
+    if not symbol:
+        st.info("Symbol wählen — dann Short-Strike + bestehende Position eingeben.")
+        return
+
+    c4, c5, c6 = st.columns(3)
+    short_strike = c4.number_input("Aktueller Short-Strike", min_value=0.0, value=0.0,
+                                   step=0.5, key="spread_short_strike",
+                                   help="Der verkaufte Put deiner bestehenden Position.")
+    credit_open = c5.number_input("Eröffnungs-Credit ($/Kontrakt)", min_value=0.0,
+                                  value=0.0, step=5.0, key="spread_credit_open",
+                                  help="Netto-Credit den du beim Öffnen des Spreads vereinnahmt hast.")
+    debit_now = c6.number_input("Aktueller Schließungs-Debit ($/Kontrakt)", min_value=0.0,
+                                value=0.0, step=5.0, key="spread_debit_now",
+                                help="Was es aktuell kostet, den bestehenden Spread zu schließen.")
+
+    c7, c8, c9 = st.columns([1, 1, 2])
+    dte_min = c7.number_input("DTE min", min_value=1, max_value=400, value=30, step=1,
+                              key="spread_dte_min")
+    dte_max = c8.number_input("DTE max", min_value=1, max_value=400, value=60, step=1,
+                              key="spread_dte_max")
+    with c9:
+        run = st.button("🔍 Roll-Kandidaten laden", type="primary", key="spread_load")
+
+    if short_strike <= 0:
+        st.info("Short-Strike der bestehenden Position eingeben.")
+        return
+
+    # Bestehende Position: Kennzahlen
+    if credit_open > 0:
+        pos = spread_position_status(short_strike=short_strike, width=width,
+                                     credit_open=credit_open, debit_now=debit_now or 0.0,
+                                     n=n_contracts)
+        pc1, pc2, pc3, pc4 = st.columns(4)
+        pc1.metric("Alte Gewinnschwelle", f"${pos['gs_old']:.2f}")
+        pc2.metric("Max-Loss (offen)", f"${pos['max_loss_open']:.0f}")
+        pc3.metric("Long-Strike", f"${short_strike - width:.2f}")
+        if debit_now > 0:
+            pc4.metric("G/V aktuell", f"${pos['pnl_abs']:.0f}",
+                       delta=f"{pos['pnl_pct']:.0f}%")
+
+        # Ludwig-Restzeitwert-Hinweis: Debit/Credit-Verhältnis (beinunabhängig).
+        # Niedriger Debit relativ zum Eröffnungs-Credit → wenig Restwert → Roll sinnvoll.
+        if debit_now > 0:
+            tv_pct = time_value_percentage(P_heute=debit_now, P_eroeffnung=credit_open)
+            if tv_pct <= 15:
+                tv_txt = f"🟢 Restwert {tv_pct:.0f}% — Roll sinnvoll (Ludwig ≤15%)"
+            elif tv_pct <= 25:
+                tv_txt = f"⚠️ Restwert {tv_pct:.0f}% — optional"
+            else:
+                tv_txt = f"🔴 Restwert {tv_pct:.0f}% — eher warten"
+            st.caption(f"Ludwig-Restzeitwert-Hinweis: {tv_txt} "
+                       f"(Debit {debit_now:.0f} vs. Eröffnungs-Credit {credit_open:.0f}).")
+
+    if not run:
+        st.info("DTE-Fenster einstellen und 'Roll-Kandidaten laden' klicken.")
+        return
+
+    with st.spinner("Lade Spread-Roll-Kandidaten…"):
+        cand = _load_spread_roll_candidates(symbol, short_strike, width,
+                                            dte_min, dte_max)
+    if cand is None or cand.empty:
+        st.warning(f"Keine Spread-Kandidaten für {symbol} (Short ≤ {short_strike}, "
+                   f"Breite {width}, DTE {dte_min}-{dte_max}). Fehlt evtl. das Long-Bein "
+                   f"bei Short−{width}? Breite anpassen.")
+        return
+
+    if credit_open <= 0 or debit_now <= 0:
+        st.warning("Für die Ampel-Bewertung Eröffnungs-Credit UND aktuellen Debit eingeben.")
+        return
+
+    # Kandidaten in die 3 Stufen einsortieren.
+    #   Stufe 1: Short < alt, gleiche Kontrakte    Stufe 2: Short == alt
+    #   Stufe 3: Short < alt, doppelte Kontrakte
+    st.divider()
+    for stufe, titel, n_use, filt in [
+        (1, "Stufe 1 — Short tiefer, gleiche Kontrakte", n_contracts,
+         lambda df: df[df["short_strike"] < short_strike]),
+        (2, "Stufe 2 — gleicher Short-Strike", n_contracts,
+         lambda df: df[df["short_strike"] == short_strike]),
+        (3, "Stufe 3 — Short tiefer, doppelte Kontrakte", n_contracts * 2,
+         lambda df: df[df["short_strike"] < short_strike]),
+    ]:
+        sub = filt(cand).copy()
+        st.markdown(f"#### {titel}")
+        if sub.empty:
+            st.caption("Keine Kandidaten in dieser Stufe.")
+            continue
+        # Sortierung: Short am nächsten zum alten (höchster Short zuerst), dann kürzeste DTE.
+        sub = sub.sort_values(["short_strike", "dte"], ascending=[False, True]).head(6)
+        cols = st.columns(min(3, len(sub)))
+        for i, (_, row) in enumerate(sub.iterrows()):
+            r = spread_roll_candidate(
+                stufe=stufe, short_old=short_strike, short_new=float(row["short_strike"]),
+                width=width, credit_open=credit_open, debit_close=debit_now,
+                credit_new=float(row["net_credit"]) * 100.0, n=n_use,
+            )
+            with cols[i % len(cols)]:
+                st.markdown(
+                    f"**{r['ampel']} Short {row['short_strike']:.1f} / "
+                    f"Long {row['long_strike']:.1f}**  \n"
+                    f"DTE {int(row['dte'])} · Verfall {row['expiration_date']}"
+                )
+                st.metric("Netto-Credit", f"${r['netto_abs']:.0f}")
+                m1, m2 = st.columns(2)
+                m1.metric("GS neu", f"${r['gs_new']:.2f}",
+                          delta=f"{r['gs_new'] - r['gs_old']:.2f}")
+                m2.metric("Max-Loss", f"${r['max_loss']:.0f}")
+                st.caption(f"Neuer Spread-Credit {float(row['net_credit']):.2f}/Aktie · "
+                           f"{n_use} Kontrakt(e)")
+
+
+# ---------------------------------------------------------------------------
 # Seite
 # ---------------------------------------------------------------------------
 _inject_css()
 
-tab_screener, tab_roller, tab_puts = st.tabs(["📈 Screener (Neuer Einstieg)", "🔄 Roller (Rollen)", "🎯 Put-Browser"])
+tab_screener, tab_roller, tab_spread, tab_puts = st.tabs(
+    ["📈 Screener (Neuer Einstieg)", "🔄 Roller (Rollen)",
+     "🔄 Spread-Roller", "🎯 Put-Browser"]
+)
 with tab_screener:
     render_screener_tab()
 with tab_roller:
     render_roller_tab()
+with tab_spread:
+    render_spread_roller_tab()
 with tab_puts:
     render_put_tab()
