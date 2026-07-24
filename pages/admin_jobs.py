@@ -20,6 +20,12 @@ logger = logging.getLogger(__name__)
 
 LOGS_BASE = Path(__file__).resolve().parent.parent / "logs"
 
+# Ordner unter logs/, die KEINE herunterladbaren .log-Dateien enthalten und
+# daher nicht als "Component" im Log-Browser auftauchen dürfen:
+#   streamlit = Streamlit-interne Logs, _status = Job-Status-JSONL (eigener Tab),
+#   _queue    = Job-Scheduler-Queue (JSON-Jobs, kein date/-Unterordner).
+NON_LOG_DIRS = {"streamlit", "_status", "_queue"}
+
 JOB_MODES = [
     "all",
     "saturday_night",
@@ -255,7 +261,7 @@ with tab_logs:
         # Component
         components = sorted(
             d.name for d in LOGS_BASE.iterdir()
-            if d.is_dir() and d.name not in ("streamlit", "_status")
+            if d.is_dir() and d.name not in NON_LOG_DIRS
         )
 
         if not components:
@@ -310,14 +316,14 @@ with tab_logs:
                     )
                     st.caption(f"Size: {len(file_bytes) // 1024} KB")
 
-        # Full directory listing
+        # Full directory listing — direkt anklickbar + herunterladbar.
         st.markdown("---")
         st.markdown("#### All Log Files")
-        st.caption("Full listing — click a component/date to navigate above.")
+        st.caption("Zeile anklicken → Download-Button erscheint darunter. Kein In-Page-Rendering.")
 
         rows = []
         for comp_dir in sorted(LOGS_BASE.iterdir()):
-            if not comp_dir.is_dir() or comp_dir.name in ("streamlit", "_status"):
+            if not comp_dir.is_dir() or comp_dir.name in NON_LOG_DIRS:
                 continue
             for date_dir in sorted(comp_dir.iterdir(), reverse=True):
                 if not date_dir.is_dir():
@@ -330,8 +336,41 @@ with tab_logs:
                         "Date": date_dir.name,
                         "File": lf.name,
                         "Size (KB)": round(lf.stat().st_size / 1024, 1),
+                        "_path": str(lf),  # intern, nicht angezeigt
                     })
 
         if rows:
             import pandas as pd
-            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+            all_df = pd.DataFrame(rows)
+            event = st.dataframe(
+                all_df.drop(columns=["_path"]),
+                use_container_width=True,
+                hide_index=True,
+                on_select="rerun",
+                selection_mode="single-row",
+                key="all_logs_table",
+            )
+
+            sel_rows = event.selection.rows if event and event.selection else []
+            if sel_rows:
+                picked = all_df.iloc[sel_rows[0]]
+                picked_path = Path(picked["_path"])
+                if picked_path.exists():
+                    data = picked_path.read_bytes()
+                    st.download_button(
+                        label=f"⬇️ Download {picked['Component']}/{picked['Date']}/{picked['File']} "
+                              f"({len(data) // 1024} KB)",
+                        data=data,
+                        file_name=picked["File"],
+                        mime="text/plain",
+                        type="primary",
+                        use_container_width=True,
+                        key="all_logs_download",
+                    )
+                else:
+                    st.warning("Datei nicht mehr vorhanden (evtl. durch Log-Rotation gelöscht).")
+            else:
+                st.caption("↑ Eine Zeile auswählen, um sie herunterzuladen.")
+        else:
+            st.info("Keine Log-Dateien gefunden.")
