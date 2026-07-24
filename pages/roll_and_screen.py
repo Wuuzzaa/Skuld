@@ -33,6 +33,7 @@ from src.roll_support_calc import position_status, roll_candidate, roll_candidat
 from src.put_ai_ranker import rank_puts, LLMProviderError, LLMClient
 from src.put_screener import (
     score_candidates, score_breakdown, put_metrics, put_evaluation,
+    shortlist_score, shortlist_breakdown, earnings_ok, delta_ok,
     DEFAULT_PE_MAX, DEFAULT_MIN_PUFFER_PCT,
 )
 from src.sector_rotation import (
@@ -1520,11 +1521,20 @@ def _render_screener_table(df: pd.DataFrame, sel_key: str, top_n: int = 5):
         left_border = "#00d4aa" if is_top else "transparent"
         row_bg = "background:rgba(0,212,170,.07);border-radius:4px;" if is_sel else ""
 
+        # Feature D: Shortlist-Score-Transparenz als Hover-Tooltip auf dem Symbol.
+        # Zeigt, WARUM die Aktie den Shortlist-Rang (★) hat: IV/Sektor/Rendite/BS-Edge.
+        try:
+            _bd = shortlist_breakdown(r)
+            _sl = sum(i["punkte"] for i in _bd)
+            _sl_tip = f"Shortlist {_sl}: " + ", ".join(f"{i['label']} +{i['punkte']}" for i in _bd)
+        except Exception:
+            _sl_tip = ""
+
         rcols = st.columns([2.2, 1.0, 1.1, 0.9, 1.3, 2.2, 2.8, 0.6])
         with rcols[0]:
             st.markdown(
                 f'<div class="sc-cell" style="{row_bg}padding-left:8px;'
-                f'border-left:3px solid {left_border};">'
+                f'border-left:3px solid {left_border};" title="{_sl_tip}">'
                 f'<span class="sc-sym" style="{sym_color}">'
                 f'{top_prefix}{sym}</span></div>',
                 unsafe_allow_html=True,
@@ -1630,6 +1640,30 @@ def render_screener_tab():
                                                help="50 $/Kontrakt = 0.50 $/Aktie.")
         min_premium_share = min_premium_contract / 100.0
 
+        # Ludwig-Filter (B: Delta, A: Earnings). Defensiv-Modus setzt strengere Defaults.
+        c9, c10 = st.columns(2)
+        with c9:
+            use_delta_filter = st.checkbox(
+                "Max. |Delta| begrenzen",
+                value=not _is_aggressiv,  # Defensiv: Delta-Filter default an (Ludwig <20)
+                key="sc_use_delta",
+                help="Ludwig 5-Star: Put-Delta < 0.20 → Zuteilungswahrscheinlichkeit niedrig, "
+                     "Trefferquote hoch. Kandidaten ohne Delta-Wert bleiben sichtbar.",
+            )
+            max_abs_delta = st.slider(
+                "|Delta|-Obergrenze", 0.05, 0.50,
+                0.20 if not _is_aggressiv else 0.50, 0.01,
+                disabled=not use_delta_filter, key="sc_max_delta",
+            )
+        with c10:
+            exclude_earnings = st.checkbox(
+                "Earnings vor Verfall ausschließen",
+                value=not _is_aggressiv,  # Defensiv: default an (Ludwig: keine Earnings in Laufzeit)
+                key="sc_excl_earnings",
+                help="Blendet Aktien aus, deren nächster Earnings-Termin INNERHALB der Put-Laufzeit "
+                     "liegt (Gap-Risiko). Kandidaten ohne bekanntes Earnings-Datum bleiben sichtbar.",
+            )
+
         # Sektor-Filter (nur wenn Daten verfügbar)
         available_quadrants = sorted(set(sector_map.values())) if sector_map else []
         all_sectors = sorted(set(sector_map.keys())) if sector_map else []
@@ -1693,25 +1727,8 @@ def render_screener_tab():
         st.warning("Keine Treffer nach Sektor-/Quadrant-Filter.")
         return
 
-    # Smart Shortlist Score: IV-Rank + Sektor + Rendite + Puffer
-    def _shortlist_score(r):
-        s = 0
-        iv = float(r.get("iv_rank") or 0)
-        if iv >= 60: s += 3
-        elif iv >= 40: s += 2
-        elif iv >= 20: s += 1
-        q = r.get("sektor_quadrant", "")
-        if q == "Leading": s += 2
-        elif q == "Improving": s += 1
-        ann = float(r.get("annualized_pct") or 0)
-        if ann >= 20: s += 2
-        elif ann >= 12: s += 1
-        return s
-
-    scored["shortlist_score"] = scored.apply(_shortlist_score, axis=1)
-    scored = scored.sort_values(["shortlist_score", "score"], ascending=[False, False]).reset_index(drop=True)
-
     # BS-Fairwert + Edge des besten Puts je Aktie (gleiche Logik wie im Detail-Bereich).
+    # ZUERST berechnen — der Shortlist-Score bezieht den BS-Edge mit ein.
     # put_iv kommt aus put_screener.sql; ohne verwertbare IV bleibt bs_fair None.
     def _bs_fair_row(r):
         S, K = r.get("price"), r.get("put_strike")
@@ -1735,6 +1752,29 @@ def render_screener_tab():
         else None,
         axis=1,
     )
+
+    # Ludwig-Filter (optional, per UI-Toggle) — Delta-Obergrenze + Earnings-Ausschluss.
+    n_before = len(scored)
+    if exclude_earnings:
+        scored = scored[scored.apply(earnings_ok, axis=1)]
+    if use_delta_filter:
+        scored = scored[scored.apply(lambda r: delta_ok(r, max_abs_delta), axis=1)]
+    n_dropped = n_before - len(scored)
+    if scored.empty:
+        st.warning("Keine Treffer nach Delta-/Earnings-Filter. Filter lockern.")
+        return
+
+    # Smart Shortlist Score: IV-Rank + Sektor + Rendite + BS-Edge (src/put_screener.py).
+    scored["shortlist_score"] = scored.apply(shortlist_score, axis=1)
+    scored = scored.sort_values(["shortlist_score", "score"], ascending=[False, False]).reset_index(drop=True)
+
+    if n_dropped:
+        _bits = []
+        if exclude_earnings:
+            _bits.append("Earnings vor Verfall")
+        if use_delta_filter:
+            _bits.append(f"|Delta| > {max_abs_delta:.2f}")
+        st.caption(f"🛡️ {n_dropped} Kandidat(en) ausgefiltert ({', '.join(_bits)}).")
 
     sel_key = "screener_selected_symbol"
 
