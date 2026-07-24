@@ -26,6 +26,8 @@ WITH puts AS (
         o.greeks_delta,
         o.implied_volatility,
         o.iv_rank,
+        o.earnings_date,
+        o.days_to_earnings,
         o.live_stock_price
     FROM "OptionDataMerged" o
     WHERE o.contract_type = 'put'
@@ -79,6 +81,11 @@ SELECT
     ROUND(p.greeks_delta::numeric, 3)                  AS put_delta,
     ROUND(p.iv_rank::numeric, 2)                       AS iv_rank,
     ROUND(p.implied_volatility::numeric, 4)            AS put_iv,
+
+    -- Earnings-Timing (Ludwig: keine Earnings innerhalb der Put-Laufzeit).
+    -- Kein harter WHERE hier — die Admin-/Screener-UI filtert optional per Toggle.
+    p.earnings_date                                    AS earnings_date,
+    p.days_to_earnings                                 AS days_to_earnings,
 
     -- Convenience: Rendite / Gewinnschwelle / Kapital
     ROUND((p.premium_option_price / NULLIF(p.strike_price, 0) * 100)::numeric, 2)        AS premium_pct,

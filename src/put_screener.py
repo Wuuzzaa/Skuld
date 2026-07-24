@@ -109,6 +109,93 @@ def criterion_labels() -> dict:
     return {col: label for col, label, *_ in _CRITERIA}
 
 
+# ==========================================================================
+# Shortlist-Score — reiht die qualifizierten Kandidaten für die Top-Liste.
+# Nicht der Buch-Score (score_candidates), sondern ein Timing-/Attraktivitäts-
+# Ranking: IV-Rank + Sektor-Rotation + Rendite + Black-Scholes-Edge.
+# Wird von der Screener-Seite genutzt; hier als reine, testbare Funktion.
+# ==========================================================================
+def _num(v, default=0.0) -> float:
+    try:
+        if v is None or (isinstance(v, float) and pd.isna(v)):
+            return default
+        return float(v)
+    except (TypeError, ValueError):
+        return default
+
+
+def shortlist_breakdown(row) -> list:
+    """Punkte-Aufschlüsselung des Shortlist-Scores (Single Source für Score + Transparenz-UI).
+
+    Returns: Liste von {label, punkte}. Summe == shortlist_score(row).
+    """
+    def _get(r, k):
+        return r.get(k) if hasattr(r, "get") else r[k]
+
+    iv = _num(_get(row, "iv_rank"))
+    if iv >= 60:
+        iv_pts = 3
+    elif iv >= 40:
+        iv_pts = 2
+    elif iv >= 20:
+        iv_pts = 1
+    else:
+        iv_pts = 0
+
+    q = _get(row, "sektor_quadrant") or ""
+    sektor_pts = 2 if q == "Leading" else 1 if q == "Improving" else 0
+
+    ann = _num(_get(row, "annualized_pct"))
+    ann_pts = 2 if ann >= 20 else 1 if ann >= 12 else 0
+
+    # Black-Scholes-Edge: Markt-Prämie über fairem BS-Wert = strukturell teuer = gut.
+    edge = _get(row, "bs_edge_pct")
+    edge = _num(edge, default=0.0)
+    bs_pts = 2 if edge > 5 else 1 if edge > 0 else 0
+
+    return [
+        {"label": f"IV-Rank ({iv:.0f})", "punkte": iv_pts},
+        {"label": f"Sektor ({q or '—'})", "punkte": sektor_pts},
+        {"label": f"Rendite ({ann:.0f} %)", "punkte": ann_pts},
+        {"label": f"BS-Edge ({edge:+.1f} %)", "punkte": bs_pts},
+    ]
+
+
+def shortlist_score(row) -> int:
+    """Summe der Shortlist-Punkte (IV + Sektor + Rendite + BS-Edge)."""
+    return int(sum(item["punkte"] for item in shortlist_breakdown(row)))
+
+
+# ==========================================================================
+# Optionale Filter-Prädikate (Ludwig) — UI schaltet sie per Toggle zu.
+# ==========================================================================
+def earnings_ok(row) -> bool:
+    """True, wenn KEIN Earnings-Termin innerhalb der Put-Laufzeit liegt.
+
+    Muster wie covered_call_scanner.sql: fehlendes Earnings-Datum ist permissiv
+    (nicht ausschließen). Earnings NACH Verfall = ok.
+    """
+    def _get(r, k):
+        return r.get(k) if hasattr(r, "get") else (r[k] if k in r else None)
+
+    dte_earn = _get(row, "days_to_earnings")
+    if dte_earn is None or (isinstance(dte_earn, float) and pd.isna(dte_earn)):
+        return True  # unbekannt -> nicht bestrafen
+    dte_put = _num(_get(row, "put_dte"), default=0.0)
+    return _num(dte_earn) > dte_put
+
+
+def delta_ok(row, max_abs_delta: float) -> bool:
+    """True, wenn |Put-Delta| <= max_abs_delta. Fehlendes Delta ist permissiv."""
+    def _get(r, k):
+        return r.get(k) if hasattr(r, "get") else (r[k] if k in r else None)
+
+    d = _get(row, "put_delta")
+    if d is None or (isinstance(d, float) and pd.isna(d)):
+        return True
+    return abs(_num(d)) <= max_abs_delta
+
+
 def put_metrics(strike: float, premium: float, dte: int) -> dict:
     """Kennzahlen eines verkaufbaren Puts. Reine Arithmetik, keine DB.
 
