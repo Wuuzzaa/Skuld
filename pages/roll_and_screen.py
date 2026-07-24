@@ -1711,6 +1711,31 @@ def render_screener_tab():
     scored["shortlist_score"] = scored.apply(_shortlist_score, axis=1)
     scored = scored.sort_values(["shortlist_score", "score"], ascending=[False, False]).reset_index(drop=True)
 
+    # BS-Fairwert + Edge des besten Puts je Aktie (gleiche Logik wie im Detail-Bereich).
+    # put_iv kommt aus put_screener.sql; ohne verwertbare IV bleibt bs_fair None.
+    def _bs_fair_row(r):
+        S, K = r.get("price"), r.get("put_strike")
+        iv, dte = r.get("put_iv"), r.get("put_dte")
+        try:
+            S, K, iv = float(S), float(K), float(iv)
+            dte = int(dte)
+        except (TypeError, ValueError):
+            return None
+        if not S or not K or iv <= 0 or dte <= 0:
+            return None
+        try:
+            return round(PutValue(S, K, iv, dte, RISK_FREE_RATE), 2)
+        except (ValueError, ZeroDivisionError):
+            return None
+
+    scored["bs_fair"] = scored.apply(_bs_fair_row, axis=1)
+    scored["bs_edge_pct"] = scored.apply(
+        lambda r: round((float(r["put_premium"]) - float(r["bs_fair"])) / float(r["bs_fair"]) * 100, 1)
+        if pd.notna(r.get("bs_fair")) and r.get("bs_fair") and pd.notna(r.get("put_premium"))
+        else None,
+        axis=1,
+    )
+
     sel_key = "screener_selected_symbol"
 
     # ── Tabellen-Filter ───────────────────────────────────────────────────
@@ -1775,6 +1800,19 @@ def render_screener_tab():
         else:
             pf5.caption(f"Nur Aktien mit Put im DTE {_put_dte_min_f}–{_put_dte_max_f}d · Puffer ≥ {_put_puffer_f}%")
 
+    # BS-Bewertungsfilter: nur Aktien, deren bester Put teurer als der Black-Scholes-Fairwert ist
+    n_bs_missing = int(scored["bs_fair"].isna().sum())
+    bf1, bf2 = st.columns([1.8, 4.2])
+    tbl_bs_overvalued = bf1.checkbox(
+        "Nur überbewertete Puts (Prämie > BS)",
+        value=False,
+        key="tbl_bs_overvalued",
+        help="Zeigt nur Aktien, deren bester Put laut Black-Scholes zu teuer bepreist ist "
+             "(Markt-Prämie > fairer BS-Wert) → strukturell gut für den Prämienverkäufer.",
+    )
+    if tbl_bs_overvalued and n_bs_missing:
+        bf2.caption(f"⚠️ {n_bs_missing} Kandidat(en) ohne verwertbare IV → ohne BS-Wert, werden ausgeblendet.")
+
     # Filter anwenden
     view = scored.copy()
     if tbl_sectors:
@@ -1785,6 +1823,8 @@ def render_screener_tab():
         view = view[view["annualized_pct"] >= tbl_min_ann]
     if tbl_min_score > 0:
         view = view[view["score"] >= tbl_min_score]
+    if tbl_bs_overvalued:
+        view = view[view["bs_edge_pct"].notna() & (view["bs_edge_pct"] > 0)]
 
     # Put-Puffer/ATM-Filter: nur Aktien behalten wo mind. 1 Put die Bedingung erfüllt
     if tbl_put_filter and not view.empty:
@@ -1830,8 +1870,8 @@ def render_screener_tab():
                               key="sc_run_ai", width="stretch")
     with sc_ai2:
         st.caption(
-            f"Analysiert alle **{len(view)} sichtbaren Kandidaten** mit DB-Fundamentaldaten (Zuteilungsrisiko-Fokus). "
-            "Erst filtern, dann starten."
+            f"Analysiert alle **{len(view)} sichtbaren Kandidaten** mit DB-Fundamentaldaten "
+            "+ Put-Bewertung (Black-Scholes-Edge). Erst filtern, dann starten."
         )
 
     if run_sc_ai:

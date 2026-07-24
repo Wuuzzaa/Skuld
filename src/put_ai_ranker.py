@@ -58,6 +58,7 @@ def _build_prompt(puts_df: pd.DataFrame) -> str:
         "- IV-Rank hoch = gute Prämie zum Zeitpunkt des Verkaufs",
         "- Annualisierte Rendite attraktiv?",
         "- Puffer zwischen Strike und Kurs ausreichend?",
+        "- BS-Edge positiv? (Prämie über Black-Scholes-Fairwert = Put ist 'teuer' = Vorteil für Verkäufer)",
         "",
         "**Wichtig:** Ein Put mit hoher Prämie bei einem schwachen Unternehmen ist KEIN guter Kandidat.",
         "Ein Put mit moderater Prämie bei einem qualitativ hochwertigen Unternehmen ist BESSER.",
@@ -99,6 +100,10 @@ def _build_prompt(puts_df: pd.DataFrame) -> str:
         iv_rank = _fmt(r.get("iv_rank"), decimals=0)
         delta   = _fmt(r.get("greeks_delta") or r.get("put_delta"), decimals=3)
 
+        # Black-Scholes-Bewertung: fairer Wert + Edge (Markt-Prämie vs. BS)
+        bs_fair = _fmt(r.get("bs_fair"), "$", decimals=2)
+        bs_edge = _fmt(r.get("bs_edge_pct"), "%", decimals=1)
+
         # Kursrisiko
         beta         = _fmt(r.get("KeyStats_beta") or r.get("beta"), decimals=2)
         dte_earnings = _fmt(r.get("days_to_earnings"), "d", decimals=0)
@@ -132,6 +137,10 @@ def _build_prompt(puts_df: pd.DataFrame) -> str:
         lines.append(
             f"  [PUT]         Strike {strike} | Kurs {kurs} | DTE {dte} | "
             f"Puffer {puffer} | Ann. {ann} | Prämie {praemie} | IV-Rank {iv_rank} | Delta {delta}"
+        )
+        lines.append(
+            f"  [BEWERTUNG]   BS-Fairwert {bs_fair} | BS-Edge {bs_edge} "
+            f"(Prämie vs. Black-Scholes; positiv = Markt teurer als fair = gut für Verkäufer)"
         )
 
     return "\n".join(lines)

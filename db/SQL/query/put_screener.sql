@@ -78,6 +78,7 @@ SELECT
     p.day_volume                                       AS put_volume,
     ROUND(p.greeks_delta::numeric, 3)                  AS put_delta,
     ROUND(p.iv_rank::numeric, 2)                       AS iv_rank,
+    ROUND(p.implied_volatility::numeric, 4)            AS put_iv,
 
     -- Convenience: Rendite / Gewinnschwelle / Kapital
     ROUND((p.premium_option_price / NULLIF(p.strike_price, 0) * 100)::numeric, 2)        AS premium_pct,
