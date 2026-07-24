@@ -1,13 +1,20 @@
 """
 Admin page for job management and log downloading.
 """
-import http.client
 import json as json_lib
 import logging
-import socket
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import streamlit as st
+
+from src.job_dispatcher import (
+    DESTRUCTIVE_MODES,
+    QUEUE_DIR,
+    cancel_job,
+    enqueue_job,
+    list_jobs,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -48,42 +55,6 @@ JOB_DESCRIPTIONS = {
 
 
 # ==============================================================================
-# Docker Engine API helpers (via Unix socket)
-# ==============================================================================
-
-class DockerUnixConnection(http.client.HTTPConnection):
-    def __init__(self):
-        super().__init__("localhost")
-
-    def connect(self):
-        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        self.sock.connect("/var/run/docker.sock")
-
-
-def _docker_exec_detached(container: str, cmd: list[str]) -> str | None:
-    try:
-        conn = DockerUnixConnection()
-        conn.request("POST", f"/containers/{container}/exec",
-                     body=json_lib.dumps({"Cmd": cmd, "Detach": True}),
-                     headers={"Content-Type": "application/json"})
-        resp = conn.getresponse()
-        if resp.status != 201:
-            return None
-        exec_id = json_lib.loads(resp.read().decode())["Id"]
-
-        conn2 = DockerUnixConnection()
-        conn2.request("POST", f"/exec/{exec_id}/start",
-                      body=json_lib.dumps({"Detach": True}),
-                      headers={"Content-Type": "application/json"})
-        resp2 = conn2.getresponse()
-        resp2.read()
-        return exec_id if resp2.status == 200 else None
-    except Exception as e:
-        logger.warning(f"Docker exec failed: {e}")
-        return None
-
-
-# ==============================================================================
 # Page
 # ==============================================================================
 
@@ -93,11 +64,17 @@ tab_jobs, tab_status, tab_logs = st.tabs(["Trigger Jobs", "Job Status", "Log Fil
 
 
 # ==============================================================================
-# TAB 1: TRIGGER JOBS
+# TAB 1: TRIGGER JOBS — jetzt Schedule-Queue (SM37-Stil), kein Sofort-Feuer mehr.
+# Der Button plant den Job in logs/_queue/ ein; ein Cron-Dispatcher startet ihn
+# im Minutentakt. Destruktive Modi verlangen einen Typing-Confirm.
 # ==============================================================================
 with tab_jobs:
-    st.markdown("#### Manually Trigger Jobs")
-    st.info("Jobs run inside the **skuld-backend** Docker container via the Docker socket.")
+    st.markdown("#### Job einplanen")
+    st.info(
+        "Jobs werden **eingeplant** statt sofort gestartet. Ein Dispatcher im "
+        "**skuld-backend**-Container prüft die Queue jede Minute und startet fällige Jobs. "
+        "Geplante Jobs sind unten stornierbar, bis sie laufen."
+    )
 
     selected_mode = st.selectbox(
         "Job Mode",
@@ -105,17 +82,62 @@ with tab_jobs:
         format_func=lambda m: f"{m} — {JOB_DESCRIPTIONS.get(m, '')}",
     )
 
-    if st.button("Start Job", type="primary"):
-        cmd = ["/bin/bash", "/app/Skuld/run_data_collection.sh", selected_mode]
-        exec_id = _docker_exec_detached("skuld-backend", cmd)
-        if exec_id:
-            st.success(f"Job **{selected_mode}** triggered successfully!")
-        else:
-            st.error(
-                "Failed to trigger job.\n"
-                "- Docker socket not mounted (`/var/run/docker.sock`)\n"
-                "- `skuld-backend` container not running"
-            )
+    is_destructive = selected_mode in DESTRUCTIVE_MODES
+
+    col_when, col_time = st.columns([1, 2])
+    with col_when:
+        when = st.radio("Ausführung", ["Jetzt", "Zu Uhrzeit (UTC)"], horizontal=False)
+    run_at = datetime.now(timezone.utc)
+    with col_time:
+        if when == "Zu Uhrzeit (UTC)":
+            d = st.date_input("Datum (UTC)", value=datetime.now(timezone.utc).date())
+            t = st.time_input("Uhrzeit (UTC)", value=(datetime.now(timezone.utc) + timedelta(minutes=5)).time())
+            run_at = datetime.combine(d, t, tzinfo=timezone.utc)
+
+    # Sicherheitsnetz: destruktive Modi (all / historical_full / only_run_migrations)
+    # löschen/überschreiben Daten (db_setup + TRUNCATE). Confirm durch Tippen des Modusnamens.
+    confirmed = True
+    if is_destructive:
+        st.warning(
+            f"⚠️ **`{selected_mode}`** ist ein **destruktiver** Modus "
+            "(setzt DB-Views neu auf und/oder überschreibt Massendaten via TRUNCATE). "
+            "Zum Bestätigen den Modusnamen exakt eintippen."
+        )
+        typed = st.text_input(f"Zur Bestätigung „{selected_mode}“ eingeben", key="destructive_confirm")
+        confirmed = typed.strip() == selected_mode
+
+    if st.button("Einplanen", type="primary", disabled=not confirmed):
+        try:
+            job = enqueue_job(QUEUE_DIR, mode=selected_mode, run_at=run_at, created_by="admin-page")
+            when_txt = "jetzt (nächster Minutentakt)" if when == "Jetzt" else f"um {job['run_at']}"
+            st.success(f"Job **{selected_mode}** eingeplant — läuft {when_txt}. (ID `{job['id']}`)")
+        except OSError as e:
+            st.error(f"Konnte Job nicht einplanen: {e}")
+
+    # -----------------------------------------------------------------
+    # Geplante Jobs — Queue-Übersicht + Stornieren
+    # -----------------------------------------------------------------
+    st.markdown("---")
+    st.markdown("#### Geplante Jobs")
+    st.caption("Einträge aus der Queue (`logs/_queue/`). Geplante Jobs sind stornierbar, laufende nicht.")
+
+    queued = list_jobs(QUEUE_DIR)
+    if not queued:
+        st.info("Keine geplanten oder laufenden Jobs.")
+    else:
+        status_icon = {"geplant": "🕒 geplant", "laufend": "▶️ laufend"}
+        for job in queued:
+            c1, c2, c3, c4 = st.columns([2, 2, 3, 1])
+            c1.markdown(f"**{job.get('mode', '?')}**")
+            c2.markdown(status_icon.get(job.get("status"), job.get("status", "?")))
+            c3.caption(f"run_at {job.get('run_at', '?')} · von {job.get('created_by', '?')} · `{job.get('id', '?')}`")
+            if job.get("status") == "geplant":
+                if c4.button("Stornieren", key=f"cancel_{job['id']}"):
+                    if cancel_job(QUEUE_DIR, job["id"]):
+                        st.success(f"Job `{job['id']}` storniert.")
+                        st.rerun()
+                    else:
+                        st.warning(f"Job `{job['id']}` konnte nicht storniert werden (läuft evtl. schon).")
 
 
 # ==============================================================================
