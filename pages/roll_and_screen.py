@@ -32,7 +32,7 @@ from src.black_scholes import PutValue
 from src.roll_support_calc import position_status, roll_candidate, roll_candidate_explained, pnl_breakdown
 from src.roll_support_calc import time_value_percentage
 from src.spread_roll_calc import (
-    spread_position_status, spread_roll_candidate,
+    spread_position_status, spread_roll_candidate, spread_pnl_breakdown,
 )
 from src.put_ai_ranker import rank_puts, LLMProviderError, LLMClient
 from src.put_screener import (
@@ -2613,6 +2613,113 @@ def _render_option_chain(chain_df, S, key_prefix):
     return short_leg, long_leg
 
 
+def _build_spread_ai_prompt(symbol, short_strike, long_strike, width, credit_open,
+                            debit_now, n, pos, cand):
+    """Kontext für den Spread-Roll-AI-Chat (Position + Kandidaten)."""
+    lines = [
+        "BESTEHENDER BULL-PUT-SPREAD:",
+        f"  Symbol: {symbol}",
+        f"  Short-Put: ${short_strike:.2f} (verkauft) · Long-Put: ${long_strike:.2f} (gekauft) · Breite ${width:.2f}",
+        f"  Eröffnungs-Credit: ${credit_open/100:.2f}/Aktie (${credit_open:.0f} gesamt, {n} Spread(s))",
+        f"  Aktueller Schließungs-Debit: ${debit_now/100:.2f}/Aktie",
+        f"  G/V aktuell: ${pos['pnl_abs']:.0f} ({pos['pnl_pct']:.0f}%) · Alte Gewinnschwelle: ${pos['gs_old']:.2f}",
+        f"  Max-Loss (offen): ${pos['max_loss_open']:.0f}",
+        "",
+        "VERFÜGBARE ROLL-KANDIDATEN (aktuelle Kette, Breite bleibt fix):",
+    ]
+    if cand is not None and not cand.empty:
+        for _, rr in cand.sort_values(["short_strike", "dte"], ascending=[False, True]).head(12).iterrows():
+            lines.append(
+                f"  Short {rr['short_strike']:.1f}/Long {rr['long_strike']:.1f} · DTE {int(rr['dte'])} · "
+                f"Verfall {rr['expiration_date']} · Netto-Credit {float(rr['net_credit']):.2f}/Aktie"
+            )
+    else:
+        lines.append("  (keine Kandidaten geladen)")
+    lines += [
+        "",
+        "Roll-Stufen (Breite fix): Stufe 1 Short tiefer/gleiche Kontrakte, Stufe 2 gleicher Short, "
+        "Stufe 3 Short tiefer/doppelte Kontrakte. Ziel: Gewinnschwelle senken, Netto-Credit positiv halten.",
+    ]
+    return "\n".join(lines)
+
+
+def _render_spread_ai_chat(symbol, short_strike, long_strike, width, credit_open,
+                           debit_now, n, pos, cand):
+    st.divider()
+    st.markdown("### 🤖 Spread-Roll-Assistent")
+    chat_key = f"spread_chat_{symbol}_{short_strike:.1f}_{width:.1f}"
+    msgs_key = f"{chat_key}_messages"
+    ctx_key = f"{chat_key}_context"
+    prov_key = f"{chat_key}_provider_used"
+    started = bool(st.session_state.get(msgs_key))
+
+    if not started:
+        provider, web_search = _provider_picker(chat_key)
+        if st.button("🤖 Spread-Empfehlung anfordern", type="primary", key=f"{chat_key}_go"):
+            context = _build_spread_ai_prompt(symbol, short_strike, long_strike, width,
+                                              credit_open, debit_now, n, pos, cand)
+            _lbl = "Kimi" if provider == "kimi" else "DeepSeek"
+            with st.spinner(f"{_lbl} analysiert den Spread" + (" (Web-Recherche)" if web_search else "") + " …"):
+                try:
+                    resp = LLMClient().chat_completion_messages(
+                        provider,
+                        messages=[
+                            {"role": "system", "content": f"{_ROLL_AI_SYSTEM_PROMPT}\n\n{context}"},
+                            {"role": "user", "content": _ROLL_AI_FORMAT_INSTRUCTION},
+                        ],
+                        temperature=0.2, max_tokens=1200, web_search=web_search,
+                    )
+                    st.session_state[ctx_key] = context
+                    st.session_state[msgs_key] = [
+                        {"role": "user", "content": _ROLL_AI_FORMAT_INSTRUCTION},
+                        {"role": "assistant", "content": resp.text},
+                    ]
+                    st.session_state[f"{chat_key}_model"] = resp.model
+                    st.session_state[prov_key] = {"provider": provider, "web_search": web_search}
+                    st.rerun()
+                except LLMProviderError as e:
+                    st.error(f"{_lbl}-Fehler: {e}")
+                except Exception as e:
+                    st.error(f"Fehler: {e}")
+        return
+
+    _ps = st.session_state.get(prov_key, {"provider": "deepseek", "web_search": False})
+    provider, web_search = _ps["provider"], _ps["web_search"]
+    _lbl = "Kimi" if provider == "kimi" else "DeepSeek"
+    model = st.session_state.get(f"{chat_key}_model", "?")
+    st.caption(f"Modell: {model}{' · 🌐 Web' if web_search else ''}")
+    for mm in st.session_state[msgs_key]:
+        if mm["role"] == "user" and mm["content"] == _ROLL_AI_FORMAT_INSTRUCTION:
+            continue
+        with st.chat_message(mm["role"]):
+            st.markdown(mm["content"])
+    if user_msg := st.chat_input(f"Rückfrage an {_lbl} …", key=f"{chat_key}_input"):
+        with st.chat_message("user"):
+            st.markdown(user_msg)
+        context = st.session_state.get(ctx_key, "")
+        history = st.session_state[msgs_key]
+        api_messages = ([{"role": "system", "content": f"{_ROLL_AI_SYSTEM_PROMPT}\n\n{context}"}]
+                        + history + [{"role": "user", "content": user_msg}])
+        with st.chat_message("assistant"):
+            with st.spinner(f"{_lbl} denkt nach …"):
+                try:
+                    resp = LLMClient().chat_completion_messages(
+                        provider, messages=api_messages, temperature=0.3,
+                        max_tokens=1200, web_search=web_search)
+                    st.markdown(resp.text)
+                    history.append({"role": "user", "content": user_msg})
+                    history.append({"role": "assistant", "content": resp.text})
+                    st.session_state[msgs_key] = history
+                except LLMProviderError as e:
+                    st.error(f"{_lbl}-Fehler: {e} — nicht gespeichert.")
+                except Exception as e:
+                    st.error(f"Fehler: {e} — nicht gespeichert.")
+    if st.button("🗑️ Chat zurücksetzen", key=f"{chat_key}_reset"):
+        for k in (msgs_key, ctx_key, f"{chat_key}_model", prov_key):
+            st.session_state.pop(k, None)
+        st.rerun()
+
+
 def render_spread_roller_tab():
     st.subheader("🔄 Spread-Roller -- Bull-Put-Spread rollen")
 
@@ -2642,29 +2749,89 @@ Laufzeit/tiefere Strikes gerollt — die **Breite bleibt konstant**.
         st.error("Keine Symbole in der aktuellen Optionskette gefunden.")
         return
 
-    c1, c2, c3 = st.columns([2, 1, 1])
+    c1, c2 = st.columns([2, 1])
     symbol = c1.selectbox("Symbol", symbols, index=None,
                           placeholder="Symbol wählen…", key="spread_symbol")
     n_contracts = c2.number_input("Kontrakte (n)", min_value=1, value=1, step=1,
                                   key="spread_n")
-    width = c3.number_input("Spread-Breite ($)", min_value=1.0, value=5.0, step=1.0,
-                            key="spread_width_in",
-                            help="Abstand Short − Long. Bleibt beim Rollen konstant.")
 
     if not symbol:
-        st.info("Symbol wählen — dann Short-Strike + bestehende Position eingeben.")
+        st.info("Symbol wählen — dann Verfall und die zwei Spread-Beine in der Kette anklicken.")
         return
 
-    c4, c5, c6 = st.columns(3)
-    short_strike = c4.number_input("Aktueller Short-Strike", min_value=0.0, value=0.0,
-                                   step=0.5, key="spread_short_strike",
-                                   help="Der verkaufte Put deiner bestehenden Position.")
-    credit_open = c5.number_input("Eröffnungs-Credit ($/Kontrakt)", min_value=0.0,
-                                  value=0.0, step=5.0, key="spread_credit_open",
-                                  help="Netto-Credit den du beim Öffnen des Spreads vereinnahmt hast.")
-    debit_now = c6.number_input("Aktueller Schließungs-Debit ($/Kontrakt)", min_value=0.0,
-                                value=0.0, step=5.0, key="spread_debit_now",
-                                help="Was es aktuell kostet, den bestehenden Spread zu schließen.")
+    # Verfall wählen (aus der Put-Kette des Symbols)
+    puts_all = _load_symbol_puts(symbol, 1, 400)
+    if puts_all is None or puts_all.empty:
+        st.warning("Keine Optionskette für dieses Symbol.")
+        return
+    exps = sorted(puts_all["expiration_date"].astype(str).unique())
+    chosen_exp = st.selectbox("Verfall der bestehenden Position", exps, key="spread_exp")
+
+    chain = _load_option_chain(symbol, chosen_exp)
+    if chain is None or chain.empty:
+        st.warning("Keine Kette für diesen Verfall.")
+        return
+    S = float(chain["live_stock_price"].iloc[0])
+
+    st.markdown("**Deine bestehende Position — Short-Put (rot) + tieferen Long-Put (blau) anklicken:**")
+    short_leg, long_leg = _render_option_chain(chain, S, key_prefix="spread_chain")
+
+    if not short_leg or not long_leg:
+        st.info("👆 Zwei Put-Strikes wählen: erst den verkauften (Short), dann den tieferen gekauften (Long).")
+        return
+
+    short_strike = short_leg["strike"]
+    long_strike = long_leg["strike"]
+    width = round(short_strike - long_strike, 2)
+
+    credit_suggest = round((short_leg["last"] - long_leg["last"]) * 100.0, 0)
+    with st.expander("🛠️ Eröffnungs-Credit / aktueller Debit (aus Kette vorbefüllt, überschreibbar)", expanded=True):
+        oc1, oc2 = st.columns(2)
+        credit_open = oc1.number_input(
+            "Eröffnungs-Credit ($/Kontrakt)", min_value=0.0, value=float(max(credit_suggest, 0.0)),
+            step=5.0, key="spread_credit_open2",
+            help="Netto-Credit beim Öffnen. Vorbefüllt aus aktuellem Ketten-Last (Short − Long).")
+        debit_now = oc2.number_input(
+            "Aktueller Schließungs-Debit ($/Kontrakt)", min_value=0.0, value=float(max(credit_suggest, 0.0)),
+            step=5.0, key="spread_debit_now2",
+            help="Was der Spread aktuell zum Schließen kostet (Vorschlag = aktueller Credit).")
+
+    st.caption(f"Gewählt: Short {short_strike:.1f} / Long {long_strike:.1f} · Breite ${width:.2f} · {int(n_contracts)} Spread(s)")
+
+    # Bestehende Position: Kennzahlen + Kontoauszug
+    pos = spread_position_status(short_strike=short_strike, width=width,
+                                 credit_open=credit_open, debit_now=debit_now, n=int(n_contracts))
+    pc1, pc2, pc3, pc4 = st.columns(4)
+    pc1.metric("Alte Gewinnschwelle", f"${pos['gs_old']:.2f}")
+    pc2.metric("Max-Loss (offen)", f"${pos['max_loss_open']:.0f}")
+    pc3.metric("Long-Strike", f"${long_strike:.2f}")
+    pc4.metric("G/V aktuell", f"${pos['pnl_abs']:.0f}", delta=f"{pos['pnl_pct']:.0f}%")
+
+    with st.expander("🧮 Wie rechnet sich das? (G/V des Spreads)", expanded=False):
+        b = spread_pnl_breakdown(short_strike=short_strike, width=width,
+                                 credit_open=credit_open, debit_now=debit_now, n=int(n_contracts))
+        status = "📈 IM GEWINN" if b["im_gewinn"] else "📉 IM VERLUST"
+        st.markdown(f"**{status} — {b['pnl_abs']:+.2f} $ gesamt ({b['pnl_pct']:+.1f} %)**")
+        st.caption(b["grund"])
+        for line in b["lines"]:
+            if line["summe"]:
+                st.markdown("---")
+                st.markdown(f"**{line['label']}:** &nbsp; `{line['formel']}` &nbsp; = **{line['wert']:+.2f} {line['einheit']}**", unsafe_allow_html=True)
+            else:
+                vorz = f"{line['wert']:+.2f}" if line["einheit"] == "$ gesamt" else f"{line['wert']:.2f}"
+                st.markdown(f"{line['label']}: &nbsp; `{line['formel']}` &nbsp; = **{vorz} {line['einheit']}**", unsafe_allow_html=True)
+        st.caption("$/Aktie = pro Aktie · $ gesamt = ×100×Spreads · 🔶 Last-Preise (Näherung).")
+
+    # Ludwig-Restzeitwert-Hinweis
+    if debit_now > 0 and credit_open > 0:
+        tv_pct = time_value_percentage(P_heute=debit_now, P_eroeffnung=credit_open)
+        if tv_pct <= 15:
+            tv_txt = f"🟢 Restwert {tv_pct:.0f}% — Roll sinnvoll (Ludwig ≤15%)"
+        elif tv_pct <= 25:
+            tv_txt = f"⚠️ Restwert {tv_pct:.0f}% — optional"
+        else:
+            tv_txt = f"🔴 Restwert {tv_pct:.0f}% — eher warten"
+        st.caption(f"Ludwig-Restzeitwert-Hinweis: {tv_txt} (Debit {debit_now:.0f} vs. Eröffnungs-Credit {credit_open:.0f}).")
 
     c7, c8, c9 = st.columns([1, 1, 2])
     dte_min = c7.number_input("DTE min", min_value=1, max_value=400, value=30, step=1,
@@ -2673,36 +2840,6 @@ Laufzeit/tiefere Strikes gerollt — die **Breite bleibt konstant**.
                               key="spread_dte_max")
     with c9:
         run = st.button("🔍 Roll-Kandidaten laden", type="primary", key="spread_load")
-
-    if short_strike <= 0:
-        st.info("Short-Strike der bestehenden Position eingeben.")
-        return
-
-    # Bestehende Position: Kennzahlen
-    if credit_open > 0:
-        pos = spread_position_status(short_strike=short_strike, width=width,
-                                     credit_open=credit_open, debit_now=debit_now or 0.0,
-                                     n=n_contracts)
-        pc1, pc2, pc3, pc4 = st.columns(4)
-        pc1.metric("Alte Gewinnschwelle", f"${pos['gs_old']:.2f}")
-        pc2.metric("Max-Loss (offen)", f"${pos['max_loss_open']:.0f}")
-        pc3.metric("Long-Strike", f"${short_strike - width:.2f}")
-        if debit_now > 0:
-            pc4.metric("G/V aktuell", f"${pos['pnl_abs']:.0f}",
-                       delta=f"{pos['pnl_pct']:.0f}%")
-
-        # Ludwig-Restzeitwert-Hinweis: Debit/Credit-Verhältnis (beinunabhängig).
-        # Niedriger Debit relativ zum Eröffnungs-Credit → wenig Restwert → Roll sinnvoll.
-        if debit_now > 0:
-            tv_pct = time_value_percentage(P_heute=debit_now, P_eroeffnung=credit_open)
-            if tv_pct <= 15:
-                tv_txt = f"🟢 Restwert {tv_pct:.0f}% — Roll sinnvoll (Ludwig ≤15%)"
-            elif tv_pct <= 25:
-                tv_txt = f"⚠️ Restwert {tv_pct:.0f}% — optional"
-            else:
-                tv_txt = f"🔴 Restwert {tv_pct:.0f}% — eher warten"
-            st.caption(f"Ludwig-Restzeitwert-Hinweis: {tv_txt} "
-                       f"(Debit {debit_now:.0f} vs. Eröffnungs-Credit {credit_open:.0f}).")
 
     if not run:
         st.info("DTE-Fenster einstellen und 'Roll-Kandidaten laden' klicken.")
@@ -2714,7 +2851,7 @@ Laufzeit/tiefere Strikes gerollt — die **Breite bleibt konstant**.
     if cand is None or cand.empty:
         st.warning(f"Keine Spread-Kandidaten für {symbol} (Short ≤ {short_strike}, "
                    f"Breite {width}, DTE {dte_min}-{dte_max}). Fehlt evtl. das Long-Bein "
-                   f"bei Short−{width}? Breite anpassen.")
+                   f"bei Short−{width}? Anderen Long-Strike wählen.")
         return
 
     if credit_open <= 0 or debit_now <= 0:
@@ -2722,8 +2859,6 @@ Laufzeit/tiefere Strikes gerollt — die **Breite bleibt konstant**.
         return
 
     # Kandidaten in die 3 Stufen einsortieren.
-    #   Stufe 1: Short < alt, gleiche Kontrakte    Stufe 2: Short == alt
-    #   Stufe 3: Short < alt, doppelte Kontrakte
     st.divider()
     for stufe, titel, n_use, filt in [
         (1, "Stufe 1 — Short tiefer, gleiche Kontrakte", n_contracts,
@@ -2760,6 +2895,41 @@ Laufzeit/tiefere Strikes gerollt — die **Breite bleibt konstant**.
                 m2.metric("Max-Loss", f"${r['max_loss']:.0f}")
                 st.caption(f"Neuer Spread-Credit {float(row['net_credit']):.2f}/Aktie · "
                            f"{n_use} Kontrakt(e)")
+                card_id = f"{stufe}_{row['short_strike']:.1f}_{int(row['dte'])}"
+                if st.button("Details →", key=f"spread_cand_{card_id}", width="stretch"):
+                    st.session_state[f"spread_sel_{stufe}"] = card_id
+                    st.rerun()
+
+        # Roll-Kontoauszug für die gewählte Karte dieser Stufe
+        _sel = st.session_state.get(f"spread_sel_{stufe}")
+        if _sel:
+            m = sub[sub.apply(lambda rr: f"{stufe}_{rr['short_strike']:.1f}_{int(rr['dte'])}" == _sel, axis=1)]
+            if not m.empty:
+                rr = m.iloc[0]
+                rc = spread_roll_candidate(
+                    stufe=stufe, short_old=short_strike, short_new=float(rr["short_strike"]),
+                    width=width, credit_open=credit_open, debit_close=debit_now,
+                    credit_new=float(rr["net_credit"]) * 100.0, n=n_use,
+                )
+                with st.container(border=True):
+                    st.markdown(
+                        f"**{rc['ampel']} Roll-Kontoauszug — Short {rr['short_strike']:.1f} / "
+                        f"Long {rr['long_strike']:.1f}** (alt schließen + neu öffnen als ein Geldfluss)")
+                    _cn = n_use * float(rr["net_credit"]) * 100.0
+                    _lines = [
+                        f"Alten Spread schließen (Debit): &nbsp; = **{-debit_now:+.2f} $ gesamt**",
+                        f"Neuen Spread öffnen ({n_use}×): &nbsp; `{float(rr['net_credit']):.2f} $/Aktie × 100 × {n_use}` &nbsp; = **{_cn:+.2f} $ gesamt**",
+                        "---",
+                        f"**Netto aus dem Roll:** &nbsp; = **{rc['netto_abs']:+.2f} $ gesamt**",
+                        f"**Neue Gewinnschwelle:** &nbsp; `Short {rr['short_strike']:.1f} − {rc['netto_abs']:.0f}/({n_use}×100)` &nbsp; = **{rc['gs_new']:.2f} $/Aktie** (Δ {rc['gs_new']-rc['gs_old']:+.2f})",
+                        f"**Max-Loss neu:** &nbsp; = **{rc['max_loss']:.0f} $ gesamt**",
+                    ]
+                    for _l in _lines:
+                        st.markdown("---" if _l == "---" else _l, unsafe_allow_html=True)
+                    st.caption("$ gesamt = ×100×Spreads · 🔶 Last-Preise (Näherung).")
+
+    _render_spread_ai_chat(symbol, short_strike, long_strike, width, credit_open,
+                           debit_now, int(n_contracts), pos, cand)
 
 
 # ---------------------------------------------------------------------------
