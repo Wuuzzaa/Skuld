@@ -1560,6 +1560,15 @@ def _load_symbol_puts(symbol, dte_min, dte_max, min_oi=100, min_vol=20, min_prem
     )
 
 
+@st.cache_data(ttl=300)
+def _load_option_chain(symbol, expiration_date):
+    """Volle Optionskette (Put+Call) eines Symbols für EINEN Verfall — Broker-Ansicht."""
+    return select_into_dataframe(
+        sql_file_path=PATH_DATABASE_QUERY_FOLDER / "option_chain_symbol.sql",
+        params={"symbol": symbol, "expiration_date": str(expiration_date)},
+    )
+
+
 def _render_screener_table(df: pd.DataFrame, sel_key: str, top_n: int = 5):
     """Native st.dataframe-Tabelle für alle Screener-Kandidaten.
 
