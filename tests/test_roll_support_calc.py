@@ -62,3 +62,43 @@ def test_roll_candidate_explained_liefert_herleitung():
     netto_step = next(s for s in exp["steps"] if s["label"] == "Netto-Prämie")
     assert "100" in netto_step["formel"] and "220" in netto_step["formel"] and "210" in netto_step["formel"]
     assert round(netto_step["wert"], 2) == 110.00
+
+
+from src.roll_support_calc import pnl_breakdown
+
+
+def test_pnl_breakdown_gewinn_summe_stimmt():
+    # Put K=50 für 300$ verkauft (3,00 $/Aktie), heute 150$ wert (1,50/Aktie), 1 Kontrakt.
+    b = pnl_breakdown(K=50.0, S=52.0, P_eroeffnung=300.0, P_heute=150.0, n=1)
+    assert b["im_gewinn"] is True
+    assert round(b["pnl_abs"], 2) == 150.00            # (300 - 150) * 1
+    assert round(b["breakeven_old"], 2) == 47.00       # 50 - 300/100
+    # Einnahme-Zeile (+) und Rückkauf-Zeile (−) summieren sich auf pnl_abs:
+    einnahme = next(l for l in b["lines"] if l["label"] == "Beim Verkauf eingenommen")
+    rueckkauf = next(l for l in b["lines"] if l["label"] == "Rückkauf kostet heute")
+    assert round(einnahme["wert"], 2) == 300.00
+    assert round(rueckkauf["wert"], 2) == -150.00
+    assert round(einnahme["wert"] + rueckkauf["wert"], 2) == round(b["pnl_abs"], 2)
+
+
+def test_pnl_breakdown_verlust_vorzeichen_und_grund():
+    # Put K=30 für 100$ verkauft, heute 210$ -> Verlust.
+    b = pnl_breakdown(K=30.0, S=28.0, P_eroeffnung=100.0, P_heute=210.0, n=1)
+    assert b["im_gewinn"] is False
+    assert round(b["pnl_abs"], 2) == -110.00
+    assert "teurer" in b["grund"].lower() or "verlust" in b["grund"].lower()
+
+
+def test_pnl_breakdown_mehrere_kontrakte_skaliert():
+    # 2 Kontrakte: Werte skalieren mit n.
+    b = pnl_breakdown(K=50.0, S=52.0, P_eroeffnung=300.0, P_heute=150.0, n=2)
+    assert round(b["pnl_abs"], 2) == 300.00            # (300 - 150) * 2
+    einnahme = next(l for l in b["lines"] if l["label"] == "Beim Verkauf eingenommen")
+    assert round(einnahme["wert"], 2) == 600.00        # 300 * 2
+
+
+def test_pnl_breakdown_hat_gewinnschwelle_zeile():
+    b = pnl_breakdown(K=50.0, S=52.0, P_eroeffnung=300.0, P_heute=150.0, n=1)
+    gs = next(l for l in b["lines"] if l["label"] == "Gewinnschwelle")
+    assert round(gs["wert"], 2) == 47.00
+    assert gs["einheit"] == "$/Aktie"

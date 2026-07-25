@@ -29,7 +29,7 @@ from src.page_display_dataframe import page_display_dataframe
 from src.ui_utils import filter_by_expiration_type
 from src.utils.option_utils import get_expiration_type
 from src.black_scholes import PutValue
-from src.roll_support_calc import position_status, roll_candidate, roll_candidate_explained
+from src.roll_support_calc import position_status, roll_candidate, roll_candidate_explained, pnl_breakdown
 from src.roll_support_calc import time_value_percentage
 from src.spread_roll_calc import (
     spread_position_status, spread_roll_candidate,
@@ -616,6 +616,32 @@ def _render_position_card(symbol: str, K: float, S: float, p_today_share: float,
     return pos
 
 
+def _render_pnl_breakdown(b: dict) -> None:
+    """Rendert die Kontobuch-Herleitung des Positions-G/V (aus pnl_breakdown())."""
+    status = "📈 IM GEWINN" if b["im_gewinn"] else "📉 IM VERLUST"
+    st.markdown(f"**{status} — {b['pnl_abs']:+.2f} $ gesamt ({b['pnl_pct']:+.1f} %)**")
+    st.caption(b["grund"])
+    for line in b["lines"]:
+        if line["summe"]:
+            st.markdown("---")
+            st.markdown(
+                f"**{line['label']}:** &nbsp; `{line['formel']}` &nbsp; "
+                f"= **{line['wert']:+.2f} {line['einheit']}**",
+                unsafe_allow_html=True,
+            )
+        else:
+            vorz = f"{line['wert']:+.2f}" if line["einheit"] == "$ gesamt" else f"{line['wert']:.2f}"
+            st.markdown(
+                f"{line['label']}: &nbsp; `{line['formel']}` &nbsp; = **{vorz} {line['einheit']}**",
+                unsafe_allow_html=True,
+            )
+    st.caption(
+        "$/Aktie = Preis pro Aktie (Broker-Ansicht). "
+        "$ gesamt = × 100 × Kontrakte (was tatsächlich aufs Konto fließt). "
+        "🔶 Prämien = Tagesschluss-Näherung."
+    )
+
+
 # ---------------------------------------------------------------------------
 # Tab 2 -- Roller
 # ---------------------------------------------------------------------------
@@ -821,6 +847,12 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
     st.markdown("### 📊 Aktuelle Position")
     pos = _render_position_card(symbol, K, S, p_today_share, P_eroeffnung, P_heute,
                                 int(n_contracts), expiration_date, price_src)
+
+    with st.expander("🧮 Wie rechnet sich das? (G/V der Position)", expanded=False):
+        _render_pnl_breakdown(
+            pnl_breakdown(K=K, S=S, P_eroeffnung=P_eroeffnung,
+                          P_heute=P_heute, n=int(n_contracts))
+        )
 
     # ── Ludwig Restzeitwert-Analyse ──────────────────────────────────────────
     innerer_wert_share = max(0.0, K - S)
@@ -1166,6 +1198,26 @@ def _render_roll_explanation(exp: dict, K: float, K2: float, P_eroeffnung: float
                 f"❌ Gewinnschwelle steigt von ${breakeven_old:.2f} auf ${gs_new:.2f} -- "
                 f"das ist schlechter als vorher."
             )
+
+        st.divider()
+        st.markdown("**🧮 Der Roll als Kontoauszug (alt + neu als ein Geldfluss):**")
+        netto = exp["netto_abs"]
+        gesamt_vereinnahmt = P_eroeffnung + n * P_neu - P_heute
+        roll_lines = [
+            f"Rückkauf alter Put: &nbsp; `{P_heute/100:.2f} $/Aktie × 100 × 1` &nbsp; = **{-P_heute:+.2f} $ gesamt**",
+            f"Verkauf neuer Put ({n}×): &nbsp; `{P_neu/100:.2f} $/Aktie × 100 × {n}` &nbsp; = **{n*P_neu:+.2f} $ gesamt**",
+            "---",
+            f"**Netto aus dem Roll:** &nbsp; `{n*P_neu:.0f} − {P_heute:.0f}` &nbsp; = **{(n*P_neu - P_heute):+.2f} $ gesamt**",
+            f"**Gesamt vereinnahmt (Eröffnung + neu − Rückkauf):** &nbsp; "
+            f"`{P_eroeffnung:.0f} + {n*P_neu:.0f} − {P_heute:.0f}` &nbsp; = **{gesamt_vereinnahmt:+.2f} $ gesamt**",
+            f"**Neue Gewinnschwelle:** &nbsp; `K2 {K2:.2f} − {netto:.0f}/({n}×100)` &nbsp; "
+            f"= **{exp['breakeven_new']:.2f} $/Aktie**",
+        ]
+        for rl in roll_lines:
+            if rl == "---":
+                st.markdown("---")
+            else:
+                st.markdown(rl, unsafe_allow_html=True)
 
         st.caption(
             f"Kapital das als Sicherheit hinterlegt werden muss: **${exp['kapital_noetig']:.0f}** "

@@ -72,6 +72,73 @@ def position_status(K: float, S: float, P_eroeffnung: float,
     }
 
 
+def pnl_breakdown(K: float, S: float, P_eroeffnung: float,
+                  P_heute: float, n: int) -> dict:
+    """Kontobuch-Herleitung des G/V der bestehenden Position (reine Anzeige-Hilfe).
+
+    Verändert keine Zahlen — nutzt position_status() und macht die
+    ×100/×n-Schritte als einzelne Zeilen sichtbar. Einheiten explizit.
+
+    Returns:
+        dict mit pnl_abs, pnl_pct, breakeven_old, im_gewinn, grund, lines.
+        lines: [{label, formel, wert, einheit, summe}]. summe=True → Zwischensumme.
+    """
+    pos = position_status(K=K, S=S, P_eroeffnung=P_eroeffnung, P_heute=P_heute, n=n)
+    p_open_share = P_eroeffnung / 100.0
+    p_today_share = P_heute / 100.0
+    einnahme = P_eroeffnung * n          # was beim Verkauf aufs Konto kam
+    rueckkauf = -(P_heute * n)           # was der Rückkauf heute kostet
+    im_gewinn = pos["pnl_abs"] >= 0
+    diff_share = p_open_share - p_today_share
+    if im_gewinn:
+        grund = (f"Im Gewinn, weil der Put seit dem Verkauf um "
+                 f"${abs(diff_share):.2f}/Aktie billiger geworden ist "
+                 f"(Zeitwert-Verfall und/oder Kursanstieg).")
+    else:
+        grund = (f"Im Verlust, weil der Put seit dem Verkauf um "
+                 f"${abs(diff_share):.2f}/Aktie teurer geworden ist "
+                 f"(Kurs gefallen und/oder Volatilität gestiegen).")
+
+    lines = [
+        {
+            "label": "Beim Verkauf eingenommen",
+            "formel": f"{p_open_share:.2f} $/Aktie × 100 × {n}",
+            "wert": einnahme,
+            "einheit": "$ gesamt",
+            "summe": False,
+        },
+        {
+            "label": "Rückkauf kostet heute",
+            "formel": f"{p_today_share:.2f} $/Aktie × 100 × {n}",
+            "wert": rueckkauf,
+            "einheit": "$ gesamt",
+            "summe": False,
+        },
+        {
+            "label": "G/V wenn du JETZT schließt",
+            "formel": f"{einnahme:.0f} − {abs(rueckkauf):.0f}",
+            "wert": pos["pnl_abs"],
+            "einheit": "$ gesamt",
+            "summe": True,
+        },
+        {
+            "label": "Gewinnschwelle",
+            "formel": f"Strike {K:.2f} − Prämie {p_open_share:.2f}",
+            "wert": pos["breakeven_old"],
+            "einheit": "$/Aktie",
+            "summe": False,
+        },
+    ]
+    return {
+        "pnl_abs": pos["pnl_abs"],
+        "pnl_pct": pos["pnl_pct"],
+        "breakeven_old": pos["breakeven_old"],
+        "im_gewinn": im_gewinn,
+        "grund": grund,
+        "lines": lines,
+    }
+
+
 def roll_candidate(stufe: int, K: float, K2: float, P_eroeffnung: float,
                    P_heute: float, P_neu: float, n: int) -> dict:
     """Berechnet einen konkreten Roll-Kandidaten einer Stufe.
