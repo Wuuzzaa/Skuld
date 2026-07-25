@@ -1315,6 +1315,35 @@ def _build_roll_ai_prompt(
     return "\n".join(lines)
 
 
+def _provider_picker(key_prefix: str) -> tuple[str, bool]:
+    """Radio (DeepSeek/Kimi) + Web-Research-Checkbox (nur bei Kimi).
+
+    Returns (provider_key, web_search). provider_key ist "deepseek" oder "kimi".
+    Web-Research nur relevant/aktiv, wenn Kimi gewählt ist.
+    """
+    pc1, pc2 = st.columns([1.4, 2.6])
+    with pc1:
+        choice = st.radio(
+            "KI-Modell",
+            options=["DeepSeek", "Kimi (K3)"],
+            horizontal=True,
+            key=f"{key_prefix}_provider",
+            help="DeepSeek = schnell & günstig. Kimi K3 = 1M-Kontext, kann Web-Recherche.",
+        )
+    provider = "kimi" if choice.startswith("Kimi") else "deepseek"
+    web_search = False
+    with pc2:
+        if provider == "kimi":
+            web_search = st.checkbox(
+                "🌐 Web-Recherche (Kimi sucht live im Netz)",
+                key=f"{key_prefix}_websearch",
+                help="Kimi durchsucht aktuelle Web-Quellen (News, Earnings). Kostet zusätzliche Tokens.",
+            )
+        else:
+            st.caption("Web-Recherche nur mit Kimi verfügbar.")
+    return provider, web_search
+
+
 # Format-Vorgabe für die ERSTE Empfehlung. Wird als erste User-Nachricht
 # geschickt (nicht als System-Prompt) — damit gilt der Formatzwang nur für
 # die Empfehlung, Folge-Rückfragen werden frei beantwortet.
@@ -1382,12 +1411,13 @@ def _render_roll_ai_chat(
     n_contracts: int, breakeven_old: float,
     cand_st1, cand_st2, cand_st3,
 ):
-    """DeepSeek Roll-Assistent: erst strukturierte Empfehlung (Formular), danach
-    freier Chat mit Rückfragen. State ist an die Position (chat_key) gebunden."""
+    """Roll-Assistent: erst strukturierte Empfehlung (Formular), danach
+    freier Chat mit Rückfragen. State ist an die Position (chat_key) gebunden.
+    Provider (DeepSeek/Kimi) + optionale Web-Recherche wählbar."""
     st.divider()
-    st.markdown("### 🤖 Roll-Assistent (DeepSeek)")
+    st.markdown("### 🤖 Roll-Assistent")
     st.caption(
-        "DeepSeek analysiert deine Position und die verfügbaren Roll-Kandidaten. "
+        "Die KI analysiert deine Position und die verfügbaren Roll-Kandidaten. "
         "Erst die Empfehlung anfordern — danach kannst du frei nachfragen "
         "(z. B. »Warum nicht Stufe 3?« oder »Was wäre bei 90 DTE?«)."
     )
@@ -1397,11 +1427,13 @@ def _render_roll_ai_chat(
     chat_key = f"roll_ai_{symbol}_{K:.2f}"
     msgs_key = f"{chat_key}_messages"      # Liste [{role, content}, ...] (ohne System)
     ctx_key = f"{chat_key}_context"        # eingefrorener System-Kontext (Snapshot)
+    prov_key = f"{chat_key}_provider_used" # eingefrorener Provider für Phase-2-Rückfragen
 
     started = bool(st.session_state.get(msgs_key))
 
     # ── Phase 1: Erste Empfehlung anfordern (nur solange noch kein Chat läuft) ──
     if not started:
+        provider, web_search = _provider_picker(chat_key)
         with st.form(key=f"roll_ai_form_{chat_key}"):
             fc1, fc2 = st.columns(2)
             roll_count = fc1.number_input(
@@ -1425,17 +1457,20 @@ def _render_roll_ai_chat(
                 cand_st1=cand_st1, cand_st2=cand_st2, cand_st3=cand_st3,
                 roll_count=int(roll_count), prev_netto=float(prev_netto),
             )
-            with st.spinner("DeepSeek analysiert deinen Trade …"):
+            _prov_label = "Kimi" if provider == "kimi" else "DeepSeek"
+            _spin = f"{_prov_label} analysiert deinen Trade" + (" (mit Web-Recherche)" if web_search else "") + " …"
+            with st.spinner(_spin):
                 try:
                     client = LLMClient()
                     response = client.chat_completion_messages(
-                        "deepseek",
+                        provider,
                         messages=[
                             {"role": "system", "content": f"{_ROLL_AI_SYSTEM_PROMPT}\n\n{context}"},
                             {"role": "user", "content": _ROLL_AI_FORMAT_INSTRUCTION},
                         ],
                         temperature=0.2,
                         max_tokens=1200,
+                        web_search=web_search,
                     )
                     st.session_state[ctx_key] = context
                     st.session_state[msgs_key] = [
@@ -1443,16 +1478,22 @@ def _render_roll_ai_chat(
                         {"role": "assistant", "content": response.text},
                     ]
                     st.session_state[f"{chat_key}_model"] = response.model
+                    st.session_state[prov_key] = {"provider": provider, "web_search": web_search}
                     st.rerun()
                 except LLMProviderError as e:
-                    st.error(f"DeepSeek-Fehler: {e}")
+                    st.error(f"{_prov_label}-Fehler: {e}")
                 except Exception as e:
                     st.error(f"Fehler: {e}")
         return
 
     # ── Phase 2: Chat läuft — Verlauf + freie Rückfragen ──────────────────────
+    _prov_state = st.session_state.get(prov_key, {"provider": "deepseek", "web_search": False})
+    provider = _prov_state["provider"]
+    web_search = _prov_state["web_search"]
+    _prov_label = "Kimi" if provider == "kimi" else "DeepSeek"
     model = st.session_state.get(f"{chat_key}_model", "?")
-    st.caption(f"Modell: {model} · Kontext eingefroren auf Kurs ${S:.2f} / Put ${P_heute/100:.2f}")
+    _ws_note = " · 🌐 Web-Recherche an" if web_search else ""
+    st.caption(f"Modell: {model}{_ws_note} · Kontext eingefroren auf Kurs ${S:.2f} / Put ${P_heute/100:.2f}")
 
     # Erste User-Nachricht ist die interne Format-Instruktion — nicht anzeigen.
     for m in st.session_state[msgs_key]:
@@ -1461,7 +1502,7 @@ def _render_roll_ai_chat(
         with st.chat_message(m["role"]):
             st.markdown(m["content"])
 
-    if user_msg := st.chat_input("Rückfrage an DeepSeek …", key=f"{chat_key}_input"):
+    if user_msg := st.chat_input(f"Rückfrage an {_prov_label} …", key=f"{chat_key}_input"):
         # Optimistisch anzeigen, aber erst NACH Erfolg dauerhaft in die History.
         with st.chat_message("user"):
             st.markdown(user_msg)
@@ -1473,11 +1514,12 @@ def _render_roll_ai_chat(
             + [{"role": "user", "content": user_msg}]
         )
         with st.chat_message("assistant"):
-            with st.spinner("DeepSeek denkt nach …"):
+            with st.spinner(f"{_prov_label} denkt nach …"):
                 try:
                     response = LLMClient().chat_completion_messages(
-                        "deepseek", messages=api_messages,
+                        provider, messages=api_messages,
                         temperature=0.3, max_tokens=1200,
+                        web_search=web_search,
                     )
                     st.markdown(response.text)
                     # Beide Turns erst jetzt committen (fehlgeschlagene Runde -> nichts gespeichert).
@@ -1485,12 +1527,12 @@ def _render_roll_ai_chat(
                     history.append({"role": "assistant", "content": response.text})
                     st.session_state[msgs_key] = history
                 except LLMProviderError as e:
-                    st.error(f"DeepSeek-Fehler: {e} — Frage nicht gespeichert, bitte erneut senden.")
+                    st.error(f"{_prov_label}-Fehler: {e} — Frage nicht gespeichert, bitte erneut senden.")
                 except Exception as e:
                     st.error(f"Fehler: {e} — Frage nicht gespeichert, bitte erneut senden.")
 
     if st.button("🗑️ Chat zurücksetzen", key=f"{chat_key}_reset"):
-        for k in (msgs_key, ctx_key, f"{chat_key}_model"):
+        for k in (msgs_key, ctx_key, f"{chat_key}_model", prov_key):
             st.session_state.pop(k, None)
         st.rerun()
 
@@ -1936,8 +1978,12 @@ def render_screener_tab():
             "+ Put-Bewertung (Black-Scholes-Edge). Erst filtern, dann starten."
         )
 
+    sc_provider, sc_web_search = _provider_picker("screener_ai")
+
     if run_sc_ai:
-        with st.spinner(f"DeepSeek analysiert {len(view)} Aktien (DB-Fundamentaldaten) …"):
+        _prov_label = "Kimi" if sc_provider == "kimi" else "DeepSeek"
+        _spin = f"{_prov_label} analysiert {len(view)} Aktien (DB-Fundamentaldaten)" + (" + Web-Recherche" if sc_web_search else "") + " …"
+        with st.spinner(_spin):
             try:
                 # view hat bereits put_strike, annualized_pct etc. aus put_screener.sql
                 # rank_puts erwartet puts_df mit symbol, strike_price, live_stock_price,
@@ -1955,7 +2001,10 @@ def render_screener_tab():
                         (_sc_puts["live_stock_price"] - _sc_puts["strike_price"])
                         / _sc_puts["live_stock_price"] * 100
                     ).round(1)
-                ai_text, ai_meta = rank_puts(_sc_puts, max_candidates=len(view))
+                ai_text, ai_meta = rank_puts(
+                    _sc_puts, max_candidates=len(view),
+                    provider=sc_provider, web_search=sc_web_search,
+                )
                 st.session_state["sc_ai_result"] = ai_text
                 st.session_state["sc_ai_meta"]   = ai_meta
             except LLMProviderError as e:
