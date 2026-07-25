@@ -18,6 +18,12 @@ DEEPSEEK_BASE_URL = os.getenv('DEEPSEEK_BASE_URL', 'https://api.deepseek.com')
 DEEPSEEK_MODEL = os.getenv('DEEPSEEK_MODEL', 'deepseek-v4-flash')
 DEEPSEEK_TIMEOUT_SECONDS = int(os.getenv('DEEPSEEK_TIMEOUT_SECONDS', '120'))
 
+# LLM / Kimi (Moonshot AI) — OpenAI-kompatibel. Key aus GitHub Secret KIMI_AI.
+KIMI_API_KEY = os.getenv('KIMI_AI') or os.getenv('MOONSHOT_API_KEY')
+KIMI_BASE_URL = os.getenv('KIMI_BASE_URL', 'https://api.moonshot.ai/v1')
+KIMI_MODEL = os.getenv('KIMI_MODEL', 'kimi-k3')
+KIMI_TIMEOUT_SECONDS = int(os.getenv('KIMI_TIMEOUT_SECONDS', '180'))
+
 # PostgreSQL
 POSTGRES_HOST = os.getenv('POSTGRES_HOST')
 POSTGRES_PORT = os.getenv('POSTGRES_PORT')
