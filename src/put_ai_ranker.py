@@ -150,11 +150,14 @@ def rank_puts(
     puts_df: pd.DataFrame,
     max_candidates: int = 25,
     max_tokens: int = 4000,
+    provider: str = "deepseek",
+    web_search: bool = False,
 ) -> tuple[str, dict[str, Any]]:
-    """Baut Prompt aus DB-Daten und fragt DeepSeek nach einer Rangliste.
+    """Baut Prompt aus DB-Daten und fragt das gewählte LLM nach einer Rangliste.
 
     Alle Daten kommen aus der eigenen DB (put_screener.sql + StockData).
-    Kein externer Scraping-Call.
+    Kein externer Scraping-Call. provider/web_search sind optional
+    (Default deepseek/aus → unverändertes Bestandsverhalten).
     """
     df = puts_df.head(max_candidates).copy()
     symbols = df["symbol"].unique().tolist()
@@ -163,7 +166,7 @@ def rank_puts(
 
     client = LLMClient()
     response = client.chat_completion(
-        "deepseek",
+        provider,
         system_prompt=(
             "Du bist ein erfahrener Optionshändler spezialisiert auf Cash-Secured-Put-Prämienverkauf. "
             "Du vergleichst Kandidaten miteinander und gibst strukturierte, tabellarische Antworten. "
@@ -174,6 +177,7 @@ def rank_puts(
         user_prompt=prompt,
         temperature=0.3,
         max_tokens=max_tokens,
+        web_search=web_search,
     )
 
     return response.text, {
