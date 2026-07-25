@@ -1568,7 +1568,7 @@ def _render_screener_table(df: pd.DataFrame, sel_key: str, top_n: int = 5):
     setzt session_state[sel_key] = symbol und rerun() — kein separater Button
     (der war die Quelle des schiefen Alignments).
 
-    Score wird als nativer ProgressColumn-Balken gezeigt, Ann.% farbig via .style.
+    Score wird als farbige Ampel gezeigt (9/9 grün → 1/9 rot), Ann.% farbig via .style.
     """
     rows = []
     for i, (_, r) in enumerate(df.iterrows()):
@@ -1580,15 +1580,19 @@ def _render_screener_table(df: pd.DataFrame, sel_key: str, top_n: int = 5):
         except Exception:
             warum = ""
         iv_rank = r.get("iv_rank")
+        _name = str(r.get("company_name") or "").strip()
+        if len(_name) > 28:
+            _name = _name[:27] + "…"
         rows.append({
             "★": "★" if i < top_n else "",
             "Symbol": r["symbol"],
+            "Name": _name,
             "Kurs": float(r["price"]) if r.get("price") is not None and pd.notna(r.get("price")) else None,
             "Ann.%": round(float(r.get("annualized_pct") or 0), 1),
             "DTE": int(r["put_dte"]) if r.get("put_dte") not in (None, "--") and pd.notna(r.get("put_dte")) else None,
             "IV-Rank": round(float(iv_rank), 0) if iv_rank is not None and pd.notna(iv_rank) else None,
-            "Score": score_val / score_max_v if score_max_v else 0.0,
-            "Score-Text": f"{score_val}/{score_max_v}",
+            "Score": f"{score_val}/{score_max_v}",
+            "_score_pct": (score_val / score_max_v) if score_max_v else 0.0,
             "Sektor": f"{r.get('sektor_ampel', '⚪')} {r.get('sector', '') or ''}".strip(),
             "Warum ★": warum,
         })
@@ -1606,7 +1610,21 @@ def _render_screener_table(df: pd.DataFrame, sel_key: str, top_n: int = 5):
                 out.append("color:#ef4444;font-weight:700")
         return out
 
-    styled = table_df.style.apply(_color_ann, subset=["Ann.%"])
+    def _color_score(col):
+        # Score-Ampel: hoher Anteil (viele von max Punkten) = grün, niedrig = rot.
+        out = []
+        for pct in table_df["_score_pct"]:
+            if pct >= 0.70:
+                out.append("color:#34d399;font-weight:700")   # grün
+            elif pct >= 0.50:
+                out.append("color:#f59e0b;font-weight:700")   # gelb
+            else:
+                out.append("color:#ef4444;font-weight:700")   # rot
+        return out
+
+    styled = (table_df.style
+              .apply(_color_ann, subset=["Ann.%"])
+              .apply(_color_score, subset=["Score"]))
 
     event = st.dataframe(
         styled,
@@ -1615,17 +1633,18 @@ def _render_screener_table(df: pd.DataFrame, sel_key: str, top_n: int = 5):
         on_select="rerun",
         selection_mode="single-row",
         key="screener_row_pick",
+        column_order=["★", "Symbol", "Name", "Kurs", "Ann.%", "DTE", "IV-Rank", "Score", "Sektor", "Warum ★"],
         column_config={
             "★": st.column_config.TextColumn("★", width="small", help="Top-Kandidat der Shortlist"),
+            "Name": st.column_config.TextColumn("Name", width="medium", help="Unternehmensname"),
             "Kurs": st.column_config.NumberColumn("Kurs", format="$%.2f"),
             "Ann.%": st.column_config.NumberColumn("Ann.%", format="%.1f%%"),
             "DTE": st.column_config.NumberColumn("DTE", format="%dd"),
             "IV-Rank": st.column_config.NumberColumn("IV-Rank", format="%.0f"),
-            "Score": st.column_config.ProgressColumn(
-                "Score", min_value=0.0, max_value=1.0, format=" ",
-                help="Shortlist-Score (Balken). Spalte 'Warum ★' zeigt die Punkte.",
+            "Score": st.column_config.TextColumn(
+                "Score", width="small",
+                help="Shortlist-Score: 9/9 grün (top), niedriger = gelb/rot. Spalte 'Warum ★' zeigt die Punkte.",
             ),
-            "Score-Text": st.column_config.TextColumn("Pkt", width="small"),
             "Warum ★": st.column_config.TextColumn("Warum ★", width="medium"),
         },
     )

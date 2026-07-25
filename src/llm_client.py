@@ -224,6 +224,18 @@ class LLMClient:
                 response.raise_for_status()
             except requests.RequestException as exc:
                 logger.exception("Kimi request failed")
+                status = getattr(getattr(exc, "response", None), "status_code", None)
+                if status == 429:
+                    raise LLMProviderError(
+                        "Kimi: Rate-Limit/Guthaben erschöpft (HTTP 429). Bei einem frisch "
+                        "angelegten Moonshot-Konto ohne aufgeladenes Guthaben tritt das sofort auf "
+                        "— bitte auf platform.kimi.ai Guthaben aufladen. (DeepSeek läuft unabhängig davon.)"
+                    ) from exc
+                if status in (401, 403):
+                    raise LLMProviderError(
+                        "Kimi: API-Key ungültig oder nicht berechtigt (HTTP "
+                        f"{status}). KIMI_AI-Secret prüfen."
+                    ) from exc
                 raise LLMProviderError(f"Kimi request failed: {exc}") from exc
 
             data = response.json()
