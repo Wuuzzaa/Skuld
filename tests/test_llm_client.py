@@ -148,3 +148,25 @@ def test_kimi_missing_key_raises():
             assert False, "should have raised"
         except LLMProviderError as e:
             assert "Kimi" in str(e)
+
+
+def test_kimi_429_gives_helpful_message():
+    """HTTP 429 -> sprechende Guthaben-/Rate-Limit-Meldung statt roher Fehler."""
+    import requests as _rq
+    from src.llm_client import LLMProviderError
+    resp = MagicMock()
+    resp.status_code = 429
+    err = _rq.HTTPError("429 Client Error: Too Many Requests")
+    err.response = resp
+
+    def _raise(*a, **k):
+        raise err
+
+    with patch.object(llm_mod, "KIMI_API_KEY", "test-kimi-key"), \
+         patch.object(llm_mod.requests, "post", side_effect=_raise):
+        try:
+            LLMClient().chat_completion_messages("kimi", messages=[{"role": "user", "content": "x"}])
+            assert False, "should have raised"
+        except LLMProviderError as e:
+            assert "429" in str(e)
+            assert "Guthaben" in str(e) or "Rate-Limit" in str(e)
