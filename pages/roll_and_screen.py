@@ -1199,6 +1199,26 @@ def _render_roll_explanation(exp: dict, K: float, K2: float, P_eroeffnung: float
                 f"das ist schlechter als vorher."
             )
 
+        st.divider()
+        st.markdown("**🧮 Der Roll als Kontoauszug (alt + neu als ein Geldfluss):**")
+        netto = exp["netto_abs"]
+        gesamt_vereinnahmt = P_eroeffnung + n * P_neu - P_heute
+        roll_lines = [
+            f"Rückkauf alter Put: &nbsp; `{P_heute/100:.2f} $/Aktie × 100 × 1` &nbsp; = **{-P_heute:+.2f} $ gesamt**",
+            f"Verkauf neuer Put ({n}×): &nbsp; `{P_neu/100:.2f} $/Aktie × 100 × {n}` &nbsp; = **{n*P_neu:+.2f} $ gesamt**",
+            "---",
+            f"**Netto aus dem Roll:** &nbsp; `{n*P_neu:.0f} − {P_heute:.0f}` &nbsp; = **{(n*P_neu - P_heute):+.2f} $ gesamt**",
+            f"**Gesamt vereinnahmt (Eröffnung + neu − Rückkauf):** &nbsp; "
+            f"`{P_eroeffnung:.0f} + {n*P_neu:.0f} − {P_heute:.0f}` &nbsp; = **{gesamt_vereinnahmt:+.2f} $ gesamt**",
+            f"**Neue Gewinnschwelle:** &nbsp; `K2 {K2:.2f} − {netto:.0f}/({n}×100)` &nbsp; "
+            f"= **{exp['breakeven_new']:.2f} $/Aktie**",
+        ]
+        for rl in roll_lines:
+            if rl == "---":
+                st.markdown("---")
+            else:
+                st.markdown(rl, unsafe_allow_html=True)
+
         st.caption(
             f"Kapital das als Sicherheit hinterlegt werden muss: **${exp['kapital_noetig']:.0f}** "
             f"(= ${K2:.2f} Strike × {n} × 100). "
