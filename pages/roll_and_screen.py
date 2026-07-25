@@ -29,7 +29,7 @@ from src.page_display_dataframe import page_display_dataframe
 from src.ui_utils import filter_by_expiration_type
 from src.utils.option_utils import get_expiration_type
 from src.black_scholes import PutValue
-from src.roll_support_calc import position_status, roll_candidate, roll_candidate_explained
+from src.roll_support_calc import position_status, roll_candidate, roll_candidate_explained, pnl_breakdown
 from src.roll_support_calc import time_value_percentage
 from src.spread_roll_calc import (
     spread_position_status, spread_roll_candidate,
@@ -616,6 +616,32 @@ def _render_position_card(symbol: str, K: float, S: float, p_today_share: float,
     return pos
 
 
+def _render_pnl_breakdown(b: dict) -> None:
+    """Rendert die Kontobuch-Herleitung des Positions-G/V (aus pnl_breakdown())."""
+    status = "📈 IM GEWINN" if b["im_gewinn"] else "📉 IM VERLUST"
+    st.markdown(f"**{status} — {b['pnl_abs']:+.2f} $ gesamt ({b['pnl_pct']:+.1f} %)**")
+    st.caption(b["grund"])
+    for line in b["lines"]:
+        if line["summe"]:
+            st.markdown("---")
+            st.markdown(
+                f"**{line['label']}:** &nbsp; `{line['formel']}` &nbsp; "
+                f"= **{line['wert']:+.2f} {line['einheit']}**",
+                unsafe_allow_html=True,
+            )
+        else:
+            vorz = f"{line['wert']:+.2f}" if line["einheit"] == "$ gesamt" else f"{line['wert']:.2f}"
+            st.markdown(
+                f"{line['label']}: &nbsp; `{line['formel']}` &nbsp; = **{vorz} {line['einheit']}**",
+                unsafe_allow_html=True,
+            )
+    st.caption(
+        "$/Aktie = Preis pro Aktie (Broker-Ansicht). "
+        "$ gesamt = × 100 × Kontrakte (was tatsächlich aufs Konto fließt). "
+        "🔶 Prämien = Tagesschluss-Näherung."
+    )
+
+
 # ---------------------------------------------------------------------------
 # Tab 2 -- Roller
 # ---------------------------------------------------------------------------
@@ -821,6 +847,12 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
     st.markdown("### 📊 Aktuelle Position")
     pos = _render_position_card(symbol, K, S, p_today_share, P_eroeffnung, P_heute,
                                 int(n_contracts), expiration_date, price_src)
+
+    with st.expander("🧮 Wie rechnet sich das? (G/V der Position)", expanded=False):
+        _render_pnl_breakdown(
+            pnl_breakdown(K=K, S=S, P_eroeffnung=P_eroeffnung,
+                          P_heute=P_heute, n=int(n_contracts))
+        )
 
     # ── Ludwig Restzeitwert-Analyse ──────────────────────────────────────────
     innerer_wert_share = max(0.0, K - S)
