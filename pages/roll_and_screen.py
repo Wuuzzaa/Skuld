@@ -1519,130 +1519,83 @@ def _load_symbol_puts(symbol, dte_min, dte_max, min_oi=100, min_vol=20, min_prem
 
 
 def _render_screener_table(df: pd.DataFrame, sel_key: str, top_n: int = 5):
-    """Custom Tabellen-Layout für alle Screener-Kandidaten via st.columns.
+    """Native st.dataframe-Tabelle für alle Screener-Kandidaten.
 
-    top_n erste Zeilen erhalten teal-Akzentlinie links + ★-Prefix.
-    Klick auf → setzt session_state[sel_key] = symbol und rerun().
+    Muster wie der Put-Browser (on_select single-row). Die ersten top_n Zeilen
+    (nach der bestehenden Sortierung) sind mit ★ markiert. Klick auf eine Zeile
+    setzt session_state[sel_key] = symbol und rerun() — kein separater Button
+    (der war die Quelle des schiefen Alignments).
+
+    Score wird als nativer ProgressColumn-Balken gezeigt, Ann.% farbig via .style.
     """
-    sel_sym = st.session_state.get(sel_key)
-
-    st.markdown("""
-    <style>
-    .sc-sym   { font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:700; color:var(--text-primary); }
-    .sc-mono  { font-family:'JetBrains Mono',monospace; font-size:14px; color:var(--text-primary); }
-    .sc-badge {
-        display:inline-block; padding:2px 8px; border-radius:4px;
-        font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:600;
-    }
-    .sc-hdr {
-        font-size:11px; font-weight:600; text-transform:uppercase;
-        letter-spacing:.08em; color:var(--text-muted);
-    }
-    .sc-cell { padding:10px 4px; color:var(--text-primary); }
-    .sc-muted { color:var(--text-muted); font-size:13px; }
-    .sc-hr-thick { margin:4px 0 0; border:none; border-top:2px solid var(--bg-border); }
-    .sc-hr-thin  { margin:0; border:none; border-top:1px solid var(--bg-border); }
-    .sc-bar-bg { width:50px; height:6px; border-radius:3px; background:var(--bg-border); }
-    </style>
-    """, unsafe_allow_html=True)
-
-    # Header-Zeile
-    hcols = st.columns([2.2, 1.0, 1.1, 0.9, 1.3, 2.2, 2.8, 0.6])
-    for hc, h in zip(hcols, ["Symbol", "Kurs", "Ann.%", "DTE", "IV-Rank", "Score", "Sektor", ""]):
-        hc.markdown(f'<span class="sc-hdr">{h}</span>', unsafe_allow_html=True)
-    st.markdown('<hr class="sc-hr-thick">', unsafe_allow_html=True)
-
+    rows = []
     for i, (_, r) in enumerate(df.iterrows()):
-        sym         = r["symbol"]
-        price_v     = r.get("price")
-        score_val   = int(r["score"])
+        score_val = int(r["score"])
         score_max_v = int(r["score_max"])
-        ann_val     = float(r.get("annualized_pct") or 0)
-        put_dte     = r.get("put_dte", "--")
-        iv_rank     = r.get("iv_rank")
-        sector_v    = r.get("sector", "") or ""
-        ampel_v     = r.get("sektor_ampel", "⚪")
-        is_top      = i < top_n
-        is_sel      = sel_sym == sym
-
-        ann_color = "#34d399" if ann_val >= 15 else ("#f59e0b" if ann_val >= 8 else "#ef4444")
-
-        if iv_rank is not None and pd.notna(iv_rank):
-            iv_v    = float(iv_rank)
-            iv_bg   = "rgba(239,68,68,.15)" if iv_v >= 60 else ("rgba(245,158,11,.15)" if iv_v >= 30 else "rgba(148,163,184,.12)")
-            iv_text = "#f87171" if iv_v >= 60 else ("#fbbf24" if iv_v >= 30 else "#94a3b8")
-            iv_html = f'<span class="sc-badge" style="background:{iv_bg};color:{iv_text};">{iv_v:.0f}</span>'
-        else:
-            iv_html = '<span class="sc-muted">--</span>'
-
-        score_pct = score_val / score_max_v * 100 if score_max_v else 0
-        bar_color = "#059669" if score_pct >= 70 else ("#d97706" if score_pct >= 50 else "#dc2626")
-        score_html = (
-            f'<div style="display:flex;align-items:center;gap:6px;">'
-            f'<div class="sc-bar-bg">'
-            f'<div style="width:{score_pct:.0f}%;height:6px;border-radius:3px;background:{bar_color};"></div></div>'
-            f'<span style="font-family:\'JetBrains Mono\',monospace;font-size:12px;color:{bar_color};">'
-            f'{score_val}/{score_max_v}</span></div>'
-        )
-
-        top_prefix = "★ " if is_top else ""
-        sym_color  = "color:#00d4aa;" if is_top else ""
-        left_border = "#00d4aa" if is_top else "transparent"
-        row_bg = "background:rgba(0,212,170,.07);border-radius:4px;" if is_sel else ""
-
-        # Feature D: Shortlist-Score-Transparenz als Hover-Tooltip auf dem Symbol.
-        # Zeigt, WARUM die Aktie den Shortlist-Rang (★) hat: IV/Sektor/Rendite/BS-Edge.
         try:
             _bd = shortlist_breakdown(r)
-            _sl = sum(i["punkte"] for i in _bd)
-            _sl_tip = f"Shortlist {_sl}: " + ", ".join(f"{i['label']} +{i['punkte']}" for i in _bd)
+            warum = ", ".join(f"{i2['label']} +{i2['punkte']}" for i2 in _bd)
         except Exception:
-            _sl_tip = ""
+            warum = ""
+        iv_rank = r.get("iv_rank")
+        rows.append({
+            "★": "★" if i < top_n else "",
+            "Symbol": r["symbol"],
+            "Kurs": float(r["price"]) if r.get("price") is not None and pd.notna(r.get("price")) else None,
+            "Ann.%": round(float(r.get("annualized_pct") or 0), 1),
+            "DTE": int(r["put_dte"]) if r.get("put_dte") not in (None, "--") and pd.notna(r.get("put_dte")) else None,
+            "IV-Rank": round(float(iv_rank), 0) if iv_rank is not None and pd.notna(iv_rank) else None,
+            "Score": score_val / score_max_v if score_max_v else 0.0,
+            "Score-Text": f"{score_val}/{score_max_v}",
+            "Sektor": f"{r.get('sektor_ampel', '⚪')} {r.get('sector', '') or ''}".strip(),
+            "Warum ★": warum,
+        })
 
-        rcols = st.columns([2.2, 1.0, 1.1, 0.9, 1.3, 2.2, 2.8, 0.6])
-        with rcols[0]:
-            st.markdown(
-                f'<div class="sc-cell" style="{row_bg}padding-left:8px;'
-                f'border-left:3px solid {left_border};" title="{_sl_tip}">'
-                f'<span class="sc-sym" style="{sym_color}">'
-                f'{top_prefix}{sym}</span></div>',
-                unsafe_allow_html=True,
-            )
-        with rcols[1]:
-            price_str = f"${float(price_v):.2f}" if price_v is not None and pd.notna(price_v) else "--"
-            st.markdown(
-                f'<div class="sc-cell"><span class="sc-mono">{price_str}</span></div>',
-                unsafe_allow_html=True,
-            )
-        with rcols[2]:
-            st.markdown(
-                f'<div class="sc-cell">'
-                f'<span style="font-family:\'JetBrains Mono\',monospace;font-size:14px;font-weight:700;color:{ann_color};">'
-                f'{ann_val:.1f}%</span></div>',
-                unsafe_allow_html=True,
-            )
-        with rcols[3]:
-            st.markdown(
-                f'<div class="sc-cell"><span class="sc-mono">{put_dte}d</span></div>',
-                unsafe_allow_html=True,
-            )
-        with rcols[4]:
-            st.markdown(f'<div class="sc-cell">{iv_html}</div>', unsafe_allow_html=True)
-        with rcols[5]:
-            st.markdown(f'<div class="sc-cell">{score_html}</div>', unsafe_allow_html=True)
-        with rcols[6]:
-            st.markdown(
-                f'<div class="sc-cell sc-muted">{ampel_v} {sector_v}</div>',
-                unsafe_allow_html=True,
-            )
-        with rcols[7]:
-            btn_label = "✓" if is_sel else "→"
-            if st.button(btn_label, key=f"screener_btn_{sym}"):
-                st.session_state[sel_key] = sym
-                st.session_state["screener_scroll_n"] = st.session_state.get("screener_scroll_n", 0) + 1
-                st.rerun()
+    table_df = pd.DataFrame(rows)
 
-        st.markdown('<hr class="sc-hr-thin">', unsafe_allow_html=True)
+    def _color_ann(col):
+        out = []
+        for v in col:
+            if v >= 15:
+                out.append("color:#34d399;font-weight:700")
+            elif v >= 8:
+                out.append("color:#f59e0b;font-weight:700")
+            else:
+                out.append("color:#ef4444;font-weight:700")
+        return out
+
+    styled = table_df.style.apply(_color_ann, subset=["Ann.%"])
+
+    event = st.dataframe(
+        styled,
+        width="stretch",
+        hide_index=True,
+        on_select="rerun",
+        selection_mode="single-row",
+        key="screener_row_pick",
+        column_config={
+            "★": st.column_config.TextColumn("★", width="small", help="Top-Kandidat der Shortlist"),
+            "Kurs": st.column_config.NumberColumn("Kurs", format="$%.2f"),
+            "Ann.%": st.column_config.NumberColumn("Ann.%", format="%.1f%%"),
+            "DTE": st.column_config.NumberColumn("DTE", format="%dd"),
+            "IV-Rank": st.column_config.NumberColumn("IV-Rank", format="%.0f"),
+            "Score": st.column_config.ProgressColumn(
+                "Score", min_value=0.0, max_value=1.0, format=" ",
+                help="Shortlist-Score (Balken). Spalte 'Warum ★' zeigt die Punkte.",
+            ),
+            "Score-Text": st.column_config.TextColumn("Pkt", width="small"),
+            "Warum ★": st.column_config.TextColumn("Warum ★", width="medium"),
+        },
+    )
+
+    sel_rows = event.selection.rows if hasattr(event, "selection") else []
+    if sel_rows:
+        picked = table_df.iloc[sel_rows[0]]["Symbol"]
+        if st.session_state.get(sel_key) != picked:
+            st.session_state[sel_key] = picked
+            st.session_state["screener_scroll_n"] = st.session_state.get("screener_scroll_n", 0) + 1
+            st.rerun()
+    st.caption("**Klick auf eine Zeile** → Detail-Ansicht darunter. ★ = Top-Shortlist.")
 
 
 def render_screener_tab():
