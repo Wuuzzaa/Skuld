@@ -2539,6 +2539,80 @@ def render_put_tab():
 # ---------------------------------------------------------------------------
 # Spread-Roller (Bull-Put-Spread rollen) — beide Beine, Breite fix
 # ---------------------------------------------------------------------------
+def _render_option_chain(chain_df, S, key_prefix):
+    """Broker-Optionskette (CALLS | STRIKE | PUTS) für EINEN Verfall.
+
+    Nur die PUT-Seite ist anklickbar: 1. Klick = Short (rot), 2. Klick tieferer
+    Strike = Long (blau). Erneuter Klick auf ein gewähltes Bein hebt es auf.
+    Zeigt Last (kein bid/ask in der DB). Returns (short_leg, long_leg) als dicts
+    mit Keys strike/last (oder None).
+    """
+    short_key = f"{key_prefix}_short"
+    long_key = f"{key_prefix}_long"
+    sel_short = st.session_state.get(short_key)   # Strike (float) oder None
+    sel_long = st.session_state.get(long_key)
+
+    calls = chain_df[chain_df["contract_type"] == "call"].set_index("strike_price")
+    puts = chain_df[chain_df["contract_type"] == "put"].set_index("strike_price")
+    strikes = sorted(chain_df["strike_price"].unique())
+
+    h = st.columns([1.0, 1.0, 1.4, 1.0, 1.0, 1.1])
+    for hc, txt in zip(h, ["CALL Last", "CALL OI/Vol", "STRIKE", "PUT Last", "PUT OI/Vol", ""]):
+        hc.markdown(f"<span style='color:#8faabf;font-size:11px;font-weight:600;'>{txt}</span>", unsafe_allow_html=True)
+
+    marker_done = False
+    for k in strikes:
+        if (not marker_done) and S is not None and k >= S:
+            st.markdown(
+                f"<div style='border-top:2px solid #f59e0b;margin:2px 0;'>"
+                f"<span style='color:#f59e0b;font-size:11px;font-family:monospace;'>"
+                f"◄ Kurs ${S:.2f}</span></div>", unsafe_allow_html=True)
+            marker_done = True
+
+        c = st.columns([1.0, 1.0, 1.4, 1.0, 1.0, 1.1])
+        call = calls.loc[k] if k in calls.index else None
+        put = puts.loc[k] if k in puts.index else None
+
+        c[0].markdown(f"<span style='font-family:monospace;'>{call['premium_option_price']:.2f}</span>" if call is not None else "—", unsafe_allow_html=True)
+        c[1].markdown(f"<span style='font-size:11px;color:#64748b;'>{int(call['open_interest'])}/{int(call['day_volume'])}</span>" if call is not None else "", unsafe_allow_html=True)
+
+        if sel_short == k:
+            strike_html = f"<span style='background:#7f1d1d;color:#fff;padding:2px 8px;border-radius:4px;font-family:monospace;font-weight:700;'>{k:.1f} (Short)</span>"
+        elif sel_long == k:
+            strike_html = f"<span style='background:#1e3a8a;color:#fff;padding:2px 8px;border-radius:4px;font-family:monospace;font-weight:700;'>{k:.1f} (Long)</span>"
+        else:
+            strike_html = f"<span style='font-family:monospace;font-weight:600;'>{k:.1f}</span>"
+        c[2].markdown(strike_html, unsafe_allow_html=True)
+
+        if put is not None:
+            c[3].markdown(f"<span style='font-family:monospace;'>{put['premium_option_price']:.2f}</span>", unsafe_allow_html=True)
+            c[4].markdown(f"<span style='font-size:11px;color:#64748b;'>{int(put['open_interest'])}/{int(put['day_volume'])}</span>", unsafe_allow_html=True)
+            with c[5]:
+                if st.button(f"wählen", key=f"{key_prefix}_pick_{k}", width="stretch"):
+                    if sel_short is None:
+                        st.session_state[short_key] = k
+                    elif sel_short == k:
+                        st.session_state[short_key] = None
+                    elif sel_long == k:
+                        st.session_state[long_key] = None
+                    elif k < sel_short:
+                        st.session_state[long_key] = k
+                    else:
+                        st.session_state[short_key] = k
+                    st.rerun()
+        else:
+            c[3].markdown("—")
+            c[4].markdown("")
+
+    short_leg = None
+    long_leg = None
+    if sel_short is not None and sel_short in puts.index:
+        short_leg = {"strike": float(sel_short), "last": float(puts.loc[sel_short]["premium_option_price"])}
+    if sel_long is not None and sel_long in puts.index:
+        long_leg = {"strike": float(sel_long), "last": float(puts.loc[sel_long]["premium_option_price"])}
+    return short_leg, long_leg
+
+
 def render_spread_roller_tab():
     st.subheader("🔄 Spread-Roller -- Bull-Put-Spread rollen")
 
