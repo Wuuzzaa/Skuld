@@ -59,6 +59,53 @@ def spread_position_status(short_strike: float, width: float, credit_open: float
     }
 
 
+def spread_pnl_breakdown(short_strike: float, width: float, credit_open: float,
+                         debit_now: float, n: int) -> dict:
+    """Kontobuch-Herleitung des G/V der bestehenden Spread-Position (Anzeige-Hilfe).
+
+    Nutzt spread_position_status(); ändert keine Zahlen. Einheiten explizit.
+    Returns dict mit pnl_abs, pnl_pct, gs_old, max_loss_open, im_gewinn, grund, lines.
+    lines: [{label, formel, wert, einheit, summe}]. summe=True → Zwischensumme.
+    """
+    pos = spread_position_status(short_strike=short_strike, width=width,
+                                 credit_open=credit_open, debit_now=debit_now, n=n)
+    credit_share = credit_open / 100.0
+    debit_share = debit_now / 100.0
+    einnahme = credit_open * n
+    schliessen = -(debit_now * n)
+    im_gewinn = pos["pnl_abs"] >= 0
+    diff_share = credit_share - debit_share
+    if im_gewinn:
+        grund = (f"Im Gewinn: der Spread lässt sich für ${abs(diff_share):.2f}/Aktie "
+                 f"billiger schließen als du beim Öffnen eingenommen hast "
+                 f"(Zeitwert-Verfall / Kurs über Short-Strike).")
+    else:
+        grund = (f"Im Verlust: das Schließen kostet ${abs(diff_share):.2f}/Aktie mehr "
+                 f"als der Eröffnungs-Credit (Kurs Richtung Short-Strike gefallen).")
+    lines = [
+        {"label": "Beim Öffnen eingenommen (Credit)",
+         "formel": f"{credit_share:.2f} $/Aktie × 100 × {n}",
+         "wert": einnahme, "einheit": "$ gesamt", "summe": False},
+        {"label": "Schließen kostet heute (Debit)",
+         "formel": f"{debit_share:.2f} $/Aktie × 100 × {n}",
+         "wert": schliessen, "einheit": "$ gesamt", "summe": False},
+        {"label": "G/V wenn du JETZT schließt",
+         "formel": f"{einnahme:.0f} − {abs(schliessen):.0f}",
+         "wert": pos["pnl_abs"], "einheit": "$ gesamt", "summe": True},
+        {"label": "Alte Gewinnschwelle",
+         "formel": f"Short {short_strike:.2f} − Credit {credit_share:.2f}",
+         "wert": pos["gs_old"], "einheit": "$/Aktie", "summe": False},
+        {"label": "Max-Loss (offen)",
+         "formel": f"(Breite {width:.2f} − Credit {credit_share:.2f}) × 100 × {n}",
+         "wert": pos["max_loss_open"], "einheit": "$ gesamt", "summe": False},
+    ]
+    return {
+        "pnl_abs": pos["pnl_abs"], "pnl_pct": pos["pnl_pct"], "gs_old": pos["gs_old"],
+        "max_loss_open": pos["max_loss_open"], "im_gewinn": im_gewinn,
+        "grund": grund, "lines": lines,
+    }
+
+
 def spread_roll_candidate(stufe: int, short_old: float, short_new: float, width: float,
                           credit_open: float, debit_close: float, credit_new: float,
                           n: int) -> dict:
