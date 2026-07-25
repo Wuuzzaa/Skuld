@@ -2189,6 +2189,7 @@ Der Chart zeigt den **IV-Rank** der letzten ~12 Monate.
             put_rows.append({
                 "Ampel": ev["ampel"],
                 "Expiry": o["expiration_date"],
+                "Earnings": (str(o["earnings_date"])[:10] if o.get("earnings_date") is not None and pd.notna(o.get("earnings_date")) else "--"),
                 "Kurs ($)": round(float(o["live_stock_price"]), 2) if _num(o["live_stock_price"]) else None,
                 "Strike": round(float(o["strike_price"]), 2),
                 "DTE": int(o["days_to_expiration"]),
@@ -2230,6 +2231,7 @@ Der Chart zeigt den **IV-Rank** der letzten ~12 Monate.
         st.caption(
             "🔶 Prämie = day_close (Näherung). "
             "BS-Preis grün = Markt teurer als Black-Scholes. "
+            "**Earnings** = nächster Earnings-Termin (liegt er vor dem Expiry → Gap-Risiko). "
             "Sortiert: ✅ oben, dann höchste annualisierte Rendite. **Klick für Details.**"
         )
 

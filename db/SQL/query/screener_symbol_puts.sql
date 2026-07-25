@@ -19,7 +19,9 @@ SELECT
     o.iv_rank,
     o.iv_percentile,
     o.expected_move,
-    o.live_stock_price
+    o.live_stock_price,
+    o.earnings_date,
+    o.days_to_earnings
 FROM "OptionDataMerged" o
 WHERE o.symbol = :symbol
   AND o.contract_type = 'put'
