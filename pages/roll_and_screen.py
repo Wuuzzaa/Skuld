@@ -243,14 +243,27 @@ def _load_roll_candidates(symbol, K, dte_min, dte_max,
 
 @st.cache_data(ttl=300)
 def _load_spread_roll_candidates(symbol, short_strike, width, dte_min, dte_max,
-                                 min_oi=50, min_vol=10):
-    """Roll-Kandidaten für einen Bull-Put-Spread: Short-Puts ≤ short_strike + Long-Bein."""
+                                 min_oi=50, min_vol=10,
+                                 contract_type="put", strategy_type="credit",
+                                 strike_lo=None, strike_hi=None):
+    """Roll-Kandidaten für einen vertikalen Spread (alle 4 Arten).
+
+    contract_type/strategy_type steuern Optionsseite + Bein-Geometrie in der SQL.
+    strike_lo/strike_hi = Fenster der zu prüfenden Sell-Strikes (Default: symmetrisch
+    ±2×Breite um den alten Short-Strike, deckt tiefere/höhere Rolls ab).
+    """
+    if strike_lo is None:
+        strike_lo = float(short_strike) - 2.0 * float(width)
+    if strike_hi is None:
+        strike_hi = float(short_strike) + 2.0 * float(width)
     return select_into_dataframe(
         sql_file_path=PATH_DATABASE_QUERY_FOLDER / "spread_roll_candidates.sql",
-        params={"symbol": symbol, "short_strike": float(short_strike),
+        params={"symbol": symbol,
+                "contract_type": contract_type, "strategy_type": strategy_type,
                 "spread_width": float(width),
                 "dte_min": int(dte_min), "dte_max": int(dte_max),
-                "min_oi": int(min_oi), "min_vol": int(min_vol)},
+                "min_oi": int(min_oi), "min_vol": int(min_vol),
+                "strike_lo": float(strike_lo), "strike_hi": float(strike_hi)},
     )
 
 
