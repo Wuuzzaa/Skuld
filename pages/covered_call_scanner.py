@@ -137,8 +137,9 @@ with col4:
     min_annualized = st.number_input(
         "Min Annualized Return %",
         min_value=0, max_value=200,
-        value=30, step=5,
+        value=10, step=5,
         key="cc_min_ann",
+        help="Untergrenze der annualisierten Rendite. Default 10% zeigt auch moderate Trades.",
     )
 with col5:
     max_annualized = st.number_input(
@@ -174,7 +175,13 @@ with col8:
         help="Filter out positions with insufficient downside buffer.",
     )
 with col9:
-    max_annualized_2 = None  # placeholder — layout symmetry
+    price_min = st.number_input(
+        "Min Stock Price ($)",
+        min_value=0.0, max_value=10000.0,
+        value=0.0, step=5.0, format="%.0f",
+        key="cc_price_min",
+        help="Nur Aktien mit Kurs ≥ diesem Wert. 0 = keine Untergrenze.",
+    )
 
 col10, col11, col12 = st.columns(3)
 with col10:
@@ -195,7 +202,13 @@ with col11:
         help="Minimum option bid price. Avoids illiquid penny options.",
     )
 with col12:
-    pass
+    price_max = st.number_input(
+        "Max Stock Price ($)",
+        min_value=0.0, max_value=10000.0,
+        value=0.0, step=5.0, format="%.0f",
+        key="cc_price_max",
+        help="Nur Aktien mit Kurs ≤ diesem Wert. 0 = keine Obergrenze.",
+    )
 
 scan_btn = st.button("Scan for Covered Calls", type="primary")
 
@@ -244,6 +257,12 @@ if scan_btn:
                 # Min option bid/premium filter
                 if min_premium > 0:
                     df = df[df["premium"] >= min_premium]
+
+                # Stock price range filter (0 = keine Grenze)
+                if price_min > 0:
+                    df = df[df["stock_price"] >= price_min]
+                if price_max > 0:
+                    df = df[df["stock_price"] <= price_max]
 
                 if df.empty:
                     st.warning("All results filtered out. Try lowering Min Annualized Return or Min Downside Protection.")
@@ -378,64 +397,68 @@ if st.session_state["cc_df"] is not None:
         st.divider()
         st.subheader(f"Trade Analysis — {symbol}")
 
+        # ── Großes, präsentes Ergebnis-Banner (grün ≥30 / amber ≥15 / grau) ──
+        if annualized >= 30:
+            _bg, _brd, _tag = "#166534", "#22c55e", "🟢 STARK"
+        elif annualized >= 15:
+            _bg, _brd, _tag = "#854d0e", "#f59e0b", "🟡 SOLIDE"
+        else:
+            _bg, _brd, _tag = "#374151", "#9ca3af", "⚪ MODERAT"
+        st.markdown(
+            f"<div style='background:{_bg};border:2px solid {_brd};border-radius:10px;"
+            f"padding:14px 18px;margin:6px 0 12px 0;'>"
+            f"<span style='color:#fff;font-size:26px;font-weight:800;'>{_tag} · "
+            f"{annualized:.1f}% p.a.</span>"
+            f"<span style='color:#e5e7eb;font-size:16px;font-weight:600;'> &nbsp;"
+            f"({assigned_ret:.2f}% in {dte} Tagen)</span>"
+            f"<br><span style='color:#e5e7eb;font-size:13px;'>"
+            f"{symbol} @ ${stock:.2f} &nbsp;·&nbsp; Strike ${strike:.2f} &nbsp;·&nbsp; "
+            f"Net Debit ${net_debit:.2f} &nbsp;·&nbsp; Breakeven ${breakeven:.2f} &nbsp;·&nbsp; "
+            f"Downside-Puffer {protection:.1f}% &nbsp;·&nbsp; Verfall {expiry}</span>"
+            f"</div>", unsafe_allow_html=True)
+
         # Metrics row
         m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Net Debit", f"${net_debit:.2f}", help="Your real cost per share")
-        m2.metric("Assigned Return", f"{assigned_ret:.2f}%", help="Profit if called away at expiry")
-        m3.metric("Annualized Return", f"{annualized:.1f}%")
-        m4.metric("Downside Protection", f"{protection:.1f}%", help="Premium / Stock Price")
+        m1.metric("Net Debit", f"${net_debit:.2f}", help="Dein realer Einstand pro Aktie (Kurs − Prämie)")
+        m2.metric("Assigned Return", f"{assigned_ret:.2f}%", help="Gewinn, wenn die Aktie am Verfall ausgeübt/abgerufen wird")
+        m3.metric("Annualized Return", f"{annualized:.1f}%", help="Auf ein Jahr hochgerechnet — vergleichbar über Laufzeiten")
+        m4.metric("Downside Protection", f"{protection:.1f}%", help="Wie weit die Aktie fallen darf, bis du ins Minus kommst (Prämie / Kurs)")
 
-        st.markdown(f"""
-**How the metrics are calculated**
-
-| | Calculation | Result |
+        # ── Erklär-Blöcke: kompakt, mit Icons, in Expandern ──────────────────
+        with st.expander("🧮 Wie berechnen sich die Kennzahlen?", expanded=True):
+            st.markdown(f"""
+| Kennzahl | Rechnung | Ergebnis |
 |---|---|---|
-| Net Debit | ${stock:.2f} (stock) − ${premium:.2f} (premium) | **${net_debit:.2f}** |
-| Assigned Return | (${strike:.2f} − ${net_debit:.2f}) / ${net_debit:.2f} × 100 | **{assigned_ret:.2f}%** |
-| Annualized Return | {assigned_ret:.2f}% / {dte} days × 365 | **{annualized:.1f}%** |
-| Downside Protection | ${premium:.2f} / ${stock:.2f} × 100 | **{protection:.1f}%** |
+| **Net Debit** | ${stock:.2f} Kurs − ${premium:.2f} Prämie | **${net_debit:.2f}** |
+| **Assigned Return** | (${strike:.2f} Strike − ${net_debit:.2f} Einstand) / ${net_debit:.2f} × 100 | **{assigned_ret:.2f}%** |
+| **Annualized Return** | {assigned_ret:.2f}% / {dte} Tage × 365 | **{annualized:.1f}%** |
+| **Downside Protection** | ${premium:.2f} Prämie / ${stock:.2f} Kurs × 100 | **{protection:.1f}%** |
+""")
 
----
+        with st.expander("📊 Gewinn & Verlust am Verfall", expanded=True):
+            st.markdown(f"""
+- 🟢 **Bestfall — Aktie über ${strike:.2f}:** Aktien werden abgerufen → **+${max_profit:.2f} pro Kontrakt** (+{assigned_ret:.2f}%). Mehr geht nicht (Gewinn gedeckelt).
+- ⚪ **Breakeven bei ${breakeven:.2f}:** genau dein Einstand → $0.
+- 🔴 **Unter ${breakeven:.2f}:** Verlust = (${breakeven:.2f} − Kurs) × 100 pro Kontrakt. Die Prämie hat dich bis hier abgefedert ({protection:.1f}% Puffer).
+""")
 
-**Profit & Loss at expiry ({expiry})**
+        with st.expander("🚪 Früher Ausstieg — 50%-Regel", expanded=False):
+            st.markdown(f"""
+Gängige Praxis: schließen, wenn die Prämie auf 50% gefallen ist.
 
-| Scenario | Stock at expiry | Result |
-|---|---|---|
-| Shares called away (best case) | Above ${strike:.2f} | +${max_profit:.2f} per contract (+{assigned_ret:.2f}%) |
-| Breakeven | Exactly ${breakeven:.2f} | $0 |
-| Below breakeven | Below ${breakeven:.2f} | Loss = (${breakeven:.2f} − stock price) × 100 |
+- Verkauft für: **${premium:.2f}**
+- Zurückkaufen bei: **${close_50pct:.2f}** (buy-to-close)
+- Gewinn: **${round(premium - close_50pct, 2):.2f} pro Aktie** in ≤ {dte} Tagen → dann Kapital in die nächste Chance.
+""")
 
----
-
-**Early exit — 50% profit rule**
-
-Standard best practice: close when premium drops to 50% of what you sold it for.
-
-- Sold for: **${premium:.2f}**
-- Close at: **${close_50pct:.2f}** (buy-to-close)
-- Profit: **${round(premium - close_50pct, 2):.2f} per share** in {dte} days or less
-- Then redeploy capital into the next opportunity
-
----
-
-**Volatility**
-
-{iv_comment}
-{iv_hv_text}
-
----
-
-**Earnings**
-
-{earn_warning}
-
----
-
-**Delta {delta_val:.3f} — what it means**
-
-Delta of {delta_val:.3f} means the option moves ~${delta_val:.2f} for every $1 move in the stock.
-Assignment probability at expiry is approximately **{delta_val*100:.0f}%**.
-{"This is a deep ITM call — high probability of assignment. The strategy is essentially a fixed-return income trade." if delta_val >= 0.8 else "Moderate ITM — reasonable balance between premium and assignment probability."}
+        with st.expander("📈 Volatilität, Earnings & Delta", expanded=False):
+            _delta_txt = ("Sehr tief im Geld — hohe Zuteilungs-Wahrscheinlichkeit, faktisch ein fixer Income-Trade."
+                          if delta_val >= 0.8 else
+                          "Moderat im Geld — ausgewogenes Verhältnis aus Prämie und Zuteilungs-Wahrscheinlichkeit.")
+            st.markdown(f"""
+- **Volatilität:** {iv_comment} {iv_hv_text}
+- **Earnings:** {earn_warning}
+- **Delta {delta_val:.3f}:** die Option bewegt sich ~${delta_val:.2f} je $1 Aktienbewegung; Zuteilungs-Wahrscheinlichkeit am Verfall ≈ **{delta_val*100:.0f}%**. {_delta_txt}
 """)
 
     else:
