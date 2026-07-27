@@ -33,6 +33,7 @@ from src.roll_support_calc import position_status, roll_candidate, roll_candidat
 from src.roll_support_calc import time_value_percentage
 from src.spread_roll_calc import (
     spread_position_status, spread_roll_candidate, spread_pnl_breakdown,
+    SPREAD_TYPES, _is_credit,
 )
 from src.put_ai_ranker import rank_puts, LLMProviderError, LLMClient
 from src.put_screener import (
@@ -243,14 +244,27 @@ def _load_roll_candidates(symbol, K, dte_min, dte_max,
 
 @st.cache_data(ttl=300)
 def _load_spread_roll_candidates(symbol, short_strike, width, dte_min, dte_max,
-                                 min_oi=50, min_vol=10):
-    """Roll-Kandidaten für einen Bull-Put-Spread: Short-Puts ≤ short_strike + Long-Bein."""
+                                 min_oi=50, min_vol=10,
+                                 contract_type="put", strategy_type="credit",
+                                 strike_lo=None, strike_hi=None):
+    """Roll-Kandidaten für einen vertikalen Spread (alle 4 Arten).
+
+    contract_type/strategy_type steuern Optionsseite + Bein-Geometrie in der SQL.
+    strike_lo/strike_hi = Fenster der zu prüfenden Sell-Strikes (Default: symmetrisch
+    ±2×Breite um den alten Short-Strike, deckt tiefere/höhere Rolls ab).
+    """
+    if strike_lo is None:
+        strike_lo = float(short_strike) - 2.0 * float(width)
+    if strike_hi is None:
+        strike_hi = float(short_strike) + 2.0 * float(width)
     return select_into_dataframe(
         sql_file_path=PATH_DATABASE_QUERY_FOLDER / "spread_roll_candidates.sql",
-        params={"symbol": symbol, "short_strike": float(short_strike),
+        params={"symbol": symbol,
+                "contract_type": contract_type, "strategy_type": strategy_type,
                 "spread_width": float(width),
                 "dte_min": int(dte_min), "dte_max": int(dte_max),
-                "min_oi": int(min_oi), "min_vol": int(min_vol)},
+                "min_oi": int(min_oi), "min_vol": int(min_vol),
+                "strike_lo": float(strike_lo), "strike_hi": float(strike_hi)},
     )
 
 
@@ -2541,14 +2555,20 @@ def render_put_tab():
 # ---------------------------------------------------------------------------
 # Spread-Roller (Bull-Put-Spread rollen) — beide Beine, Breite fix
 # ---------------------------------------------------------------------------
-def _render_option_chain(chain_df, S, key_prefix):
+def _render_option_chain(chain_df, S, key_prefix, spread_type="bull_put"):
     """Broker-Optionskette (CALLS | STRIKE | PUTS) für EINEN Verfall.
 
-    Nur die PUT-Seite ist anklickbar: 1. Klick = Short (rot), 2. Klick tieferer
-    Strike = Long (blau). Erneuter Klick auf ein gewähltes Bein hebt es auf.
-    Zeigt Last (kein bid/ask in der DB). Returns (short_leg, long_leg) als dicts
-    mit Keys strike/last (oder None).
+    Die klickbare Seite (Put oder Call) und die Short/Long-Semantik richten sich nach
+    spread_type (SPREAD_TYPES). Rot = Short (verkauft), Blau = Long (gekauft). Bei
+    DEBIT-Spreads ist das LONG-Bein das primäre (zuerst geklickte); bei CREDIT das SHORT.
+    Erneuter Klick auf ein gewähltes Bein hebt es auf. Zeigt Last (kein bid/ask in der DB).
+    Returns (short_leg, long_leg) als dicts mit Keys strike/last (oder None).
     """
+    meta = SPREAD_TYPES.get(spread_type, SPREAD_TYPES["bull_put"])
+    side = meta["contract"]                    # 'put' oder 'call' — diese Seite ist klickbar
+    primary = meta["primary"]                  # 'short' (Credit) oder 'long' (Debit)
+    second_below = meta["second_dir"] == "below"
+
     short_key = f"{key_prefix}_short"
     long_key = f"{key_prefix}_long"
     sel_short = st.session_state.get(short_key)   # Strike (float) oder None
@@ -2556,7 +2576,33 @@ def _render_option_chain(chain_df, S, key_prefix):
 
     calls = chain_df[chain_df["contract_type"] == "call"].set_index("strike_price")
     puts = chain_df[chain_df["contract_type"] == "put"].set_index("strike_price")
+    side_idx = calls if side == "call" else puts
     strikes = sorted(chain_df["strike_price"].unique())
+
+    def _assign_click(k):
+        """Setzt/entfernt Short bzw. Long je nach Klick-Reihenfolge und Spread-Art."""
+        # Abwählen, wenn ein bereits gewähltes Bein erneut geklickt wird.
+        if sel_short == k:
+            st.session_state[short_key] = None
+            return
+        if sel_long == k:
+            st.session_state[long_key] = None
+            return
+        # Primäres Bein zuerst.
+        prim_key = short_key if primary == "short" else long_key
+        sec_key = long_key if primary == "short" else short_key
+        prim_sel = sel_short if primary == "short" else sel_long
+        if prim_sel is None:
+            st.session_state[prim_key] = k
+            return
+        # Zweites Bein muss auf der richtigen Seite des primären liegen.
+        ok = (k < prim_sel) if second_below else (k > prim_sel)
+        if ok:
+            st.session_state[sec_key] = k
+        else:
+            # Klick auf falsche Seite -> als neues primäres Bein interpretieren.
+            st.session_state[prim_key] = k
+            st.session_state[sec_key] = None
 
     h = st.columns([1.0, 1.0, 1.4, 1.0, 1.0, 1.1])
     for hc, txt in zip(h, ["CALL Last", "CALL OI/Vol", "STRIKE", "PUT Last", "PUT OI/Vol", ""]):
@@ -2574,6 +2620,7 @@ def _render_option_chain(chain_df, S, key_prefix):
         c = st.columns([1.0, 1.0, 1.4, 1.0, 1.0, 1.1])
         call = calls.loc[k] if k in calls.index else None
         put = puts.loc[k] if k in puts.index else None
+        row = side_idx.loc[k] if k in side_idx.index else None
 
         c[0].markdown(f"<span style='font-family:monospace;'>{call['premium_option_price']:.2f}</span>" if call is not None else "—", unsafe_allow_html=True)
         c[1].markdown(f"<span style='font-size:11px;color:#64748b;'>{int(call['open_interest'])}/{int(call['day_volume'])}</span>" if call is not None else "", unsafe_allow_html=True)
@@ -2586,46 +2633,53 @@ def _render_option_chain(chain_df, S, key_prefix):
             strike_html = f"<span style='font-family:monospace;font-weight:600;'>{k:.1f}</span>"
         c[2].markdown(strike_html, unsafe_allow_html=True)
 
-        if put is not None:
-            c[3].markdown(f"<span style='font-family:monospace;'>{put['premium_option_price']:.2f}</span>", unsafe_allow_html=True)
-            c[4].markdown(f"<span style='font-size:11px;color:#64748b;'>{int(put['open_interest'])}/{int(put['day_volume'])}</span>", unsafe_allow_html=True)
-            with c[5]:
-                if st.button(f"wählen", key=f"{key_prefix}_pick_{k}", width="stretch"):
-                    if sel_short is None:
-                        st.session_state[short_key] = k
-                    elif sel_short == k:
-                        st.session_state[short_key] = None
-                    elif sel_long == k:
-                        st.session_state[long_key] = None
-                    elif k < sel_short:
-                        st.session_state[long_key] = k
-                    else:
-                        st.session_state[short_key] = k
+        c[3].markdown(f"<span style='font-family:monospace;'>{put['premium_option_price']:.2f}</span>" if put is not None else "—", unsafe_allow_html=True)
+        c[4].markdown(f"<span style='font-size:11px;color:#64748b;'>{int(put['open_interest'])}/{int(put['day_volume'])}</span>" if put is not None else "", unsafe_allow_html=True)
+
+        # Klickbare Seite = die zum Spread-Typ passende (put ODER call).
+        with c[5]:
+            if row is not None:
+                if st.button("wählen", key=f"{key_prefix}_pick_{k}", width="stretch"):
+                    _assign_click(k)
                     st.rerun()
-        else:
-            c[3].markdown("—")
-            c[4].markdown("")
 
     short_leg = None
     long_leg = None
-    if sel_short is not None and sel_short in puts.index:
-        short_leg = {"strike": float(sel_short), "last": float(puts.loc[sel_short]["premium_option_price"])}
-    if sel_long is not None and sel_long in puts.index:
-        long_leg = {"strike": float(sel_long), "last": float(puts.loc[sel_long]["premium_option_price"])}
+    if sel_short is not None and sel_short in side_idx.index:
+        short_leg = {"strike": float(sel_short), "last": float(side_idx.loc[sel_short]["premium_option_price"])}
+    if sel_long is not None and sel_long in side_idx.index:
+        long_leg = {"strike": float(sel_long), "last": float(side_idx.loc[sel_long]["premium_option_price"])}
     return short_leg, long_leg
 
 
 def _build_spread_ai_prompt(symbol, short_strike, long_strike, width, credit_open,
-                            debit_now, n, pos, cand):
-    """Kontext für den Spread-Roll-AI-Chat (Position + Kandidaten)."""
+                            debit_now, n, pos, cand, spread_type="bull_put"):
+    """Kontext für den Spread-Roll-AI-Chat (Position + Kandidaten), typ-abhängig."""
+    meta = SPREAD_TYPES.get(spread_type, SPREAD_TYPES["bull_put"])
+    is_credit = meta["strategy"] == "credit"
+    seite = "Put" if meta["contract"] == "put" else "Call"
+    if is_credit:
+        beine = (f"  Short-{seite}: ${short_strike:.2f} (verkauft) · "
+                 f"Long-{seite}: ${long_strike:.2f} (gekauft) · Breite ${width:.2f}")
+        geld = (f"  Eröffnungs-Credit: ${credit_open/100:.2f}/Aktie "
+                f"(${credit_open:.0f} gesamt, {n} Spread(s))\n"
+                f"  Aktueller Schließungs-Debit: ${debit_now/100:.2f}/Aktie")
+        netlabel = "Netto-Credit"
+    else:
+        beine = (f"  Long-{seite}: ${long_strike:.2f} (gekauft) · "
+                 f"Short-{seite}: ${short_strike:.2f} (verkauft) · Breite ${width:.2f}")
+        geld = (f"  Bezahlter Debit beim Öffnen: ${credit_open/100:.2f}/Aktie "
+                f"(${credit_open:.0f} gesamt = Max-Risiko, {n} Spread(s))\n"
+                f"  Aktueller Wert/Schließungs-Credit: ${debit_now/100:.2f}/Aktie")
+        netlabel = "Netto-Preis"
     lines = [
-        "BESTEHENDER BULL-PUT-SPREAD:",
+        f"BESTEHENDER {meta['label'].upper()}:",
         f"  Symbol: {symbol}",
-        f"  Short-Put: ${short_strike:.2f} (verkauft) · Long-Put: ${long_strike:.2f} (gekauft) · Breite ${width:.2f}",
-        f"  Eröffnungs-Credit: ${credit_open/100:.2f}/Aktie (${credit_open:.0f} gesamt, {n} Spread(s))",
-        f"  Aktueller Schließungs-Debit: ${debit_now/100:.2f}/Aktie",
-        f"  G/V aktuell: ${pos['pnl_abs']:.0f} ({pos['pnl_pct']:.0f}%) · Alte Gewinnschwelle: ${pos['gs_old']:.2f}",
-        f"  Max-Loss (offen): ${pos['max_loss_open']:.0f}",
+        beine,
+        geld,
+        f"  G/V aktuell: ${pos['pnl_abs']:.0f} ({pos['pnl_pct']:.0f}%) · "
+        f"Alter Breakeven: ${pos['gs_old']:.2f}",
+        f"  Max-Risiko (offen): ${pos['max_loss_open']:.0f}",
         "",
         "VERFÜGBARE ROLL-KANDIDATEN (aktuelle Kette, Breite bleibt fix):",
     ]
@@ -2633,23 +2687,27 @@ def _build_spread_ai_prompt(symbol, short_strike, long_strike, width, credit_ope
         for _, rr in cand.sort_values(["short_strike", "dte"], ascending=[False, True]).head(12).iterrows():
             lines.append(
                 f"  Short {rr['short_strike']:.1f}/Long {rr['long_strike']:.1f} · DTE {int(rr['dte'])} · "
-                f"Verfall {rr['expiration_date']} · Netto-Credit {float(rr['net_credit']):.2f}/Aktie"
+                f"Verfall {rr['expiration_date']} · {netlabel} {abs(float(rr['net_credit'])):.2f}/Aktie"
             )
     else:
         lines.append("  (keine Kandidaten geladen)")
-    lines += [
-        "",
-        "Roll-Stufen (Breite fix): Stufe 1 Short tiefer/gleiche Kontrakte, Stufe 2 gleicher Short, "
-        "Stufe 3 Short tiefer/doppelte Kontrakte. Ziel: Gewinnschwelle senken, Netto-Credit positiv halten.",
-    ]
+    if is_credit:
+        ziel = ("Roll-Prinzipien (Breite fix): VERTIKAL (Strikes verschieben, gleicher Verfall), "
+                "HORIZONTAL (nur Zeit, gleiche Strikes), DIAGONAL (beides), VERDOPPELN (2× Kontrakte), "
+                "KONTRA (Richtung drehen = neue Position). Ziel: Breakeven verbessern, Netto-Credit positiv halten.")
+    else:
+        ziel = ("Roll-Prinzipien (Breite fix): VERTIKAL, HORIZONTAL, DIAGONAL, VERDOPPELN, KONTRA. "
+                "Bei DEBIT-Spreads ist ein guter Roll einer, der wenig zusätzlichen Debit kostet und das "
+                "Gesamt-Risiko (= gezahlter Debit) NICHT erhöht — Risiko ist begrenzt, Breakeven näher an den Kurs bringen.")
+    lines += ["", ziel]
     return "\n".join(lines)
 
 
 def _render_spread_ai_chat(symbol, short_strike, long_strike, width, credit_open,
-                           debit_now, n, pos, cand):
+                           debit_now, n, pos, cand, spread_type="bull_put"):
     st.divider()
     st.markdown("### 🤖 Spread-Roll-Assistent")
-    chat_key = f"spread_chat_{symbol}_{short_strike:.1f}_{width:.1f}"
+    chat_key = f"spread_chat_{spread_type}_{symbol}_{short_strike:.1f}_{width:.1f}"
     msgs_key = f"{chat_key}_messages"
     ctx_key = f"{chat_key}_context"
     prov_key = f"{chat_key}_provider_used"
@@ -2659,7 +2717,7 @@ def _render_spread_ai_chat(symbol, short_strike, long_strike, width, credit_open
         provider, web_search = _provider_picker(chat_key)
         if st.button("🤖 Spread-Empfehlung anfordern", type="primary", key=f"{chat_key}_go"):
             context = _build_spread_ai_prompt(symbol, short_strike, long_strike, width,
-                                              credit_open, debit_now, n, pos, cand)
+                                              credit_open, debit_now, n, pos, cand, spread_type)
             _lbl = "Kimi" if provider == "kimi" else "DeepSeek"
             with st.spinner(f"{_lbl} analysiert den Spread" + (" (Web-Recherche)" if web_search else "") + " …"):
                 try:
@@ -2722,28 +2780,129 @@ def _render_spread_ai_chat(symbol, short_strike, long_strike, width, credit_open
         st.rerun()
 
 
+def _render_roll_section(kind, titel, hinweis, sub, n_use, is_credit, spread_type,
+                         short_strike, long_strike, width, credit_open, debit_now):
+    """Rendert eine benannte Roll-Sektion (Karten + Details-Kontoauszug).
+
+    kind: 'vertikal'|'horizontal'|'diagonal'|'verdoppeln'. sub = gefiltertes cand-DF.
+    """
+    st.caption(hinweis)
+    if sub is None or sub.empty:
+        st.info("Keine Kandidaten in dieser Kategorie (DTE-Fenster / Strikes anpassen).")
+        return
+    sub = sub.sort_values(["short_strike", "dte"], ascending=[False, True]).head(6)
+    cols = st.columns(min(3, len(sub)))
+    for i, (_, row) in enumerate(sub.iterrows()):
+        r = spread_roll_candidate(
+            stufe=0, roll_kind=kind, spread_type=spread_type,
+            short_old=short_strike, short_new=float(row["short_strike"]),
+            long_old=long_strike, long_new=float(row["long_strike"]),
+            width=width, credit_open=credit_open, debit_close=debit_now,
+            credit_new=abs(float(row["net_credit"])) * 100.0, n=n_use,
+        )
+        with cols[i % len(cols)]:
+            st.markdown(
+                f"**{r['ampel']} Short {row['short_strike']:.1f} / "
+                f"Long {row['long_strike']:.1f}**  \n"
+                f"DTE {int(row['dte'])} · Verfall {row['expiration_date']}"
+            )
+            if is_credit:
+                st.metric("Netto-Credit", f"${r['netto_abs']:.0f}")
+            else:
+                st.metric("Zusätzl. Debit", f"${r['added_debit_abs']:.0f}",
+                          help="Was der Roll per Saldo zusätzlich kostet (neuen Debit zahlen − alten Credit).")
+            m1, m2 = st.columns(2)
+            m1.metric("Breakeven neu", f"${r['breakeven_new']:.2f}",
+                      delta=f"{r['breakeven_new'] - r['gs_old']:.2f}")
+            m2.metric("Risiko" if not is_credit else "Max-Loss", f"${r['risk']:.0f}")
+            _np = abs(float(row["net_credit"]))
+            st.caption(f"Neuer Spread-{'Credit' if is_credit else 'Debit'} {_np:.2f}/Aktie · "
+                       f"{n_use} Kontrakt(e)")
+            card_id = f"{kind}_{row['short_strike']:.1f}_{int(row['dte'])}"
+            if st.button("Details →", key=f"spread_cand_{card_id}", width="stretch"):
+                st.session_state[f"spread_sel_{kind}"] = card_id
+                st.rerun()
+
+    _sel = st.session_state.get(f"spread_sel_{kind}")
+    if _sel:
+        m = sub[sub.apply(lambda rr: f"{kind}_{rr['short_strike']:.1f}_{int(rr['dte'])}" == _sel, axis=1)]
+        if not m.empty:
+            rr = m.iloc[0]
+            rc = spread_roll_candidate(
+                stufe=0, roll_kind=kind, spread_type=spread_type,
+                short_old=short_strike, short_new=float(rr["short_strike"]),
+                long_old=long_strike, long_new=float(rr["long_strike"]),
+                width=width, credit_open=credit_open, debit_close=debit_now,
+                credit_new=abs(float(rr["net_credit"])) * 100.0, n=n_use,
+            )
+            _np = abs(float(rr["net_credit"]))
+            with st.container(border=True):
+                st.markdown(
+                    f"**{rc['ampel']} Roll-Kontoauszug — Short {rr['short_strike']:.1f} / "
+                    f"Long {rr['long_strike']:.1f}** (alt schließen + neu öffnen als ein Geldfluss)")
+                if is_credit:
+                    _cn = n_use * _np * 100.0
+                    _lines = [
+                        f"Alten Spread schließen (Debit): &nbsp; = **{-debit_now:+.2f} $ gesamt**",
+                        f"Neuen Spread öffnen ({n_use}×): &nbsp; `{_np:.2f} $/Aktie × 100 × {n_use}` &nbsp; = **{_cn:+.2f} $ gesamt**",
+                        "---",
+                        f"**Netto aus dem Roll:** &nbsp; = **{rc['netto_abs']:+.2f} $ gesamt**",
+                        f"**Neue Gewinnschwelle:** &nbsp; = **{rc['breakeven_new']:.2f} $/Aktie** (Δ {rc['breakeven_new']-rc['gs_old']:+.2f})",
+                        f"**Max-Loss neu:** &nbsp; = **{rc['risk']:.0f} $ gesamt**",
+                    ]
+                else:
+                    _cn = n_use * _np * 100.0
+                    _lines = [
+                        f"Alten Spread schließen (Credit erhalten): &nbsp; = **{debit_now:+.2f} $ gesamt**",
+                        f"Neuen Spread öffnen ({n_use}×, Debit zahlen): &nbsp; `{_np:.2f} $/Aktie × 100 × {n_use}` &nbsp; = **{-_cn:+.2f} $ gesamt**",
+                        "---",
+                        f"**Zusätzlicher Debit für den Roll:** &nbsp; = **{rc['added_debit_abs']:+.2f} $ gesamt** (positiv = du zahlst)",
+                        f"**Neuer Breakeven:** &nbsp; = **{rc['breakeven_new']:.2f} $/Aktie** (Δ {rc['breakeven_new']-rc['gs_old']:+.2f})",
+                        f"**Max-Risiko neu (= neuer Debit):** &nbsp; = **{rc['risk']:.0f} $ gesamt**",
+                    ]
+                for _l in _lines:
+                    st.markdown("---" if _l == "---" else _l, unsafe_allow_html=True)
+                st.caption("$ gesamt = ×100×Spreads · 🔶 Last-Preise (Näherung).")
+
+
 def render_spread_roller_tab():
-    st.subheader("🔄 Spread-Roller -- Bull-Put-Spread rollen")
+    st.subheader("🔄 Spread-Roller -- vertikale Spreads rollen")
+
+    # ── Spread-Typ ZUERST wählen (Default Bull-Put = Credit) ────────────────
+    _type_keys = list(SPREAD_TYPES.keys())   # bull_put, bear_call, bull_call, bear_put
+    prev_type = st.session_state.get("spread_type")
+    spread_type = st.radio(
+        "Spread-Typ (vorab wählen)", _type_keys, index=0, horizontal=True,
+        format_func=lambda k: SPREAD_TYPES[k]["label"], key="spread_type",
+        help="Bull-Put/Bear-Call = Credit (du erhältst Geld). "
+             "Bull-Call/Bear-Put = Debit (du zahlst Geld, Risiko = gezahlter Debit).")
+    meta = SPREAD_TYPES[spread_type]
+    is_credit = meta["strategy"] == "credit"
+    # Typwechsel -> Bein-Auswahl zurücksetzen (Kette kippt evtl. Put<->Call).
+    if prev_type is not None and prev_type != spread_type:
+        for _k in ("spread_chain_short", "spread_chain_long"):
+            st.session_state.pop(_k, None)
 
     with st.expander("ℹ️ Wie funktioniert das Spread-Rollen? (Konzept)", expanded=False):
         st.markdown("""
-**Bull-Put-Spread** = Short-Put (verkauft) + Long-Put (gekauft, tiefer). Der Long-Put
-begrenzt den Verlust. Beim Rollen werden **beide Beine gemeinsam** auf eine neue
-Laufzeit/tiefere Strikes gerollt — die **Breite bleibt konstant**.
+**Vertikaler Spread** = zwei Optionen gleicher Seite, ein Bein verkauft (Short), eins
+gekauft (Long). Die **Breite** (Strike-Differenz) ist dein Rahmen. Beim Rollen wandern
+**beide Beine gemeinsam** — die Breite bleibt konstant.
 
-**Die 3 Stufen (analog Buch Kap. 3):**
-| Stufe | Was passiert | Ziel |
-|-------|-------------|------|
-| **1** | Short-Strike tiefer, Breite fix, gleiche Kontrakte | GS senken |
-| **2** | Gleicher Short-Strike | GS senken wenn kein tieferer Short möglich |
-| **3** | Short tiefer, doppelte Kontrakte | GS maximal senken |
+| Typ | Beine | Geld | Max-Risiko | Max-Gewinn |
+|-----|-------|------|-----------|-----------|
+| **Bull-Put** (Credit) | Short-Put hoch / Long-Put tief | erhältst Credit | Breite − Credit | Credit |
+| **Bear-Call** (Credit) | Short-Call tief / Long-Call hoch | erhältst Credit | Breite − Credit | Credit |
+| **Bull-Call** (Debit) | Long-Call tief / Short-Call hoch | zahlst Debit | **gezahlter Debit** | Breite − Debit |
+| **Bear-Put** (Debit) | Long-Put hoch / Short-Put tief | zahlst Debit | **gezahlter Debit** | Breite − Debit |
 
-**Ampel** (auf den Netto-Credit des ganzen Spreads):
-- ✅ Netto-Credit positiv UND neue Gewinnschwelle niedriger als alte
-- ⚠️ Netto-Credit positiv, aber GS nicht besser
-- ❌ Netto-Credit ≤ 0 (Roll kostet drauf)
+**Rollen (benannte Reiter):** *Vertikal* = Strikes verschieben (gleicher Verfall),
+*Horizontal* = nur Zeit (gleiche Strikes, späterer Verfall), *Diagonal* = beides,
+*Verdoppeln* = doppelte Kontraktzahl, *Kontra* = Richtung drehen (neue Position).
 
-**Max-Loss** = (Breite − Gesamt-Credit/Aktie) × Kontrakte × 100 — als Risiko-Kennzahl.
+**Ampel Credit:** ✅ Netto-Credit > 0 & Breakeven besser · ⚠️ Credit > 0, Breakeven
+nicht besser · ❌ Credit ≤ 0. **Ampel Debit (risiko-basiert):** ✅ Roll kostet nichts
+oder Risiko sinkt · ⚠️ Risiko bis +10 % · ❌ Risiko deutlich höher.
 """)
 
     symbols = _load_symbols()
@@ -2761,7 +2920,7 @@ Laufzeit/tiefere Strikes gerollt — die **Breite bleibt konstant**.
         st.info("Symbol wählen — dann Verfall und die zwei Spread-Beine in der Kette anklicken.")
         return
 
-    # Verfall wählen (aus der Put-Kette des Symbols)
+    # Verfall wählen (aus der Kette des Symbols)
     puts_all = _load_symbol_puts(symbol, 1, 400)
     if puts_all is None or puts_all.empty:
         st.warning("Keine Optionskette für dieses Symbol.")
@@ -2775,43 +2934,77 @@ Laufzeit/tiefere Strikes gerollt — die **Breite bleibt konstant**.
         return
     S = float(chain["live_stock_price"].iloc[0])
 
-    st.markdown("**Deine bestehende Position — Short-Put (rot) + tieferen Long-Put (blau) anklicken:**")
-    short_leg, long_leg = _render_option_chain(chain, S, key_prefix="spread_chain")
+    _seite = "Put" if meta["contract"] == "put" else "Call"
+    if is_credit:
+        _klick = f"erst den verkauften **Short-{_seite}** (rot), dann das gekaufte **Long-{_seite}** (blau)"
+    else:
+        _klick = f"erst das gekaufte **Long-{_seite}** (blau, primär), dann das verkaufte **Short-{_seite}** (rot)"
+    st.markdown(f"**Bestehende Position ({meta['label']}) — {_klick} anklicken:**")
+    short_leg, long_leg = _render_option_chain(chain, S, key_prefix="spread_chain",
+                                               spread_type=spread_type)
 
     if not short_leg or not long_leg:
-        st.info("👆 Zwei Put-Strikes wählen: erst den verkauften (Short), dann den tieferen gekauften (Long).")
+        st.info(f"👆 Zwei {_seite}-Strikes wählen — {_klick}.")
         return
 
     short_strike = short_leg["strike"]
     long_strike = long_leg["strike"]
-    width = round(short_strike - long_strike, 2)
+    width = round(abs(short_strike - long_strike), 2)
 
-    credit_suggest = round((short_leg["last"] - long_leg["last"]) * 100.0, 0)
-    with st.expander("🛠️ Eröffnungs-Credit / aktueller Debit (aus Kette vorbefüllt, überschreibbar)", expanded=True):
+    net_suggest = round(abs(short_leg["last"] - long_leg["last"]) * 100.0, 0)
+    _open_lbl = "Eröffnungs-Credit ($/Kontrakt)" if is_credit else "Bezahlter Debit beim Öffnen ($/Kontrakt)"
+    _now_lbl = "Aktueller Schließungs-Debit ($/Kontrakt)" if is_credit else "Aktueller Wert / Schließungs-Credit ($/Kontrakt)"
+    with st.expander("🛠️ " + ("Credit / Debit" if is_credit else "Debit / Wert") + " (aus Kette vorbefüllt, überschreibbar)", expanded=True):
         oc1, oc2 = st.columns(2)
         credit_open = oc1.number_input(
-            "Eröffnungs-Credit ($/Kontrakt)", min_value=0.0, value=float(max(credit_suggest, 0.0)),
+            _open_lbl, min_value=0.0, value=float(max(net_suggest, 0.0)),
             step=5.0, key="spread_credit_open2",
-            help="Netto-Credit beim Öffnen. Vorbefüllt aus aktuellem Ketten-Last (Short − Long).")
+            help="Vorbefüllt aus aktuellem Ketten-Last (|Short − Long|).")
         debit_now = oc2.number_input(
-            "Aktueller Schließungs-Debit ($/Kontrakt)", min_value=0.0, value=float(max(credit_suggest, 0.0)),
+            _now_lbl, min_value=0.0, value=float(max(net_suggest, 0.0)),
             step=5.0, key="spread_debit_now2",
-            help="Was der Spread aktuell zum Schließen kostet (Vorschlag = aktueller Credit).")
+            help="Wert des Spreads heute (Vorschlag = aktueller Netto-Last).")
+
+    # ── Mental-Modell-Panel (150/140) ──────────────────────────────────────
+    _hi, _lo = max(short_strike, long_strike), min(short_strike, long_strike)
+    with st.container(border=True):
+        if is_credit:
+            _sk = short_strike
+            st.markdown(
+                f"💰 **{meta['label']}** · Du **verkaufst** den **{short_strike:.0f}er** "
+                f"({_seite}) und **kaufst** den **{long_strike:.0f}er** ({_seite}). "
+                f"Du **erhältst ${credit_open:.0f} Credit**.  \n"
+                f"→ **Max-Risiko = (Breite ${width:.0f} − Credit ${credit_open/100:.2f}) × 100 × {int(n_contracts)} = "
+                f"${max(0.0,(width - credit_open/100))*100*int(n_contracts):.0f}** · "
+                f"**Max-Gewinn = ${credit_open*int(n_contracts):.0f}** (der Credit).")
+        else:
+            st.markdown(
+                f"💸 **{meta['label']}** · Du **kaufst** den **{long_strike:.0f}er** "
+                f"({_seite}) und **verkaufst** den **{short_strike:.0f}er** ({_seite}). "
+                f"Du **zahlst ${credit_open:.0f} Debit**.  \n"
+                f"→ **Max-Risiko = die gezahlte Debit = ${credit_open*int(n_contracts):.0f}** "
+                f"(Differenz der Prämien × 100 × {int(n_contracts)}) · "
+                f"**Max-Gewinn = (Breite ${width:.0f} − Debit ${credit_open/100:.2f}) × 100 × {int(n_contracts)} = "
+                f"${max(0.0,(width - credit_open/100))*100*int(n_contracts):.0f}**.")
 
     st.caption(f"Gewählt: Short {short_strike:.1f} / Long {long_strike:.1f} · Breite ${width:.2f} · {int(n_contracts)} Spread(s)")
 
     # Bestehende Position: Kennzahlen + Kontoauszug
     pos = spread_position_status(short_strike=short_strike, width=width,
-                                 credit_open=credit_open, debit_now=debit_now, n=int(n_contracts))
+                                 credit_open=credit_open, debit_now=debit_now,
+                                 n=int(n_contracts), spread_type=spread_type,
+                                 long_strike=long_strike)
     pc1, pc2, pc3, pc4 = st.columns(4)
-    pc1.metric("Alte Gewinnschwelle", f"${pos['gs_old']:.2f}")
-    pc2.metric("Max-Loss (offen)", f"${pos['max_loss_open']:.0f}")
+    pc1.metric("Alter Breakeven", f"${pos['gs_old']:.2f}")
+    pc2.metric("Max-Risiko (offen)", f"${pos['max_loss_open']:.0f}")
     pc3.metric("Long-Strike", f"${long_strike:.2f}")
     pc4.metric("G/V aktuell", f"${pos['pnl_abs']:.0f}", delta=f"{pos['pnl_pct']:.0f}%")
 
     with st.expander("🧮 Wie rechnet sich das? (G/V des Spreads)", expanded=False):
         b = spread_pnl_breakdown(short_strike=short_strike, width=width,
-                                 credit_open=credit_open, debit_now=debit_now, n=int(n_contracts))
+                                 credit_open=credit_open, debit_now=debit_now,
+                                 n=int(n_contracts), spread_type=spread_type,
+                                 long_strike=long_strike)
         status = "📈 IM GEWINN" if b["im_gewinn"] else "📉 IM VERLUST"
         st.markdown(f"**{status} — {b['pnl_abs']:+.2f} $ gesamt ({b['pnl_pct']:+.1f} %)**")
         st.caption(b["grund"])
@@ -2824,8 +3017,8 @@ Laufzeit/tiefere Strikes gerollt — die **Breite bleibt konstant**.
                 st.markdown(f"{line['label']}: &nbsp; `{line['formel']}` &nbsp; = **{vorz} {line['einheit']}**", unsafe_allow_html=True)
         st.caption("$/Aktie = pro Aktie · $ gesamt = ×100×Spreads · 🔶 Last-Preise (Näherung).")
 
-    # Ludwig-Restzeitwert-Hinweis
-    if debit_now > 0 and credit_open > 0:
+    # Ludwig-Restzeitwert-Hinweis (nur bei Credit sinnvoll: Restwert des Verkaufs)
+    if is_credit and debit_now > 0 and credit_open > 0:
         tv_pct = time_value_percentage(P_heute=debit_now, P_eroeffnung=credit_open)
         if tv_pct <= 15:
             tv_txt = f"🟢 Restwert {tv_pct:.0f}% — Roll sinnvoll (Ludwig ≤15%)"
@@ -2848,90 +3041,76 @@ Laufzeit/tiefere Strikes gerollt — die **Breite bleibt konstant**.
         return
 
     with st.spinner("Lade Spread-Roll-Kandidaten…"):
-        cand = _load_spread_roll_candidates(symbol, short_strike, width,
-                                            dte_min, dte_max)
+        cand = _load_spread_roll_candidates(
+            symbol, short_strike, width, dte_min, dte_max,
+            contract_type=meta["contract"], strategy_type=meta["strategy"])
     if cand is None or cand.empty:
-        st.warning(f"Keine Spread-Kandidaten für {symbol} (Short ≤ {short_strike}, "
-                   f"Breite {width}, DTE {dte_min}-{dte_max}). Fehlt evtl. das Long-Bein "
-                   f"bei Short−{width}? Anderen Long-Strike wählen.")
+        st.warning(f"Keine {meta['label']}-Kandidaten für {symbol} "
+                   f"(Breite {width}, DTE {dte_min}-{dte_max}). Evtl. fehlt das Gegenbein "
+                   f"bei der Breite — anderen Long/Short-Strike wählen.")
         return
 
     if credit_open <= 0 or debit_now <= 0:
-        st.warning("Für die Ampel-Bewertung Eröffnungs-Credit UND aktuellen Debit eingeben.")
+        st.warning("Für die Ampel-Bewertung beide Werte (Öffnungs- und aktueller Wert) eingeben.")
         return
 
-    # Kandidaten in die 3 Stufen einsortieren.
+    # ── Benannte Roll-Reiter statt Stufe 1/2/3 ──────────────────────────────
     st.divider()
-    for stufe, titel, n_use, filt in [
-        (1, "Stufe 1 — Short tiefer, gleiche Kontrakte", n_contracts,
-         lambda df: df[df["short_strike"] < short_strike]),
-        (2, "Stufe 2 — gleicher Short-Strike", n_contracts,
-         lambda df: df[df["short_strike"] == short_strike]),
-        (3, "Stufe 3 — Short tiefer, doppelte Kontrakte", n_contracts * 2,
-         lambda df: df[df["short_strike"] < short_strike]),
-    ]:
-        sub = filt(cand).copy()
-        st.markdown(f"#### {titel}")
-        if sub.empty:
-            st.caption("Keine Kandidaten in dieser Stufe.")
-            continue
-        # Sortierung: Short am nächsten zum alten (höchster Short zuerst), dann kürzeste DTE.
-        sub = sub.sort_values(["short_strike", "dte"], ascending=[False, True]).head(6)
-        cols = st.columns(min(3, len(sub)))
-        for i, (_, row) in enumerate(sub.iterrows()):
-            r = spread_roll_candidate(
-                stufe=stufe, short_old=short_strike, short_new=float(row["short_strike"]),
-                width=width, credit_open=credit_open, debit_close=debit_now,
-                credit_new=float(row["net_credit"]) * 100.0, n=n_use,
-            )
-            with cols[i % len(cols)]:
-                st.markdown(
-                    f"**{r['ampel']} Short {row['short_strike']:.1f} / "
-                    f"Long {row['long_strike']:.1f}**  \n"
-                    f"DTE {int(row['dte'])} · Verfall {row['expiration_date']}"
-                )
-                st.metric("Netto-Credit", f"${r['netto_abs']:.0f}")
-                m1, m2 = st.columns(2)
-                m1.metric("GS neu", f"${r['gs_new']:.2f}",
-                          delta=f"{r['gs_new'] - r['gs_old']:.2f}")
-                m2.metric("Max-Loss", f"${r['max_loss']:.0f}")
-                st.caption(f"Neuer Spread-Credit {float(row['net_credit']):.2f}/Aktie · "
-                           f"{n_use} Kontrakt(e)")
-                card_id = f"{stufe}_{row['short_strike']:.1f}_{int(row['dte'])}"
-                if st.button("Details →", key=f"spread_cand_{card_id}", width="stretch"):
-                    st.session_state[f"spread_sel_{stufe}"] = card_id
-                    st.rerun()
+    _old_exp = str(chosen_exp)
+    cand = cand.copy()
+    cand["_exp"] = cand["expiration_date"].astype(str)
+    same_exp = cand[cand["_exp"] == _old_exp]
+    later_exp = cand[cand["_exp"] > _old_exp]
 
-        # Roll-Kontoauszug für die gewählte Karte dieser Stufe
-        _sel = st.session_state.get(f"spread_sel_{stufe}")
-        if _sel:
-            m = sub[sub.apply(lambda rr: f"{stufe}_{rr['short_strike']:.1f}_{int(rr['dte'])}" == _sel, axis=1)]
-            if not m.empty:
-                rr = m.iloc[0]
-                rc = spread_roll_candidate(
-                    stufe=stufe, short_old=short_strike, short_new=float(rr["short_strike"]),
-                    width=width, credit_open=credit_open, debit_close=debit_now,
-                    credit_new=float(rr["net_credit"]) * 100.0, n=n_use,
-                )
-                with st.container(border=True):
-                    st.markdown(
-                        f"**{rc['ampel']} Roll-Kontoauszug — Short {rr['short_strike']:.1f} / "
-                        f"Long {rr['long_strike']:.1f}** (alt schließen + neu öffnen als ein Geldfluss)")
-                    _cn = n_use * float(rr["net_credit"]) * 100.0
-                    _lines = [
-                        f"Alten Spread schließen (Debit): &nbsp; = **{-debit_now:+.2f} $ gesamt**",
-                        f"Neuen Spread öffnen ({n_use}×): &nbsp; `{float(rr['net_credit']):.2f} $/Aktie × 100 × {n_use}` &nbsp; = **{_cn:+.2f} $ gesamt**",
-                        "---",
-                        f"**Netto aus dem Roll:** &nbsp; = **{rc['netto_abs']:+.2f} $ gesamt**",
-                        f"**Neue Gewinnschwelle:** &nbsp; `Short {rr['short_strike']:.1f} − {rc['netto_abs']:.0f}/({n_use}×100)` &nbsp; = **{rc['gs_new']:.2f} $/Aktie** (Δ {rc['gs_new']-rc['gs_old']:+.2f})",
-                        f"**Max-Loss neu:** &nbsp; = **{rc['max_loss']:.0f} $ gesamt**",
-                    ]
-                    for _l in _lines:
-                        st.markdown("---" if _l == "---" else _l, unsafe_allow_html=True)
-                    st.caption("$ gesamt = ×100×Spreads · 🔶 Last-Preise (Näherung).")
+    t_vert, t_horiz, t_diag, t_kontra, t_double = st.tabs(
+        ["↕️ Vertikal", "↔️ Horizontal", "⤢ Diagonal", "🔄 Kontra", "✖️2 Verdoppeln"])
+
+    with t_vert:
+        sub = same_exp[same_exp["short_strike"] != short_strike]
+        _render_roll_section(
+            "vertikal", "Vertikal", "Strikes verschieben, **gleicher Verfall** — Breakeven verschieben.",
+            sub, int(n_contracts), is_credit, spread_type,
+            short_strike, long_strike, width, credit_open, debit_now)
+
+    with t_horiz:
+        sub = later_exp[later_exp["short_strike"] == short_strike]
+        _render_roll_section(
+            "horizontal", "Horizontal", "**Nur Zeit** kaufen: gleiche Strikes, **späterer Verfall**.",
+            sub, int(n_contracts), is_credit, spread_type,
+            short_strike, long_strike, width, credit_open, debit_now)
+
+    with t_diag:
+        sub = later_exp[later_exp["short_strike"] != short_strike]
+        _render_roll_section(
+            "diagonal", "Diagonal", "**Beides**: andere Strikes UND späterer Verfall.",
+            sub, int(n_contracts), is_credit, spread_type,
+            short_strike, long_strike, width, credit_open, debit_now)
+
+    with t_kontra:
+        _opp = meta["opposite"]
+        st.caption("**Kontra = Richtung drehen.** Aus dem aktuellen Spread wird der "
+                   "Gegen-Typ — das ist eine **neue Position**, keine Anpassung der alten.")
+        st.info(f"**{meta['label']} → {SPREAD_TYPES[_opp]['label']}.** "
+                f"Wechsle oben den Spread-Typ, um die Gegenrichtung mit eigener Kette "
+                f"durchzurechnen.")
+        if st.button(f"↪️ Auf {SPREAD_TYPES[_opp]['label']} umschalten",
+                     key="spread_kontra_switch"):
+            st.session_state["spread_type"] = _opp
+            for _k in ("spread_chain_short", "spread_chain_long"):
+                st.session_state.pop(_k, None)
+            st.rerun()
+
+    with t_double:
+        sub = same_exp[same_exp["short_strike"] != short_strike]
+        _render_roll_section(
+            "verdoppeln", "Verdoppeln",
+            f"**Doppelte Kontraktzahl** ({int(n_contracts)}→{int(n_contracts)*2}) — "
+            f"Breakeven maximal verschieben, aber auch doppeltes Risiko.",
+            sub, int(n_contracts) * 2, is_credit, spread_type,
+            short_strike, long_strike, width, credit_open, debit_now)
 
     _render_spread_ai_chat(symbol, short_strike, long_strike, width, credit_open,
-                           debit_now, int(n_contracts), pos, cand)
+                           debit_now, int(n_contracts), pos, cand, spread_type)
 
 
 # ---------------------------------------------------------------------------
