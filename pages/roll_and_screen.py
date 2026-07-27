@@ -2878,9 +2878,11 @@ def render_spread_roller_tab():
              "Bull-Call/Bear-Put = Debit (du zahlst Geld, Risiko = gezahlter Debit).")
     meta = SPREAD_TYPES[spread_type]
     is_credit = meta["strategy"] == "credit"
-    # Typwechsel -> Bein-Auswahl zurücksetzen (Kette kippt evtl. Put<->Call).
+    # Typwechsel -> Bein-Auswahl zurücksetzen (Seite kippt evtl. Put<->Call,
+    # sonst hält ein Dropdown/Klick einen Strike, den die neue Seite nicht hat).
     if prev_type is not None and prev_type != spread_type:
-        for _k in ("spread_chain_short", "spread_chain_long"):
+        for _k in ("spread_chain_short", "spread_chain_long",
+                   "spread_dd_short", "spread_dd_long"):
             st.session_state.pop(_k, None)
 
     with st.expander("ℹ️ Wie funktioniert das Spread-Rollen? (Konzept)", expanded=False):
@@ -2917,7 +2919,7 @@ oder Risiko sinkt · ⚠️ Risiko bis +10 % · ❌ Risiko deutlich höher.
                                   key="spread_n")
 
     if not symbol:
-        st.info("Symbol wählen — dann Verfall und die zwei Spread-Beine in der Kette anklicken.")
+        st.info("Symbol wählen — dann Verfall und die zwei Spread-Beine per Dropdown (oder Kette) wählen.")
         return
 
     # Verfall wählen (aus der Kette des Symbols)
@@ -2935,20 +2937,65 @@ oder Risiko sinkt · ⚠️ Risiko bis +10 % · ❌ Risiko deutlich höher.
     S = float(chain["live_stock_price"].iloc[0])
 
     _seite = "Put" if meta["contract"] == "put" else "Call"
-    if is_credit:
-        _klick = f"erst den verkauften **Short-{_seite}** (rot), dann das gekaufte **Long-{_seite}** (blau)"
-    else:
-        _klick = f"erst das gekaufte **Long-{_seite}** (blau, primär), dann das verkaufte **Short-{_seite}** (rot)"
-    st.markdown(f"**Bestehende Position ({meta['label']}) — {_klick} anklicken:**")
-    short_leg, long_leg = _render_option_chain(chain, S, key_prefix="spread_chain",
-                                               spread_type=spread_type)
-
-    if not short_leg or not long_leg:
-        st.info(f"👆 Zwei {_seite}-Strikes wählen — {_klick}.")
+    # Strikes der passenden Seite (Put oder Call) aus der Kette.
+    side_df = chain[chain["contract_type"] == meta["contract"]]
+    side_strikes = sorted(float(s) for s in side_df["strike_price"].unique())
+    if len(side_strikes) < 2:
+        st.warning(f"Zu wenige {_seite}-Strikes in dieser Kette für einen Spread.")
         return
+    _last_by_strike = {float(r["strike_price"]): float(r["premium_option_price"])
+                       for _, r in side_df.iterrows()}
 
-    short_strike = short_leg["strike"]
-    long_strike = long_leg["strike"]
+    # Verkaufte/gekaufte Rolle je Spread-Art (nur zur Beschriftung).
+    if is_credit:
+        _short_desc, _long_desc = f"Short-{_seite} (verkauft, primär)", f"Long-{_seite} (gekauft, Absicherung)"
+    else:
+        _short_desc, _long_desc = f"Short-{_seite} (verkauft, Gegenbein)", f"Long-{_seite} (gekauft, primär)"
+
+    st.markdown(f"**Bestehende Position ({meta['label']}) — Beine wählen:**")
+    ds1, ds2 = st.columns(2)
+    # Sinnvolle Defaults: Short nahe/über Kurs, Long eine Stufe entfernt.
+    _def_short = min(side_strikes, key=lambda k: abs(k - S))
+    _si = side_strikes.index(_def_short)
+    _def_long = side_strikes[max(0, _si - 1)] if is_credit else side_strikes[min(len(side_strikes) - 1, _si + 1)]
+    sel_short = ds1.selectbox(_short_desc, side_strikes,
+                              index=side_strikes.index(_def_short),
+                              format_func=lambda k: f"{k:.1f}  (Last {_last_by_strike.get(k, 0):.2f})",
+                              key="spread_dd_short")
+    sel_long = ds2.selectbox(_long_desc, side_strikes,
+                             index=side_strikes.index(_def_long),
+                             format_func=lambda k: f"{k:.1f}  (Last {_last_by_strike.get(k, 0):.2f})",
+                             key="spread_dd_long")
+
+    # Optionskette optional (anklickbar) — überschreibt die Dropdowns, wenn genutzt.
+    with st.expander("📊 Optionskette stattdessen anklicken (optional)", expanded=False):
+        if is_credit:
+            _klick = f"erst den verkauften **Short-{_seite}** (rot), dann das gekaufte **Long-{_seite}** (blau)"
+        else:
+            _klick = f"erst das gekaufte **Long-{_seite}** (blau, primär), dann das verkaufte **Short-{_seite}** (rot)"
+        st.caption(f"{_klick} anklicken. Was hier gewählt ist, hat Vorrang vor den Dropdowns.")
+        chain_short, chain_long = _render_option_chain(chain, S, key_prefix="spread_chain",
+                                                       spread_type=spread_type)
+
+    # Kette gewinnt, wenn beide Beine geklickt sind; sonst Dropdowns.
+    if chain_short and chain_long:
+        short_strike = chain_short["strike"]
+        long_strike = chain_long["strike"]
+        short_last = chain_short["last"]
+        long_last = chain_long["last"]
+        st.caption("Beine aus der angeklickten Kette übernommen.")
+    else:
+        short_strike = float(sel_short)
+        long_strike = float(sel_long)
+        short_last = _last_by_strike.get(short_strike, 0.0)
+        long_last = _last_by_strike.get(long_strike, 0.0)
+
+    if short_strike == long_strike:
+        st.warning("Short- und Long-Strike müssen verschieden sein.")
+        return
+    short_leg = {"strike": short_strike, "last": short_last}
+    long_leg = {"strike": long_strike, "last": long_last}
+
     width = round(abs(short_strike - long_strike), 2)
 
     net_suggest = round(abs(short_leg["last"] - long_leg["last"]) * 100.0, 0)
@@ -2994,6 +3041,23 @@ oder Risiko sinkt · ⚠️ Risiko bis +10 % · ❌ Risiko deutlich höher.
                                  credit_open=credit_open, debit_now=debit_now,
                                  n=int(n_contracts), spread_type=spread_type,
                                  long_strike=long_strike)
+
+    # ── Großes, präsentes Plus/Minus-Banner ─────────────────────────────────
+    _plus = pos["pnl_abs"] >= 0
+    _bg = "#166534" if _plus else "#991b1b"        # sattes Grün / Rot
+    _brd = "#22c55e" if _plus else "#ef4444"
+    _icon = "📈 IM PLUS" if _plus else "📉 IM MINUS"
+    st.markdown(
+        f"<div style='background:{_bg};border:2px solid {_brd};border-radius:10px;"
+        f"padding:14px 18px;margin:6px 0 12px 0;'>"
+        f"<span style='color:#fff;font-size:26px;font-weight:800;'>{_icon} "
+        f"{pos['pnl_abs']:+,.0f} $</span>"
+        f"<span style='color:#e5e7eb;font-size:16px;font-weight:600;'> &nbsp;({pos['pnl_pct']:+.1f} %)</span>"
+        f"<br><span style='color:#e5e7eb;font-size:13px;'>"
+        f"Breakeven ${pos['gs_old']:.2f} &nbsp;·&nbsp; Max-Risiko ${pos['max_loss_open']:,.0f} "
+        f"&nbsp;·&nbsp; {meta['label']} &nbsp;·&nbsp; {int(n_contracts)} Spread(s)</span>"
+        f"</div>", unsafe_allow_html=True)
+
     pc1, pc2, pc3, pc4 = st.columns(4)
     pc1.metric("Alter Breakeven", f"${pos['gs_old']:.2f}")
     pc2.metric("Max-Risiko (offen)", f"${pos['max_loss_open']:.0f}")
@@ -3096,7 +3160,8 @@ oder Risiko sinkt · ⚠️ Risiko bis +10 % · ❌ Risiko deutlich höher.
         if st.button(f"↪️ Auf {SPREAD_TYPES[_opp]['label']} umschalten",
                      key="spread_kontra_switch"):
             st.session_state["spread_type"] = _opp
-            for _k in ("spread_chain_short", "spread_chain_long"):
+            for _k in ("spread_chain_short", "spread_chain_long",
+                       "spread_dd_short", "spread_dd_long"):
                 st.session_state.pop(_k, None)
             st.rerun()
 
