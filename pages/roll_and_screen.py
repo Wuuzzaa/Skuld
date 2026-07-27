@@ -33,6 +33,7 @@ from src.roll_support_calc import position_status, roll_candidate, roll_candidat
 from src.roll_support_calc import time_value_percentage
 from src.spread_roll_calc import (
     spread_position_status, spread_roll_candidate, spread_pnl_breakdown,
+    SPREAD_TYPES, _is_credit,
 )
 from src.put_ai_ranker import rank_puts, LLMProviderError, LLMClient
 from src.put_screener import (
@@ -2554,14 +2555,20 @@ def render_put_tab():
 # ---------------------------------------------------------------------------
 # Spread-Roller (Bull-Put-Spread rollen) — beide Beine, Breite fix
 # ---------------------------------------------------------------------------
-def _render_option_chain(chain_df, S, key_prefix):
+def _render_option_chain(chain_df, S, key_prefix, spread_type="bull_put"):
     """Broker-Optionskette (CALLS | STRIKE | PUTS) für EINEN Verfall.
 
-    Nur die PUT-Seite ist anklickbar: 1. Klick = Short (rot), 2. Klick tieferer
-    Strike = Long (blau). Erneuter Klick auf ein gewähltes Bein hebt es auf.
-    Zeigt Last (kein bid/ask in der DB). Returns (short_leg, long_leg) als dicts
-    mit Keys strike/last (oder None).
+    Die klickbare Seite (Put oder Call) und die Short/Long-Semantik richten sich nach
+    spread_type (SPREAD_TYPES). Rot = Short (verkauft), Blau = Long (gekauft). Bei
+    DEBIT-Spreads ist das LONG-Bein das primäre (zuerst geklickte); bei CREDIT das SHORT.
+    Erneuter Klick auf ein gewähltes Bein hebt es auf. Zeigt Last (kein bid/ask in der DB).
+    Returns (short_leg, long_leg) als dicts mit Keys strike/last (oder None).
     """
+    meta = SPREAD_TYPES.get(spread_type, SPREAD_TYPES["bull_put"])
+    side = meta["contract"]                    # 'put' oder 'call' — diese Seite ist klickbar
+    primary = meta["primary"]                  # 'short' (Credit) oder 'long' (Debit)
+    second_below = meta["second_dir"] == "below"
+
     short_key = f"{key_prefix}_short"
     long_key = f"{key_prefix}_long"
     sel_short = st.session_state.get(short_key)   # Strike (float) oder None
@@ -2569,7 +2576,33 @@ def _render_option_chain(chain_df, S, key_prefix):
 
     calls = chain_df[chain_df["contract_type"] == "call"].set_index("strike_price")
     puts = chain_df[chain_df["contract_type"] == "put"].set_index("strike_price")
+    side_idx = calls if side == "call" else puts
     strikes = sorted(chain_df["strike_price"].unique())
+
+    def _assign_click(k):
+        """Setzt/entfernt Short bzw. Long je nach Klick-Reihenfolge und Spread-Art."""
+        # Abwählen, wenn ein bereits gewähltes Bein erneut geklickt wird.
+        if sel_short == k:
+            st.session_state[short_key] = None
+            return
+        if sel_long == k:
+            st.session_state[long_key] = None
+            return
+        # Primäres Bein zuerst.
+        prim_key = short_key if primary == "short" else long_key
+        sec_key = long_key if primary == "short" else short_key
+        prim_sel = sel_short if primary == "short" else sel_long
+        if prim_sel is None:
+            st.session_state[prim_key] = k
+            return
+        # Zweites Bein muss auf der richtigen Seite des primären liegen.
+        ok = (k < prim_sel) if second_below else (k > prim_sel)
+        if ok:
+            st.session_state[sec_key] = k
+        else:
+            # Klick auf falsche Seite -> als neues primäres Bein interpretieren.
+            st.session_state[prim_key] = k
+            st.session_state[sec_key] = None
 
     h = st.columns([1.0, 1.0, 1.4, 1.0, 1.0, 1.1])
     for hc, txt in zip(h, ["CALL Last", "CALL OI/Vol", "STRIKE", "PUT Last", "PUT OI/Vol", ""]):
@@ -2587,6 +2620,7 @@ def _render_option_chain(chain_df, S, key_prefix):
         c = st.columns([1.0, 1.0, 1.4, 1.0, 1.0, 1.1])
         call = calls.loc[k] if k in calls.index else None
         put = puts.loc[k] if k in puts.index else None
+        row = side_idx.loc[k] if k in side_idx.index else None
 
         c[0].markdown(f"<span style='font-family:monospace;'>{call['premium_option_price']:.2f}</span>" if call is not None else "—", unsafe_allow_html=True)
         c[1].markdown(f"<span style='font-size:11px;color:#64748b;'>{int(call['open_interest'])}/{int(call['day_volume'])}</span>" if call is not None else "", unsafe_allow_html=True)
@@ -2599,32 +2633,22 @@ def _render_option_chain(chain_df, S, key_prefix):
             strike_html = f"<span style='font-family:monospace;font-weight:600;'>{k:.1f}</span>"
         c[2].markdown(strike_html, unsafe_allow_html=True)
 
-        if put is not None:
-            c[3].markdown(f"<span style='font-family:monospace;'>{put['premium_option_price']:.2f}</span>", unsafe_allow_html=True)
-            c[4].markdown(f"<span style='font-size:11px;color:#64748b;'>{int(put['open_interest'])}/{int(put['day_volume'])}</span>", unsafe_allow_html=True)
-            with c[5]:
-                if st.button(f"wählen", key=f"{key_prefix}_pick_{k}", width="stretch"):
-                    if sel_short is None:
-                        st.session_state[short_key] = k
-                    elif sel_short == k:
-                        st.session_state[short_key] = None
-                    elif sel_long == k:
-                        st.session_state[long_key] = None
-                    elif k < sel_short:
-                        st.session_state[long_key] = k
-                    else:
-                        st.session_state[short_key] = k
+        c[3].markdown(f"<span style='font-family:monospace;'>{put['premium_option_price']:.2f}</span>" if put is not None else "—", unsafe_allow_html=True)
+        c[4].markdown(f"<span style='font-size:11px;color:#64748b;'>{int(put['open_interest'])}/{int(put['day_volume'])}</span>" if put is not None else "", unsafe_allow_html=True)
+
+        # Klickbare Seite = die zum Spread-Typ passende (put ODER call).
+        with c[5]:
+            if row is not None:
+                if st.button("wählen", key=f"{key_prefix}_pick_{k}", width="stretch"):
+                    _assign_click(k)
                     st.rerun()
-        else:
-            c[3].markdown("—")
-            c[4].markdown("")
 
     short_leg = None
     long_leg = None
-    if sel_short is not None and sel_short in puts.index:
-        short_leg = {"strike": float(sel_short), "last": float(puts.loc[sel_short]["premium_option_price"])}
-    if sel_long is not None and sel_long in puts.index:
-        long_leg = {"strike": float(sel_long), "last": float(puts.loc[sel_long]["premium_option_price"])}
+    if sel_short is not None and sel_short in side_idx.index:
+        short_leg = {"strike": float(sel_short), "last": float(side_idx.loc[sel_short]["premium_option_price"])}
+    if sel_long is not None and sel_long in side_idx.index:
+        long_leg = {"strike": float(sel_long), "last": float(side_idx.loc[sel_long]["premium_option_price"])}
     return short_leg, long_leg
 
 
