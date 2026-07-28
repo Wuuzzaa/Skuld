@@ -231,6 +231,21 @@ def _load_put_history(symbol, entry_date, dte_min, dte_max):
 
 
 @st.cache_data(ttl=300)
+def _load_spread_open_history(symbol, entry_date, expiration_date):
+    """Historische Kette (put+call) EINES Verfalls am Eröffnungstag des Spreads.
+
+    Für die Time-Travel-Funktion: day_close am entry_date liefert den historischen
+    Eröffnungs-Credit/-Debit der beiden Spread-Beine. Muster wie _load_put_history,
+    aber ohne contract_type-Filter (Debit-Spreads nutzen Calls).
+    """
+    return select_into_dataframe(
+        sql_file_path=PATH_DATABASE_QUERY_FOLDER / "spread_open_history.sql",
+        params={"symbol": symbol, "entry_date": str(entry_date),
+                "expiration_date": str(expiration_date)},
+    )
+
+
+@st.cache_data(ttl=300)
 def _load_roll_candidates(symbol, K, dte_min, dte_max,
                           min_oi=50, min_vol=10, delta_min=-1.0, delta_max=-0.05):
     return select_into_dataframe(
@@ -2930,6 +2945,26 @@ oder Risiko sinkt · ⚠️ Risiko bis +10 % · ❌ Risiko deutlich höher.
     exps = sorted(puts_all["expiration_date"].astype(str).unique())
     chosen_exp = st.selectbox("Verfall der bestehenden Position", exps, key="spread_exp")
 
+    # ── Time-Travel: Eröffnungstag des Spreads wählen ───────────────────────
+    # Wie beim Single-Put-Roller: der Eröffnungs-Credit/-Debit kommt aus dem
+    # day_close des historischen Tages, "heute" aus der aktuellen Kette → echtes G/V.
+    entry_date = st.date_input(
+        "Einstiegsdatum (Eröffnung des Spreads)",
+        value=st.session_state.get("spread_entry_date_val", date.today()),
+        max_value=date.today(),
+        key="spread_entry_date_val",
+        help="Wähle den Tag, an dem du den Spread eröffnet hast. Der historische "
+             "Tagesschluss beider Beine wird als Eröffnungs-Credit/-Debit vorbefüllt.",
+    )
+
+    # Historische Kette des Eröffnungstags (put+call) laden — für die Vorbefüllung.
+    _open_hist = _load_spread_open_history(symbol, entry_date, chosen_exp)
+    _open_last_by = {}   # (contract_type, strike) -> day_close am Eröffnungstag
+    if _open_hist is not None and not _open_hist.empty:
+        for _, _r in _open_hist.iterrows():
+            _open_last_by[(_r["contract_type"], round(float(_r["strike_price"]), 2))] = \
+                float(_r["premium_option_price"])
+
     chain = _load_option_chain(symbol, chosen_exp)
     if chain is None or chain.empty:
         st.warning("Keine Kette für diesen Verfall.")
@@ -2999,18 +3034,47 @@ oder Risiko sinkt · ⚠️ Risiko bis +10 % · ❌ Risiko deutlich höher.
     width = round(abs(short_strike - long_strike), 2)
 
     net_suggest = round(abs(short_leg["last"] - long_leg["last"]) * 100.0, 0)
+
+    # Eröffnungs-Credit/-Debit aus dem HISTORISCHEN Tag (day_close beider Beine).
+    # Fehlt der Tag oder ein Bein in der Historie -> None -> Warnung + manuell.
+    _cn = meta["contract"]
+    _sh_open = _open_last_by.get((_cn, round(short_strike, 2)))
+    _lg_open = _open_last_by.get((_cn, round(long_strike, 2)))
+    if _sh_open is not None and _lg_open is not None:
+        open_suggest = round(abs(_sh_open - _lg_open) * 100.0, 0)
+        _open_hist_ok = True
+    else:
+        open_suggest = 0.0
+        _open_hist_ok = False
+
+    # Vorbefüllung neu setzen, wenn sich Datum/Symbol/Verfall/Beine ändern.
+    # (Streamlit: key= gewinnt sonst über value= und friert alte Werte ein.)
+    _fill_key = f"{symbol}|{chosen_exp}|{entry_date}|{spread_type}|{short_strike}|{long_strike}"
+    if st.session_state.get("_spread_fill_key") != _fill_key:
+        st.session_state["_spread_fill_key"] = _fill_key
+        st.session_state["spread_credit_open2"] = float(max(open_suggest, 0.0))
+        st.session_state["spread_debit_now2"] = float(max(net_suggest, 0.0))
+
+    if not _open_hist_ok:
+        st.warning(
+            f"Keine historischen Daten für {symbol} am {entry_date} (Verfall {chosen_exp}) — "
+            f"trage den Eröffnungs-{'Credit' if is_credit else 'Debit'} unten manuell ein. "
+            "Grund: Tag zu weit zurück, Feiertag/Wochenende oder Bein damals nicht gehandelt."
+        )
+
     _open_lbl = "Eröffnungs-Credit ($/Kontrakt)" if is_credit else "Bezahlter Debit beim Öffnen ($/Kontrakt)"
     _now_lbl = "Aktueller Schließungs-Debit ($/Kontrakt)" if is_credit else "Aktueller Wert / Schließungs-Credit ($/Kontrakt)"
-    with st.expander("🛠️ " + ("Credit / Debit" if is_credit else "Debit / Wert") + " (aus Kette vorbefüllt, überschreibbar)", expanded=True):
+    with st.expander("🛠️ " + ("Credit / Debit" if is_credit else "Debit / Wert") + " (Eröffnung historisch, heute aus Kette — überschreibbar)", expanded=True):
         oc1, oc2 = st.columns(2)
         credit_open = oc1.number_input(
-            _open_lbl, min_value=0.0, value=float(max(net_suggest, 0.0)),
+            _open_lbl, min_value=0.0,
             step=5.0, key="spread_credit_open2",
-            help="Vorbefüllt aus aktuellem Ketten-Last (|Short − Long|).")
+            help=f"Vorbefüllt aus dem Tagesschluss beider Beine am {entry_date} "
+                 "(|Short − Long|). Bei fehlenden Daten 0 → manuell eintragen.")
         debit_now = oc2.number_input(
-            _now_lbl, min_value=0.0, value=float(max(net_suggest, 0.0)),
+            _now_lbl, min_value=0.0,
             step=5.0, key="spread_debit_now2",
-            help="Wert des Spreads heute (Vorschlag = aktueller Netto-Last).")
+            help="Wert des Spreads heute (Vorschlag = aktueller Netto-Last aus der Kette).")
 
     # ── Mental-Modell-Panel (150/140) ──────────────────────────────────────
     _hi, _lo = max(short_strike, long_strike), min(short_strike, long_strike)
