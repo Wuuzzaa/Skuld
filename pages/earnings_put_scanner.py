@@ -421,6 +421,28 @@ if st.session_state.get("eps_selected_symbol"):
 
 **Delta** — Je näher an 0, desto weiter OTM und sicherer. −0.10 bis −0.25 ist typisch für diese Strategie.
 """)
+
+                # ── Externe Links ────────────────────────────────────────────
+                import urllib.parse
+                company_name = symbol_row.get("company_name", symbol)
+                claude_prompt = (
+                    f"Erstelle eine kompakte Aktienanalyse für {symbol} ({company_name}):\n"
+                    f"Geschäftsmodell, aktuelle News, anstehende Earnings.\n\n"
+                    f"Beurteile folgende Options-Strategie:\n"
+                    f"Cash-secured Put verkaufen: Strike ${p_strike:.2f}, Prämie ${p_premium:.2f}, "
+                    f"DTE {p_dte}, Breakeven ${p_breakeven:.2f}.\n"
+                    f"Gewinnwahrscheinlichkeit, IV-Crush-Potenzial, Risiken?\n"
+                    f"Klare Empfehlung: Strategie umsetzen oder nicht?"
+                )
+                claude_url = f"https://claude.ai/new?q={urllib.parse.quote(claude_prompt)}"
+
+                st.markdown("**Links**")
+                link_cols = st.columns(5)
+                link_cols[0].link_button("📈 TradingView", f"https://www.tradingview.com/chart/?symbol={symbol}")
+                link_cols[1].link_button("📊 Finviz", f"https://finviz.com/quote.ashx?t={symbol}")
+                link_cols[2].link_button("💹 Yahoo Finance", f"https://finance.yahoo.com/quote/{symbol}")
+                link_cols[3].link_button("📰 Seeking Alpha", f"https://seekingalpha.com/symbol/{symbol}")
+                link_cols[4].link_button("🤖 Claude AI", claude_url)
             else:
                 st.caption("Zeile anklicken für detaillierte Analyse.")
 
