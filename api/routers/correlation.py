@@ -302,6 +302,40 @@ async def get_symbol_vs_all(
     if cached is not None:
         return cached
 
+    # Fast path: serve from the precomputed table (filled by the
+    # correlation_precompute job) if it has rows for this base/lookback/method.
+    pre = query_dataframe(
+        """
+        SELECT peer_symbol AS symbol, correlation, computed_at
+        FROM "CorrelationPrecomputed"
+        WHERE base_symbol = :base AND lookback_days = :lb AND method = :m
+        ORDER BY correlation DESC
+        """,
+        {"base": base, "lb": lookback_days, "m": method},
+    )
+    if pre is not None and not pre.empty:
+        items = [
+            {"symbol": r["symbol"], "correlation": round(float(r["correlation"]), 4)}
+            for _, r in pre.iterrows()
+        ]
+        if top_n and top_n > 0:
+            items = sorted(items, key=lambda x: abs(x["correlation"]), reverse=True)[:top_n]
+            items.sort(key=lambda x: x["correlation"], reverse=True)
+        vals = [it["correlation"] for it in items]
+        stats = {
+            "base": base,
+            "num_peers": len(items),
+            "source": "precomputed",
+            "computed_at": str(pre.iloc[0]["computed_at"])[:19],
+            "avg_correlation": round(float(np.mean(vals)), 4) if vals else 0,
+            "most_correlated": items[0] if items else None,
+            "most_inverse": items[-1] if items else None,
+        }
+        result = {"base": base, "correlations": items, "stats": stats}
+        cache.set("correlation_vs_all", {"key": cache_key}, result, ttl=600)
+        return result
+
+    # Fallback: compute live (also used before the precompute job first runs).
     # Pull the base symbol plus every symbol with recent data.
     sql = """
         SELECT symbol, snapshot_date, close

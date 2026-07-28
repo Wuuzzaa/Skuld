@@ -31,6 +31,7 @@ JOB_MODES = [
     "historical_dividend_classification",
     "historical_full",
     "historization",
+    "correlation_precompute",
     "only_run_migrations",
 ]
 
@@ -126,6 +127,7 @@ async def get_job_modes(current_user: dict = Depends(get_current_user)):
         "historical_dividend_classification": "Backfill full dividend classification history",
         "historical_full": "Full historical backfill (prices -> volatility -> technicals -> dividend classification, sequential)",
         "historization": "Archive/version current data",
+        "correlation_precompute": "Precompute pairwise correlations into CorrelationPrecomputed (for fast symbol-vs-all)",
         "only_run_migrations": "Run DB migrations only (no data collection)",
     }
     return [{"mode": m, "description": descriptions.get(m, "")} for m in JOB_MODES]
