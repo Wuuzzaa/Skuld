@@ -405,51 +405,154 @@ if st.session_state.get("eps_selected_symbol"):
                 c7.metric("Zuweisung ~",       f"{assign_prob:.0f}%" if assign_prob else "—")
                 c8.metric("Prämie % Strike",   f"{float(pr['premium_pct']):.2f}%")
 
-                # ── Payoff-Diagramm ──────────────────────────────────────────
+                # ── Grafiken ─────────────────────────────────────────────────
                 if price:
                     import plotly.graph_objects as go
+                    from plotly.subplots import make_subplots
                     import numpy as np
 
                     x_min = p_strike * 0.80
                     x_max = price * 1.10
                     xs = np.linspace(x_min, x_max, 300)
-                    ys = np.where(xs >= p_strike, p_premium, p_premium - (p_strike - xs))
 
-                    fig = go.Figure()
+                    # Payoff bei Verfall
+                    ys_pnl = np.where(xs >= p_strike, p_premium, p_premium - (p_strike - xs)) * 100
+
+                    # Wahrscheinlichkeitsverteilung (Normalverteilung um Kurs mit σ = expected_move / 1.00)
+                    exp_move_val = float(expected_move) if pd.notna(expected_move) else price * 0.05
+                    sigma = exp_move_val / 1.0  # 1σ = Expected Move
+                    ys_prob = (1 / (sigma * np.sqrt(2 * np.pi))) * np.exp(-0.5 * ((xs - price) / sigma) ** 2)
+                    ys_prob_pct = ys_prob / ys_prob.max() * 100  # normiert auf 0-100
+
+                    fig = make_subplots(
+                        rows=1, cols=2,
+                        subplot_titles=("Payoff bei Verfall", "Wahrscheinlichkeitsverteilung"),
+                        column_widths=[0.55, 0.45],
+                    )
+
+                    # ── Panel 1: Payoff ──
                     fig.add_trace(go.Scatter(
-                        x=xs, y=ys * 100, mode="lines",
+                        x=xs, y=ys_pnl, mode="lines",
                         line=dict(color="#10b981", width=2.5),
                         hovertemplate="Kurs: $%{x:.2f}<br>P&L: $%{y:.0f}<extra></extra>",
-                    ))
-                    fig.add_hline(y=0, line=dict(color="#6b7280", width=1, dash="dash"))
-                    fig.add_vline(x=price, line=dict(color="#60a5fa", width=1.5, dash="dot"),
-                                  annotation_text=f"Kurs ${price:.2f}", annotation_position="top right")
-                    fig.add_vline(x=p_breakeven, line=dict(color="#f59e0b", width=1.5, dash="dot"),
-                                  annotation_text=f"BE ${p_breakeven:.2f}", annotation_position="top left")
-                    fig.add_vline(x=p_strike, line=dict(color="#ef4444", width=1.5, dash="dot"),
-                                  annotation_text=f"Strike ${p_strike:.2f}", annotation_position="bottom right")
+                        name="P&L",
+                    ), row=1, col=1)
+
+                    # Safe Zone Bereich (Payoff)
                     if safety_threshold:
-                        fig.add_vrect(x0=x_min, x1=safety_threshold,
-                                      fillcolor="rgba(16,185,129,0.07)", layer="below", line_width=0,
-                                      annotation_text="Safe Zone", annotation_position="top left",
-                                      annotation=dict(font_size=11, font_color="#10b981"))
+                        safe_mask = xs <= safety_threshold
+                        fig.add_trace(go.Scatter(
+                            x=np.concatenate([[x_min], xs[safe_mask], [safety_threshold, x_min]]),
+                            y=np.concatenate([[0], ys_pnl[safe_mask], [0, 0]]),
+                            fill="toself", fillcolor="rgba(16,185,129,0.10)",
+                            line=dict(width=0), showlegend=False, hoverinfo="skip",
+                        ), row=1, col=1)
+
+                    for x_val, color, label, pos in [
+                        (price,       "#60a5fa", f"Kurs ${price:.0f}",        "top right"),
+                        (p_breakeven, "#f59e0b", f"BE ${p_breakeven:.0f}",    "top left"),
+                        (p_strike,    "#ef4444", f"Strike ${p_strike:.0f}",   "bottom right"),
+                    ]:
+                        fig.add_vline(x=x_val, line=dict(color=color, width=1.5, dash="dot"),
+                                      annotation_text=label, annotation_position=pos,
+                                      annotation_font_size=10, row=1, col=1)
+
+                    fig.add_hline(y=0, line=dict(color="#6b7280", width=1, dash="dash"), row=1, col=1)
                     fig.add_hline(y=p_profit90,
                                   line=dict(color="#a78bfa", width=1, dash="dot"),
-                                  annotation_text=f"90% Ziel ${p_profit90:.0f}",
-                                  annotation_position="right")
-                    fig.update_layout(
-                        height=300, margin=dict(l=10, r=10, t=35, b=10),
-                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                        font=dict(color="#9ca3af", size=11),
-                        xaxis=dict(title="Aktienkurs bei Verfall ($)",
-                                   gridcolor="rgba(255,255,255,0.05)", tickformat="$.0f"),
-                        yaxis=dict(title="P&L / Kontrakt ($)",
-                                   gridcolor="rgba(255,255,255,0.05)", tickformat="$,.0f", zeroline=False),
+                                  annotation_text=f"90% ${p_profit90:.0f}",
+                                  annotation_position="right", annotation_font_size=10,
+                                  row=1, col=1)
+
+                    # ── Panel 2: Wahrscheinlichkeitsverteilung ──
+                    # Gesamte Kurve grau
+                    fig.add_trace(go.Scatter(
+                        x=xs, y=ys_prob_pct, mode="lines",
+                        line=dict(color="#6b7280", width=1.5),
+                        hovertemplate="Kurs: $%{x:.2f}<extra></extra>",
                         showlegend=False,
-                        title=dict(text=f"Payoff bei Verfall — {symbol} ${p_strike:.1f} Put",
-                                   font=dict(size=13, color="#e5e7eb"), x=0.01),
+                    ), row=1, col=2)
+
+                    # Safe Zone grün einfärben (< safety_threshold)
+                    if safety_threshold:
+                        safe_x = xs[xs <= safety_threshold]
+                        safe_y = ys_prob_pct[xs <= safety_threshold]
+                        fig.add_trace(go.Scatter(
+                            x=np.concatenate([[safe_x[0]], safe_x, [safe_x[-1]]]),
+                            y=np.concatenate([[0], safe_y, [0]]),
+                            fill="toself", fillcolor="rgba(16,185,129,0.20)",
+                            line=dict(width=0), showlegend=False, hoverinfo="skip",
+                            name="Safe Zone",
+                        ), row=1, col=2)
+
+                    # Expected Move Bereich (±1σ) hellgrau
+                    fig.add_vrect(
+                        x0=price - exp_move_val, x1=price + exp_move_val,
+                        fillcolor="rgba(255,255,255,0.04)", layer="below", line_width=0,
+                        annotation_text=f"±${exp_move_val:.1f}", annotation_position="top right",
+                        annotation_font_size=10, annotation_font_color="#9ca3af",
+                        row=1, col=2,
+                    )
+
+                    fig.add_vline(x=price, line=dict(color="#60a5fa", width=1.5, dash="dot"),
+                                  annotation_text=f"${price:.0f}", annotation_position="top right",
+                                  annotation_font_size=10, row=1, col=2)
+                    if safety_threshold:
+                        fig.add_vline(x=safety_threshold, line=dict(color="#10b981", width=1.5, dash="dot"),
+                                      annotation_text=f"Safe ${safety_threshold:.0f}",
+                                      annotation_position="bottom left", annotation_font_size=10,
+                                      row=1, col=2)
+
+                    fig.update_layout(
+                        height=320, margin=dict(l=10, r=10, t=40, b=10),
+                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                        font=dict(color="#9ca3af", size=10),
+                        showlegend=False,
+                    )
+                    for ax in ["xaxis", "xaxis2"]:
+                        fig.update_layout(**{ax: dict(gridcolor="rgba(255,255,255,0.05)", tickformat="$.0f")})
+                    fig.update_layout(
+                        yaxis=dict(title="P&L ($)", gridcolor="rgba(255,255,255,0.05)",
+                                   tickformat="$,.0f", zeroline=False),
+                        yaxis2=dict(title="Wahrscheinlichkeit", gridcolor="rgba(255,255,255,0.05)",
+                                    showticklabels=False, zeroline=False),
                     )
                     st.plotly_chart(fig, use_container_width=True)
+
+                    # ── IV Rank Gauge ────────────────────────────────────────
+                    if iv_rank is not None:
+                        gauge_fig = go.Figure(go.Indicator(
+                            mode="gauge+number",
+                            value=iv_rank,
+                            number=dict(suffix="%", font=dict(size=20, color="#e5e7eb")),
+                            title=dict(text="IV Rank", font=dict(size=13, color="#9ca3af")),
+                            gauge=dict(
+                                axis=dict(range=[0, 100], tickwidth=1, tickcolor="#6b7280",
+                                          tickfont=dict(color="#9ca3af", size=10)),
+                                bar=dict(color="#10b981" if iv_rank >= 60 else "#f59e0b" if iv_rank >= 40 else "#6b7280",
+                                         thickness=0.3),
+                                bgcolor="rgba(0,0,0,0)",
+                                borderwidth=0,
+                                steps=[
+                                    dict(range=[0, 40],  color="rgba(107,114,128,0.15)"),
+                                    dict(range=[40, 60], color="rgba(245,158,11,0.15)"),
+                                    dict(range=[60, 100],color="rgba(16,185,129,0.15)"),
+                                ],
+                                threshold=dict(line=dict(color="#ef4444", width=2), value=50),
+                            ),
+                        ))
+                        gauge_fig.update_layout(
+                            height=200, margin=dict(l=20, r=20, t=30, b=10),
+                            paper_bgcolor="rgba(0,0,0,0)", font=dict(color="#9ca3af"),
+                        )
+                        gc1, gc2, gc3 = st.columns([1, 1, 2])
+                        with gc1:
+                            st.plotly_chart(gauge_fig, use_container_width=True)
+                        with gc2:
+                            st.markdown(
+                                f"**IV Rank {iv_rank:.0f}%**\n\n"
+                                f"{'🟢 Hoch — Optionen teuer, gut zum Verkaufen' if iv_rank >= 60 else '🟡 Mittel — Optionen fair bewertet' if iv_rank >= 40 else '⚪ Niedrig — IV-Crush-Effekt könnte gering sein'}"
+                            )
 
                 st.markdown("**Exit-Plan**")
                 st.markdown(
