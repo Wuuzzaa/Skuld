@@ -25,7 +25,7 @@ SELECT
     c.profit_margin,
     c.company_sector,
     c.company_industry,
-    COALESCE(safe_check.has_safe_put, 0)::boolean AS has_safe_put
+    COALESCE(safe_check.has_safe_put, false) AS has_safe_put
 FROM (
     -- One row per symbol: earnings metadata
     SELECT DISTINCT ON (o.symbol)
@@ -78,7 +78,7 @@ JOIN LATERAL (
 ) op ON true
 -- Check: does at least one safe put exist (strike below safe threshold)?
 LEFT JOIN LATERAL (
-    SELECT 1 AS has_safe_put
+    SELECT true AS has_safe_put
     FROM "OptionDataMerged" o4
     WHERE o4.symbol = c.symbol
       AND o4.contract_type = 'put'

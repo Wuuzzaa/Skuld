@@ -140,7 +140,7 @@ if st.session_state["eps_candidates_df"] is not None:
             help="Nur Symbole anzeigen, für die mindestens ein Put unterhalb des Expected Move existiert",
         )
         if safe_puts_only and "has_safe_put" in df.columns:
-            df = df[df["has_safe_put"] == True]
+            df = df[df["has_safe_put"].astype(bool) == True]
 
     st.subheader(f"Earnings-Kandidaten — {len(df)} gefunden")
     st.caption("Zeile anklicken um verfügbare Puts für das Symbol zu sehen.")
