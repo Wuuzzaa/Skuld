@@ -405,6 +405,52 @@ if st.session_state.get("eps_selected_symbol"):
                 c7.metric("Zuweisung ~",       f"{assign_prob:.0f}%" if assign_prob else "—")
                 c8.metric("Prämie % Strike",   f"{float(pr['premium_pct']):.2f}%")
 
+                # ── Payoff-Diagramm ──────────────────────────────────────────
+                if price:
+                    import plotly.graph_objects as go
+                    import numpy as np
+
+                    x_min = p_strike * 0.80
+                    x_max = price * 1.10
+                    xs = np.linspace(x_min, x_max, 300)
+                    ys = np.where(xs >= p_strike, p_premium, p_premium - (p_strike - xs))
+
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(
+                        x=xs, y=ys * 100, mode="lines",
+                        line=dict(color="#10b981", width=2.5),
+                        hovertemplate="Kurs: $%{x:.2f}<br>P&L: $%{y:.0f}<extra></extra>",
+                    ))
+                    fig.add_hline(y=0, line=dict(color="#6b7280", width=1, dash="dash"))
+                    fig.add_vline(x=price, line=dict(color="#60a5fa", width=1.5, dash="dot"),
+                                  annotation_text=f"Kurs ${price:.2f}", annotation_position="top right")
+                    fig.add_vline(x=p_breakeven, line=dict(color="#f59e0b", width=1.5, dash="dot"),
+                                  annotation_text=f"BE ${p_breakeven:.2f}", annotation_position="top left")
+                    fig.add_vline(x=p_strike, line=dict(color="#ef4444", width=1.5, dash="dot"),
+                                  annotation_text=f"Strike ${p_strike:.2f}", annotation_position="bottom right")
+                    if safety_threshold:
+                        fig.add_vrect(x0=x_min, x1=safety_threshold,
+                                      fillcolor="rgba(16,185,129,0.07)", layer="below", line_width=0,
+                                      annotation_text="Safe Zone", annotation_position="top left",
+                                      annotation=dict(font_size=11, font_color="#10b981"))
+                    fig.add_hline(y=p_profit90,
+                                  line=dict(color="#a78bfa", width=1, dash="dot"),
+                                  annotation_text=f"90% Ziel ${p_profit90:.0f}",
+                                  annotation_position="right")
+                    fig.update_layout(
+                        height=300, margin=dict(l=10, r=10, t=35, b=10),
+                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                        font=dict(color="#9ca3af", size=11),
+                        xaxis=dict(title="Aktienkurs bei Verfall ($)",
+                                   gridcolor="rgba(255,255,255,0.05)", tickformat="$.0f"),
+                        yaxis=dict(title="P&L / Kontrakt ($)",
+                                   gridcolor="rgba(255,255,255,0.05)", tickformat="$,.0f", zeroline=False),
+                        showlegend=False,
+                        title=dict(text=f"Payoff bei Verfall — {symbol} ${p_strike:.1f} Put",
+                                   font=dict(size=13, color="#e5e7eb"), x=0.01),
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+
                 st.markdown("**Exit-Plan**")
                 st.markdown(
                     f"1. **Morgens nach Earnings:** Buy-to-Close bei **${p_close90:.2f}** (90% Ziel)  \n"
