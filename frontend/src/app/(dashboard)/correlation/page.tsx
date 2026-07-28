@@ -300,7 +300,14 @@ export default function CorrelationPage() {
             <div className="space-y-3">
               {vsAll.stats && (
                 <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-                  <span>{vsAll.stats.num_peers} peers · {vsAll.stats.num_data_points} days ({vsAll.stats.date_from} → {vsAll.stats.date_to})</span>
+                  <span>
+                    {vsAll.stats.num_peers} peers
+                    {vsAll.stats.source === 'precomputed'
+                      ? ` · precomputed ${vsAll.stats.computed_at ?? ''}`
+                      : vsAll.stats.num_data_points
+                        ? ` · ${vsAll.stats.num_data_points} days (${vsAll.stats.date_from} → ${vsAll.stats.date_to})`
+                        : ''}
+                  </span>
                   {vsAll.stats.most_correlated && (
                     <span>Most correlated: <span className="text-emerald-400 font-medium">{vsAll.stats.most_correlated.symbol} ({vsAll.stats.most_correlated.correlation.toFixed(2)})</span></span>
                   )}

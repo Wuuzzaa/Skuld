@@ -19,6 +19,7 @@ from config import *
 from src.historization import create_history_tables_and_views, generate_table_functions_for_history_enabled_views, generate_time_travel_views_for_history_enabled_views, run_historization_pipeline
 from src.pipeline_monitor import PipelineMonitor
 from src.log_cleanup import cleanup_old_logs
+from src.correlation_precompute import precompute_correlations
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +127,9 @@ def main(args):
             ],
             "sp500_constituents": [
                 ("S&P500 Constituents", load_sp500_constituents_from_wikipedia, ()),
+            ],
+            "correlation_precompute": [
+                ("Correlation Precompute", precompute_correlations, ()),
             ],
         }
 
