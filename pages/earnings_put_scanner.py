@@ -131,17 +131,15 @@ if st.session_state["eps_candidates_df"] is not None:
             "✅ Nur mit Safe-Put",
             value=False,
             key="eps_safe_puts_only",
-            help="Nur Aktien anzeigen die mind. 1 Put haben: Strike < Safe-Schwelle + Min OI + Min Prämie % erfüllt",
+            help="Nur Symbole für die ein Put UNTER dem Expected Move in der DB existiert",
         )
 
     # Safe-Put-Filter: lade puts_check einmalig wenn Toggle aktiviert
     if safe_puts_only:
-        # Dieselben Filter wie die Put-Tabelle weiter unten verwenden
-        check_min_oi = st.session_state.get("eps_min_oi", 50)
+        check_min_oi  = st.session_state.get("eps_min_oi", 50)
         check_min_prem = st.session_state.get("eps_min_premium_pct", 1.0)
-
-        # Cache invalidieren wenn sich Filter geändert haben
         cache_key = f"{check_min_oi}_{check_min_prem}"
+
         if ("eps_safe_put_symbols" not in st.session_state or
                 st.session_state.get("eps_safe_put_filter_key") != cache_key):
             safe_symbols = set()
@@ -158,12 +156,9 @@ if st.session_state["eps_candidates_df"] is not None:
                                                  params={"symbol": sym, "min_oi": check_min_oi})
                     if not puts.empty:
                         puts["strike_price"] = pd.to_numeric(puts["strike_price"], errors="coerce")
-                        puts["premium_pct"] = pd.to_numeric(puts["premium_pct"], errors="coerce")
-                        safe_puts = puts[
-                            (puts["strike_price"] < float(thresh)) &
-                            (puts["premium_pct"] >= check_min_prem)
-                        ]
-                        if not safe_puts.empty:
+                        puts["premium_pct"]  = pd.to_numeric(puts["premium_pct"],  errors="coerce")
+                        if ((puts["strike_price"] < float(thresh)) &
+                                (puts["premium_pct"] >= check_min_prem)).any():
                             safe_symbols.add(sym)
                 except Exception:
                     pass
@@ -175,9 +170,10 @@ if st.session_state["eps_candidates_df"] is not None:
         safe_symbols = st.session_state.get("eps_safe_put_symbols", set())
         df = df[df["symbol"].isin(safe_symbols)]
     else:
-        # Toggle aus → Cache löschen
-        st.session_state.pop("eps_safe_put_symbols", None)
-        st.session_state.pop("eps_safe_put_filter_key", None)
+        # Toggle aus → Cache löschen damit beim nächsten Ein-Klicken frisch geladen wird
+        if "eps_safe_put_symbols" in st.session_state:
+            del st.session_state["eps_safe_put_symbols"]
+            st.session_state.pop("eps_safe_put_filter_key", None)
 
     st.subheader(f"Earnings-Kandidaten — {len(df)} gefunden")
     st.caption("Zeile anklicken um verfügbare Puts für das Symbol zu sehen.")
@@ -303,12 +299,15 @@ if st.session_state.get("eps_selected_symbol"):
     st.divider()
     st.subheader(f"Put-Kandidaten — {symbol}")
 
-    p_col1, p_col2 = st.columns(2)
+    p_col1, p_col2, p_col3 = st.columns(3)
     with p_col1:
         min_oi = st.number_input("Min Open Interest", min_value=0, value=50, step=25, key="eps_min_oi")
     with p_col2:
         min_premium_pct = st.number_input("Min Prämie % vom Strike", min_value=0.0, max_value=10.0,
                                           value=1.0, step=0.1, format="%.1f", key="eps_min_premium_pct")
+    with p_col3:
+        safe_only = st.checkbox("Nur Safe Zone", value=True, key="eps_safe_only",
+                                help="Nur Puts anzeigen deren Strike unterhalb des Expected Move liegt")
 
     if st.session_state["eps_puts_df"] is None:
         with st.spinner(f"Lade Puts für {symbol}..."):
@@ -338,6 +337,9 @@ if st.session_state.get("eps_selected_symbol"):
             df_puts["is_safe"] = df_puts["strike_price"] < safety_threshold
         else:
             df_puts["is_safe"] = False
+
+        if safe_only:
+            df_puts = df_puts[df_puts["is_safe"]]
 
         if df_puts.empty:
             st.info("Keine Puts mit den aktuellen Filtern. Min OI oder Min Prämie % senken.")
