@@ -63,6 +63,7 @@ Wichtig: Der self-hosted Runner auf dem Homeserver muss online sein, sonst bleib
 |---|---|
 | `DEPLOY_SSH_KEY` | SSH Private Key fuer Server-Zugang |
 | `TELEGRAM_BOT_TOKEN` | Telegram Bot Token |
+| `DEEP_SEEK` | API-Key DeepSeek |
 | `MASSIVE_API_KEY` | API-Key Massive-Daten |
 | `MASSIVE_API_KEY_FLAT_FILES` | API-Key Flat-File-Daten |
 | `POSTGRES_PASSWORD` | PostgreSQL Passwort |

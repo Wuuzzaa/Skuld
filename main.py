@@ -3,35 +3,39 @@ import logging
 import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from src.massiv_api import get_symbols
-from src.logger_config import setup_logging
-from src.database import run_migrations
+from src.logger_config import setup_logging, get_log_level_from_db
+from src.database import drop_all_views, get_postgres_engine, recreate_views, run_migrations
 from src.send_alert import send_telegram_message
 from src.massiv_api import load_option_chains
-from src.stock_volatility import calculate_and_store_stock_implied_volatility_history
+from src.sp500_symbols_wiki import load_sp500_constituents_from_wikipedia
+from src.stock_volatility import calculate_and_store_stock_historical_volatility_history, calculate_and_store_stock_implied_volatility_history
 from src.technical_indicators import calc_technical_indicators, calc_technical_indicators_history
 from src.yahoo_asset_profile import load_asset_profile
-from src.yahoo_dividens import calculate_dividend_classification
+from src.yahoo_dividens import calculate_dividend_classification, calculate_dividend_classification_history, calculate_dividend_classification_history_full
 from src.yahooquery_earning_dates import scrape_earning_dates
 from src.yahooquery_financials import generate_fundamental_data, load_historical_prices, load_stock_prices
 from src.yfinance_analyst_price_targets import scrape_yahoo_finance_analyst_price_targets
 from config import *
-from src.historization import run_historization_pipeline
+from src.historization import create_history_tables_and_views, generate_table_functions_for_history_enabled_views, generate_time_travel_views_for_history_enabled_views, run_historization_pipeline
 from src.pipeline_monitor import PipelineMonitor
+from src.log_cleanup import cleanup_old_logs
 
-# Determine log component from mode argument (before full argparse)
-import sys
-_log_component = "data_collector"
-for i, arg in enumerate(sys.argv):
-    if arg == "--mode" and i + 1 < len(sys.argv):
-        _mode = sys.argv[i + 1]
-        if _mode == "historization":
-            _log_component = "historization"
-        break
-
-setup_logging(component=_log_component, log_level=logging.DEBUG, console_output=True)
 logger = logging.getLogger(__name__)
-logger.info(f"Log component: {_log_component}")
 
+def db_setup():
+    """Set up the database with migrations and history tables/views."""
+    logger.info("###### Dropping all views to avoid dependency issues during migrations...")
+    drop_all_views(get_postgres_engine())
+    logger.info("###### Running database migrations...")
+    run_migrations()
+    logger.info("###### Creating history tables and views...")
+    create_history_tables_and_views()
+    logger.info("###### Recreating views...")
+    recreate_views()
+    create_history_tables_and_views()
+    logger.info("###### Generating table functions for history-enabled views...")
+    generate_table_functions_for_history_enabled_views()
+    generate_time_travel_views_for_history_enabled_views()
 
 def main(args):
     pipeline = None
@@ -42,7 +46,9 @@ def main(args):
         logger.info("Running database migrations only...")
         logger.info("#" * 80)
         try:
-            run_migrations()
+            logger.info("###### Setting up database...")
+            db_setup()
+            
             logger.info("#" * 80)
             logger.info("Database migrations done. Exit main")
             logger.info("#" * 80)
@@ -66,7 +72,7 @@ def main(args):
         
         run_successful = False
 
-        run_migrations()
+        db_setup()
 
         logger.info("#" * 80)
         logger.info(f"Starting Data Collection Pipeline")
@@ -92,6 +98,7 @@ def main(args):
                 ("Yahoo Finance Analyst Price Targets", scrape_yahoo_finance_analyst_price_targets, (symbols["stocks"],)),
                 ("Earning Dates", scrape_earning_dates, (symbols["stocks"],)),
                 ("Yahoo Asset Profiles", load_asset_profile, (symbols["all"],)),
+                ("S&P500 Constituents", load_sp500_constituents_from_wikipedia, ()),
             ],
             "market_start_mid_end": [
                 ("Fetch Current Stock Day Prices", load_stock_prices, (symbols["all"],)),
@@ -103,51 +110,35 @@ def main(args):
                 ("Massive Option Chains", load_option_chains, (symbols["options"],)),
             ],
             "historical_technical_indicators": [
-                ("Technical Indicators History", calc_technical_indicators_history, (symbols["all"],)),
+                # ("Technical Indicators History", calc_technical_indicators_history, (symbols["all"],)),
+            ],
+            "historical_prices": [
+                ("Historical Prices", load_historical_prices, (symbols["all"],)),
+            ],
+            "historical_iv": [
+                ("Historical IV", calculate_and_store_stock_implied_volatility_history, ()),
+            ],
+            "historical_volatility": [
+                ("Historical Volatility", calculate_and_store_stock_historical_volatility_history, ()),
+            ],
+            "historical_dividend_classification": [
+                ("Historical Volatility", calculate_dividend_classification_history, ()),
+            ],
+            "sp500_constituents": [
+                ("S&P500 Constituents", load_sp500_constituents_from_wikipedia, ()),
             ],
         }
 
         parallel_tasks = task_map.get(args.mode)
 
-        if args.mode == "historical_prices":
-            parallel_tasks = []
-            task_name, result, error, mem_diff, peak_mem, duration = pipeline.run_task(
-                "Historical Prices", load_historical_prices, symbols["all"]
-            )
-            pipeline.record_result(task_name, result, error, mem_diff, peak_mem)
-        elif args.mode == "historical_iv":
-            parallel_tasks = []
-            task_name, result, error, mem_diff, peak_mem, duration = pipeline.run_task(
-                "Historical IV", calculate_and_store_stock_implied_volatility_history
-            )
-            pipeline.record_result(task_name, result, error, mem_diff, peak_mem)
-        elif args.mode == "historical_full":
-            # Sequential: prices -> technical indicators -> IV
-            parallel_tasks = []
-            steps = [
-                ("Historical Prices", load_historical_prices, (symbols["all"],)),
-                ("Technical Indicators History", calc_technical_indicators_history, (symbols["all"],)),
-                ("Historical IV", calculate_and_store_stock_implied_volatility_history, ()),
-            ]
-            for step_name, step_func, step_args in steps:
-                send_telegram_message(
-                    f"SKULD Job: Historical Full",
-                    f"▶️ Starting: <b>{step_name}</b>"
-                )
-                task_name, result, error, mem_diff, peak_mem, duration = pipeline.run_task(
-                    step_name, step_func, *step_args
-                )
-                pipeline.record_result(task_name, result, error, mem_diff, peak_mem)
-                if error:
-                    send_telegram_message(
-                        f"SKULD Job: Historical Full",
-                        f"❌ <b>{step_name}</b> failed after {duration}s:\n<code>{error}</code>"
-                    )
-                    raise RuntimeError(f"{step_name} failed: {error}")
-                send_telegram_message(
-                    f"SKULD Job: Historical Full",
-                    f"✅ <b>{step_name}</b> completed in {duration}s"
-                )
+        
+        if args.mode == "historical_full":
+            load_historical_prices(symbols["all"])
+            calculate_and_store_stock_historical_volatility_history()
+            calc_technical_indicators_history(symbols)
+            calculate_dividend_classification_history_full()
+        elif args.mode == "historical_technical_indicators":
+            calc_technical_indicators_history(symbols["all"])
         elif args.mode == "historization":
             parallel_tasks = []
         elif args.mode not in task_map:
@@ -245,18 +236,52 @@ if __name__ == "__main__":
                             "option_data",
                             "historical_prices",
                             "historical_iv",
+                            "historical_volatility",
                             "historical_technical_indicators",
+                            "historical_dividend_classification",
                             "historical_full",
                             "historization",
                             "only_run_migrations",
+                            "sp500_constituents"
                         ],
                         help="Mode for data collection")
     parser.add_argument("--env", type=str, required=False, default=None,
                         help="Environment name (e.g. Staging, Prod)")
     args = parser.parse_args()
 
+    # Log component based on mode for separate log directories.
+    # Each mode gets its own folder so dedicated jobs (saturday_night,
+    # market_start_mid_end, ...) are distinguishable in the log browser
+    # instead of all landing in the shared data_collector bucket.
+    MODE_COMPONENTS = {
+        "historization": "historization",
+        "historical_prices": "historical",
+        "historical_iv": "historical",
+        "historical_volatility": "historical",
+        "historical_technical_indicators": "historical",
+        "historical_dividend_classification": "historical",
+        "historical_full": "historical",
+        "only_run_migrations": "migrations",
+        "saturday_night": "saturday_night",
+        "market_start_mid_end": "market_start_mid_end",
+        "stock_data_daily": "stock_data_daily",
+        "option_data": "option_data",
+        "sp500_constituents": "sp500_constituents",
+    }
+    log_component = MODE_COMPONENTS.get(args.mode, "data_collector")
+    
+    # Get log level from database if available, otherwise use INFO as default
+    try:
+        log_level = get_log_level_from_db()
+    except Exception:
+        log_level = logging.INFO
+    
+    setup_logging(component=log_component, log_level=log_level, console_output=True)
+    logger.info(f"Starting {log_component} (mode: {args.mode})")
+
     if args.env:
         os.environ['SKULD_ENV'] = args.env
 
     main(args)
+    cleanup_old_logs()
 

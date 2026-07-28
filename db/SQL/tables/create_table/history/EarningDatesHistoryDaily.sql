@@ -3,7 +3,7 @@
     CREATE TABLE IF NOT EXISTS "EarningDatesHistoryDaily" (
         snapshot_date DATE NOT NULL,
         "symbol" TEXT,
-        "earnings_date" TEXT,
+        "earnings_date" DATE,
         PRIMARY KEY(snapshot_date, "symbol")
     );
     

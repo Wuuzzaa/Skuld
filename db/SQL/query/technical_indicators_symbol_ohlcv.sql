@@ -1,12 +1,12 @@
 SELECT
     symbol,
-    snapshot_date,
+    date AS snapshot_date,
     open,
     high,
     low,
     close,
     volume
-FROM "StockPricesYahooHistoryDaily"
+FROM "StockPricesYahooHistory"
 WHERE symbol = ANY(:symbols)
-AND snapshot_date > CURRENT_DATE - INTERVAL '3 year'
-ORDER BY symbol ASC, snapshot_date ASC ;
+AND date > CURRENT_DATE - INTERVAL '3 year'
+ORDER BY symbol ASC, date ASC ;

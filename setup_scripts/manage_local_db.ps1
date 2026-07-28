@@ -23,6 +23,38 @@ $ErrorActionPreference = "Stop"
 
 # --- Functions ---
 
+# --- Safety Guards ---
+# See docs/superpowers/specs/2026-07-05-slim-db-download-design.md
+#
+# Assert-ReadonlySql: refuse any SQL payload about to be sent to the
+#                     production server that contains destructive keywords.
+#                     Case-sensitive on uppercase SQL keywords to avoid
+#                     false positives from shell flags like '-delete' or
+#                     table names containing 'update'.
+# Assert-LocalContainer: DROP/CREATE DATABASE calls must ONLY hit the
+#                     local docker container 'skuld-local-db', never a
+#                     remote host.
+
+function Assert-ReadonlySql {
+    param([string]$Sql)
+    if ($Sql -cmatch '\b(DROP|DELETE|TRUNCATE|INSERT|UPDATE|ALTER|GRANT|REVOKE)\s+(TABLE|DATABASE|SCHEMA|ROLE|USER|INDEX|VIEW|FROM|INTO|ON|ALL)\b') {
+        Write-Error "SAFETY ABORT: destructive SQL detected in remote command"
+    }
+    if ($Sql -cmatch '\bCREATE\s+(DATABASE|ROLE|USER|SCHEMA)\b') {
+        Write-Error "SAFETY ABORT: destructive DDL detected in remote command"
+    }
+    if ($Sql -imatch '\bpg_restore\b') {
+        Write-Error "SAFETY ABORT: pg_restore detected in remote command"
+    }
+}
+
+function Assert-LocalContainer {
+    param([string]$Container)
+    if ($Container -ne "skuld-local-db") {
+        Write-Error "SAFETY ABORT: destructive op targets non-local container '$Container'"
+    }
+}
+
 function Show-FileOpenDialog {
     Add-Type -AssemblyName System.Windows.Forms
     Add-Type -AssemblyName System.Drawing
@@ -110,6 +142,11 @@ function Get-RemoteDumpFile {
     $keyInput = Read-Host "Path to private SSH key (Leave empty if using auto-agent or default: $SshKey)"
     if (-not [string]::IsNullOrWhiteSpace($keyInput)) { $SshKey = $keyInput }
 
+    $defaultDownloadPath = Resolve-DownloadDirectory
+    $localDownloadPath = Read-Host "Local download folder (Default: $defaultDownloadPath)"
+    if ([string]::IsNullOrWhiteSpace($localDownloadPath)) { $localDownloadPath = $defaultDownloadPath }
+    $localDownloadPath = [Environment]::ExpandEnvironmentVariables($localDownloadPath)
+
     # Build commands
     $sshCmd = "ssh"
     $scpCmd = "scp"
@@ -125,18 +162,18 @@ function Get-RemoteDumpFile {
 
     # --- Connectivity Check ---
     Write-Host "Verifying SSH connection to $rUser@$rHost..." -ForegroundColor Cyan
-    $testCmd = "$sshCmd -o BatchMode=yes -o StrictHostKeyChecking=no ${rUser}@${rHost} echo 'SSH_CONNECTION_OK'"
+    $testCmd = "$sshCmd -n -o BatchMode=yes -o StrictHostKeyChecking=no ${rUser}@${rHost} echo 'SSH_CONNECTION_OK'"
     $testResult = Invoke-Expression $testCmd 2>&1
-    
+
     if ("$testResult" -ne "SSH_CONNECTION_OK") {
         Write-Error "SSH Connection FAILED!`nDetails: $testResult`nHint: Check your VPN, IP, User, or SSH Key permissions."
     }
     Write-Host "SSH Connection established." -ForegroundColor Green
 
     Write-Host "Checking $rHost for newest backup in $rPath..." -ForegroundColor Yellow
-    
+
     # Removed 2>/dev/null so we see if directory exists
-    $findCmd = "$sshCmd -o StrictHostKeyChecking=no ${rUser}@${rHost} ""ls -1t $rPath/*.sql* | head -n 1"""
+    $findCmd = "$sshCmd -n -o StrictHostKeyChecking=no ${rUser}@${rHost} ""ls -1t $rPath/*.sql* | head -n 1"""
     
     try {
         $latestFile = Invoke-Expression $findCmd
@@ -154,7 +191,7 @@ function Get-RemoteDumpFile {
     
     Write-Host "Found newest backup: $fileName" -ForegroundColor Green
     
-    $localDownloadPath = Join-Path $env:USERPROFILE "Downloads"
+    if (-not (Test-Path $localDownloadPath)) { New-Item -ItemType Directory -Path $localDownloadPath | Out-Null }
     $localFile = Join-Path $localDownloadPath $fileName
 
     if (Test-Path $localFile) {
@@ -177,6 +214,191 @@ function Get-RemoteDumpFile {
     } else {
         Write-Error "Download failed."
     }
+}
+
+function Get-RemoteSlimDump {
+    param (
+        $RemoteHost,
+        $RemoteUser,
+        $SshKey,
+        $DefaultDays
+    )
+
+    Write-Host "`n--- Slim Remote Dump Configuration ---" -ForegroundColor Cyan
+
+    $rHost = Read-Host "Remote Host IP (Default: $RemoteHost)"
+    if ([string]::IsNullOrWhiteSpace($rHost)) { $rHost = $RemoteHost }
+
+    $rUser = Read-Host "Remote User (Default: $RemoteUser)"
+    if ([string]::IsNullOrWhiteSpace($rUser)) { $rUser = $RemoteUser }
+
+    $keyInput = Read-Host "Path to private SSH key (Leave empty if using auto-agent or default: $SshKey)"
+    if (-not [string]::IsNullOrWhiteSpace($keyInput)) { $SshKey = $keyInput }
+
+    $daysInput = Read-Host "Days to include (Default: $DefaultDays)"
+    if ([string]::IsNullOrWhiteSpace($daysInput)) { $daysInput = $DefaultDays }
+    if (-not ($daysInput -match '^\d+$') -or [int]$daysInput -lt 1) {
+        Write-Error "Invalid day count: $daysInput"
+    }
+    $rDays = [int]$daysInput
+
+    $sshCmd = "ssh"
+    $scpCmd = "scp"
+    if (-not [string]::IsNullOrWhiteSpace($SshKey)) {
+        if (-not (Test-Path $SshKey)) { Write-Error "SSH Key not found: $SshKey" }
+        $sshCmd = "ssh -i ""$SshKey"""
+        $scpCmd = "scp -i ""$SshKey"""
+    }
+
+    Write-Host "Verifying SSH connection to $rUser@$rHost..." -ForegroundColor Cyan
+    $testCmd = "$sshCmd -n -o BatchMode=yes -o StrictHostKeyChecking=no ${rUser}@${rHost} echo 'SSH_CONNECTION_OK'"
+    $testResult = Invoke-Expression $testCmd 2>&1
+    if ("$testResult" -ne "SSH_CONNECTION_OK") {
+        Write-Error "SSH Connection FAILED! Details: $testResult"
+    }
+    Write-Host "SSH Connection established." -ForegroundColor Green
+
+    $ts = Get-Date -Format "yyyyMMdd_HHmmss"
+    $remoteFilename = "skuld_slim_${ts}_${rDays}d.sql.gz"
+    $remoteTmp = "/tmp/$remoteFilename"
+
+    # Remote script (see spec section "Fix: correct escaping for
+    # mixed-case identifiers"). Uses a bash array so that arguments like
+    # --exclude-table-data="TableName" survive as-is when passed to
+    # docker exec (no shell re-parse). Uses '@' single-quoted here-string
+    # so PowerShell does not expand anything - only __REMOTE_TMP__ /
+    # __DAYS__ get substituted after.
+    $remoteScript = @'
+    set -eu
+
+REMOTE_TMP='__REMOTE_TMP__'
+DAYS='__DAYS__'
+CONTAINER='postgres_setup-db-1'
+DB='Skuld'
+DB_USER='admin'
+
+find /tmp -maxdepth 1 -name 'skuld_slim_*.sql.gz' -mmin +60 -delete 2>/dev/null || true
+
+trap 'rm -f "$REMOTE_TMP"' EXIT
+
+echo "[remote] Discovering *HistoryDaily tables..." >&2
+HISTORY_TABLES=$(docker exec -e PGOPTIONS='-c default_transaction_read_only=on' "$CONTAINER" \
+    psql -U "$DB_USER" -d "$DB" -tAc \
+    "SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename LIKE '%HistoryDaily' ORDER BY tablename;")
+
+if [ -z "$HISTORY_TABLES" ]; then
+    echo "[remote] No *HistoryDaily tables found - aborting" >&2
+    exit 1
+fi
+COUNT=$(echo "$HISTORY_TABLES" | wc -l)
+echo "[remote] Found $COUNT HistoryDaily tables" >&2
+
+EXCLUDE_ARGS=()
+while IFS= read -r tbl; do
+    [ -z "$tbl" ] && continue
+    EXCLUDE_ARGS+=("--exclude-table-data=\"$tbl\"")
+done <<< "$HISTORY_TABLES"
+
+echo "[remote] Streaming dump to $REMOTE_TMP ..." >&2
+{
+    docker exec -e PGOPTIONS='-c default_transaction_read_only=on' "$CONTAINER" \
+        pg_dump -U "$DB_USER" "${EXCLUDE_ARGS[@]}" "$DB"
+
+    while IFS= read -r tbl; do
+        [ -z "$tbl" ] && continue
+        echo ""
+        echo "-- Slim data (last $DAYS days) for $tbl"
+        echo "SET search_path TO public;"
+        echo "COPY public.\"$tbl\" FROM stdin;"
+        docker exec -e PGOPTIONS='-c default_transaction_read_only=on' "$CONTAINER" \
+            psql -U "$DB_USER" -d "$DB" -tAc \
+            "\\COPY (SELECT * FROM \"$tbl\" WHERE snapshot_date >= CURRENT_DATE - INTERVAL '$DAYS days') TO STDOUT"
+        echo "\\."
+    done <<< "$HISTORY_TABLES"
+} | gzip > "$REMOTE_TMP"
+
+SIZE=$(stat --printf='%s' "$REMOTE_TMP" 2>/dev/null || echo 0)
+SIZE_MB=$(( SIZE / 1024 / 1024 ))
+echo "[remote] Slim dump ready: ${SIZE_MB} MB" >&2
+
+trap - EXIT
+echo "$REMOTE_TMP"
+'@
+
+    $remoteScript = $remoteScript.Replace('__REMOTE_TMP__', $remoteTmp)
+    $remoteScript = $remoteScript.Replace('__DAYS__', $rDays.ToString())
+
+    # The .ps1 file is saved with CRLF line endings, so the here-string above
+    # carries a literal `\r` at the end of every line. Bash treats `\r` as
+    # part of the preceding token (not a line separator), so e.g. "set -eu\r"
+    # is parsed as one bad option string. Normalize to LF before sending.
+    $remoteScript = $remoteScript -replace "`r`n", "`n"
+
+    # Safety guard before executing anything remotely.
+    Assert-ReadonlySql -Sql $remoteScript
+
+    Write-Host "Building slim dump on $rHost (this may take a few minutes)..." -ForegroundColor Cyan
+
+    $remotePath = ""
+    # Windows PowerShell 5.1 mangles multi-line strings piped into a native
+    # exe's stdin (newlines/encoding get corrupted in transit, breaking the
+    # remote bash script). Base64-encode the script and decode it on the
+    # remote side instead - this sidesteps stdin piping/encoding entirely.
+    $encodedScript = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($remoteScript))
+    $remoteExec = "echo $encodedScript | base64 -d | bash"
+    # -n redirects ssh's local stdin from NUL. Without it, ssh forwards local
+    # stdin to the remote command and then waits for local stdin EOF before
+    # tearing down the connection - this hangs indefinitely in non-interactive
+    # contexts (e.g. Task Scheduler, some terminal hosts) even after the
+    # remote script has already finished and printed its output.
+    $execCmd = "$sshCmd -n -o StrictHostKeyChecking=no ${rUser}@${rHost} ""$remoteExec"""
+    # $ErrorActionPreference = "Stop" (set at top of script) causes PowerShell
+    # to throw a terminating error the moment ssh writes ANYTHING to stderr -
+    # including the informational >&2 progress messages in the remote script.
+    # Temporarily relax it so those messages are captured, not thrown.
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = "SilentlyContinue"
+    $output = Invoke-Expression $execCmd 2>&1
+    $ErrorActionPreference = $prevEAP
+
+    # Separate stdout (plain strings) from stderr (ErrorRecord objects).
+    # The remote script writes all progress to stderr; only the final tmp-path
+    # goes to stdout - that is what we need to capture as $remotePath.
+    $stdoutLines = $output | Where-Object { $_ -is [string] } | Where-Object { $_.Trim() -ne "" }
+    $stderrLines = $output | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] }
+    foreach ($e in $stderrLines) { Write-Host "  $($e.ToString().Trim())" -ForegroundColor DarkGray }
+    if ($stdoutLines.Count -gt 0) { $remotePath = ($stdoutLines | Select-Object -Last 1).Trim() }
+
+    if ([string]::IsNullOrWhiteSpace($remotePath) -or -not $remotePath.StartsWith("/tmp/skuld_slim_")) {
+        Write-Error "Remote slim dump failed. Output tail: $output"
+    }
+
+    $localDownloadPath = Resolve-DownloadDirectory
+    if (-not (Test-Path $localDownloadPath)) { New-Item -ItemType Directory -Path $localDownloadPath | Out-Null }
+    $localFile = Join-Path $localDownloadPath (Split-Path $remotePath -Leaf)
+
+    Write-Host "Downloading $remotePath -> $localFile ..." -ForegroundColor Cyan
+    $downloadCmd = "$scpCmd -o StrictHostKeyChecking=no ${rUser}@${rHost}:""$remotePath"" ""$localFile"""
+    Invoke-Expression $downloadCmd
+
+    # Best-effort cleanup on the server regardless of SCP outcome.
+    $cleanupCmd = "$sshCmd -n -o StrictHostKeyChecking=no ${rUser}@${rHost} ""rm -f '$remotePath'"""
+    Invoke-Expression $cleanupCmd 2>&1 | Out-Null
+
+    if (Test-Path $localFile) {
+        Write-Host "Slim download complete." -ForegroundColor Green
+        return $localFile
+    } else {
+        Write-Error "Download failed."
+    }
+}
+
+function Resolve-DownloadDirectory {
+    if ($script:DOWNLOAD_DIR_VAL -and -not [string]::IsNullOrWhiteSpace($script:DOWNLOAD_DIR_VAL)) {
+        return [Environment]::ExpandEnvironmentVariables($script:DOWNLOAD_DIR_VAL)
+    }
+
+    return (Join-Path $env:USERPROFILE "Downloads")
 }
 
 # --- Configuration paths ---
@@ -216,6 +438,10 @@ REMOTE_DB_HOST=91.98.156.116
 REMOTE_DB_USER=deploy
 REMOTE_DB_PATH=/home/deploy/backups/postgres
 SSH_KEY_PATH=
+# Local download target for DB dumps
+DOWNLOAD_DIR=
+# Slim Download Config
+SLIM_DAYS=60
 "@
     Set-Content -Path $EnvFile -Value $DefaultEnv
     Write-Host ".env file created at $EnvFile" -ForegroundColor Green
@@ -246,6 +472,8 @@ $REMOTE_HOST_VAL = if ($EnvVars.ContainsKey("REMOTE_DB_HOST")) { $EnvVars["REMOT
 $REMOTE_USER_VAL = if ($EnvVars.ContainsKey("REMOTE_DB_USER")) { $EnvVars["REMOTE_DB_USER"] } else { "deploy" }
 $REMOTE_PATH_VAL = if ($EnvVars.ContainsKey("REMOTE_DB_PATH")) { $EnvVars["REMOTE_DB_PATH"] } else { "/home/deploy/backups/postgres" }
 $SSH_KEY_VAL     = if ($EnvVars.ContainsKey("SSH_KEY_PATH"))     { $EnvVars["SSH_KEY_PATH"] }     else { "" }
+$script:DOWNLOAD_DIR_VAL = if ($EnvVars.ContainsKey("DOWNLOAD_DIR")) { $EnvVars["DOWNLOAD_DIR"] } else { (Join-Path $env:USERPROFILE "Downloads") }
+$SLIM_DAYS_VAL   = if ($EnvVars.ContainsKey("SLIM_DAYS"))        { $EnvVars["SLIM_DAYS"] }        else { "60" }
 
 # --- 2. Check Docker ---
 if (-not (Test-DockerRunning)) {
@@ -258,14 +486,17 @@ $method = ""
 if ([string]::IsNullOrWhiteSpace($DumpFile)) {
     Write-Host "No dump file provided via arguments." -ForegroundColor Gray
     Write-Host "1) Select local file"
-    Write-Host "2) Download latest from Remote Server ($REMOTE_HOST_VAL)"
-    Write-Host "3) Start with EMPTY database (Cancel/Skip)"
-    
-    $method = Read-Host "Choose option [1/2/3]"
-    
+    Write-Host "2) Download latest FULL dump from Remote Server ($REMOTE_HOST_VAL)"
+    Write-Host "3) Download SLIM dump (last N days) from Remote Server"
+    Write-Host "4) Start with EMPTY database (Cancel/Skip)"
+
+    $method = Read-Host "Choose option [1/2/3/4]"
+
     if ($method -eq "2") {
         $DumpFile = Get-RemoteDumpFile -RemoteHost $REMOTE_HOST_VAL -RemoteUser $REMOTE_USER_VAL -RemotePath $REMOTE_PATH_VAL -SshKey $SSH_KEY_VAL
     } elseif ($method -eq "3") {
+        $DumpFile = Get-RemoteSlimDump -RemoteHost $REMOTE_HOST_VAL -RemoteUser $REMOTE_USER_VAL -SshKey $SSH_KEY_VAL -DefaultDays $SLIM_DAYS_VAL
+    } elseif ($method -eq "4") {
         Write-Host "Proceeding with empty DB."
         $DumpFile = ""
     } else {
@@ -273,7 +504,7 @@ if ([string]::IsNullOrWhiteSpace($DumpFile)) {
     }
 }
 
-if ([string]::IsNullOrWhiteSpace($DumpFile) -and $method -ne "3") {
+if ([string]::IsNullOrWhiteSpace($DumpFile) -and $method -ne "4") {
      Write-Host "No file selected. Proceeding with EMPTY database." -ForegroundColor Yellow
 }
 
@@ -353,7 +584,10 @@ if (-not [string]::IsNullOrWhiteSpace($DumpFile)) {
         }
 
         Write-Host "Preparing target database '$DB_NAME_VAL'..." -ForegroundColor Cyan
-        
+
+        # Safety: destructive DROP/CREATE below must never leave the local container.
+        Assert-LocalContainer -Container $ContainerName
+
         $killCmd = "export PGPASSWORD=$DB_PASS_VAL; psql -U $DB_USER_VAL -d postgres -c ""SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$DB_NAME_VAL' AND pid <> pg_backend_pid();"""
         docker exec $ContainerName bash -c "$killCmd" | Out-Null
         

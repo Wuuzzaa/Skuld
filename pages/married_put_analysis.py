@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 
 import streamlit as st
 import pandas as pd
@@ -6,18 +7,48 @@ import sys
 import os
 
 from config import PATH_DATABASE_QUERY_FOLDER
+from pages.backtesting.married_put_backtesting import display_married_put_backtesting
+from src.historization import select_timetravel_into_dataframe
+from src.logger_config import setup_logging
 from src.page_display_dataframe import page_display_dataframe
 from src.documentation_renderer import render_married_put_analysis_documentation
+from src.streamlit_helpers import render_date_filter
 
 # Add src directory to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from src.database import select_into_dataframe
+st.set_page_config(
+    page_title="Married Put Analysis",
+    layout="wide"  # Das schaltet den Fullscreen/Wide-Modus frei
+)
 
+setup_logging(component="streamlit", sub_component="marriedput", log_level=logging.DEBUG, console_output=True)
 logger = logging.getLogger(__name__)
+
+# Cached data loading function
+@st.cache_data(ttl=300)
+def get_married_put_data(selected_date, strike_multiplier):
+    """Fetch married put data from database with caching."""
+    sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'married_put.sql'
+    return select_timetravel_into_dataframe(
+        date=selected_date,
+        sql_file_path=sql_file_path,
+        params={"strike_multiplier": strike_multiplier}
+    )
+
+# ── Inline Documentation on row click ──────────────────────────
+@st.fragment
+def show_documentation(selected_row):
+        st.divider()
+        doc_md = render_married_put_analysis_documentation(row=selected_row)
+        st.markdown(doc_md)
 
 # Titel
 st.subheader("Married Put Analysis")
+
+selected_date = render_date_filter(
+    date_query='select date from (select date from "DatesHistory" union select current_date) as sub ORDER BY date DESC',
+)
 
 # Filter Controls
 col1, col2, col3, col4, col5 = st.columns(5)
@@ -80,15 +111,16 @@ if not show_all:
 
 # Auto-load data on page load or when filters change
 # Using session state to track if data needs to be reloaded
-filter_key = f"{max_results}_{min_roi}_{max_roi}_{strike_multiplier}_{days_range}_{selected_statuses}_{show_all}"
+filter_key = f"{selected_date}_{max_results}_{min_roi}_{max_roi}_{strike_multiplier}_{days_range}_{selected_statuses}_{show_all}"
 if 'last_filter_key' not in st.session_state or st.session_state['last_filter_key'] != filter_key:
     st.session_state['last_filter_key'] = filter_key
     
     with st.spinner("Loading married put analysis..."):
         try:
-            # Execute SQL query
-            sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'married_put.sql'
-            df = select_into_dataframe(sql_file_path=sql_file_path, params={"strike_multiplier": strike_multiplier})
+            # Execute SQL query with caching
+            logger.info(f"Loading married put data for date={selected_date}, strike_multiplier={strike_multiplier}")
+            df = get_married_put_data(selected_date=selected_date, strike_multiplier=strike_multiplier)
+            logger.info(f"Data loaded. Rows: {len(df) if df is not None else 0}")
             
             if df is not None and not df.empty:
                 # Apply ROI filters
@@ -237,18 +269,19 @@ if 'married_put_df' in st.session_state and not st.session_state['married_put_df
             ),
         }
     )
-
-    # ── Inline Documentation on row click ──────────────────────────
+                
     selected_rows = event.selection.rows if hasattr(event, "selection") else []
     if selected_rows and not display_df.empty:
         selected_idx = selected_rows[0]
         selected_row = display_df.iloc[selected_idx]
 
-        st.divider()
-        doc_md = render_married_put_analysis_documentation(row=selected_row)
-        st.markdown(doc_md)
+        display_married_put_backtesting(selected_date, selected_row)
+        show_documentation(selected_row)
     else:
         st.caption("💡 Klicke auf eine Zeile in der Tabelle, um die vollständige Berechnung für diese Option zu sehen.")
+    
+    
+    
 
 else:
     st.info("No data available")

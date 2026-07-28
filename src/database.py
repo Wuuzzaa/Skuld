@@ -88,11 +88,7 @@ def truncate_table(connection, table_name: str):
     - table_name (str): The name of the table to truncate.
     """
 
-    if hasattr(connection, 'cursor'):
-        with connection.cursor() as cur:
-            cur.execute(f'DELETE FROM "{table_name}"')
-    else:
-        execute_sql(connection, f'DELETE FROM "{table_name}"', table_name, "TRUNCATE")
+    execute_sql(connection, f'DELETE FROM "{table_name}"', table_name, "TRUNCATE")
 
 def log_data_change(connection, operation_type, table_name, affected_rows=None, additional_data=None):
     """
@@ -104,13 +100,31 @@ def log_data_change(connection, operation_type, table_name, affected_rows=None, 
             INSERT INTO "DataChangeLogs" (timestamp, operation_type, table_name, affected_rows, additional_data)
             VALUES (:timestamp, :operation_type, :table_name, :affected_rows, :additional_data)
         """)
-        connection.execute(query, {
-            "timestamp": timestamp,
-            "operation_type": operation_type,
-            "table_name": table_name,
-            "affected_rows": affected_rows,
-            "additional_data": additional_data
-        })
+        if hasattr(connection, 'cursor'):
+            # Konvertiert :param zu %(param)s für den nativen PostgreSQL-Cursor
+            import re
+            # Extrahiert den rohen String aus dem TextClause-Objekt
+            raw_sql_string = query.text if hasattr(query, 'text') else str(query)
+            
+            # Konvertiert :param zu %(param)s
+            query_native = re.sub(r':([a-zA-Z0-9_]+)', r'%(\1)s', raw_sql_string)
+            
+            with connection.cursor() as cur:
+                cur.execute(query_native, {
+                    "timestamp": timestamp,
+                    "operation_type": operation_type,
+                    "table_name": table_name,
+                    "affected_rows": affected_rows,
+                    "additional_data": additional_data
+                })
+        else:
+            connection.execute(query, {
+                "timestamp": timestamp,
+                "operation_type": operation_type,
+                "table_name": table_name,
+                "affected_rows": affected_rows,
+                "additional_data": additional_data
+            })
     except Exception as e:
         logger.error(f"Error logging data change: \n{e}")
         raise e
@@ -185,11 +199,13 @@ def insert_into_table_bulk(
                 null='',
                 columns=columns
             )
+        rows_saved = len(dataframe)
+
+        log_data_change(raw_connection, "INSERT", table_name, affected_rows=rows_saved)
+        logger.info(f"[PostgreSQL] Successfully saved {rows_saved} rows to {table_name} in {round(time.time() - start, 2)}s.")
     except Exception as e:
         logger.error(f"[PostgreSQL] Error executing SQL on {table_name}: \n{e}")
         raise e
-    rows_saved = len(dataframe)
-    logger.info(f"[PostgreSQL] Successfully saved {rows_saved} rows to {table_name} in {round(time.time() - start, 2)}s.")
     
 def execute_sql(connection, sql: str, table_name: str, operation_type: str = "INSERT", additional_data=None):
     """
@@ -202,23 +218,27 @@ def execute_sql(connection, sql: str, table_name: str, operation_type: str = "IN
     - operation_type (str): The type of operation (INSERT, UPDATE, DELETE).
     """
     logger.debug(f"SQL Statement for {additional_data}:\n{text(sql)}")
+
+    # Execute on PostgreSQL (Side-by-side test)
+    try:
+        start_pg = time.time()
         
-    if 'postgresql' in str(connection.engine.url):
-        # Execute on PostgreSQL (Side-by-side test)
-        try:
-            start_pg = time.time()
+        if hasattr(connection, 'cursor'):
+            with connection.cursor() as cur:
+                cur.execute(f'{sql}')
+                pg_affected = cur.rowcount
+        else:
             pg_result = connection.execute(text(sql))
             pg_affected = pg_result.rowcount
-            
-            logger.info(f"[PostgreSQL] Successfully executed {operation_type} SQL on {table_name} in {round(time.time() - start_pg, 2)}s. Rows affected: {pg_affected}")
-            log_data_change(connection, operation_type, table_name, affected_rows=pg_affected, additional_data=additional_data)
-            return pg_affected
-        except Exception as e:
-            logger.error(f"[PostgreSQL] Error executing SQL on {table_name}: \n{e}")
-            raise e
+        
+        logger.info(f"[PostgreSQL] Successfully executed {operation_type} SQL on {table_name} in {round(time.time() - start_pg, 2)}s. Rows affected: {pg_affected}")
+        log_data_change(connection, operation_type, table_name, affected_rows=pg_affected, additional_data=additional_data)
+        return pg_affected
+    except Exception as e:
+        logger.error(f"[PostgreSQL] Error executing SQL on {table_name}: \n{e}")
+        raise e
 
-@log_function
-def select_into_dataframe(query: str = None, sql_file_path: str = None, params: dict = None):
+def select_into_dataframe(query: str = None, sql_file_path: str = None, params: dict = None, session_variables: dict = {'jit': 'off', 'enable_nestloop': 'off'}) -> pd.DataFrame:
     """
     Executes a SQL query and returns the result as a DataFrame.
     You can provide either a SQL query string or a path to a .sql file.
@@ -227,24 +247,7 @@ def select_into_dataframe(query: str = None, sql_file_path: str = None, params: 
     - query (str, optional): SQL query string to execute.
     - sql_file_path (str, optional): Path to a .sql file containing the query.
     - params (dict, optional): Dictionary of parameters to bind to the query (e.g., {'expiration_date': '2026-08-21'})
-
-    Returns:
-    - pd.DataFrame: Result of the query.
-    """
-    df = select_into_dataframe_pg(query=query, sql_file_path=sql_file_path, params=params)
-
-    return df
-
-
-def select_into_dataframe_pg(query: str = None, sql_file_path: str = None, params: dict = None):
-    """
-    Executes a SQL query and returns the result as a DataFrame.
-    You can provide either a SQL query string or a path to a .sql file.
-
-    Parameters:
-    - query (str, optional): SQL query string to execute.
-    - sql_file_path (str, optional): Path to a .sql file containing the query.
-    - params (dict, optional): Dictionary of parameters to bind to the query (e.g., {'expiration_date': '2026-08-21'})
+    - session_variables (dict, optional): Dictionary of session variables to set before executing the query.
 
     Returns:
     - pd.DataFrame: Result of the query.
@@ -262,21 +265,41 @@ def select_into_dataframe_pg(query: str = None, sql_file_path: str = None, param
             logger.error(msg)
             raise ValueError(msg)
 
+        if params:
+            sql_without_parameter = sql
+            for var, value in params.items():
+                sql_without_parameter = sql_without_parameter.replace(f":{var}", f"'{value}'")
+            log_str_parameters = f"\n-- select with parameters replaced by literals\n{sql_without_parameter}\n\n-- original select\n"
+        else:
+            log_str_parameters = ""
+
+        if session_variables:
+            session_variables_str = ""
+            for var, value in session_variables.items():
+                session_variables_str = session_variables_str + f"SELECT set_config('{var}', '{value}', true);\n"
+            log_str_session_vaiables = f"\n-- session variables set for execution\n{session_variables_str}\n"
+        else:
+            log_str_session_vaiables = ""
+
+        logger.debug(f"Executing query with params: {params} and session variables: {session_variables}")
+        logger.debug(f"\n{log_str_session_vaiables}{log_str_parameters}{sql}\n")
         pg_engine = get_postgres_engine()
         if pg_engine:
             start_pg = time.time()
             with pg_engine.connect() as conn:
-                conn.execute(text("SET jit = off;"))
-                conn.execute(text("SET enable_nestloop = off;"))
+                for var, value in session_variables.items():
+                    # Der Parameter 'true' bindet die Variable lokal an die Transaktion
+                    conn.execute(text(f"SELECT set_config('{var}', '{value}', true);"))
                 if params:
                     df = pd.read_sql(text(str(sql)), conn, params=params)
                 else:
                     df = pd.read_sql(text(str(sql)), conn)
-            logger.debug(f"[PostgreSQL] Rows: {len(df)} - Runtime: {round(time.time() - start_pg, 2)}s.")
+            logger.info(f"[PostgreSQL] Rows: {len(df)} - Runtime: {round(time.time() - start_pg, 2)}s.")
     except Exception as e:
         logger.error(f"[PostgreSQL] Error executing query: \n{e}")
         logger.error(f"\n{str(sql)}")
         raise e
+
     return df
 
 def get_table_key_and_data_columns(table_name):
@@ -364,7 +387,7 @@ def _run_migrations_for_engine(engine):
         migrations_path = "db/SQL/migrations/"
         if not os.path.exists(migrations_path):
             logger.info(f"[{label}] Migrations directory not found at {migrations_path}. Skipping migrations.")
-            _recreate_views_connection(connection)
+            # _recreate_views_connection(connection)
             connection.commit()  # Ensure any pending transactions are committed before
             return
             
@@ -375,11 +398,11 @@ def _run_migrations_for_engine(engine):
 
         if not pending_migrations:
             logger.info(f"[{label}] Database is up to date.")
-            _recreate_views_connection(connection)
+            # _recreate_views_connection(connection)
             connection.commit()  # Ensure any pending transactions are committed before
             return
 
-        drop_all_views(engine)
+        # drop_all_views(engine)
         # with connection.begin():
         #     for table in HISTORY_ENABLED_TABLES:
         #         pass
@@ -417,7 +440,7 @@ def _run_migrations_for_engine(engine):
                 logger.info(f"[{label}] Database version updated to {last_migration_version}.")
     
         # Recreate views after migrations
-        _recreate_views_connection(connection)
+        # _recreate_views_connection(connection)
     logger.info(f"[{label}] Migration completed in {round(time.time() - start,2)}s")
 
 
@@ -490,7 +513,7 @@ def _recreate_views_connection(connection):
                 
                 with connection.begin():
                     for statement in statements:
-                        connection.execute(text(statement))
+                        execute_sql(connection, statement, table_name=view_file, operation_type="CREATE VIEW", additional_data=f"Creating view {view_file}")
                 
                 progress_made = True
             except Exception as e:
@@ -584,6 +607,32 @@ def view_exists(view_name: str) -> bool:
             exists_pg = view_name in insp_pg.get_view_names()
     except Exception as e:
         logger.error(f"[PostgreSQL] Error checking view existence {view_name}: \n{e}")
+        exists_pg = False
+
+    return exists_pg
+
+def table_function_exists(name: str) -> bool:
+    """
+    Checks if a table function exists in the database.
+    Returns True only if it exists in active databases.
+    """
+    # Check Postgres
+    exists_pg = True
+    try:
+        pg_engine = get_postgres_engine()
+        if pg_engine:
+            with pg_engine.connect() as connection:
+                result = connection.execute(text(f"""
+                    SELECT EXISTS (
+                        SELECT 1 
+                        FROM information_schema.routines 
+                        WHERE routine_type='FUNCTION' 
+                        AND routine_name='{name}'
+                    );
+                """)).fetchone()
+                exists_pg = result[0]
+    except Exception as e:
+        logger.error(f"[PostgreSQL] Error checking function existence {name}: \n{e}")
         exists_pg = False
 
     return exists_pg

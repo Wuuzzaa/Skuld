@@ -1,6 +1,7 @@
 """RSL Momentum Rotation router."""
 
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
 
 from api.core.auth import get_current_user
 from api.core.database import query_sql_file
@@ -46,4 +47,58 @@ async def get_rsl_momentum(
     )
 
     cache.set("rsl_momentum", cache_params, result, ttl=300)
+    return result
+
+
+class RslBacktestRequest(BaseModel):
+    start_date: str
+    end_date: str
+    start_budget: float = 10000.0
+    flat_fee: float = 4.90
+    pct_fee: float = 0.001
+    top_n: int = 5
+    max_per_sector: int = 2
+    exit_percentile: float = 50.0
+    trading_frequency: str = "monthly"
+    fractional_shares: bool = False
+    risk_free_rate: float = 0.0
+    tax_rate: float = 0.25
+
+
+@router.post("/backtest")
+async def backtest_rsl_momentum(
+    request: RslBacktestRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """Run the RSL Momentum rotation portfolio backtest simulation."""
+    params = request.model_dump()
+
+    cached = cache.get("rsl_backtest", params)
+    if cached is not None:
+        return cached
+
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from src.rsl_momentum_backtest import calculate_rsl_momentum_strategy
+
+    result = calculate_rsl_momentum_strategy(
+        start_date=request.start_date,
+        end_date=request.end_date,
+        start_budget=request.start_budget,
+        flat_fee=request.flat_fee,
+        pct_fee=request.pct_fee,
+        top_n=request.top_n,
+        max_per_sector=request.max_per_sector,
+        exit_percentile=request.exit_percentile,
+        trading_frequency=request.trading_frequency,
+        allow_fractional=request.fractional_shares,
+        risk_free_rate=request.risk_free_rate,
+        tax_rate=request.tax_rate,
+    )
+
+    if result is None:
+        return {"summary": {}, "equity_curve": [], "transactions": []}
+
+    cache.set("rsl_backtest", params, result, ttl=300)
     return result

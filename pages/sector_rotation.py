@@ -15,11 +15,12 @@ from src.sector_rotation import (
     load_sector_rotation_price_history,
     required_history_length,
 )
+from src.streamlit_helpers import render_date_filter
 
 
 @st.cache_data(ttl=3600)
-def load_rotation_dataset(parameters: RotationParameters):
-    price_history = load_sector_rotation_price_history(parameters)
+def load_rotation_dataset(selected_date: str, parameters: RotationParameters):
+    price_history = load_sector_rotation_price_history(selected_date, parameters)
     rotation_data = calculate_sector_rotation(price_history, parameters)
     return price_history, rotation_data
 
@@ -34,8 +35,10 @@ def format_date_value(date_value) -> str:
         return ""
     return parsed.strftime("%Y-%m-%d")
 
-
 st.subheader("S&P 500 Sektorrotation")
+selected_date = render_date_filter(
+    date_query='select date from (select date from "DatesHistory" union select current_date) as sub ORDER BY date DESC',
+)
 st.caption("Benchmark: SPY. Sektoren werden ueber die SPDR Sector ETFs abgebildet.")
 st.info(
     "Aktuell ist nur eine kurze Historie verfuegbar. Deshalb nutzt die Seite standardmaessig kuerzere Fenster "
@@ -131,7 +134,7 @@ if parameters.long_window <= parameters.short_window:
     st.stop()
 
 with st.spinner("Lade Kursdaten und berechne RS-Ratio / RS-Momentum..."):
-    price_history, rotation_data = load_rotation_dataset(parameters)
+    price_history, rotation_data = load_rotation_dataset(selected_date, parameters)
 
 available_symbols = set(price_history["symbol"].unique()) if not price_history.empty else set()
 missing_symbols = [symbol for symbol in SECTOR_ETFS if symbol not in available_symbols]
@@ -310,7 +313,7 @@ snapshot_csv = snapshot_export.to_csv(index=False).encode("utf-8")
 parameter_json = json.dumps(parameter_export, indent=2, ensure_ascii=True).encode("utf-8")
 sql_query_bytes = (sql_query + "\n").encode("utf-8")
 
-metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
+metric_col1, metric_col2, metric_col3, metric_col4 = st.columns([2, 1, 1, 1])
 metric_col1.metric("Stand", format_date_value(latest_date))
 metric_col2.metric("Benchmark", parameters.benchmark_symbol)
 metric_col3.metric("Sektoren mit Signal", int(latest_snapshot["symbol"].nunique()))

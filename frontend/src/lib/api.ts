@@ -55,6 +55,23 @@ export async function getSpreads(params: Record<string, any>) {
   return data;
 }
 
+export async function backtestSpread(body: {
+  symbol: string;
+  sell_option_osi: string;
+  buy_option_osi: string;
+  sell_strike: number;
+  buy_strike: number;
+  sell_last_option_price: number;
+  buy_last_option_price: number;
+  expiration_date: string;
+  entry_date: string;
+  compare_date: string;
+  override?: Record<string, number> | null;
+}) {
+  const { data } = await api.post('/spreads/backtest', body);
+  return data;
+}
+
 // Analyst Prices
 export async function getAnalystPrices() {
   const { data } = await api.get('/analyst-prices/');
@@ -70,6 +87,21 @@ export async function getIronCondors(params: Record<string, any>) {
 // Married Puts
 export async function getMarriedPuts(params: Record<string, any>) {
   const { data } = await api.get('/married-puts/', { params });
+  return data;
+}
+
+export async function backtestMarriedPut(body: {
+  symbol: string;
+  live_stock_price: number;
+  premium_option_price: number;
+  number_of_stocks: number;
+  option_osi?: string | null;
+  strike_price: number;
+  expiration_date: string;
+  entry_date: string;
+  compare_date: string;
+}) {
+  const { data } = await api.post('/married-puts/backtest', body);
   return data;
 }
 
@@ -130,6 +162,24 @@ export async function getRslMomentum(params: Record<string, any>) {
   return data;
 }
 
+export async function backtestRslMomentum(body: {
+  start_date: string;
+  end_date: string;
+  start_budget?: number;
+  flat_fee?: number;
+  pct_fee?: number;
+  top_n?: number;
+  max_per_sector?: number;
+  exit_percentile?: number;
+  trading_frequency?: string;
+  fractional_shares?: boolean;
+  risk_free_rate?: number;
+  tax_rate?: number;
+}) {
+  const { data } = await api.post('/rsl-momentum/backtest', body);
+  return data;
+}
+
 // Watchlist
 export async function getWatchlist() {
   const { data } = await api.get('/watchlist/');
@@ -165,6 +215,15 @@ export async function getCoveredCalls(params: Record<string, any>) {
   return data;
 }
 
+// Covered Call Scanner (ITM, PowerOptions MorningUpdate style)
+export async function getCoveredCallScanner(params: Record<string, any>) {
+  const cleanParams = Object.fromEntries(
+    Object.entries(params).filter(([_, v]) => v != null)
+  );
+  const { data } = await api.get('/covered-call-scanner/', { params: cleanParams });
+  return data;
+}
+
 // Dividend Screener (Zahltagstrategie)
 export async function getDividendScreener(params: Record<string, any>) {
   const cleanParams = Object.fromEntries(
@@ -179,11 +238,87 @@ export async function getDividendScreenerSectors() {
   return data;
 }
 
+// Earnings Put Scanner
+export async function getEarningsPutCandidates(params: { days_ahead?: number }) {
+  const { data } = await api.get('/earnings-put-scanner/', { params });
+  return data;
+}
+
+export async function getEarningsPutOptions(params: { symbol: string; min_oi?: number }) {
+  const { data } = await api.get('/earnings-put-scanner/puts', { params });
+  return data;
+}
+
 // Dividend Portfolio Builder
 export async function buildDividendPortfolio(params: Record<string, any>) {
   const cleanParams = Object.fromEntries(
     Object.entries(params).filter(([_, v]) => v != null)
   );
   const { data } = await api.get('/dividend-portfolio/', { params: cleanParams });
+  return data;
+}
+
+// Roll & Screen — Put Screener (Tab 1)
+export async function getPutScreener(params: Record<string, any>) {
+  const cleanParams = Object.fromEntries(
+    Object.entries(params).filter(([_, v]) => v != null)
+  );
+  const { data } = await api.get('/roll-and-screen/screener', { params: cleanParams });
+  return data;
+}
+
+export async function getPutScreenerBreakdown(row: Record<string, any>, pe_max = 40) {
+  const { data } = await api.post('/roll-and-screen/screener/breakdown', { row, pe_max });
+  return data;
+}
+
+export async function rankPutsAi(body: {
+  puts: Record<string, any>[];
+  max_candidates?: number;
+  provider?: string;
+  web_search?: boolean;
+}) {
+  const { data } = await api.post('/roll-and-screen/screener/ai-rank', body);
+  return data;
+}
+
+// Roll & Screen — Put Roller (Tab 2)
+export async function getRollerPuts(params: { symbol: string; entry_date: string; dte_min?: number; dte_max?: number }) {
+  const { data } = await api.get('/roll-and-screen/roller/puts', { params });
+  return data;
+}
+
+export async function getRollerPrice(params: { symbol: string; option_osi: string }) {
+  const { data } = await api.get('/roll-and-screen/roller/price', { params });
+  return data;
+}
+
+export async function getRollerCandidates(params: Record<string, any>) {
+  const cleanParams = Object.fromEntries(Object.entries(params).filter(([_, v]) => v != null));
+  const { data } = await api.get('/roll-and-screen/roller/candidates', { params: cleanParams });
+  return data;
+}
+
+// Roll & Screen — Spread Roller (Tab 3)
+export async function getSpreadTypes() {
+  const { data } = await api.get('/roll-and-screen/spread-roller/types');
+  return data;
+}
+
+export async function getSpreadRollerOpen(params: { symbol: string; entry_date: string; expiration_date: string }) {
+  const { data } = await api.get('/roll-and-screen/spread-roller/open', { params });
+  return data;
+}
+
+export async function getSpreadRollerCandidates(params: Record<string, any>) {
+  const cleanParams = Object.fromEntries(Object.entries(params).filter(([_, v]) => v != null));
+  const { data } = await api.get('/roll-and-screen/spread-roller/candidates', { params: cleanParams });
+  return data;
+}
+
+// Roll & Screen — Put Browser (Tab 4)
+export async function getBrowserPuts(params: Record<string, any>) {
+  const cleanParams = Object.fromEntries(Object.entries(params).filter(([_, v]) => v != null));
+  const { data } = await api.get('/roll-and-screen/browser/puts', { params: cleanParams });
   return data;
 }

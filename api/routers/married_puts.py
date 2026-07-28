@@ -1,6 +1,7 @@
 """Married Put Analysis router."""
 
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
 
 from api.core.auth import get_current_user
 from api.core.database import query_sql_file, df_to_json_safe
@@ -50,4 +51,48 @@ async def get_married_puts(
 
     result = df_to_json_safe(df)
     cache.set("married_puts", all_params, result, ttl=300)
+    return result
+
+
+class MarriedPutBacktestRequest(BaseModel):
+    symbol: str
+    live_stock_price: float
+    premium_option_price: float
+    number_of_stocks: int
+    option_osi: str | None = None
+    strike_price: float
+    expiration_date: str
+    entry_date: str
+    compare_date: str
+
+
+@router.post("/backtest")
+async def backtest_married_put(
+    request: MarriedPutBacktestRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """Time-travel exit simulation for a married put position."""
+    params = request.model_dump()
+
+    cached = cache.get("married_put_backtest", params)
+    if cached is not None:
+        return cached
+
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from src.married_put_backtest import simulate_married_put_exit
+
+    trade = {
+        "symbol": request.symbol,
+        "live_stock_price": request.live_stock_price,
+        "premium_option_price": request.premium_option_price,
+        "number_of_stocks": request.number_of_stocks,
+        "option_osi": request.option_osi,
+        "strike_price": request.strike_price,
+        "expiration_date": request.expiration_date,
+    }
+    result = simulate_married_put_exit(trade, request.entry_date, request.compare_date)
+
+    cache.set("married_put_backtest", params, result, ttl=300)
     return result

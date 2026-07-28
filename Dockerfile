@@ -66,21 +66,15 @@ while ! python3 -c "import socket; s=socket.create_connection(('$PG_HOST', int('
 done
 echo "PostgreSQL connection check done"
 
-# --- Run database migrations once on first container start ---
-MIGRATION_FLAG="/app/.migrations_done"
-if [ ! -f "$MIGRATION_FLAG" ]; then
-  echo "First container start detected - running database migrations..."
-  cd /app/Skuld && python main.py --mode only_run_migrations
-  MIGRATION_EXIT=$?
-  if [ $MIGRATION_EXIT -eq 0 ]; then
-    echo "Database migrations completed successfully"
-    touch "$MIGRATION_FLAG"
-  else
-    echo "Database migrations failed (exit code: $MIGRATION_EXIT)"
-    exit $MIGRATION_EXIT
-  fi
+# --- Run database migrations on every container start ---
+echo "Running database migrations..."
+cd /app/Skuld && python main.py --mode only_run_migrations
+MIGRATION_EXIT=$?
+if [ $MIGRATION_EXIT -eq 0 ]; then
+  echo "Database migrations completed successfully"
 else
-  echo "Migrations already applied (flag exists), skipping"
+  echo "Database migrations failed (exit code: $MIGRATION_EXIT)"
+  exit $MIGRATION_EXIT
 fi
 
 # Start Cron Service

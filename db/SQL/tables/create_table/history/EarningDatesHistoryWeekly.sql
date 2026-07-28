@@ -4,7 +4,7 @@
         isoyear INT NOT NULL,
         week INT NOT NULL,
         "symbol" TEXT,
-        "earnings_date" TEXT,
+        "earnings_date" DATE,
         PRIMARY KEY(isoyear, week, "symbol")
     );
     

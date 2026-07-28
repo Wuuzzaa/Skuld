@@ -1,5 +1,6 @@
 WITH FilteredOptions AS (
     SELECT
+        option_osi,
         symbol,
         expiration_date,
         contract_type AS option_type,
@@ -22,9 +23,11 @@ WITH FilteredOptions AS (
         company_sector,
         historical_volatility_30d,
         iv_rank,
-        iv_percentile
+        iv_percentile,
+        last_updated_option_data,
+        last_updated_stock_data
     FROM
-        "OptionDataMerged"
+        "OptionDataMerged" AS a
     WHERE
         open_interest >= :min_open_interest
         AND day_volume >= :min_day_volume
@@ -63,6 +66,7 @@ SELECT
     sell.iv_rank,
     sell.iv_percentile,
     -- sell option
+    sell.option_osi AS sell_option_osi,
     sell.strike AS sell_strike,
     sell.last_option_price AS sell_last_option_price,
     sell.delta AS sell_delta,
@@ -73,6 +77,7 @@ SELECT
     sell.day_volume AS sell_day_volume,
     sell.day_last_updated AS sell_last_updated,
     -- buy option
+    buy.option_osi AS buy_option_osi,
     buy.strike AS buy_strike,
     buy.last_option_price AS buy_last_option_price,
     buy.delta AS buy_delta,
@@ -81,7 +86,9 @@ SELECT
     buy.option_open_interest AS buy_open_interest,
     buy.expected_move AS buy_expected_move,
     buy.day_volume AS buy_day_volume,
-    buy.day_last_updated AS buy_last_updated
+    buy.day_last_updated AS buy_last_updated,
+    buy.last_updated_option_data,
+    buy.last_updated_stock_data
 FROM
     TargetOptions sell
 INNER JOIN

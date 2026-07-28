@@ -9,6 +9,7 @@ import { DataTable, Column } from '@/components/ui/data-table';
 import { LoadingState } from '@/components/ui/spinner';
 import { formatCurrency, formatPercent, getClaudeAnalysisUrl } from '@/lib/utils';
 import { Shield, ExternalLink, Filter } from 'lucide-react';
+import { MarriedPutBacktestPanel } from '@/components/MarriedPutBacktestPanel';
 
 export default function MarriedPutsPage() {
   const [params, setParams] = useState({
@@ -217,6 +218,7 @@ export default function MarriedPutsPage() {
           </CardContent>
         </Card>
       )}
+      {selectedRow && <MarriedPutBacktestPanel trade={selectedRow} />}
     </div>
   );
 }

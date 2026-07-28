@@ -9,6 +9,8 @@ from src.database import get_postgres_engine, truncate_table, insert_into_table,
 from src.decorator_log_function import log_function
 from src.logger_config import setup_logging
 from src.stock_volatility import calculate_and_store_stock_implied_volatility
+from src.technical_indicators import calc_technical_indicators_history
+from src.yahooquery_financials import load_historical_prices
 
 logger = logging.getLogger(__name__)
 
@@ -256,7 +258,7 @@ def load_option_chains(symbols: List[str]):
         
         for i in range(0, len(symbols), batch_size):
             symbol_batch = symbols[i:i + batch_size]
-            logger.info(f"Fetching Massive API option data for batch {i//batch_size + 1}...")
+            logger.info(f"Fetching Massive API option data for batch {i//batch_size + 1} of {(len(symbols) + batch_size - 1) // batch_size} (symbols {i} to {i + len(symbol_batch) - 1})")
             
             df = get_option_chains_df(tickers=symbol_batch)
 
@@ -343,6 +345,11 @@ def load_symbols():
             if_exists="append"
         )
     logger.info(f"Loaded {len(df)} symbols with exchange and options into the database.")
+
+    # load history for new symbols
+    symbols = get_symbols()
+    load_historical_prices(symbols["all"])
+    calc_technical_indicators_history(symbols["all"])
 
 def _historize_data(symbol: str):
     select = f"""

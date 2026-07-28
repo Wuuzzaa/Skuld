@@ -4,7 +4,7 @@
         year INT NOT NULL,
         month INT NOT NULL,
         "symbol" TEXT,
-        "earnings_date" TEXT,
+        "earnings_date" DATE,
         PRIMARY KEY(year, month, "symbol")
     );
     
