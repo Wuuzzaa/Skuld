@@ -4,6 +4,7 @@
 
 SELECT
     c.symbol,
+    c.company_name,
     c.earnings_date,
     c.days_to_earnings,
     ROUND(s."FinData_currentPrice"::numeric, 2)                          AS live_stock_price,
@@ -26,6 +27,7 @@ FROM (
     -- One row per symbol: earnings metadata
     SELECT DISTINCT ON (o.symbol)
         o.symbol,
+        o.company_name,
         o.earnings_date,
         o.days_to_earnings,
         o.iv_rank,

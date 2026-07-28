@@ -207,6 +207,8 @@ if st.session_state["eps_candidates_df"] is not None:
 
     display_df = pd.DataFrame({
         "Symbol":        df["symbol"],
+        "Name":          df.get("company_name", pd.Series("—", index=df.index))
+                             .fillna("—").astype(str).str.slice(0, 28),
         "Earnings":      df["earnings_date"].astype(str),
         "Days":          df["days_to_earnings"].astype("Int64"),
         "Price ($)":     df["live_stock_price"].apply(
