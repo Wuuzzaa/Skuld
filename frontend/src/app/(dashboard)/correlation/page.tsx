@@ -50,6 +50,16 @@ async function getPairDetail(params: { symbol_a: string; symbol_b: string; lookb
   return data as PairDetailResult;
 }
 
+async function getSymbolVsAll(params: { symbol: string; lookback_days: number; method: string; top_n?: number }) {
+  const { data } = await api.get('/correlation/vs-all', { params });
+  return data as {
+    base: string;
+    correlations: { symbol: string; correlation: number }[];
+    stats: Record<string, any>;
+    error?: string;
+  };
+}
+
 interface CorrelationResult {
   matrix: { x: string; y: string; value: number }[];
   symbols: string[];
@@ -115,6 +125,15 @@ export default function CorrelationPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [showExplain, setShowExplain] = useState(false);
   const [selectedPair, setSelectedPair] = useState<{ a: string; b: string } | null>(null);
+  const [mode, setMode] = useState<'matrix' | 'single'>('matrix');
+  const [singleSymbol, setSingleSymbol] = useState('AAPL');
+  const [singleQuery, setSingleQuery] = useState<string | null>(null);
+
+  const { data: vsAll, isLoading: vsAllLoading, isFetching: vsAllFetching } = useQuery({
+    queryKey: ['correlation-vs-all', singleQuery, lookbackDays, method],
+    queryFn: () => getSymbolVsAll({ symbol: singleQuery as string, lookback_days: lookbackDays, method }),
+    enabled: mode === 'single' && !!singleQuery,
+  });
 
   const symbols = useMemo(() => symbolInput.trim(), [symbolInput]);
 
@@ -228,7 +247,102 @@ export default function CorrelationPage() {
         </div>
       </div>
 
+      {/* Mode switch: matrix vs single-symbol */}
+      <div className="flex gap-1 border-b border-border/50">
+        <button
+          onClick={() => setMode('matrix')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            mode === 'matrix' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Matrix
+        </button>
+        <button
+          onClick={() => setMode('single')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            mode === 'single' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Single Symbol vs. All
+        </button>
+      </div>
+
+      {/* Single-symbol mode */}
+      {mode === 'single' && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-3 items-end">
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Symbol</label>
+              <input
+                value={singleSymbol}
+                onChange={(e) => setSingleSymbol(e.target.value.toUpperCase())}
+                onKeyDown={(e) => { if (e.key === 'Enter') setSingleQuery(singleSymbol.trim()); }}
+                className="flex h-9 w-32 rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+              />
+            </div>
+            <button
+              onClick={() => setSingleQuery(singleSymbol.trim())}
+              disabled={!singleSymbol.trim()}
+              className="h-9 px-4 rounded-md text-sm font-medium bg-primary text-primary-foreground disabled:opacity-40"
+            >
+              Analyze
+            </button>
+            {vsAllFetching && <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse mb-3" />}
+          </div>
+
+          {singleQuery === null ? (
+            <p className="text-sm text-muted-foreground">Enter a symbol and click Analyze to see how it correlates with every other symbol.</p>
+          ) : vsAllLoading ? (
+            <p className="text-sm text-muted-foreground">Calculating correlations…</p>
+          ) : vsAll?.error ? (
+            <p className="text-sm text-amber-400">No correlation data for {singleQuery} (needs sufficient recent price history).</p>
+          ) : vsAll?.correlations?.length ? (
+            <div className="space-y-3">
+              {vsAll.stats && (
+                <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+                  <span>{vsAll.stats.num_peers} peers · {vsAll.stats.num_data_points} days ({vsAll.stats.date_from} → {vsAll.stats.date_to})</span>
+                  {vsAll.stats.most_correlated && (
+                    <span>Most correlated: <span className="text-emerald-400 font-medium">{vsAll.stats.most_correlated.symbol} ({vsAll.stats.most_correlated.correlation.toFixed(2)})</span></span>
+                  )}
+                  {vsAll.stats.most_inverse && (
+                    <span>Most inverse: <span className="text-red-400 font-medium">{vsAll.stats.most_inverse.symbol} ({vsAll.stats.most_inverse.correlation.toFixed(2)})</span></span>
+                  )}
+                </div>
+              )}
+              <div className="border border-border/50 rounded-lg overflow-hidden">
+                {vsAll.correlations.map((c) => {
+                  const pct = Math.round(Math.abs(c.correlation) * 100);
+                  const pos = c.correlation >= 0;
+                  return (
+                    <button
+                      key={c.symbol}
+                      onClick={() => { setMode('matrix'); setSelectedPair({ a: vsAll.base, b: c.symbol }); }}
+                      className="w-full flex items-center gap-3 px-3 py-1.5 text-sm border-b border-border/30 last:border-0 hover:bg-accent/40 transition-colors"
+                      title="Open pair detail"
+                    >
+                      <span className="w-16 text-left font-medium">{c.symbol}</span>
+                      <span className={`w-16 text-right tabular-nums ${pos ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {c.correlation.toFixed(3)}
+                      </span>
+                      <span className="flex-1 h-2 rounded-full bg-muted/30 overflow-hidden">
+                        <span
+                          className={`block h-full ${pos ? 'bg-emerald-400/60' : 'bg-red-400/60'}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No results.</p>
+          )}
+        </div>
+      )}
+
       {/* Symbol Input */}
+      {mode === 'matrix' && (<>
       <Card className="border-border/40">
         <CardContent className="pt-4 space-y-3">
           <div>
@@ -562,6 +676,7 @@ export default function CorrelationPage() {
           </CardContent>
         </Card>
       )}
+      </>)}
     </div>
   );
 }
