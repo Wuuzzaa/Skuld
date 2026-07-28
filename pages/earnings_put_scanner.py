@@ -159,20 +159,24 @@ if st.session_state["eps_candidates_df"] is not None:
         return f"⚪ {iv:.0f}%"
 
     display_df = pd.DataFrame({
-        "Symbol":    df["symbol"],
-        "Name":      df.get("company_name", pd.Series("—", index=df.index)).fillna("—").astype(str).str.slice(0, 28),
-        "Sektor":    df.get("company_sector", pd.Series("—", index=df.index)).fillna("—"),
-        "Safe Put":  df.get("has_safe_put", pd.Series(False, index=df.index)).apply(lambda v: "✅" if v else "—"),
-        "Earnings":  df["earnings_date"].astype(str),
-        "Tage":      df["days_to_earnings"].astype("Int64"),
-        "Kurs ($)":  df["live_stock_price"].apply(lambda v: f"{v:.2f}" if pd.notna(v) else "—"),
-        "Exp. Move": df.apply(
-            lambda r: f"±{r['expected_move']:.2f} ({r['expected_move_pct']:.1f}%)"
+        "Symbol":        df["symbol"],
+        "Name":          df.get("company_name", pd.Series("—", index=df.index)).fillna("—").astype(str).str.slice(0, 28),
+        "Sektor":        df.get("company_sector", pd.Series("—", index=df.index)).fillna("—"),
+        "Safe Put":      df.get("has_safe_put", pd.Series(False, index=df.index)).apply(lambda v: "✅" if v else "—"),
+        "Earnings":      df["earnings_date"].astype(str),
+        "Tage":          df["days_to_earnings"].astype("Int64"),
+        "Kurs ($)":      df["live_stock_price"].apply(lambda v: f"{v:.2f}" if pd.notna(v) else "—"),
+        "ATM Strike":    df.get("atm_strike", pd.Series(None, index=df.index)).apply(lambda v: f"${v:.1f}" if pd.notna(v) else "—"),
+        "Straddle Verf.": df.get("straddle_expiry", pd.Series("—", index=df.index)).astype(str),
+        "ATM Call+Put":  df.apply(
+            lambda r: f"${r['expected_move']:.2f}" if pd.notna(r.get("expected_move")) else "—", axis=1),
+        "Exp. Move":     df.apply(
+            lambda r: f"±${r['expected_move']:.2f} ({r['expected_move_pct']:.1f}%)"
             if pd.notna(r.get("expected_move")) else "—", axis=1),
-        "IV Rank":   df.apply(_iv_rank_badge, axis=1),
-        "Mkt Cap":   df["market_cap"].apply(_fmt_market_cap),
-        "P/E":       df["trailing_pe"].apply(lambda v: f"{v:.1f}" if pd.notna(v) else "—"),
-        "Dividende": df["dividend_classification"].fillna("—"),
+        "IV Rank":       df.apply(_iv_rank_badge, axis=1),
+        "Mkt Cap":       df["market_cap"].apply(_fmt_market_cap),
+        "P/E":           df["trailing_pe"].apply(lambda v: f"{v:.1f}" if pd.notna(v) else "—"),
+        "Dividende":     df["dividend_classification"].fillna("—"),
     })
 
     event = st.dataframe(
