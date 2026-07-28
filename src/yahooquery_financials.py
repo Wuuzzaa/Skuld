@@ -6,7 +6,9 @@ import numpy as np
 import pandas as pd
 
 from config import TABLE_FUNDAMENTAL_DATA_YAHOO, TABLE_STOCK_PRICES_YAHOO
-from src.database import get_postgres_engine, insert_into_table, insert_into_table_bulk, truncate_table
+from src.database import execute_sql, get_postgres_engine, insert_into_table, insert_into_table_bulk, select_into_dataframe, truncate_table
+from src.stock_volatility import calculate_and_store_stock_historical_volatility, calculate_and_store_stock_historical_volatility_history
+from src.technical_indicators import calc_technical_indicators, calc_technical_indicators_history
 from src.yahooquery_scraper import YahooQueryScraper
 
 # Add parent directory to path for imports
@@ -292,21 +294,58 @@ def load_stock_prices(symbols):
     # replace symbol prefix I: with ^ for indices to match yahoo format
     symbols = [symbol.replace('I:', '^') for symbol in symbols]
     yahoo_query = YahooQueryScraper.instance(symbols)
+    
     with get_postgres_engine().begin() as connection:
         truncate_table(connection, TABLE_STOCK_PRICES_YAHOO)
+        
         for df in yahoo_query.get_historical_prices(period='1d'):
             if df is not None and not df.empty:
-                # drop date column
+                # # 1. Index flachklopfen
+                # df = df.reset_index()
+
+                # # 2. Fehlerresistente Konvertierung zu reinen Datums-Strings via Python-Standard
+                # def clean_date_to_str(x):
+                #     if pd.isna(x):
+                #         return None
+                    
+                #     # Egal ob String, Timestamp oder Datetime: In String konvertieren
+                #     # Ein String sieht dann z.B. so aus: "2026-06-19 00:00:00+00:00" oder "2026-06-19"
+                #     str_val = str(x).strip()
+                    
+                #     # Die ersten 10 Zeichen extrahieren (das ist immer YYYY-MM-DD)
+                #     return str_val[:10]
+
+                # # Die Funktion auf jede Zeile anwenden
+                # df['date_str'] = df['date'].apply(clean_date_to_str)
+
+                # # 3. Den neuesten Tag ermitteln (als String, z.B. '2026-06-19')
+                # latest_date_str = df['date_str'].max()
+
+                # # 4. Filtern
+                # df = df[df['date_str'] == latest_date_str]
+
+                # # 5. Spalten aufräumen
+                # df = df.drop(columns=['date_str'])
                 if 'date' in df.columns:
                     df = df.drop(columns=['date'])
-                    # replace symbol prefix ^ with :I for indices to match symbols table
-                    df['symbol'] = df['symbol'].str.replace('^', 'I:')
+                
+                # Sortierung (optional, falls benötigt, aber nach dem Filtern performanter)
+                df = df.sort_values(by=["symbol"], ascending=False)
+
+                # replace symbol prefix ^ with I: for indices to match symbols table
+                if 'symbol' in df.columns:
+                    df['symbol'] = df['symbol'].str.replace('^', 'I:', regex=False)
+                    
                     insert_into_table(
                         connection,
                         TABLE_STOCK_PRICES_YAHOO,
                         df,
                         if_exists="append"
                     )
+
+    check_stock_split()
+    calculate_and_store_stock_historical_volatility()
+    calc_technical_indicators(symbols)
 
 def load_historical_prices_(symbols):
     # replace symbol prefix I: with ^ for indices to match yahoo format
@@ -327,7 +366,7 @@ def load_historical_prices_(symbols):
                     if_exists="append"
                 )
 
-def load_historical_prices(symbols):
+def load_historical_prices(symbols, delete_all_existing=True):
     logger.info(f"Fetching historical stock prices (high, low, close) for {len(symbols)} symbols using YahooQueryScraper...")
     table_name = f"{TABLE_STOCK_PRICES_YAHOO}HistoryDaily"
     # replace symbol prefix I: with ^ for indices to match yahoo format
@@ -336,10 +375,14 @@ def load_historical_prices(symbols):
     total_rows = 0
     conn = get_postgres_engine().raw_connection()
     try:
-        truncate_table(conn, table_name)
+        if delete_all_existing:
+            truncate_table(conn, table_name)
+        else:
+            execute_sql(conn, f'DELETE FROM "{table_name}" WHERE symbol IN ({",".join([f"'{symbol}'" for symbol in symbols])})', table_name, "DELETE")
+            
 
         batch = 1
-        for df in yahoo_query.get_historical_prices(period='26y'):
+        for df in yahoo_query.get_historical_prices(period='26y', symbols=symbols):
             logger.info(f"Batch {batch} - fetched {len(df) if df is not None else 0} historical price entries")
             if df is not None and not df.empty:
                 # rename date column to snapshot_date for consistency
@@ -361,6 +404,16 @@ def load_historical_prices(symbols):
     finally:
         conn.close()
     logger.info(f"Total historical price entries loaded: {total_rows}")
+
+def check_stock_split():
+    df = select_into_dataframe('select symbol, splits from "StockPricesYahoo" where splits is not NULL AND splits <> 0')
+
+    if not df.empty:
+        logger.info(f"Found {len(df)} symbols with stock splits. Updating historical prices...")
+        logger.info(df['symbol'].tolist())
+        symbols_with_splits = df['symbol'].tolist()
+        load_historical_prices(symbols_with_splits, delete_all_existing=False)
+
 
 if __name__ == "__main__":
 

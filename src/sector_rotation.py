@@ -6,6 +6,8 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
+from src.historization import select_timetravel_into_dataframe
+
 
 SECTOR_ETFS = {
     "XLC": {"name": "Kommunikation", "full_name": "Communication Services Select Sector SPDR Fund", "isin": "US81369Y8030"},
@@ -74,18 +76,24 @@ def build_sector_rotation_query(symbols: list[str], lookback_days: int) -> str:
         FROM "StockPricesYahooHistoryDaily"
         WHERE symbol IN ({quoted_symbols})
           AND snapshot_date >= CURRENT_DATE - INTERVAL '{int(lookback_days)} day'
+          AND snapshot_date <= CURRENT_DATE
         ORDER BY snapshot_date ASC, symbol ASC
     '''
 
 
-def load_sector_rotation_price_history(parameters: RotationParameters) -> pd.DataFrame:
-    from src.database import select_into_dataframe
+def load_sector_rotation_price_history(selected_date: str = None, parameters: RotationParameters = None) -> pd.DataFrame:
+    import time
 
     symbols = [parameters.benchmark_symbol, *SECTOR_ETFS.keys()]
     # Use max of lookback_days and sma200_days + generous buffer for trading days vs calendar days
     effective_lookback = max(parameters.lookback_days, int(parameters.sma200_days * 1.6) + 30)
     query = build_sector_rotation_query(symbols=symbols, lookback_days=effective_lookback)
-    return select_into_dataframe(query=query)
+    # Default to the current date when no date is supplied (e.g. React FastAPI caller).
+    # select_timetravel_into_dataframe treats "today" as a no-op and runs the plain
+    # query, matching the previous select_into_dataframe behaviour; a real date enables time travel.
+    if selected_date is None:
+        selected_date = time.strftime("%Y-%m-%d", time.gmtime())
+    return select_timetravel_into_dataframe(selected_date, query=query)
 
 
 def weighted_moving_average(values: np.ndarray) -> float:

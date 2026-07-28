@@ -20,6 +20,7 @@ on:
       - '*.md'
       - 'docs/**'
       - 'ops/skuld-cli/**'
+      - 'ops/scripts/**'
       - 'ops/environments.yaml'
       - '.github/workflows/**'
   workflow_dispatch:
@@ -30,6 +31,7 @@ on:
         type: choice
         options:
           - production
+          - hetzner
           - home
         default: production
       ref:
@@ -106,6 +108,10 @@ jobs:
       traefik_entrypoint: ${{ steps.parse.outputs.traefik_entrypoint }}
       certresolver_skuld: ${{ steps.parse.outputs.certresolver_skuld }}
       certresolver_authelia: ${{ steps.parse.outputs.certresolver_authelia }}
+      certresolver_kuma: ${{ steps.parse.outputs.certresolver_kuma }}
+      monitoring_domain: ${{ steps.parse.outputs.monitoring_domain }}
+      monitoring_url: ${{ steps.parse.outputs.monitoring_url }}
+      monitoring_middlewares: ${{ steps.parse.outputs.monitoring_middlewares }}
       auth_scheme: ${{ steps.parse.outputs.auth_scheme }}
       authelia: ${{ steps.parse.outputs.authelia }}
       skuld_env: ${{ steps.parse.outputs.skuld_env }}
@@ -369,9 +375,12 @@ jobs:
       - name: Notify deploy started via Telegram
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ needs.load-config.outputs.telegram_chat_id }}
+          CFG_TELEGRAM_CHAT_ID: ${{ needs.load-config.outputs.telegram_chat_id }}
+          SECRET_PROD_TELEGRAM_CHAT_ID: ${{ secrets.PROD_TELEGRAM_CHAT_ID }}
         run: |
           cd "$SOURCE_DIR"
+          # Prod-Chat-ID kommt aus Secret (nur production gesetzt); sonst environments.yaml
+          TELEGRAM_CHAT_ID="${SECRET_PROD_TELEGRAM_CHAT_ID:-$CFG_TELEGRAM_CHAT_ID}"
           ACTOR="${{ github.actor }}"
           REF="${{ inputs.ref || github.ref_name }}"
           COMMIT_MSG=$(git log -1 --format='%s' 2>/dev/null || echo "workflow_dispatch")
@@ -415,6 +424,9 @@ jobs:
             --exclude 'authelia/session_secret' \
             --exclude 'authelia/jwt_secret' \
             --exclude 'authelia/storage_encryption_key' \
+            --exclude 'secrets/' \
+            --exclude 'uptime-kuma-data/' \
+            --exclude '.env.bak.*' \
             "$SOURCE_DIR"/ ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }}:/opt/skuld/
 
       - name: Get version
@@ -435,6 +447,10 @@ jobs:
           CFG_TRAEFIK_ENTRYPOINT: ${{ needs.load-config.outputs.traefik_entrypoint }}
           CFG_CERTRESOLVER_SKULD: ${{ needs.load-config.outputs.certresolver_skuld }}
           CFG_CERTRESOLVER_AUTHELIA: ${{ needs.load-config.outputs.certresolver_authelia }}
+          CFG_CERTRESOLVER_KUMA: ${{ needs.load-config.outputs.certresolver_kuma }}
+          CFG_MONITORING_DOMAIN: ${{ needs.load-config.outputs.monitoring_domain }}
+          CFG_MONITORING_URL: ${{ needs.load-config.outputs.monitoring_url }}
+          CFG_MONITORING_MIDDLEWARES: ${{ needs.load-config.outputs.monitoring_middlewares }}
           CFG_AUTH_SCHEME: ${{ needs.load-config.outputs.auth_scheme }}
           CFG_TELEGRAM_CHAT_ID: ${{ needs.load-config.outputs.telegram_chat_id }}
           CFG_POSTGRES_HOST: ${{ needs.load-config.outputs.postgres_host }}
@@ -450,8 +466,11 @@ jobs:
           SKULD_VERSION: ${{ steps.get_version.outputs.VERSION }}
           SKULD_BRANCH: ${{ steps.get_version.outputs.BRANCH }}
           SECRET_TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          SECRET_PROD_TELEGRAM_CHAT_ID: ${{ secrets.PROD_TELEGRAM_CHAT_ID }}
           SECRET_MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY }}
           SECRET_MASSIVE_API_KEY_FLAT_FILES: ${{ secrets.MASSIVE_API_KEY_FLAT_FILES }}
+          SECRET_DEEP_SEEK: ${{ secrets.DEEP_SEEK }}
+          SECRET_KIMI_AI: ${{ secrets.KIMI_AI }}
           SECRET_POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           SECRET_AUTHELIA_JWT: ${{ secrets.AUTHELIA_JWT_SECRET }}
           SECRET_AUTHELIA_SESSION: ${{ secrets.AUTHELIA_SESSION_SECRET }}
@@ -472,11 +491,17 @@ jobs:
           TRAEFIK_ENTRYPOINT=${CFG_TRAEFIK_ENTRYPOINT}
           TRAEFIK_CERTRESOLVER_LABEL_SKULD=${CFG_CERTRESOLVER_SKULD}
           TRAEFIK_CERTRESOLVER_LABEL_AUTHELIA=${CFG_CERTRESOLVER_AUTHELIA}
+          TRAEFIK_CERTRESOLVER_LABEL_KUMA=${CFG_CERTRESOLVER_KUMA}
+          MONITORING_DOMAIN=${CFG_MONITORING_DOMAIN}
+          MONITORING_URL=${CFG_MONITORING_URL}
+          MONITORING_MIDDLEWARES=${CFG_MONITORING_MIDDLEWARES}
           AUTH_SCHEME=${CFG_AUTH_SCHEME}
           TELEGRAM_BOT_TOKEN=${SECRET_TELEGRAM_BOT_TOKEN}
-          TELEGRAM_CHAT_ID=${CFG_TELEGRAM_CHAT_ID}
+          TELEGRAM_CHAT_ID=${SECRET_PROD_TELEGRAM_CHAT_ID:-$CFG_TELEGRAM_CHAT_ID}
           MASSIVE_API_KEY=${SECRET_MASSIVE_API_KEY}
           MASSIVE_API_KEY_FLAT_FILES=${SECRET_MASSIVE_API_KEY_FLAT_FILES}
+          DEEP_SEEK=${SECRET_DEEP_SEEK}
+          KIMI_AI=${SECRET_KIMI_AI}
           SKULD_VERSION=${SKULD_VERSION}
           SKULD_BRANCH=${SKULD_BRANCH}
           SKULD_ENV=${CFG_SKULD_ENV}
@@ -538,7 +563,7 @@ jobs:
           send_telegram() {
             local msg="$1"
             curl -s -X POST "https://api.telegram.org/bot${SECRET_TELEGRAM_BOT_TOKEN}/sendMessage" \
-              -d chat_id="${CFG_TELEGRAM_CHAT_ID}" \
+              -d chat_id="${SECRET_PROD_TELEGRAM_CHAT_ID:-$CFG_TELEGRAM_CHAT_ID}" \
               -d text="${msg}" \
               -d parse_mode=HTML >/dev/null 2>&1 || true
           }
@@ -630,6 +655,10 @@ jobs:
              CFG_TRAEFIK_ENTRYPOINT='${CFG_TRAEFIK_ENTRYPOINT}' \
              CFG_CERTRESOLVER_SKULD='${CFG_CERTRESOLVER_SKULD}' \
              CFG_CERTRESOLVER_AUTHELIA='${CFG_CERTRESOLVER_AUTHELIA}' \
+             CFG_CERTRESOLVER_KUMA='${CFG_CERTRESOLVER_KUMA}' \
+             CFG_MONITORING_DOMAIN='${CFG_MONITORING_DOMAIN}' \
+             CFG_MONITORING_URL='${CFG_MONITORING_URL}' \
+             CFG_MONITORING_MIDDLEWARES='${CFG_MONITORING_MIDDLEWARES}' \
              CFG_AUTH_SCHEME='${CFG_AUTH_SCHEME}' \
              CFG_TELEGRAM_CHAT_ID='${CFG_TELEGRAM_CHAT_ID}' \
              CFG_POSTGRES_HOST='${CFG_POSTGRES_HOST}' \
@@ -645,8 +674,11 @@ jobs:
              SKULD_VERSION='${SKULD_VERSION}' \
              SKULD_BRANCH='${SKULD_BRANCH}' \
              SECRET_TELEGRAM_BOT_TOKEN='${SECRET_TELEGRAM_BOT_TOKEN}' \
+             SECRET_PROD_TELEGRAM_CHAT_ID='${SECRET_PROD_TELEGRAM_CHAT_ID}' \
              SECRET_MASSIVE_API_KEY='${SECRET_MASSIVE_API_KEY}' \
              SECRET_MASSIVE_API_KEY_FLAT_FILES='${SECRET_MASSIVE_API_KEY_FLAT_FILES}' \
+             SECRET_DEEP_SEEK='${SECRET_DEEP_SEEK}' \
+             SECRET_KIMI_AI='${SECRET_KIMI_AI}' \
              SECRET_POSTGRES_PASSWORD='${SECRET_POSTGRES_PASSWORD}' \
              SECRET_AUTHELIA_JWT='${SECRET_AUTHELIA_JWT}' \
              SECRET_AUTHELIA_SESSION='${SECRET_AUTHELIA_SESSION}' \
@@ -658,9 +690,11 @@ jobs:
         if: success()
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ needs.load-config.outputs.telegram_chat_id }}
+          CFG_TELEGRAM_CHAT_ID: ${{ needs.load-config.outputs.telegram_chat_id }}
+          SECRET_PROD_TELEGRAM_CHAT_ID: ${{ secrets.PROD_TELEGRAM_CHAT_ID }}
         run: |
           cd "$SOURCE_DIR"
+          TELEGRAM_CHAT_ID="${SECRET_PROD_TELEGRAM_CHAT_ID:-$CFG_TELEGRAM_CHAT_ID}"
           COMMIT_MSG=$(git log -1 --format='%s' 2>/dev/null || echo "workflow_dispatch")
           SHORT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "${GITHUB_SHA:0:7}")
           LABEL="${{ env.DEPLOY_LABEL }}"
@@ -674,9 +708,11 @@ jobs:
         if: failure()
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ needs.load-config.outputs.telegram_chat_id }}
+          CFG_TELEGRAM_CHAT_ID: ${{ needs.load-config.outputs.telegram_chat_id }}
+          SECRET_PROD_TELEGRAM_CHAT_ID: ${{ secrets.PROD_TELEGRAM_CHAT_ID }}
         run: |
           cd "$SOURCE_DIR" 2>/dev/null || true
+          TELEGRAM_CHAT_ID="${SECRET_PROD_TELEGRAM_CHAT_ID:-$CFG_TELEGRAM_CHAT_ID}"
           ACTOR="${{ github.actor }}"
           COMMIT_MSG=$(git log -1 --format='%s' 2>/dev/null || echo "checkout failed before git metadata was available")
           SHORT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "${GITHUB_SHA:0:7}")

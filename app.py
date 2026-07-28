@@ -6,12 +6,10 @@ from src.logger_config import setup_logging
 from config import *
 import os
 
-# enable logging
-setup_logging(component="streamlit", log_level=logging.DEBUG, console_output=True)
-logger = logging.getLogger(__name__)
-logger.info("Start SKULD")
-
-# run_migrations()
+# # enable logging
+# setup_logging(component="streamlit", log_level=logging.DEBUG, console_output=True)
+# logger = logging.getLogger(__name__)
+# logger.info("Start SKULD")
 
 # Check if "--local" is passed as a command-line argument
 # start in terminal with: streamlit run app.py -- --local
@@ -39,6 +37,9 @@ dividend_scanner = st.Page("pages/dividend_scanner.py", title="Dividend Scanner"
 zahltagstrategie = st.Page("pages/dividend_screener_zahltagstrategie.py", title="Zahltagstrategie")
 data_logs = st.Page("pages/data_change_logs.py", title="Data Logs")
 iron_condors = st.Page("pages/iron_condors.py", title="Iron Condors")
+earnings_put_scanner = st.Page("pages/earnings_put_scanner.py", title="Earnings Put Scanner")
+covered_call_scanner = st.Page("pages/covered_call_scanner.py", title="ITM Covered Call Scanner")
+roll_and_screen = st.Page("pages/roll_and_screen.py", title="Roll & Screen")
 symbolpage = st.Page("pages/symbolpage.py", title="Symbol Page")
 admin_jobs = st.Page("pages/admin_jobs.py", title="Admin - Jobs")
 
@@ -49,6 +50,9 @@ page = st.navigation(
         watchlist,
         spreads,
         iron_condors,
+        earnings_put_scanner,
+        covered_call_scanner,
+        roll_and_screen,
         marrieds,
         position_insurance,
         multifactor_swingtrading,

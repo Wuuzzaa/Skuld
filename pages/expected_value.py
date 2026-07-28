@@ -2,7 +2,6 @@ import logging
 import os
 import streamlit as st
 from src.logger_config import setup_logging
-from src.monte_carlo_simulation import UniversalOptionsMonteCarloSimulator
 from src.options_utils import OptionLeg, calculate_strategy_metrics
 from src.ui_strategy_display import display_strategy_details
 

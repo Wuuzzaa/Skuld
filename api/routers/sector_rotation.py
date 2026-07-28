@@ -52,7 +52,7 @@ async def get_sector_rotation(
         allocated_capital=allocated_capital,
     )
 
-    price_history = load_sector_rotation_price_history(parameters)
+    price_history = load_sector_rotation_price_history(selected_date=None, parameters=parameters)
     rotation_data = calculate_sector_rotation(price_history, parameters)
 
     if rotation_data.empty:

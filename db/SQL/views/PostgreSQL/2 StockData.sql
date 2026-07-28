@@ -6,7 +6,7 @@ SELECT
 	A.SYMBOL,
 	A.close as LIVE_STOCK_PRICE,
 	B.EARNINGS_DATE,
-	CAST(B.EARNINGS_DATE::DATE - CURRENT_DATE AS INTEGER) AS days_to_earnings,
+	CAST(B.EARNINGS_DATE - CURRENT_DATE AS INTEGER) AS days_to_earnings,
 	C.ANALYST_MEAN_TARGET,
 
 	-- StockImpliedVolatilityMassive
@@ -544,19 +544,13 @@ SELECT
 
 	-- Additional calculated fields
 	ROUND((c.analyst_mean_target - a.close)::numeric,2) as "target-close$",
-	ROUND((ROUND((c.analyst_mean_target - a.close)::numeric,2) / a.close * 100.0)::numeric, 2) as "target-close%"
+	ROUND((ROUND((c.analyst_mean_target - a.close)::numeric,2) / a.close * 100.0)::numeric, 2) as "target-close%",
+
+	-- tlu.last_updated AS last_updated_stock_data
+	'' AS last_updated_stock_data
 FROM
 	"StockPricesYahoo" AS A
-	LEFT OUTER JOIN (
-		SELECT
-			SYMBOL,
-			CASE
-				WHEN EARNINGS_DATE LIKE '%.%.%' THEN SUBSTR(EARNINGS_DATE, 7, 4) || '-' || SUBSTR(EARNINGS_DATE, 4, 2) || '-' || SUBSTR(EARNINGS_DATE, 1, 2)
-				ELSE NULL
-			END AS EARNINGS_DATE
-		FROM
-			"EarningDates"
-	) AS B ON A.SYMBOL = B.SYMBOL
+	LEFT OUTER JOIN "EarningDates" AS B ON A.SYMBOL = B.SYMBOL
 	LEFT OUTER JOIN "AnalystPriceTargets" AS C ON A.SYMBOL = C.SYMBOL
 	LEFT OUTER JOIN "StockImpliedVolatilityMassive" AS d ON a.symbol = d.symbol
 	LEFT OUTER JOIN "StockVolatility" AS E ON A.SYMBOL = E.SYMBOL
@@ -570,4 +564,6 @@ FROM
 	LEFT OUTER JOIN "FundamentalData" AS I
 	ON A.SYMBOL = I.SYMBOL
 	LEFT OUTER JOIN "TechnicalIndicatorsCalculated" AS J
-	ON A.SYMBOL = J.SYMBOL;
+	ON A.SYMBOL = J.SYMBOL
+	-- LEFT OUTER JOIN "TableLastUpdated" AS tlu
+	-- ON tlu.table_name = 'StockPricesYahoo';

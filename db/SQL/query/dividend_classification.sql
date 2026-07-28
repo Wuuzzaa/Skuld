@@ -13,9 +13,10 @@ WITH
 			) AS MEDIAN_DIVIDEND,
 			COUNT(*) AS DIVIDENDS_PAID
 		FROM
-			"StockPricesYahooHistoryDaily"
+			"StockPricesYahooHistoryDaily" AS stock_hostory
 		WHERE
 			DIVIDENDS > 0
+			AND snapshot_date <= CURRENT_DATE
 		GROUP BY
 			SYMBOL,
 			DIV_YEAR
@@ -64,6 +65,7 @@ WITH
 			) = B.DIV_YEAR
 		WHERE
 			DIVIDENDS > 0
+			AND snapshot_date <= CURRENT_DATE
 			AND (
 				ABS(
 					(

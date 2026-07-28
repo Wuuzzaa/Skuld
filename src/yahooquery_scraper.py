@@ -6,6 +6,7 @@ import time
 import threading
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 import pandas as pd
+import numpy as np
 from yahooquery import Ticker
 from config import MAX_WORKERS
 from src.util import Singleton, log_memory_usage
@@ -175,16 +176,18 @@ class YahooQueryScraper:
 
             return df
 
-    def get_historical_prices(self, period="1d"):
+    def get_historical_prices(self, period="1d", symbols=None):
+        if symbols is None:
+            symbols = self.symbols
         local_batch_size = 500
-        local_ticker_batches = _get_ticker_batches(self.symbols, local_batch_size, self.retries, asynchronous=True)
+        local_ticker_batches = _get_ticker_batches(symbols, local_batch_size, self.retries, asynchronous=True)
         batch = 1
         for ticker_batch in local_ticker_batches:
             logger.info(f"({batch}/{len(local_ticker_batches)}) Batch")
             batch += 1
             for attempt in range(self.retries):
                 try:
-                    if len(self.symbols) > local_batch_size:
+                    if len(symbols) > local_batch_size:
                         logger.info(f"Fetching Yahoo historical data for batch of up to {local_batch_size} symbols...")
                     # Historical prices for 26y can be very slow — use longer timeout
                     hist_timeout = YAHOO_REQUEST_TIMEOUT * 3 if period != '1d' else YAHOO_REQUEST_TIMEOUT
@@ -199,6 +202,12 @@ class YahooQueryScraper:
                     if df is not None and not df.empty:
                         # symbol expiration_date and option-type from index to column
                         df = df.reset_index()
+                        cols_cleanup = ['dividends', 'splits']
+                        for col in cols_cleanup:
+                            if col in df.columns:
+                                df[col] = df[col].replace(0, np.nan)
+                            else:
+                                logger.warning(f"No column '{col}' in dataframe")
                         found_data = True
                         logger.info(f"SUCCESS: {len(df)} historical prices found")
                         yield df
@@ -206,7 +215,8 @@ class YahooQueryScraper:
                         logger.warning(f"WARNING: No historical prices available")
 
                 except Exception as e:
-                    logger.error(f"ERROR: Error fetching historical prices - {str(e)}")
+                    logger.error(f"Error fetching historical prices - {str(e)}")
+                    logger.error(e)
                     logger.error(f"{attempt} failed -> Retry after 10s")
                     time.sleep(10)
                 else:
@@ -218,6 +228,51 @@ class YahooQueryScraper:
                 logger.error(" ! " * 80)
                 raise Exception("RETRY LIMIT REACHED")
 
+    def get_option_chain(self, symbols=None):
+        print(f"Loading for {len(self.symbols)} symbols option chain from Yahoo Finance")
+        if not symbols:
+            symbols = self.symbols
+
+        all_option_data = []
+        local_batch_size = 500
+        local_ticker_batches = _get_ticker_batches(symbols, local_batch_size, self.retries, asynchronous=False)
+                
+        for ticker_batch in local_ticker_batches:
+            for attempt in range(self.retries):
+                try:
+                    if len(symbols) > local_batch_size:
+                        print(f"Fetching Yahoo option chain for batch of up to {local_batch_size} symbols...")
+                    df = ticker_batch.option_chain
+                    if df is not None and not df.empty:
+                        # symbol expiration_date and option-type from index to column
+                        df = df.reset_index()
+                        all_option_data.append(df)
+                        print(f"SUCCESS: {len(df)} options found")
+                    else:
+                        print(f"WARNING: No option data available")
+                        
+                except Exception as e:
+                    print(f"ERROR: Error fetching options - {str(e)}")
+                    print(f"{attempt} failed -> Retry after 10s")
+                    time.sleep(10)
+                else: 
+                    # Success - exit the retry loop
+                    break
+            else:
+                print(" ! " * 80)
+                print("RETRY LIMIT REACHED")
+                print(" ! " * 80)
+                time.sleep(1)
+
+        if not all_option_data:
+            print("WARNING: No option data found for any symbols")
+            return
+        
+        # Combine all data
+        df = pd.concat(all_option_data, ignore_index=True)
+        print(f"{len(df)} option chains")
+        return df
+    
     def get_modules(self, symbols=None, modules=None):
         data = self._load_module_data(symbols=symbols, modules=modules)
         return data
@@ -247,7 +302,8 @@ def _get_ticker_batches(symbols, batch_size, retries, asynchronous=False):
         try:
             ticker_batches = [Ticker(symbol_batch, progress=True, asynchronous=asynchronous) for symbol_batch in local_symbol_batches]
         except Exception as e:
-                logger.error(f"ERROR: Error fetching historical prices - {str(e)}")
+                logger.error(f"Error fetching historical prices - {str(e)}")
+                logger.error(e)
                 logger.error(f"{attempt} failed -> Retry after 10s")
                 time.sleep(10)
         else:
@@ -260,3 +316,4 @@ def _get_ticker_batches(symbols, batch_size, retries, asynchronous=False):
             raise Exception("RETRY LIMIT REACHED")
     
     return ticker_batches
+

@@ -3,147 +3,42 @@
     CREATE VIEW
         "TechnicalIndicatorsCalculatedHistory" AS
     
-    SELECT
-        dates.date,
-        dates.year,
-        dates.month,
-        dates.isoyear,
-        dates.week,
-        master_data."symbol",
-        coalesce(
-                daily."EMA_5",
-                master_data."EMA_5"
-            ) as "EMA_5",
-		coalesce(
-                daily."EMA_10",
-                master_data."EMA_10"
-            ) as "EMA_10",
-		coalesce(
-                daily."EMA_20",
-                master_data."EMA_20"
-            ) as "EMA_20",
-		coalesce(
-                daily."EMA_30",
-                master_data."EMA_30"
-            ) as "EMA_30",
-		coalesce(
-                daily."EMA_50",
-                master_data."EMA_50"
-            ) as "EMA_50",
-		coalesce(
-                daily."EMA_100",
-                master_data."EMA_100"
-            ) as "EMA_100",
-		coalesce(
-                daily."EMA_200",
-                master_data."EMA_200"
-            ) as "EMA_200",
-		coalesce(
-                daily."SMA_5",
-                master_data."SMA_5"
-            ) as "SMA_5",
-		coalesce(
-                daily."SMA_10",
-                master_data."SMA_10"
-            ) as "SMA_10",
-		coalesce(
-                daily."SMA_20",
-                master_data."SMA_20"
-            ) as "SMA_20",
-		coalesce(
-                daily."SMA_30",
-                master_data."SMA_30"
-            ) as "SMA_30",
-		coalesce(
-                daily."SMA_50",
-                master_data."SMA_50"
-            ) as "SMA_50",
-		coalesce(
-                daily."SMA_100",
-                master_data."SMA_100"
-            ) as "SMA_100",
-		coalesce(
-                daily."SMA_200",
-                master_data."SMA_200"
-            ) as "SMA_200",
-		coalesce(
-                daily."MACD_12_26_9",
-                master_data."MACD_12_26_9"
-            ) as "MACD_12_26_9",
-		coalesce(
-                daily."MACDh_12_26_9",
-                master_data."MACDh_12_26_9"
-            ) as "MACDh_12_26_9",
-		coalesce(
-                daily."MACDs_12_26_9",
-                master_data."MACDs_12_26_9"
-            ) as "MACDs_12_26_9",
-		coalesce(
-                daily."BBL_20_2.0_2.0",
-                master_data."BBL_20_2.0_2.0"
-            ) as "BBL_20_2.0_2.0",
-		coalesce(
-                daily."BBM_20_2.0_2.0",
-                master_data."BBM_20_2.0_2.0"
-            ) as "BBM_20_2.0_2.0",
-		coalesce(
-                daily."BBU_20_2.0_2.0",
-                master_data."BBU_20_2.0_2.0"
-            ) as "BBU_20_2.0_2.0",
-		coalesce(
-                daily."BBB_20_2.0_2.0",
-                master_data."BBB_20_2.0_2.0"
-            ) as "BBB_20_2.0_2.0",
-		coalesce(
-                daily."BBP_20_2.0_2.0",
-                master_data."BBP_20_2.0_2.0"
-            ) as "BBP_20_2.0_2.0",
-		coalesce(
-                daily."ATRr_14",
-                master_data."ATRr_14"
-            ) as "ATRr_14",
-		coalesce(
-                daily."ADX_10",
-                master_data."ADX_10"
-            ) as "ADX_10",
-		coalesce(
-                daily."ADXR_10_2",
-                master_data."ADXR_10_2"
-            ) as "ADXR_10_2",
-		coalesce(
-                daily."DMP_10",
-                master_data."DMP_10"
-            ) as "DMP_10",
-		coalesce(
-                daily."DMN_10",
-                master_data."DMN_10"
-            ) as "DMN_10",
-		coalesce(
-                daily."STOCHk_14_3_1",
-                master_data."STOCHk_14_3_1"
-            ) as "STOCHk_14_3_1",
-		coalesce(
-                daily."STOCHd_14_3_1",
-                master_data."STOCHd_14_3_1"
-            ) as "STOCHd_14_3_1",
-		coalesce(
-                daily."STOCHh_14_3_1",
-                master_data."STOCHh_14_3_1"
-            ) as "STOCHh_14_3_1",
-		coalesce(
-                daily."RSI_14",
-                master_data."RSI_14"
-            ) as "RSI_14",
-		coalesce(
-                daily."RSL",
-                master_data."RSL"
-            ) as "RSL"
-    FROM
-        "DatesHistory" as dates
-        INNER JOIN "TechnicalIndicatorsCalculatedMasterData" as master_data
-        ON dates.date BETWEEN master_data.from_date AND master_data.to_date 
-        LEFT JOIN "TechnicalIndicatorsCalculatedHistoryDaily" as daily
-        ON dates.date = daily.snapshot_date
-        AND master_data."symbol" = daily."symbol"
-    ;
+            SELECT
+                daily.snapshot_date AS date,
+                daily."symbol",
+            daily."EMA_5" as "EMA_5",
+			daily."EMA_10" as "EMA_10",
+			daily."EMA_20" as "EMA_20",
+			daily."EMA_30" as "EMA_30",
+			daily."EMA_50" as "EMA_50",
+			daily."EMA_100" as "EMA_100",
+			daily."EMA_200" as "EMA_200",
+			daily."SMA_5" as "SMA_5",
+			daily."SMA_10" as "SMA_10",
+			daily."SMA_20" as "SMA_20",
+			daily."SMA_30" as "SMA_30",
+			daily."SMA_50" as "SMA_50",
+			daily."SMA_100" as "SMA_100",
+			daily."SMA_200" as "SMA_200",
+			daily."MACD_12_26_9" as "MACD_12_26_9",
+			daily."MACDh_12_26_9" as "MACDh_12_26_9",
+			daily."MACDs_12_26_9" as "MACDs_12_26_9",
+			daily."BBL_20_2.0_2.0" as "BBL_20_2.0_2.0",
+			daily."BBM_20_2.0_2.0" as "BBM_20_2.0_2.0",
+			daily."BBU_20_2.0_2.0" as "BBU_20_2.0_2.0",
+			daily."BBB_20_2.0_2.0" as "BBB_20_2.0_2.0",
+			daily."BBP_20_2.0_2.0" as "BBP_20_2.0_2.0",
+			daily."ATRr_14" as "ATRr_14",
+			daily."ADX_10" as "ADX_10",
+			daily."ADXR_10_2" as "ADXR_10_2",
+			daily."DMP_10" as "DMP_10",
+			daily."DMN_10" as "DMN_10",
+			daily."STOCHk_14_3_1" as "STOCHk_14_3_1",
+			daily."STOCHd_14_3_1" as "STOCHd_14_3_1",
+			daily."STOCHh_14_3_1" as "STOCHh_14_3_1",
+			daily."RSI_14" as "RSI_14",
+			daily."RSL" as "RSL"
+            FROM
+                "TechnicalIndicatorsCalculatedHistoryDaily" as daily
+            ;
     

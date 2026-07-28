@@ -179,6 +179,17 @@ export async function getDividendScreenerSectors() {
   return data;
 }
 
+// Earnings Put Scanner
+export async function getEarningsPutCandidates(params: { days_ahead?: number }) {
+  const { data } = await api.get('/earnings-put-scanner/', { params });
+  return data;
+}
+
+export async function getEarningsPutOptions(params: { symbol: string; min_oi?: number }) {
+  const { data } = await api.get('/earnings-put-scanner/puts', { params });
+  return data;
+}
+
 // Dividend Portfolio Builder
 export async function buildDividendPortfolio(params: Record<string, any>) {
   const cleanParams = Object.fromEntries(

@@ -34,6 +34,7 @@ const navItems = [
   { href: '/dividend-screener', label: 'Dividend Screener', icon: Award, color: 'text-amber-400' },
   { href: '/dividend-portfolio', label: 'Portfolio Builder', icon: Wallet, color: 'text-emerald-400' },
   { href: '/spreads', label: 'Spreads', icon: TrendingUp, color: 'text-emerald-400' },
+  { href: '/earnings-put-screener', label: 'Earnings Puts', icon: TrendingUp, color: 'text-orange-400' },
   { href: '/iron-condors', label: 'Iron Condors', icon: Layers, color: 'text-blue-400' },
   { href: '/covered-calls', label: 'Covered Calls', icon: Shield, color: 'text-lime-400' },
   { href: '/married-puts', label: 'Married Puts', icon: Shield, color: 'text-purple-400' },

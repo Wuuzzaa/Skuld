@@ -24,11 +24,22 @@ def display_strategy_details(
     legs_data = []
     for i, leg in enumerate(legs):
         # Format last_updated if it's a timestamp
-        updated_str = leg.last_updated
-        if isinstance(updated_str, (pd.Timestamp, datetime)):
-            updated_str = updated_str.strftime('%d.%m.%Y %H:%M')
-        elif pd.isna(updated_str):
-            updated_str = "N/A"
+        updated_str_massive = leg.last_updated_massive
+        updated_str_option_data = leg.last_updated_option_data
+        updated_str_stock_data = leg.last_updated_stock_data
+        if isinstance(updated_str_massive, (pd.Timestamp, datetime)):
+            updated_str_massive = updated_str_massive.strftime('%d.%m.%Y %H:%M')      
+        elif pd.isna(updated_str_massive):
+            updated_str_massive = "N/A"
+        if isinstance(updated_str_option_data, (pd.Timestamp, datetime)):
+            updated_str_option_data = leg.last_updated_option_data.strftime('%d.%m.%Y %H:%M')
+        elif pd.isna(updated_str_option_data):
+            updated_str_option_data = "N/A"
+        if isinstance(updated_str_stock_data, (pd.Timestamp, datetime)):
+            updated_str_stock_data = leg.last_updated_stock_data.strftime('%d.%m.%Y %H:%M')
+        elif pd.isna(updated_str_stock_data):
+            updated_str_stock_data = "N/A"
+
 
         legs_data.append({
             "Leg": f"Leg {i+1}",
@@ -43,7 +54,9 @@ def display_strategy_details(
             "OI": leg.oi,
             "Volume": leg.volume,
             "Exp Move": leg.expected_move,
-            "Updated": updated_str
+            "Updated_Massive": updated_str_massive,
+            "Updated_OptionData": updated_str_option_data,
+            "Updated_StockData": updated_str_stock_data
         })
 
     details_df = pd.DataFrame(legs_data)
@@ -58,9 +71,9 @@ def display_strategy_details(
                 bs_val = float(row['BS Price'])
                 price_val = float(row['Price'])
                 if price_val > bs_val:
-                    styles[bs_idx] = 'color: #2ecc71'  # green
+                    styles[bs_idx] = 'background-color: #90EE90; color: #000000; font-weight: bold'  # light green background with black text
                 else:
-                    styles[bs_idx] = 'color: #e74c3c'  # red
+                    styles[bs_idx] = 'background-color: #FFB6B6; color: #000000; font-weight: bold'  # light red background with black text
             except (ValueError, TypeError):
                 pass
         return styles
@@ -98,7 +111,7 @@ def display_strategy_details(
     if extra_info:
         st.write(f"**Sektor:** {extra_info.get('company_sector', 'N/A')} | **Branche:** {extra_info.get('company_industry', 'N/A')}")
         if 'analyst_mean_target' in extra_info and pd.notnull(extra_info['analyst_mean_target']):
-            st.write(f"**Analyst Kursziel:** ${extra_info['analyst_mean_target']:.2f} (Aktuell: ${extra_info.get('close', 0):.2f})")
+            st.write(f"**Analyst Kursziel:** ${extra_info['analyst_mean_target']:.2f}$ (Aktuell: ${extra_info.get('close', 0):.2f}$)")
 
     # 3. External Links
     display_external_links(symbol, extra_info)

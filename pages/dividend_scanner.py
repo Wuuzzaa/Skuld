@@ -2,55 +2,19 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import urllib.parse
-from api.core.database import query_dataframe
+from config import PATH_DATABASE_QUERY_FOLDER
+from src.database import select_into_dataframe
+from src.historization import select_timetravel_into_dataframe
+from src.streamlit_helpers import render_date_filter
 from src.ui_strategy_display import display_external_links
 from src.page_display_dataframe import _create_claude_prompt_dividend_scanner
 
 @st.cache_data(ttl=3600)
-def load_data():
+def load_data(date: str):
     """Lädt die Basisdaten für den Dividenden-Scanner optimiert über OptionDataMerged."""
-    sql = """
-    SELECT DISTINCT ON (symbol)
-        symbol,
-        "Summary_dividendYield" as dividend_yield,
-        "Summary_payoutRatio" as payout_ratio,
-        "FreeCashFlow" as free_cashflow,
-        "OperatingCashFlow" as operating_cashflow,
-        "MarketCap" as market_cap,
-        "FinData_debtToEquity" as debt_to_equity,
-        "FinData_currentRatio" as current_ratio,
-        "Summary_trailingPE" as trailing_pe,
-        "KeyStats_priceToBook" as price_to_book,
-        "Summary_beta" as beta,
-        "Summary_priceToSalesTrailing12Months" as price_to_sales,
-        "KeyStats_enterpriseToEbitda" as ev_ebitda,
-        "Summary_fiveYearAvgDividendYield" as avg_yield_5y,
-        "FinData_returnOnEquity" as roe,
-        "FinData_returnOnAssets" as roa,
-        "FinData_profitMargins" as profit_margin,
-        "FinData_earningsGrowth" as earnings_growth,
-        "FinData_revenueGrowth" as revenue_growth,
-        live_stock_price as current_price,
-        "RSI_14" as rsi,
-        "SMA_200" as sma_200,
-        "SMA_50" as sma_50,
-        "STOCHk_14_3_1" as stoch_k,
-        "STOCHd_14_3_1" as stoch_d,
-        "MACD_12_26_9" as macd,
-        "MACDs_12_26_9" as macd_signal,
-        "BBL_20_2.0_2.0" as bb_lower,
-        "BBU_20_2.0_2.0" as bb_upper,
-        iv as current_iv,
-        iv_low as iv_min_52w,
-        iv_high as iv_max_52w,
-        company_name as name,
-        company_sector as sector,
-        company_industry as industry
-    FROM "OptionDataMerged"
-    WHERE "Summary_dividendYield" IS NOT NULL
-    ORDER BY symbol, day_last_updated DESC
-    """
-    return query_dataframe(sql)
+    query_path = PATH_DATABASE_QUERY_FOLDER / "dividend_scanner.sql"
+    
+    return select_timetravel_into_dataframe(date=date, sql_file_path=query_path, params={})
 
 @st.cache_data
 def calculate_scores(df):
@@ -175,31 +139,20 @@ def get_status_indicator(value, metric_type):
     return "⚪"
 
 @st.cache_data(ttl=3600)
-def get_options_for_symbol(symbol):
+def get_options_for_symbol(date, symbol):
     """Sucht nach passenden Short Puts."""
-    sql = f"""
-    SELECT 
-        strike_price, 
-        expiration_date, 
-        greeks_delta, 
-        implied_volatility,
-        open_interest,
-        day_volume,
-        day_last_updated
-    FROM "OptionDataMerged"
-    WHERE symbol = '{symbol}' 
-      AND contract_type = 'put'
-      AND expiration_date BETWEEN CURRENT_DATE + INTERVAL '30 days' AND CURRENT_DATE + INTERVAL '60 days'
-      AND greeks_delta BETWEEN -0.40 AND -0.20
-    ORDER BY ABS(greeks_delta + 0.30) ASC
-    LIMIT 5
-    """
-    return query_dataframe(sql)
+    query_path = PATH_DATABASE_QUERY_FOLDER / "dividend_scanner_options.sql"
+    return select_timetravel_into_dataframe(date=date, sql_file_path=query_path, params={"symbol": symbol})
 
 def main():
     st.title("🎯 Dividenden-Scanner v2.0")
     st.write("Short Put Strategie: Value Investing + Optionsprämien")
     
+    selected_date = render_date_filter(
+        date_query='select date from (select date from "DatesHistory" union select current_date) as sub ORDER BY date DESC',
+    )
+
+
     # --- Dokumentation ---
     with st.expander("ℹ️ Dokumentation & Strategie-Details"):
         st.markdown("""
@@ -265,7 +218,7 @@ def main():
             if total_w != 100:
                 st.warning(f"Gesamtgewichtung ist {total_w}%. Sie sollte idealerweise 100% ergeben.")
 
-    df_raw = load_data()
+    df_raw = load_data(selected_date)
     df_scored = calculate_scores(df_raw)
     
     # Hard Filter (M1-M11)
@@ -458,7 +411,7 @@ def main():
 
         st.divider()
         st.subheader(f"Ideale Short Puts (Delta -0.30, 30-60 DTE) für {selected_symbol}")
-        options_df = get_options_for_symbol(selected_symbol)
+        options_df = get_options_for_symbol(selected_date, selected_symbol)
         if not options_df.empty:
             st.table(options_df.style.format({
                 'strike_price': '{:.2f}',

@@ -3,10 +3,11 @@ SELECT
     days_to_expiration,
     COUNT(DISTINCT symbol) AS symbol_count
 FROM
-    "OptionData"
+    "OptionData" AS a
 WHERE
     days_to_expiration > 0
+    AND expiration_date > CURRENT_DATE
 GROUP BY
     expiration_date, days_to_expiration
 ORDER BY
-    days_to_expiration;
+    expiration_date;
