@@ -136,26 +136,36 @@ if st.session_state["eps_candidates_df"] is not None:
 
     # Safe-Put-Filter: lade puts_check einmalig wenn Toggle aktiviert
     if safe_puts_only:
-        if "eps_safe_put_symbols" not in st.session_state:
-            symbols = df["symbol"].tolist()
+        check_min_oi  = st.session_state.get("eps_min_oi", 50)
+        check_min_prem = st.session_state.get("eps_min_premium_pct", 1.0)
+        cache_key = f"{check_min_oi}_{check_min_prem}"
+
+        if ("eps_safe_put_symbols" not in st.session_state or
+                st.session_state.get("eps_safe_put_filter_key") != cache_key):
             safe_symbols = set()
-            for _, row in df.iterrows():
+            progress = st.progress(0, text="Prüfe Safe-Puts...")
+            total = len(df)
+            for i, (_, row) in enumerate(df.iterrows()):
                 thresh = row.get("_safe_threshold")
                 sym = row["symbol"]
-                earnings_dt = row.get("earnings_date")
                 if pd.isna(thresh) or thresh is None:
                     continue
                 try:
                     check_sql = PATH_DATABASE_QUERY_FOLDER / "earnings_put_candidates.sql"
                     puts = select_into_dataframe(sql_file_path=check_sql,
-                                                 params={"symbol": sym, "min_oi": 10})
+                                                 params={"symbol": sym, "min_oi": check_min_oi})
                     if not puts.empty:
                         puts["strike_price"] = pd.to_numeric(puts["strike_price"], errors="coerce")
-                        if (puts["strike_price"] < float(thresh)).any():
+                        puts["premium_pct"]  = pd.to_numeric(puts["premium_pct"],  errors="coerce")
+                        if ((puts["strike_price"] < float(thresh)) &
+                                (puts["premium_pct"] >= check_min_prem)).any():
                             safe_symbols.add(sym)
                 except Exception:
                     pass
+                progress.progress((i + 1) / total, text=f"Prüfe {sym}...")
+            progress.empty()
             st.session_state["eps_safe_put_symbols"] = safe_symbols
+            st.session_state["eps_safe_put_filter_key"] = cache_key
 
         safe_symbols = st.session_state.get("eps_safe_put_symbols", set())
         df = df[df["symbol"].isin(safe_symbols)]
@@ -163,6 +173,7 @@ if st.session_state["eps_candidates_df"] is not None:
         # Toggle aus → Cache löschen damit beim nächsten Ein-Klicken frisch geladen wird
         if "eps_safe_put_symbols" in st.session_state:
             del st.session_state["eps_safe_put_symbols"]
+            st.session_state.pop("eps_safe_put_filter_key", None)
 
     st.subheader(f"Earnings-Kandidaten — {len(df)} gefunden")
     st.caption("Zeile anklicken um verfügbare Puts für das Symbol zu sehen.")
@@ -295,7 +306,7 @@ if st.session_state.get("eps_selected_symbol"):
         min_premium_pct = st.number_input("Min Prämie % vom Strike", min_value=0.0, max_value=10.0,
                                           value=1.0, step=0.1, format="%.1f", key="eps_min_premium_pct")
     with p_col3:
-        safe_only = st.checkbox("Nur Safe Zone", value=False, key="eps_safe_only",
+        safe_only = st.checkbox("Nur Safe Zone", value=True, key="eps_safe_only",
                                 help="Nur Puts anzeigen deren Strike unterhalb des Expected Move liegt")
 
     if st.session_state["eps_puts_df"] is None:
