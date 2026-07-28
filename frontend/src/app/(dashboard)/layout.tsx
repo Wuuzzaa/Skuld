@@ -24,6 +24,7 @@ import {
   Award,
   Wallet,
   Settings,
+  RefreshCw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { LoadingState } from '@/components/ui/spinner';
@@ -38,6 +39,7 @@ const navItems = [
   { href: '/iron-condors', label: 'Iron Condors', icon: Layers, color: 'text-blue-400' },
   { href: '/covered-calls', label: 'Covered Calls', icon: Shield, color: 'text-lime-400' },
   { href: '/covered-call-scanner', label: 'CC Scanner', icon: Target, color: 'text-lime-400' },
+  { href: '/roll-and-screen', label: 'Roll & Screen', icon: RefreshCw, color: 'text-cyan-400' },
   { href: '/married-puts', label: 'Married Puts', icon: Shield, color: 'text-purple-400' },
   { href: '/position-insurance', label: 'Insurance', icon: Shield, color: 'text-orange-400' },
   { href: '/analyst-prices', label: 'Analyst Prices', icon: Target, color: 'text-cyan-400' },

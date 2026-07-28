@@ -257,3 +257,68 @@ export async function buildDividendPortfolio(params: Record<string, any>) {
   const { data } = await api.get('/dividend-portfolio/', { params: cleanParams });
   return data;
 }
+
+// Roll & Screen — Put Screener (Tab 1)
+export async function getPutScreener(params: Record<string, any>) {
+  const cleanParams = Object.fromEntries(
+    Object.entries(params).filter(([_, v]) => v != null)
+  );
+  const { data } = await api.get('/roll-and-screen/screener', { params: cleanParams });
+  return data;
+}
+
+export async function getPutScreenerBreakdown(row: Record<string, any>, pe_max = 40) {
+  const { data } = await api.post('/roll-and-screen/screener/breakdown', { row, pe_max });
+  return data;
+}
+
+export async function rankPutsAi(body: {
+  puts: Record<string, any>[];
+  max_candidates?: number;
+  provider?: string;
+  web_search?: boolean;
+}) {
+  const { data } = await api.post('/roll-and-screen/screener/ai-rank', body);
+  return data;
+}
+
+// Roll & Screen — Put Roller (Tab 2)
+export async function getRollerPuts(params: { symbol: string; entry_date: string; dte_min?: number; dte_max?: number }) {
+  const { data } = await api.get('/roll-and-screen/roller/puts', { params });
+  return data;
+}
+
+export async function getRollerPrice(params: { symbol: string; option_osi: string }) {
+  const { data } = await api.get('/roll-and-screen/roller/price', { params });
+  return data;
+}
+
+export async function getRollerCandidates(params: Record<string, any>) {
+  const cleanParams = Object.fromEntries(Object.entries(params).filter(([_, v]) => v != null));
+  const { data } = await api.get('/roll-and-screen/roller/candidates', { params: cleanParams });
+  return data;
+}
+
+// Roll & Screen — Spread Roller (Tab 3)
+export async function getSpreadTypes() {
+  const { data } = await api.get('/roll-and-screen/spread-roller/types');
+  return data;
+}
+
+export async function getSpreadRollerOpen(params: { symbol: string; entry_date: string; expiration_date: string }) {
+  const { data } = await api.get('/roll-and-screen/spread-roller/open', { params });
+  return data;
+}
+
+export async function getSpreadRollerCandidates(params: Record<string, any>) {
+  const cleanParams = Object.fromEntries(Object.entries(params).filter(([_, v]) => v != null));
+  const { data } = await api.get('/roll-and-screen/spread-roller/candidates', { params: cleanParams });
+  return data;
+}
+
+// Roll & Screen — Put Browser (Tab 4)
+export async function getBrowserPuts(params: Record<string, any>) {
+  const cleanParams = Object.fromEntries(Object.entries(params).filter(([_, v]) => v != null));
+  const { data } = await api.get('/roll-and-screen/browser/puts', { params: cleanParams });
+  return data;
+}
