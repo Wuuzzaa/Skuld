@@ -131,7 +131,7 @@ if st.session_state["eps_candidates_df"] is not None:
             "✅ Nur mit Safe-Put",
             value=False,
             key="eps_safe_puts_only",
-            help="Nur Symbole für die ein Put UNTER dem Expected Move in der DB existiert",
+            help="Nur Aktien anzeigen die mind. 1 Put haben: Strike < Safe-Schwelle + Min OI + Min Prämie % erfüllt",
         )
 
     # Safe-Put-Filter: lade puts_check einmalig wenn Toggle aktiviert
@@ -303,15 +303,12 @@ if st.session_state.get("eps_selected_symbol"):
     st.divider()
     st.subheader(f"Put-Kandidaten — {symbol}")
 
-    p_col1, p_col2, p_col3 = st.columns(3)
+    p_col1, p_col2 = st.columns(2)
     with p_col1:
         min_oi = st.number_input("Min Open Interest", min_value=0, value=50, step=25, key="eps_min_oi")
     with p_col2:
         min_premium_pct = st.number_input("Min Prämie % vom Strike", min_value=0.0, max_value=10.0,
                                           value=1.0, step=0.1, format="%.1f", key="eps_min_premium_pct")
-    with p_col3:
-        safe_only = st.checkbox("Nur Safe Zone", value=False, key="eps_safe_only",
-                                help="Nur Puts anzeigen deren Strike unterhalb des Expected Move liegt")
 
     if st.session_state["eps_puts_df"] is None:
         with st.spinner(f"Lade Puts für {symbol}..."):
@@ -341,9 +338,6 @@ if st.session_state.get("eps_selected_symbol"):
             df_puts["is_safe"] = df_puts["strike_price"] < safety_threshold
         else:
             df_puts["is_safe"] = False
-
-        if safe_only:
-            df_puts = df_puts[df_puts["is_safe"]]
 
         if df_puts.empty:
             st.info("Keine Puts mit den aktuellen Filtern. Min OI oder Min Prämie % senken.")
