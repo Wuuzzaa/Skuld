@@ -272,6 +272,17 @@ export async function getPutScreenerBreakdown(row: Record<string, any>, pe_max =
   return data;
 }
 
+export async function getScreenerIvHistory(symbol: string) {
+  const { data } = await api.get('/roll-and-screen/screener/iv-history', { params: { symbol } });
+  return data;
+}
+
+export async function getScreenerSymbolPuts(params: Record<string, any>) {
+  const cleanParams = Object.fromEntries(Object.entries(params).filter(([_, v]) => v != null));
+  const { data } = await api.get('/roll-and-screen/screener/symbol-puts', { params: cleanParams });
+  return data;
+}
+
 export async function rankPutsAi(body: {
   puts: Record<string, any>[];
   max_candidates?: number;

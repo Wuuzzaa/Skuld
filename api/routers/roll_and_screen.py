@@ -659,3 +659,60 @@ async def browser_puts(
     result = df_to_json_safe(df) if df is not None and not df.empty else []
     cache.set("browser_puts", params, result, ttl=300)
     return result
+
+
+# ---------------------------------------------------------------------------
+# Screener detail — IV history + sellable puts for a clicked candidate symbol
+# ---------------------------------------------------------------------------
+@router.get("/screener/iv-history")
+async def screener_iv_history(
+    symbol: str = Query(..., min_length=1),
+    current_user: dict = Depends(get_current_user),
+):
+    """1-year IV / IV-rank / IV-percentile history for the IV chart."""
+    sym = symbol.strip().upper()
+    cached = cache.get("screener_iv_history", {"symbol": sym})
+    if cached is not None:
+        return cached
+
+    sql = """
+        SELECT date, symbol,
+               ROUND(iv::numeric * 100, 2)       AS iv,
+               ROUND(iv_rank::numeric, 2)         AS iv_rank,
+               ROUND(iv_percentile::numeric, 2)   AS iv_percentile
+        FROM "StockImpliedVolatilityMassiveHistory"
+        WHERE symbol = :symbol
+          AND date >= CURRENT_DATE - INTERVAL '365 days'
+          AND date <= CURRENT_DATE
+        ORDER BY date ASC
+    """
+    df = query_dataframe(sql, {"symbol": sym})
+    result = df_to_json_safe(df) if df is not None and not df.empty else []
+    cache.set("screener_iv_history", {"symbol": sym}, result, ttl=600)
+    return result
+
+
+@router.get("/screener/symbol-puts")
+async def screener_symbol_puts(
+    symbol: str = Query(..., min_length=1),
+    dte_min: int = Query(20, ge=0, le=400),
+    dte_max: int = Query(60, ge=0, le=400),
+    min_oi: int = Query(50, ge=0),
+    min_vol: int = Query(0, ge=0),
+    min_premium_share: float = Query(0.0, ge=0.0),
+    current_user: dict = Depends(get_current_user),
+):
+    """Concrete sellable puts for one symbol (the master 'Verkaufbare Puts' table)."""
+    sym = symbol.strip().upper()
+    params = {
+        "symbol": sym, "dte_min": dte_min, "dte_max": dte_max,
+        "min_oi": min_oi, "min_vol": min_vol, "min_premium_share": min_premium_share,
+    }
+    cached = cache.get("screener_symbol_puts", params)
+    if cached is not None:
+        return cached
+
+    df = query_sql_file("screener_symbol_puts.sql", params)
+    result = df_to_json_safe(df) if df is not None and not df.empty else []
+    cache.set("screener_symbol_puts", params, result, ttl=300)
+    return result
