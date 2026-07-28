@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import {
-  getPutScreener, rankPutsAi, getPutScreenerBreakdown, getRollerPuts, getRollerPrice, getRollerCandidates,
+  getPutScreener, rankPutsAi, getPutScreenerBreakdown, getScreenerIvHistory, getScreenerSymbolPuts,
+  getRollerPuts, getRollerPrice, getRollerCandidates,
   getSpreadTypes, getSpreadRollerOpen, getSpreadRollerCandidates, getBrowserPuts,
 } from '@/lib/api';
 import { Input } from '@/components/ui/input';
@@ -13,6 +14,9 @@ import { LoadingState } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { formatCurrency, formatPercent, formatNumber, getClaudeAnalysisUrl } from '@/lib/utils';
 import { Sparkles, X, ExternalLink, Check } from 'lucide-react';
+import {
+  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
+} from 'recharts';
 
 type TabKey = 'screener' | 'put-roller' | 'spread-roller' | 'browser';
 
@@ -91,6 +95,22 @@ function PutScreenerTab() {
   const { data: breakdown, isFetching: loadingBreakdown } = useQuery({
     queryKey: ['put-screener-breakdown', selectedRow?.symbol, selectedRow?.put_strike, form.pe_max],
     queryFn: () => getPutScreenerBreakdown(selectedRow, form.pe_max),
+    enabled: !!selectedRow,
+  });
+
+  const { data: ivHistory } = useQuery({
+    queryKey: ['screener-iv-history', selectedRow?.symbol],
+    queryFn: () => getScreenerIvHistory(selectedRow.symbol),
+    enabled: !!selectedRow,
+  });
+
+  const { data: symbolPuts, isFetching: loadingSymbolPuts } = useQuery({
+    queryKey: ['screener-symbol-puts', selectedRow?.symbol, form.dte_min, form.dte_max, form.min_oi],
+    queryFn: () => getScreenerSymbolPuts({
+      symbol: selectedRow.symbol,
+      dte_min: form.dte_min, dte_max: form.dte_max,
+      min_oi: form.min_oi, min_vol: form.min_vol, min_premium_share: form.min_premium_share,
+    }),
     enabled: !!selectedRow,
   });
 
@@ -232,6 +252,57 @@ function PutScreenerTab() {
                 ) : (
                   <p className="text-sm text-muted-foreground">No breakdown available.</p>
                 )}
+
+                {/* IV history chart */}
+                {Array.isArray(ivHistory) && ivHistory.length > 0 && (
+                  <div className="pt-3 border-t border-border/40">
+                    <h4 className="text-xs font-semibold mb-2">IV History (1Y)</h4>
+                    <div className="h-56 w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={ivHistory} margin={{ top: 8, right: 12, bottom: 8, left: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
+                          <XAxis dataKey="date" tick={{ fontSize: 10 }} minTickGap={40} />
+                          <YAxis tick={{ fontSize: 10 }} domain={['auto', 'auto']} />
+                          <Tooltip
+                            contentStyle={{ fontSize: 12, background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}
+                            formatter={(v: any) => (typeof v === 'number' ? v.toFixed(2) : v)}
+                          />
+                          <Legend wrapperStyle={{ fontSize: 11 }} />
+                          <Line type="monotone" dataKey="iv" stroke="#8b5cf6" dot={false} strokeWidth={2} name="IV %" />
+                          <Line type="monotone" dataKey="iv_rank" stroke="#10b981" dot={false} strokeWidth={1.5} name="IV Rank" />
+                          <Line type="monotone" dataKey="iv_percentile" stroke="#6b7280" dot={false} strokeWidth={1} name="IV %ile" />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                )}
+
+                {/* Sellable puts now */}
+                <div className="pt-3 border-t border-border/40">
+                  <h4 className="text-xs font-semibold mb-2">Sellable Puts — now</h4>
+                  {loadingSymbolPuts ? (
+                    <p className="text-sm text-muted-foreground">Loading puts…</p>
+                  ) : Array.isArray(symbolPuts) && symbolPuts.length > 0 ? (
+                    <DataTable
+                      data={symbolPuts}
+                      columns={[
+                        { key: 'strike_price', label: 'Strike', align: 'right', format: (v) => formatCurrency(v), sortable: true },
+                        { key: 'expiration_date', label: 'Expiration', sortable: true },
+                        { key: 'days_to_expiration', label: 'DTE', align: 'right', sortable: true },
+                        { key: 'premium_option_price', label: 'Premium', align: 'right', format: (v) => formatCurrency(v), sortable: true },
+                        { key: 'greeks_delta', label: 'Delta', align: 'right', format: (v) => formatNumber(v, 3), sortable: true },
+                        { key: 'implied_volatility', label: 'IV', align: 'right', format: (v) => formatPercent(v), sortable: true },
+                        { key: 'open_interest', label: 'OI', align: 'right', format: (v) => formatNumber(v, 0), sortable: true },
+                        { key: 'day_volume', label: 'Vol', align: 'right', format: (v) => formatNumber(v, 0), sortable: true },
+                        { key: 'iv_rank', label: 'IV Rank', align: 'right', format: (v) => formatNumber(v, 1), sortable: true },
+                        { key: 'days_to_earnings', label: 'To Earn.', align: 'right', sortable: true },
+                      ]}
+                      compact stickyHeader maxHeight="40vh"
+                    />
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No sellable puts for the current DTE/OI filters.</p>
+                  )}
+                </div>
               </CardContent>
             </Card>
           )}
