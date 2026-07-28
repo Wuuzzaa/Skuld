@@ -941,7 +941,7 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
     else:
         st.success("🟢 Position im Gewinn -- Rollen optional (z. B. Laufzeit verlängern für mehr Prämie).")
 
-    st.markdown("### 🎯 Roll-Kandidaten (alle 3 Stufen)")
+    st.markdown("### 🎯 Roll-Kandidaten")
     with st.expander("ℹ️ Wie lese ich die Tabelle?", expanded=False):
         st.markdown("""
 - **Netto absolut**: Gesamtprämie nach dem Roll -- positiv heißt du nimmst Geld ein
@@ -950,7 +950,7 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
 - **Kapital nötig**: Cash der als Sicherheit hinterlegt werden muss (Strike × Kontrakte × 100)
 - **Klick auf eine Zeile** → Plain-Language Erklärung was genau passiert
 - 🟢 DTE-Farbe = 30–60 Tage (Buch-Optimum), 🟡 = 61–90 Tage (Ausnahme)
-- Stufe 1+3: nur OTM-Kandidaten (Strike < aktueller Kurs)
+- **↕️ Vertikal** = niedrigerer Strike (OTM), gleiche Kontrakte · **↔️ Horizontal** = gleicher Strike, nur Zeit · **✖️2 Verdoppeln** = niedrigerer Strike, doppelte Kontrakte
 """)
 
     # Filter-Zeile für Roll-Kandidaten
@@ -995,33 +995,44 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
     # Puffer-Grenze berechnen: Strike muss ≤ S * (1 - puffer/100)
     _strike_max_otm = S * (1 - _roll_puffer / 100) if _roll_puffer > 0 else S
 
-    # Stufe 1: OTM-Strikes (< aktueller Kurs S), mit optionalem Puffer
+    # Kandidaten je Kategorie vorbereiten (Logik identisch zu den alten Stufen 1/2/3,
+    # nur unter benannten Reitern präsentiert).
+    # ↕️ Vertikal (= Stufe 1): OTM-Strikes (< aktueller Kurs S), mit optionalem Puffer
     st1 = cand[cand["strike_price"] < _strike_max_otm].sort_values(
         ["strike_price", "days_to_expiration"], ascending=[False, True]
     )
-    any_green |= _render_stufe(1, st1, K, P_eroeffnung, P_heute, int(n_contracts), breakeven_old,
-                               f"Stufe 1 — niedrigerer Basispreis (OTM), gleiche Kontrakte")
-
-    # Stufe 2: gleicher Strike wie K — nur wenn K selbst OTM oder max 15% ITM
+    # ↔️ Horizontal (= Stufe 2): gleicher Strike wie K — nur wenn K selbst OTM oder max 15% ITM
     st2_raw = cand[cand["strike_price"] == K]
     itm_pct = (K - S) / K * 100 if K > 0 else 0
-    if itm_pct > 15:
-        st.caption(
-            f"⚠️ Stufe 2 übersprungen: Strike ${K:.2f} ist {itm_pct:.1f}% im Geld bei Kurs ${S:.2f} — "
-            f"kaum Zeitwert vorhanden, GS-Verbesserung unwahrscheinlich."
-        )
-        st2 = st2_raw.iloc[0:0]
-    else:
-        st2 = st2_raw
-    any_green |= _render_stufe(2, st2, K, P_eroeffnung, P_heute, int(n_contracts), breakeven_old,
-                               "Stufe 2 — gleicher Basispreis, gleiche Kontrakte")
-
-    # Stufe 3: OTM-Strikes mit Puffer, doppelte Kontrakte
+    # ✖️2 Verdoppeln (= Stufe 3): OTM-Strikes mit Puffer, doppelte Kontrakte
     st3 = cand[cand["strike_price"] < _strike_max_otm].sort_values(
         ["strike_price", "days_to_expiration"], ascending=[False, True]
     )
-    any_green |= _render_stufe(3, st3, K, P_eroeffnung, P_heute, 2 * int(n_contracts), breakeven_old,
-                               "Stufe 3 — niedrigerer Basispreis (OTM), Kontrakte verdoppelt")
+
+    tab_v, tab_h, tab_x2 = st.tabs(["↕️ Vertikal", "↔️ Horizontal", "✖️2 Verdoppeln"])
+
+    with tab_v:
+        st.caption("Strike senken (OTM), gleiche Laufzeit-Klasse, gleiche Kontraktzahl.")
+        any_green |= _render_stufe(1, st1, K, P_eroeffnung, P_heute, int(n_contracts), breakeven_old,
+                                   "↕️ Vertikal — niedrigerer Basispreis (OTM), gleiche Kontrakte")
+
+    with tab_h:
+        st.caption("Gleicher Strike, nur Zeit kaufen (späterer Verfall).")
+        if itm_pct > 15:
+            st.caption(
+                f"⚠️ Übersprungen: Strike ${K:.2f} ist {itm_pct:.1f}% im Geld bei Kurs ${S:.2f} — "
+                f"kaum Zeitwert vorhanden, GS-Verbesserung unwahrscheinlich."
+            )
+            st2 = st2_raw.iloc[0:0]
+        else:
+            st2 = st2_raw
+        any_green |= _render_stufe(2, st2, K, P_eroeffnung, P_heute, int(n_contracts), breakeven_old,
+                                   "↔️ Horizontal — gleicher Basispreis, gleiche Kontrakte")
+
+    with tab_x2:
+        st.caption("Niedrigerer Strike (OTM), doppelte Kontraktzahl — maximale GS-Senkung, mehr Kapital nötig.")
+        any_green |= _render_stufe(3, st3, K, P_eroeffnung, P_heute, 2 * int(n_contracts), breakeven_old,
+                                   "✖️2 Verdoppeln — niedrigerer Basispreis (OTM), Kontrakte verdoppelt")
 
     if not any_green:
         _render_endgame_hint()
