@@ -1,6 +1,4 @@
-"""
-Earnings Put Scanner — IV-Crush Strategie
-"""
+"""Earnings Put Scanner — IV-Crush Strategie"""
 
 import logging
 import os
@@ -45,26 +43,16 @@ for key, default in [
     if key not in st.session_state:
         st.session_state[key] = default
 
-# ── Filter controls ───────────────────────────────────────────────────────────
+# ── Scanner Filter ────────────────────────────────────────────────────────────
 st.subheader("Scanner Filter")
 
 col1, col2, col3, col4, col5 = st.columns([1.5, 1.5, 1.5, 1, 1])
-
 with col1:
-    days_ahead = st.selectbox(
-        "Earnings binnen",
-        options=[3, 5, 7, 10, 14, 21, 30, 45, 60],
-        index=2,
-        format_func=lambda x: f"{x} Tagen",
-        key="eps_days_ahead",
-    )
+    days_ahead = st.selectbox("Earnings binnen", options=[3, 5, 7, 10, 14, 21, 30, 45, 60],
+                               index=2, format_func=lambda x: f"{x} Tagen", key="eps_days_ahead")
 with col2:
-    require_dividend = st.selectbox(
-        "Dividenden-Filter",
-        options=["Alle", "Nur Dividendenzahler"],
-        index=0,
-        key="eps_div_filter",
-    )
+    require_dividend = st.selectbox("Dividenden-Filter", options=["Alle", "Nur Dividendenzahler"],
+                                    index=0, key="eps_div_filter")
 with col3:
     max_pe = st.number_input("Max P/E Ratio", min_value=1, max_value=500, value=100, step=5, key="eps_max_pe")
 with col4:
@@ -115,21 +103,27 @@ if scan_btn:
 if st.session_state["eps_candidates_df"] is not None:
     df = st.session_state["eps_candidates_df"].copy()
 
+    # Berechne safe_threshold pro Zeile und markiere ob safe puts existieren
+    # (client-seitig aus den SQL-Daten: prüft ob ATM-Put-Strike < safe_threshold)
+    # Wir nutzen die earnings_put_candidates SQL nicht hier — stattdessen prüfen wir
+    # ob der Scanner selbst einen "atm_strike" hat der unter der Schwelle liegt,
+    # UND ob das Symbol überhaupt Puts unter der Schwelle haben KÖNNTE.
+    # Da wir keine Put-Daten pro Symbol im Kandidaten-Scan haben, laden wir sie
+    # einmalig beim ersten Toggle-Aufruf aus der DB.
+
+    # Berechne safe_threshold aus den bereits vorhandenen Spalten
+    if "live_stock_price" in df.columns and "expected_move" in df.columns:
+        df["_safe_threshold"] = df["live_stock_price"] - df["expected_move"]
+
     st.divider()
 
-    # Sektor-Filter (client-seitig, aus geladenen Daten)
+    # Filter-Zeile: Sektor-Multiselect + Safe-Put-Toggle
     available_sectors = sorted(df["company_sector"].dropna().unique().tolist()) if "company_sector" in df.columns else []
-
     filter_col1, filter_col2 = st.columns([3, 1])
     with filter_col1:
         if available_sectors:
-            selected_sectors = st.multiselect(
-                "Sektor-Filter",
-                options=available_sectors,
-                default=[],
-                placeholder="Alle Sektoren anzeigen",
-                key="eps_sector_filter",
-            )
+            selected_sectors = st.multiselect("Sektor-Filter", options=available_sectors,
+                                               default=[], placeholder="Alle Sektoren", key="eps_sector_filter")
             if selected_sectors:
                 df = df[df["company_sector"].isin(selected_sectors)]
     with filter_col2:
@@ -137,10 +131,38 @@ if st.session_state["eps_candidates_df"] is not None:
             "✅ Nur mit Safe-Put",
             value=False,
             key="eps_safe_puts_only",
-            help="Nur Symbole anzeigen, für die mindestens ein Put unterhalb des Expected Move existiert",
+            help="Nur Symbole für die ein Put UNTER dem Expected Move in der DB existiert",
         )
-        if safe_puts_only and "has_safe_put" in df.columns:
-            df = df[df["has_safe_put"].astype(bool) == True]
+
+    # Safe-Put-Filter: lade puts_check einmalig wenn Toggle aktiviert
+    if safe_puts_only:
+        if "eps_safe_put_symbols" not in st.session_state:
+            symbols = df["symbol"].tolist()
+            safe_symbols = set()
+            for _, row in df.iterrows():
+                thresh = row.get("_safe_threshold")
+                sym = row["symbol"]
+                earnings_dt = row.get("earnings_date")
+                if pd.isna(thresh) or thresh is None:
+                    continue
+                try:
+                    check_sql = PATH_DATABASE_QUERY_FOLDER / "earnings_put_candidates.sql"
+                    puts = select_into_dataframe(sql_file_path=check_sql,
+                                                 params={"symbol": sym, "min_oi": 10})
+                    if not puts.empty:
+                        puts["strike_price"] = pd.to_numeric(puts["strike_price"], errors="coerce")
+                        if (puts["strike_price"] < float(thresh)).any():
+                            safe_symbols.add(sym)
+                except Exception:
+                    pass
+            st.session_state["eps_safe_put_symbols"] = safe_symbols
+
+        safe_symbols = st.session_state.get("eps_safe_put_symbols", set())
+        df = df[df["symbol"].isin(safe_symbols)]
+    else:
+        # Toggle aus → Cache löschen damit beim nächsten Ein-Klicken frisch geladen wird
+        if "eps_safe_put_symbols" in st.session_state:
+            del st.session_state["eps_safe_put_symbols"]
 
     st.subheader(f"Earnings-Kandidaten — {len(df)} gefunden")
     st.caption("Zeile anklicken um verfügbare Puts für das Symbol zu sehen.")
@@ -159,34 +181,26 @@ if st.session_state["eps_candidates_df"] is not None:
         return f"⚪ {iv:.0f}%"
 
     display_df = pd.DataFrame({
-        "Symbol":        df["symbol"],
-        "Name":          df.get("company_name", pd.Series("—", index=df.index)).fillna("—").astype(str).str.slice(0, 28),
-        "Sektor":        df.get("company_sector", pd.Series("—", index=df.index)).fillna("—"),
-        "Safe Put":      df.get("has_safe_put", pd.Series(False, index=df.index)).apply(lambda v: "✅" if v else "—"),
-        "Earnings":      df["earnings_date"].astype(str),
-        "Tage":          df["days_to_earnings"].astype("Int64"),
-        "Kurs ($)":      df["live_stock_price"].apply(lambda v: f"{v:.2f}" if pd.notna(v) else "—"),
-        "ATM Strike":    df.get("atm_strike", pd.Series(None, index=df.index)).apply(lambda v: f"${v:.1f}" if pd.notna(v) else "—"),
+        "Symbol":         df["symbol"],
+        "Name":           df.get("company_name", pd.Series("—", index=df.index)).fillna("—").astype(str).str.slice(0, 28),
+        "Sektor":         df.get("company_sector", pd.Series("—", index=df.index)).fillna("—"),
+        "Earnings":       df["earnings_date"].astype(str),
+        "Tage":           df["days_to_earnings"].astype("Int64"),
+        "Kurs ($)":       df["live_stock_price"].apply(lambda v: f"{v:.2f}" if pd.notna(v) else "—"),
+        "ATM Strike":     df.get("atm_strike", pd.Series(None, index=df.index)).apply(lambda v: f"${v:.1f}" if pd.notna(v) else "—"),
         "Straddle Verf.": df.get("straddle_expiry", pd.Series("—", index=df.index)).astype(str),
-        "ATM Call+Put":  df.apply(
-            lambda r: f"${r['expected_move']:.2f}" if pd.notna(r.get("expected_move")) else "—", axis=1),
-        "Exp. Move":     df.apply(
-            lambda r: f"±${r['expected_move']:.2f} ({r['expected_move_pct']:.1f}%)"
-            if pd.notna(r.get("expected_move")) else "—", axis=1),
-        "IV Rank":       df.apply(_iv_rank_badge, axis=1),
-        "Mkt Cap":       df["market_cap"].apply(_fmt_market_cap),
-        "P/E":           df["trailing_pe"].apply(lambda v: f"{v:.1f}" if pd.notna(v) else "—"),
-        "Dividende":     df["dividend_classification"].fillna("—"),
+        "ATM Call+Put":   df.apply(lambda r: f"${r['expected_move']:.2f}" if pd.notna(r.get("expected_move")) else "—", axis=1),
+        "Exp. Move":      df.apply(lambda r: f"±${r['expected_move']:.2f} ({r['expected_move_pct']:.1f}%)"
+                                   if pd.notna(r.get("expected_move")) else "—", axis=1),
+        "IV Rank":        df.apply(_iv_rank_badge, axis=1),
+        "Mkt Cap":        df["market_cap"].apply(_fmt_market_cap),
+        "P/E":            df["trailing_pe"].apply(lambda v: f"{v:.1f}" if pd.notna(v) else "—"),
+        "Dividende":      df["dividend_classification"].fillna("—"),
     })
 
-    event = st.dataframe(
-        display_df,
-        use_container_width=True,
-        height=min(600, 40 + 35 * len(display_df)),
-        selection_mode="single-row",
-        on_select="rerun",
-        key="eps_candidate_table",
-    )
+    event = st.dataframe(display_df, use_container_width=True,
+                         height=min(600, 40 + 35 * len(display_df)),
+                         selection_mode="single-row", on_select="rerun", key="eps_candidate_table")
 
     selected_rows = event.selection.rows if hasattr(event, "selection") else []
     if selected_rows:
@@ -194,12 +208,12 @@ if st.session_state["eps_candidates_df"] is not None:
         selected_symbol = df.iloc[selected_idx]["symbol"]
         row = df.iloc[selected_idx]
 
-        price    = float(row["live_stock_price"])    if pd.notna(row.get("live_stock_price"))    else None
-        exp_move = float(row["expected_move"])       if pd.notna(row.get("expected_move"))       else None
-        exp_pct  = float(row["expected_move_pct"])   if pd.notna(row.get("expected_move_pct"))   else None
-        iv_rank  = float(row["iv_rank"])             if pd.notna(row.get("iv_rank"))             else None
-        hv       = float(row["historical_volatility_30d"]) if pd.notna(row.get("historical_volatility_30d")) else None
-        atm_strike     = float(row["atm_strike"])    if pd.notna(row.get("atm_strike"))          else None
+        price           = float(row["live_stock_price"])        if pd.notna(row.get("live_stock_price"))        else None
+        exp_move        = float(row["expected_move"])           if pd.notna(row.get("expected_move"))           else None
+        exp_pct         = float(row["expected_move_pct"])       if pd.notna(row.get("expected_move_pct"))       else None
+        iv_rank         = float(row["iv_rank"])                 if pd.notna(row.get("iv_rank"))                 else None
+        hv              = float(row["historical_volatility_30d"]) if pd.notna(row.get("historical_volatility_30d")) else None
+        atm_strike      = float(row["atm_strike"])              if pd.notna(row.get("atm_strike"))              else None
         straddle_expiry = str(row.get("straddle_expiry", ""))
 
         st.divider()
@@ -209,7 +223,6 @@ if st.session_state["eps_candidates_df"] is not None:
             safe_threshold = price - exp_move
             upper_range    = price + exp_move
 
-            # Kennzahlen kompakt
             m1, m2, m3, m4 = st.columns(4)
             m1.metric("Kurs", f"${price:.2f}")
             m2.metric("Expected Move", f"±${exp_move:.2f}", f"{exp_pct:.1f}%" if exp_pct else None)
@@ -223,11 +236,10 @@ if st.session_state["eps_candidates_df"] is not None:
 Der Expected Move wird **nicht** aus einer Formel geschätzt, sondern direkt aus dem Marktpreis abgelesen:
 
 ```
-Expected Move = Preis ATM Call + Preis ATM Put
-              = ATM Straddle-Preis
+Expected Move = Preis ATM Call + Preis ATM Put  =  ATM Straddle-Preis
 ```
 
-Konkret für {selected_symbol}: Strike **${atm_strike:.1f}**, Verfall **{straddle_expiry}**
+Konkret für **{selected_symbol}**: Strike **${atm_strike:.1f}**, Verfall **{straddle_expiry}**
 
 > Der Markt selbst sagt damit: *"Wir erwarten eine Bewegung von ±${exp_move:.2f}."*
 > Das ist die genaueste Methode — keine Schätzung, sondern implizite Marktmeinung.
@@ -237,26 +249,23 @@ Konkret für {selected_symbol}: Strike **${atm_strike:.1f}**, Verfall **{straddl
 **Was bedeutet die Prozentzahl ({exp_pct:.1f}%)?**
 
 ```
-{exp_pct:.1f}% = Expected Move / Aktueller Kurs
-             = ${exp_move:.2f} / ${price:.2f}
+{exp_pct:.1f}% = Expected Move / Aktueller Kurs  =  ${exp_move:.2f} / ${price:.2f}
 ```
 
-Die Aktie wird sich nach Earnings mit **68% Wahrscheinlichkeit** innerhalb dieser Bandbreite bewegen:
+| Zone | Kurs | Bedeutung |
+|---|---|---|
+| Obergrenze | ${upper_range:.2f} (+{exp_pct:.1f}%) | Erwartete Aufwärtsbewegung |
+| Aktuell | ${price:.2f} | — |
+| Safe-Strike-Schwelle | ${safe_threshold:.2f} (−{exp_pct:.1f}%) | Puts MIT Strike darunter = Safe Zone |
 
-| Zone | Kurs |
-|---|---|
-| Obergrenze | ${upper_range:.2f} (+{exp_pct:.1f}%) |
-| Aktuell | ${price:.2f} |
-| Untergrenze / Safe-Strike-Schwelle | ${safe_threshold:.2f} (−{exp_pct:.1f}%) |
-
-Puts mit Strike **unter ${safe_threshold:.2f}** liegen außerhalb dieser Zone — das Risiko einer Zuweisung ist statistisch kleiner als 16%.
+Puts unter **${safe_threshold:.2f}** werden nur ausgeübt wenn die Aktie **mehr fällt als der Markt erwartet** (< 16% Wahrscheinlichkeit).
 """)
                 if hv is not None and exp_pct is not None:
                     hv_pct = hv * 100
                     if exp_pct > hv_pct:
-                        st.info(f"📊 Implizierte Bewegung ({exp_pct:.1f}%) > historische Volatilität ({hv_pct:.1f}%) — Optionen sind überdurchschnittlich teuer. Guter Zeitpunkt zum Verkaufen.")
+                        st.info(f"📊 Implizierte Bewegung ({exp_pct:.1f}%) > historische Volatilität ({hv_pct:.1f}%) — Optionen teuer. Guter Zeitpunkt zum Verkaufen.")
                     else:
-                        st.warning(f"📊 Implizierte Bewegung ({exp_pct:.1f}%) ≈ historische Volatilität ({hv_pct:.1f}%) — Optionen nicht deutlich überbewertet. IV-Crush-Effekt könnte geringer ausfallen.")
+                        st.warning(f"📊 Implizierte Bewegung ({exp_pct:.1f}%) ≈ historische Volatilität ({hv_pct:.1f}%) — IV-Crush-Effekt könnte geringer ausfallen.")
 
         if selected_symbol != st.session_state.get("eps_selected_symbol"):
             st.session_state["eps_selected_symbol"] = selected_symbol
@@ -273,20 +282,18 @@ if st.session_state.get("eps_selected_symbol"):
     expected_move = symbol_row.get("expected_move")
     earnings_date = symbol_row.get("earnings_date")
 
-    safety_threshold = (
-        float(live_price) - float(expected_move)
-        if pd.notna(live_price) and pd.notna(expected_move) else None
-    )
+    safety_threshold = (float(live_price) - float(expected_move)
+                        if pd.notna(live_price) and pd.notna(expected_move) else None)
 
     st.divider()
     st.subheader(f"Put-Kandidaten — {symbol}")
 
-    # Put filter controls
     p_col1, p_col2, p_col3 = st.columns(3)
     with p_col1:
         min_oi = st.number_input("Min Open Interest", min_value=0, value=50, step=25, key="eps_min_oi")
     with p_col2:
-        min_premium_pct = st.number_input("Min Prämie % vom Strike", min_value=0.0, max_value=10.0, value=1.0, step=0.1, format="%.1f", key="eps_min_premium_pct")
+        min_premium_pct = st.number_input("Min Prämie % vom Strike", min_value=0.0, max_value=10.0,
+                                          value=1.0, step=0.1, format="%.1f", key="eps_min_premium_pct")
     with p_col3:
         safe_only = st.checkbox("Nur Safe Zone", value=False, key="eps_safe_only",
                                 help="Nur Puts anzeigen deren Strike unterhalb des Expected Move liegt")
@@ -295,7 +302,8 @@ if st.session_state.get("eps_selected_symbol"):
         with st.spinner(f"Lade Puts für {symbol}..."):
             try:
                 sql_path = PATH_DATABASE_QUERY_FOLDER / "earnings_put_candidates.sql"
-                puts_df  = select_into_dataframe(sql_file_path=sql_path, params={"symbol": symbol, "min_oi": min_oi})
+                puts_df  = select_into_dataframe(sql_file_path=sql_path,
+                                                 params={"symbol": symbol, "min_oi": min_oi})
                 st.session_state["eps_puts_df"] = puts_df
             except Exception as e:
                 st.error(f"Fehler: {e}")
@@ -306,8 +314,7 @@ if st.session_state.get("eps_selected_symbol"):
     if puts_df is not None and not puts_df.empty:
         df_puts = puts_df.copy()
         for col in ["strike_price", "premium_option_price", "premium_pct",
-                    "open_interest", "implied_volatility", "greeks_delta",
-                    "live_stock_price", "expected_move"]:
+                    "open_interest", "implied_volatility", "greeks_delta"]:
             if col in df_puts.columns:
                 df_puts[col] = pd.to_numeric(df_puts[col], errors="coerce")
 
@@ -329,73 +336,64 @@ if st.session_state.get("eps_selected_symbol"):
             df_puts["close_at_90pct"] = (df_puts["premium_option_price"] * 0.10).round(2)
 
             disp = pd.DataFrame({
-                "Zone":          df_puts["is_safe"].apply(lambda v: "✅ Safe" if v else "⚠️ Inside"),
-                "Verfall":       df_puts["expiration_date"].astype(str),
-                "DTE":           df_puts["days_to_expiration"].astype("Int64"),
-                "Strike ($)":    df_puts["strike_price"].apply(lambda v: f"{v:.1f}"),
-                "Prämie ($)":    df_puts["premium_option_price"].apply(lambda v: f"{v:.2f}" if pd.notna(v) else "—"),
-                "Prämie %":      df_puts["premium_pct"].apply(lambda v: f"{v:.2f}%" if pd.notna(v) else "—"),
-                "Ziel 90% ($)":  df_puts["close_at_90pct"].apply(lambda v: f"{v:.2f}"),
-                "OI":            df_puts["open_interest"].apply(lambda v: f"{int(v):,}" if pd.notna(v) else "—"),
-                "Delta":         df_puts["greeks_delta"].apply(lambda v: f"{v:.3f}" if pd.notna(v) else "—"),
-                "IV":            df_puts["implied_volatility"].apply(lambda v: f"{v*100:.1f}%" if pd.notna(v) else "—"),
+                "Zone":         df_puts["is_safe"].apply(lambda v: "✅ Safe" if v else "⚠️ Inside"),
+                "Verfall":      df_puts["expiration_date"].astype(str),
+                "DTE":          df_puts["days_to_expiration"].astype("Int64"),
+                "Strike ($)":   df_puts["strike_price"].apply(lambda v: f"{v:.1f}"),
+                "Prämie ($)":   df_puts["premium_option_price"].apply(lambda v: f"{v:.2f}" if pd.notna(v) else "—"),
+                "Prämie %":     df_puts["premium_pct"].apply(lambda v: f"{v:.2f}%" if pd.notna(v) else "—"),
+                "Ziel 90%":     df_puts["close_at_90pct"].apply(lambda v: f"${v:.2f}"),
+                "OI":           df_puts["open_interest"].apply(lambda v: f"{int(v):,}" if pd.notna(v) else "—"),
+                "Delta":        df_puts["greeks_delta"].apply(lambda v: f"{v:.3f}" if pd.notna(v) else "—"),
+                "IV":           df_puts["implied_volatility"].apply(lambda v: f"{v*100:.1f}%" if pd.notna(v) else "—"),
             })
 
-            st.caption(f"{len(disp)} Puts — ✅ Safe Zone = Strike unterhalb des Expected Move")
+            st.caption(f"{len(disp)} Puts — ✅ Safe Zone = Strike unter ${safety_threshold:.2f}")
 
-            put_event = st.dataframe(
-                disp,
-                use_container_width=True,
-                height=min(600, 40 + 35 * len(disp)),
-                selection_mode="single-row",
-                on_select="rerun",
-                key="eps_put_table",
-            )
+            put_event = st.dataframe(disp, use_container_width=True,
+                                     height=min(600, 40 + 35 * len(disp)),
+                                     selection_mode="single-row", on_select="rerun", key="eps_put_table")
 
-            # ── Put detail panel ──────────────────────────────────────────────
             put_selected = put_event.selection.rows if hasattr(put_event, "selection") else []
             if put_selected:
-                pr        = df_puts.iloc[put_selected[0]]
-                p_strike  = float(pr["strike_price"])
-                p_premium = float(pr["premium_option_price"])
-                p_dte     = int(pr["days_to_expiration"])
-                p_delta   = float(pr["greeks_delta"])   if pd.notna(pr.get("greeks_delta"))   else None
-                p_below   = bool(pr["is_safe"])
-                p_close90 = round(p_premium * 0.10, 2)
-                p_breakeven = round(p_strike - p_premium, 2)
+                pr          = df_puts.iloc[put_selected[0]]
+                p_strike    = float(pr["strike_price"])
+                p_premium   = float(pr["premium_option_price"])
+                p_dte       = int(pr["days_to_expiration"])
+                p_delta     = float(pr["greeks_delta"]) if pd.notna(pr.get("greeks_delta")) else None
+                p_below     = bool(pr["is_safe"])
+                p_close90   = round(p_premium * 0.10, 2)
                 p_max_gain  = round(p_premium * 100, 2)
+                p_breakeven = round(p_strike - p_premium, 2)
                 p_profit90  = round((p_premium - p_close90) * 100, 2)
-
-                price = float(live_price) if pd.notna(live_price) else None
-                distance     = round(price - p_strike, 2)        if price else None
-                distance_pct = round(distance / price * 100, 1)  if price else None
-                assign_prob  = round(abs(p_delta) * 100, 0)      if p_delta else None
+                price       = float(live_price) if pd.notna(live_price) else None
+                distance    = round(price - p_strike, 2)       if price else None
+                dist_pct    = round(distance / price * 100, 1) if price else None
+                assign_prob = round(abs(p_delta) * 100, 0)     if p_delta else None
 
                 st.divider()
                 st.subheader(f"{symbol} — ${p_strike:.1f} Put ({p_dte} DTE)")
 
                 if p_below:
-                    st.success("✅ Safe Zone — Strike liegt unterhalb des Expected Move. Nur Zuweisung wenn Aktie mehr fällt als erwartet.")
+                    st.success("✅ Safe Zone — Strike liegt unterhalb des Expected Move.")
                 else:
-                    st.warning("⚠️ Innerhalb des Expected Move — realistisches Zuweisungsrisiko nach Earnings.")
+                    st.warning("⚠️ Innerhalb des Expected Move — realistisches Zuweisungsrisiko.")
 
-                # Kennzahlen
                 c1, c2, c3, c4 = st.columns(4)
-                c1.metric("Prämie / Aktie",     f"${p_premium:.2f}")
-                c2.metric("Prämie / Kontrakt",  f"${p_max_gain:.2f}")
-                c3.metric("Breakeven",          f"${p_breakeven:.2f}")
-                c4.metric("Abstand zum Kurs",   f"${distance:.2f} ({distance_pct:.1f}%)" if distance else "—")
+                c1.metric("Prämie / Aktie",    f"${p_premium:.2f}")
+                c2.metric("Prämie / Kontrakt", f"${p_max_gain:.2f}")
+                c3.metric("Breakeven",         f"${p_breakeven:.2f}")
+                c4.metric("Abstand zum Kurs",  f"${distance:.2f} ({dist_pct:.1f}%)" if distance else "—")
 
                 c5, c6, c7, c8 = st.columns(4)
-                c5.metric("Zielkurs (90%)",     f"${p_close90:.2f}")
-                c6.metric("Gewinn bei 90%",     f"${p_profit90:.2f} / Kontrakt")
-                c7.metric("Zuweisungswahrsch.", f"~{assign_prob:.0f}%" if assign_prob else "—")
-                c8.metric("Prämie % vom Strike", f"{float(pr['premium_pct']):.2f}%")
+                c5.metric("Zielkurs (90%)",    f"${p_close90:.2f}")
+                c6.metric("Gewinn bei 90%",    f"${p_profit90:.2f} / Kontrakt")
+                c7.metric("Zuweisung ~",       f"{assign_prob:.0f}%" if assign_prob else "—")
+                c8.metric("Prämie % Strike",   f"{float(pr['premium_pct']):.2f}%")
 
-                # Exit-Plan
                 st.markdown("**Exit-Plan**")
                 st.markdown(
-                    f"1. **Morgens nach Earnings:** Buy-to-Close bei **${p_close90:.2f}** (90% Gewinnziel)  \n"
+                    f"1. **Morgens nach Earnings:** Buy-to-Close bei **${p_close90:.2f}** (90% Ziel)  \n"
                     f"2. **60 min nach Marktöffnung:** Falls nicht gefüllt → zum Marktpreis schließen  \n"
                     f"3. **Bei Zuweisung:** 100 Aktien zu ${p_strike:.2f} → Covered Call verkaufen"
                 )
@@ -405,22 +403,18 @@ if st.session_state.get("eps_selected_symbol"):
 **Prämie / Aktie** — Betrag den du kassierst. 1 Kontrakt = 100 Aktien = ${p_max_gain:.2f} gesamt.
 
 **Breakeven (${p_breakeven:.2f})** — Strike minus Prämie. Erst darunter machst du Verlust.
-Bei Zuweisung kaufst du die Aktie effektiv zu diesem Preis.
 
-**Zielkurs (${p_close90:.2f})** — Zielpreis für deine Buy-to-Close Order am nächsten Morgen.
-Du hast die Option zu 10% des ursprünglichen Wertes zurückgekauft = 90% Gewinn einbehalten.
+**Zielkurs (${p_close90:.2f})** — Buy-to-Close Zielpreis. Du kaufst die Option für 10% zurück = 90% Gewinn.
 
-**Zuweisungswahrscheinlichkeit (~{assign_prob:.0f}%)** — abgeleitet aus Delta {p_delta:.3f}.
-Delta −0.23 bedeutet ~23% Chance, dass der Put im Geld verfällt.
+**Zuweisungswahrscheinlichkeit (~{assign_prob:.0f}%)** — aus Delta {p_delta:.3f} abgeleitet. Delta −0.20 = ~20% Chance auf Zuweisung.
 
-**Delta** — Je näher an 0, desto weiter OTM (out of the money) und sicherer.
-−0.10 bis −0.25 ist typisch für diese Strategie.
+**Delta** — Je näher an 0, desto weiter OTM und sicherer. −0.10 bis −0.25 ist typisch für diese Strategie.
 """)
             else:
-                st.caption("Zeile in der Put-Tabelle anklicken für detaillierte Analyse.")
+                st.caption("Zeile anklicken für detaillierte Analyse.")
 
     elif puts_df is not None:
-        st.info(f"Keine wöchentlichen Puts für {symbol} mit den aktuellen Filtern.")
+        st.info(f"Keine Puts für {symbol} mit den aktuellen Filtern.")
 
 # ── Footer ────────────────────────────────────────────────────────────────────
 st.divider()
