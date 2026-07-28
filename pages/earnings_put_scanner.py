@@ -116,6 +116,20 @@ if st.session_state["eps_candidates_df"] is not None:
     df = st.session_state["eps_candidates_df"].copy()
 
     st.divider()
+
+    # Sektor-Filter (client-seitig, aus geladenen Daten)
+    available_sectors = sorted(df["company_sector"].dropna().unique().tolist()) if "company_sector" in df.columns else []
+    if available_sectors:
+        selected_sectors = st.multiselect(
+            "Sektor-Filter",
+            options=available_sectors,
+            default=[],
+            placeholder="Alle Sektoren anzeigen",
+            key="eps_sector_filter",
+        )
+        if selected_sectors:
+            df = df[df["company_sector"].isin(selected_sectors)]
+
     st.subheader(f"Earnings-Kandidaten — {len(df)} gefunden")
     st.caption("Zeile anklicken um verfügbare Puts für das Symbol zu sehen.")
 
@@ -135,6 +149,7 @@ if st.session_state["eps_candidates_df"] is not None:
     display_df = pd.DataFrame({
         "Symbol":    df["symbol"],
         "Name":      df.get("company_name", pd.Series("—", index=df.index)).fillna("—").astype(str).str.slice(0, 28),
+        "Sektor":    df.get("company_sector", pd.Series("—", index=df.index)).fillna("—"),
         "Earnings":  df["earnings_date"].astype(str),
         "Tage":      df["days_to_earnings"].astype("Int64"),
         "Kurs ($)":  df["live_stock_price"].apply(lambda v: f"{v:.2f}" if pd.notna(v) else "—"),
@@ -184,22 +199,47 @@ if st.session_state["eps_candidates_df"] is not None:
             m3.metric("Safe-Strike-Schwelle", f"< ${safe_threshold:.2f}", "Strike muss darunter liegen")
             m4.metric("IV Rank", f"{iv_rank:.0f}%" if iv_rank is not None else "—")
 
-            with st.expander("Was bedeutet Expected Move und Safe-Strike-Schwelle?"):
+            with st.expander("ℹ️ Wie wird der Expected Move berechnet? Was bedeutet die Prozentzahl?"):
                 st.markdown(f"""
-Der **Expected Move von ±${exp_move:.2f} ({exp_pct:.1f}%)** wird aus dem ATM-Straddle berechnet
-(Call + Put bei Strike ${atm_strike:.1f}, Verfall {straddle_expiry}).
+**Berechnung — ATM Straddle**
 
-Der Markt sagt damit: *"Mit 68% Wahrscheinlichkeit bleibt die Aktie zwischen ${safe_threshold:.2f} und ${upper_range:.2f}."*
+Der Expected Move wird **nicht** aus einer Formel geschätzt, sondern direkt aus dem Marktpreis abgelesen:
 
-Die **Safe-Strike-Schwelle (${safe_threshold:.2f})** ist die untere Grenze dieser Zone.
-Puts mit Strike darunter werden nur ausgeübt, wenn die Aktie **mehr fällt als erwartet**.
+```
+Expected Move = Preis ATM Call + Preis ATM Put
+              = ATM Straddle-Preis
+```
+
+Konkret für {selected_symbol}: Strike **${atm_strike:.1f}**, Verfall **{straddle_expiry}**
+
+> Der Markt selbst sagt damit: *"Wir erwarten eine Bewegung von ±${exp_move:.2f}."*
+> Das ist die genaueste Methode — keine Schätzung, sondern implizite Marktmeinung.
+
+---
+
+**Was bedeutet die Prozentzahl ({exp_pct:.1f}%)?**
+
+```
+{exp_pct:.1f}% = Expected Move / Aktueller Kurs
+             = ${exp_move:.2f} / ${price:.2f}
+```
+
+Die Aktie wird sich nach Earnings mit **68% Wahrscheinlichkeit** innerhalb dieser Bandbreite bewegen:
+
+| Zone | Kurs |
+|---|---|
+| Obergrenze | ${upper_range:.2f} (+{exp_pct:.1f}%) |
+| Aktuell | ${price:.2f} |
+| Untergrenze / Safe-Strike-Schwelle | ${safe_threshold:.2f} (−{exp_pct:.1f}%) |
+
+Puts mit Strike **unter ${safe_threshold:.2f}** liegen außerhalb dieser Zone — das Risiko einer Zuweisung ist statistisch kleiner als 16%.
 """)
                 if hv is not None and exp_pct is not None:
                     hv_pct = hv * 100
                     if exp_pct > hv_pct:
-                        st.info(f"Implizierte Bewegung ({exp_pct:.1f}%) > historische Volatilität ({hv_pct:.1f}%) — Optionen sind teuer. Gut zum Verkaufen.")
+                        st.info(f"📊 Implizierte Bewegung ({exp_pct:.1f}%) > historische Volatilität ({hv_pct:.1f}%) — Optionen sind überdurchschnittlich teuer. Guter Zeitpunkt zum Verkaufen.")
                     else:
-                        st.warning(f"Implizierte Bewegung ({exp_pct:.1f}%) ≈ historische Volatilität ({hv_pct:.1f}%) — Optionen nicht deutlich überbewertet.")
+                        st.warning(f"📊 Implizierte Bewegung ({exp_pct:.1f}%) ≈ historische Volatilität ({hv_pct:.1f}%) — Optionen nicht deutlich überbewertet. IV-Crush-Effekt könnte geringer ausfallen.")
 
         if selected_symbol != st.session_state.get("eps_selected_symbol"):
             st.session_state["eps_selected_symbol"] = selected_symbol

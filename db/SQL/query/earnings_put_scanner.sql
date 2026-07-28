@@ -22,7 +22,9 @@ SELECT
     c.trailing_pe,
     c.avg_volume,
     c.dividend_classification,
-    c.profit_margin
+    c.profit_margin,
+    c.company_sector,
+    c.company_industry
 FROM (
     -- One row per symbol: earnings metadata
     SELECT DISTINCT ON (o.symbol)
@@ -37,7 +39,9 @@ FROM (
         o."Summary_trailingPE"       AS trailing_pe,
         o."Summary_averageVolume"    AS avg_volume,
         o.dividend_classification,
-        o."KeyStats_profitMargins"   AS profit_margin
+        o."KeyStats_profitMargins"   AS profit_margin,
+        o.company_sector,
+        o.company_industry
     FROM "OptionDataMerged" o
     WHERE o.days_to_earnings BETWEEN 0 AND :days_ahead
     ORDER BY o.symbol, o.days_to_earnings ASC
