@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import {
-  getPutScreener, rankPutsAi, getRollerPuts, getRollerPrice, getRollerCandidates,
+  getPutScreener, rankPutsAi, getPutScreenerBreakdown, getRollerPuts, getRollerPrice, getRollerCandidates,
   getSpreadTypes, getSpreadRollerOpen, getSpreadRollerCandidates, getBrowserPuts,
 } from '@/lib/api';
 import { Input } from '@/components/ui/input';
@@ -12,7 +12,7 @@ import { DataTable, Column } from '@/components/ui/data-table';
 import { LoadingState } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { formatCurrency, formatPercent, formatNumber, getClaudeAnalysisUrl } from '@/lib/utils';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, X, ExternalLink, Check } from 'lucide-react';
 
 type TabKey = 'screener' | 'put-roller' | 'spread-roller' | 'browser';
 
@@ -77,6 +77,8 @@ function PutScreenerTab() {
   const [form, setForm] = useState(SCREENER_DEFAULTS);
   const [params, setParams] = useState<typeof SCREENER_DEFAULTS | null>(null);
   const [aiProvider, setAiProvider] = useState('deepseek');
+  const [selectedRow, setSelectedRow] = useState<any>(null);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ['put-screener', params],
@@ -85,6 +87,12 @@ function PutScreenerTab() {
   });
 
   const rows: any[] = Array.isArray(data) ? data : [];
+
+  const { data: breakdown, isFetching: loadingBreakdown } = useQuery({
+    queryKey: ['put-screener-breakdown', selectedRow?.symbol, selectedRow?.put_strike, form.pe_max],
+    queryFn: () => getPutScreenerBreakdown(selectedRow, form.pe_max),
+    enabled: !!selectedRow,
+  });
 
   const aiMutation = useMutation({
     mutationFn: () => rankPutsAi({ puts: rows.slice(0, 25), provider: aiProvider }),
@@ -169,10 +177,64 @@ function PutScreenerTab() {
             data={rows}
             columns={columns}
             defaultSort={{ key: 'shortlist_score', direction: 'desc' }}
+            onRowClick={(row, index) => { setSelectedRow(row); setSelectedIndex(index); }}
+            selectedIndex={selectedIndex ?? undefined}
             stickyHeader
             maxHeight="60vh"
             compact
           />
+
+          {selectedRow && (
+            <Card>
+              <CardContent className="p-4 space-y-3 relative">
+                <button
+                  onClick={() => { setSelectedRow(null); setSelectedIndex(null); }}
+                  className="absolute top-3 right-3 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+                <div>
+                  <h3 className="text-base font-semibold flex items-center gap-2">
+                    {selectedRow.symbol}
+                    <span className="text-sm font-normal text-muted-foreground">
+                      Score {selectedRow.score}/9
+                    </span>
+                    <a
+                      href={getClaudeAnalysisUrl(selectedRow.symbol, selectedRow.company_name)}
+                      target="_blank" rel="noopener noreferrer"
+                      className="text-primary hover:underline text-xs inline-flex items-center gap-1"
+                    >
+                      Analysis <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    {selectedRow.company_name} · Strike {formatCurrency(selectedRow.put_strike)} · {selectedRow.put_dte} DTE · Premium {formatCurrency(selectedRow.put_premium)}
+                  </p>
+                </div>
+
+                {loadingBreakdown ? (
+                  <p className="text-sm text-muted-foreground">Loading score breakdown…</p>
+                ) : breakdown?.breakdown ? (
+                  <div className="space-y-1">
+                    {breakdown.breakdown.map((c: any) => (
+                      <div key={c.key} className="flex items-center gap-2 text-sm py-1 border-b border-border/30 last:border-0">
+                        <span className={`flex-shrink-0 w-5 ${c.erreicht ? 'text-emerald-400' : 'text-red-400'}`}>
+                          {c.erreicht ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}
+                        </span>
+                        <span className="flex-1">{c.label}</span>
+                        <span className="text-muted-foreground text-xs">{c.annahme}</span>
+                        <span className="font-medium tabular-nums w-24 text-right">
+                          {typeof c.ist_wert === 'number' ? formatNumber(c.ist_wert, 2) : String(c.ist_wert ?? '—')}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No breakdown available.</p>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </>
       )}
     </div>
@@ -252,11 +314,12 @@ function PutRollerTab() {
     { key: 'kapital_noetig', label: 'Capital', align: 'right', format: (v) => formatCurrency(v) },
   ];
 
-  const stufen = [
-    { key: 'stufe1', label: 'Stufe 1 — Vertikal (lower strike)' },
-    { key: 'stufe2', label: 'Stufe 2 — Horizontal (same strike)' },
-    { key: 'stufe3', label: 'Stufe 3 — Verdoppeln (2× lower strike)' },
+  const rollTabs = [
+    { key: 'stufe1', label: 'Vertikal' },
+    { key: 'stufe2', label: 'Horizontal' },
+    { key: 'stufe3', label: 'Verdoppeln' },
   ];
+  const [activeRoll, setActiveRoll] = useState('stufe1');
 
   return (
     <div className="space-y-4">
@@ -287,14 +350,33 @@ function PutRollerTab() {
               P&amp;L: {formatCurrency(candidates.position.pnl_abs)} ({formatPercent(candidates.position.pnl_pct / 100)}) · {candidates.position.grund}
             </p>
           )}
-          {stufen.map((s) => (
-            candidates?.[s.key]?.length > 0 && (
-              <div key={s.key}>
-                <h4 className="text-xs font-semibold mt-3 mb-1">{s.label}</h4>
-                <DataTable data={candidates[s.key]} columns={candCols} compact maxHeight="30vh" />
+          {candidates && (
+            <div>
+              <div className="flex gap-1 border-b border-border/50 mb-2">
+                {rollTabs.map((t) => {
+                  const count = candidates?.[t.key]?.length || 0;
+                  return (
+                    <button
+                      key={t.key}
+                      onClick={() => setActiveRoll(t.key)}
+                      className={`px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${
+                        activeRoll === t.key
+                          ? 'border-primary text-foreground'
+                          : 'border-transparent text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      {t.label} {count > 0 && <span className="text-xs text-muted-foreground">({count})</span>}
+                    </button>
+                  );
+                })}
               </div>
-            )
-          ))}
+              {candidates?.[activeRoll]?.length > 0 ? (
+                <DataTable data={candidates[activeRoll]} columns={candCols} compact maxHeight="40vh" stickyHeader />
+              ) : (
+                <p className="text-sm text-muted-foreground py-4">No roll candidates in this category.</p>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

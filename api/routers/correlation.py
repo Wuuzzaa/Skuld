@@ -281,3 +281,83 @@ async def get_pair_detail(
 
     cache.set("correlation_pair_detail", {"key": cache_key}, result, ttl=600)
     return result
+
+
+@router.get("/vs-all")
+async def get_symbol_vs_all(
+    symbol: str = Query(..., description="Base symbol to correlate against all others"),
+    lookback_days: int = Query(252, description="Lookback period in trading days"),
+    method: str = Query("pearson", description="Correlation method: pearson, spearman, kendall"),
+    top_n: int = Query(0, description="Limit to N strongest correlations by |value| (0 = all)"),
+    current_user: dict = Depends(get_current_user),
+):
+    """Correlate one symbol against every other symbol with data.
+
+    Returns a list sorted from strongest positive to strongest negative
+    correlation, so the most/least correlated peers are immediately visible.
+    """
+    base = symbol.strip().upper()
+    cache_key = f"{base}_{lookback_days}_{method}_{top_n}"
+    cached = cache.get("correlation_vs_all", {"key": cache_key})
+    if cached is not None:
+        return cached
+
+    # Pull the base symbol plus every symbol with recent data.
+    sql = """
+        SELECT symbol, snapshot_date, close
+        FROM "StockPricesYahooHistoryDaily"
+        WHERE snapshot_date >= CURRENT_DATE - CAST(:lookback_days || ' days' AS INTERVAL)
+          AND symbol IN (
+            SELECT DISTINCT symbol FROM "StockPricesYahooHistoryDaily"
+            WHERE snapshot_date >= CURRENT_DATE - INTERVAL '30 days'
+          )
+        ORDER BY symbol, snapshot_date
+    """
+    df = query_dataframe(sql, {"lookback_days": str(lookback_days)})
+
+    if df.empty or base not in set(df["symbol"]):
+        return {"base": base, "correlations": [], "stats": {}, "error": "no_data"}
+
+    pivot = df.pivot(index="snapshot_date", columns="symbol", values="close")
+    min_data_points = int(pivot.shape[0] * 0.8)
+    pivot = pivot.dropna(axis=1, thresh=min_data_points)
+
+    if base not in pivot.columns:
+        return {"base": base, "correlations": [], "stats": {}, "error": "insufficient_base_data"}
+
+    pivot = pivot.ffill()
+    returns = pivot.pct_change().dropna()
+
+    if returns.empty or base not in returns.columns or returns.shape[1] < 2:
+        return {"base": base, "correlations": [], "stats": {}, "error": "insufficient_data"}
+
+    corr_series = returns.corr(method=method)[base].drop(labels=[base], errors="ignore")
+    corr_series = corr_series.dropna()
+
+    items = [
+        {"symbol": sym, "correlation": round(float(val), 4)}
+        for sym, val in corr_series.items()
+    ]
+    # Sort strongest positive -> strongest negative.
+    items.sort(key=lambda x: x["correlation"], reverse=True)
+
+    if top_n and top_n > 0:
+        # Keep the N strongest by absolute correlation, then re-sort by signed value.
+        items = sorted(items, key=lambda x: abs(x["correlation"]), reverse=True)[:top_n]
+        items.sort(key=lambda x: x["correlation"], reverse=True)
+
+    vals = [it["correlation"] for it in items]
+    stats = {
+        "base": base,
+        "num_peers": len(items),
+        "num_data_points": int(returns.shape[0]),
+        "date_from": str(returns.index.min())[:10],
+        "date_to": str(returns.index.max())[:10],
+        "avg_correlation": round(float(np.mean(vals)), 4) if vals else 0,
+        "most_correlated": items[0] if items else None,
+        "most_inverse": items[-1] if items else None,
+    }
+
+    result = {"base": base, "correlations": items, "stats": stats}
+    cache.set("correlation_vs_all", {"key": cache_key}, result, ttl=600)
+    return result
