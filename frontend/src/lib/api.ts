@@ -165,6 +165,15 @@ export async function getCoveredCalls(params: Record<string, any>) {
   return data;
 }
 
+// Covered Call Scanner (ITM, PowerOptions MorningUpdate style)
+export async function getCoveredCallScanner(params: Record<string, any>) {
+  const cleanParams = Object.fromEntries(
+    Object.entries(params).filter(([_, v]) => v != null)
+  );
+  const { data } = await api.get('/covered-call-scanner/', { params: cleanParams });
+  return data;
+}
+
 // Dividend Screener (Zahltagstrategie)
 export async function getDividendScreener(params: Record<string, any>) {
   const cleanParams = Object.fromEntries(

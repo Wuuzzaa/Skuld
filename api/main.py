@@ -28,6 +28,7 @@ from api.routers import (
     dividend_screener,
     dividend_portfolio_builder,
     earnings_put_scanner,
+    covered_call_scanner,
 )
 
 
@@ -74,6 +75,7 @@ app.include_router(correlation.router, prefix="/api/correlation", tags=["Correla
 app.include_router(dividend_screener.router, prefix="/api/dividend-screener", tags=["Dividend Screener"])
 app.include_router(dividend_portfolio_builder.router, prefix="/api/dividend-portfolio", tags=["Dividend Portfolio Builder"])
 app.include_router(earnings_put_scanner.router, prefix="/api/earnings-put-scanner", tags=["Earnings Put Scanner"])
+app.include_router(covered_call_scanner.router, prefix="/api/covered-call-scanner", tags=["Covered Call Scanner"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 
 

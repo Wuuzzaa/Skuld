@@ -73,6 +73,8 @@ export default function SpreadsPage() {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [expTypeFilter, setExpTypeFilter] = useState<'all' | 'Monthly' | 'Weekly' | 'Daily'>('all');
+  const [sectorFilter, setSectorFilter] = useState<string[]>([]);
+  const [industryFilter, setIndustryFilter] = useState<string[]>([]);
 
   const { data: expirations, isLoading: loadingExp, isError: expError, error: expErrorMsg } = useQuery({
     queryKey: ['expirations'],
@@ -105,15 +107,31 @@ export default function SpreadsPage() {
     setSelectedExpiration(target.expiration_date);
   }
 
+  // Derive unique sectors and industries from loaded data
+  const availableSectors = useMemo(() => {
+    if (!spreads?.length) return [];
+    return [...new Set(spreads.map((r: any) => r.company_sector).filter(Boolean))].sort() as string[];
+  }, [spreads]);
+
+  const availableIndustries = useMemo(() => {
+    if (!spreads?.length) return [];
+    const base = sectorFilter.length
+      ? spreads.filter((r: any) => sectorFilter.includes(r.company_sector))
+      : spreads;
+    return [...new Set(base.map((r: any) => r.company_industry).filter(Boolean))].sort() as string[];
+  }, [spreads, sectorFilter]);
+
   // Apply client-side filters
   const filteredSpreads = useMemo(() => {
     return (spreads || []).filter((row: any) => {
       if (row.max_profit < params.min_max_profit) return false;
       if (row.sell_iv < params.min_sell_iv) return false;
       if (row.sell_iv > params.max_sell_iv) return false;
+      if (sectorFilter.length && !sectorFilter.includes(row.company_sector)) return false;
+      if (industryFilter.length && !industryFilter.includes(row.company_industry)) return false;
       return true;
     });
-  }, [spreads, params.min_max_profit, params.min_sell_iv, params.max_sell_iv]);
+  }, [spreads, params.min_max_profit, params.min_sell_iv, params.max_sell_iv, sectorFilter, industryFilter]);
 
   // Summary stats
   const stats = useMemo(() => {
@@ -348,65 +366,96 @@ export default function SpreadsPage() {
       {/* Extended Filters Panel */}
       {showFilters && (
         <Card className="border-primary/20">
-          <CardContent className="pt-4">
+          <CardContent className="pt-4 space-y-4">
+            {/* Numeric filters */}
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
               <div>
                 <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Min Volume</label>
-                <Input
-                  type="number"
-                  value={params.min_day_volume}
-                  onChange={(e) => setParams({ ...params, min_day_volume: +e.target.value })}
-                  className="h-8 mt-1"
-                />
+                <Input type="number" value={params.min_day_volume} onChange={(e) => setParams({ ...params, min_day_volume: +e.target.value })} className="h-8 mt-1" />
               </div>
               <div>
                 <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Min OI</label>
-                <Input
-                  type="number"
-                  value={params.min_open_interest}
-                  onChange={(e) => setParams({ ...params, min_open_interest: +e.target.value })}
-                  className="h-8 mt-1"
-                />
+                <Input type="number" value={params.min_open_interest} onChange={(e) => setParams({ ...params, min_open_interest: +e.target.value })} className="h-8 mt-1" />
               </div>
               <div>
                 <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Min Profit ($)</label>
-                <Input
-                  type="number"
-                  value={params.min_max_profit}
-                  onChange={(e) => setParams({ ...params, min_max_profit: +e.target.value })}
-                  className="h-8 mt-1"
-                />
+                <Input type="number" value={params.min_max_profit} onChange={(e) => setParams({ ...params, min_max_profit: +e.target.value })} className="h-8 mt-1" />
               </div>
               <div>
                 <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Min IV</label>
-                <Input
-                  type="number"
-                  step="0.05"
-                  value={params.min_sell_iv}
-                  onChange={(e) => setParams({ ...params, min_sell_iv: +e.target.value })}
-                  className="h-8 mt-1"
-                />
+                <Input type="number" step="0.05" value={params.min_sell_iv} onChange={(e) => setParams({ ...params, min_sell_iv: +e.target.value })} className="h-8 mt-1" />
               </div>
               <div>
                 <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Max IV</label>
-                <Input
-                  type="number"
-                  step="0.05"
-                  value={params.max_sell_iv}
-                  onChange={(e) => setParams({ ...params, max_sell_iv: +e.target.value })}
-                  className="h-8 mt-1"
-                />
+                <Input type="number" step="0.05" value={params.max_sell_iv} onChange={(e) => setParams({ ...params, max_sell_iv: +e.target.value })} className="h-8 mt-1" />
               </div>
               <div>
                 <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Min IV Rank</label>
-                <Input
-                  type="number"
-                  value={params.min_iv_rank}
-                  onChange={(e) => setParams({ ...params, min_iv_rank: +e.target.value })}
-                  className="h-8 mt-1"
-                />
+                <Input type="number" value={params.min_iv_rank} onChange={(e) => setParams({ ...params, min_iv_rank: +e.target.value })} className="h-8 mt-1" />
               </div>
             </div>
+
+            {/* Sector filter */}
+            {availableSectors.length > 0 && (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Sektor</label>
+                  {sectorFilter.length > 0 && (
+                    <button onClick={() => { setSectorFilter([]); setIndustryFilter([]); }} className="text-[11px] text-muted-foreground hover:text-foreground underline">
+                      Auswahl löschen
+                    </button>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {availableSectors.map((s) => (
+                    <Badge
+                      key={s}
+                      active={sectorFilter.includes(s)}
+                      onClick={() => {
+                        const next = sectorFilter.includes(s)
+                          ? sectorFilter.filter((x) => x !== s)
+                          : [...sectorFilter, s];
+                        setSectorFilter(next);
+                        setIndustryFilter([]);
+                      }}
+                    >
+                      {s}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Industry filter — only shown after sector selection */}
+            {availableIndustries.length > 0 && (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] text-muted-foreground uppercase tracking-wider">
+                    Industrie {sectorFilter.length > 0 ? `(${sectorFilter.join(', ')})` : ''}
+                  </label>
+                  {industryFilter.length > 0 && (
+                    <button onClick={() => setIndustryFilter([])} className="text-[11px] text-muted-foreground hover:text-foreground underline">
+                      Auswahl löschen
+                    </button>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {availableIndustries.map((ind) => (
+                    <Badge
+                      key={ind}
+                      active={industryFilter.includes(ind)}
+                      onClick={() =>
+                        setIndustryFilter((prev) =>
+                          prev.includes(ind) ? prev.filter((x) => x !== ind) : [...prev, ind]
+                        )
+                      }
+                    >
+                      {ind}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
