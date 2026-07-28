@@ -55,6 +55,23 @@ export async function getSpreads(params: Record<string, any>) {
   return data;
 }
 
+export async function backtestSpread(body: {
+  symbol: string;
+  sell_option_osi: string;
+  buy_option_osi: string;
+  sell_strike: number;
+  buy_strike: number;
+  sell_last_option_price: number;
+  buy_last_option_price: number;
+  expiration_date: string;
+  entry_date: string;
+  compare_date: string;
+  override?: Record<string, number> | null;
+}) {
+  const { data } = await api.post('/spreads/backtest', body);
+  return data;
+}
+
 // Analyst Prices
 export async function getAnalystPrices() {
   const { data } = await api.get('/analyst-prices/');
@@ -70,6 +87,21 @@ export async function getIronCondors(params: Record<string, any>) {
 // Married Puts
 export async function getMarriedPuts(params: Record<string, any>) {
   const { data } = await api.get('/married-puts/', { params });
+  return data;
+}
+
+export async function backtestMarriedPut(body: {
+  symbol: string;
+  live_stock_price: number;
+  premium_option_price: number;
+  number_of_stocks: number;
+  option_osi?: string | null;
+  strike_price: number;
+  expiration_date: string;
+  entry_date: string;
+  compare_date: string;
+}) {
+  const { data } = await api.post('/married-puts/backtest', body);
   return data;
 }
 
@@ -127,6 +159,24 @@ export async function getRslMomentum(params: Record<string, any>) {
     Object.entries(params).filter(([_, v]) => v != null)
   );
   const { data } = await api.get('/rsl-momentum/', { params: cleanParams });
+  return data;
+}
+
+export async function backtestRslMomentum(body: {
+  start_date: string;
+  end_date: string;
+  start_budget?: number;
+  flat_fee?: number;
+  pct_fee?: number;
+  top_n?: number;
+  max_per_sector?: number;
+  exit_percentile?: number;
+  trading_frequency?: string;
+  fractional_shares?: boolean;
+  risk_free_rate?: number;
+  tax_rate?: number;
+}) {
+  const { data } = await api.post('/rsl-momentum/backtest', body);
   return data;
 }
 

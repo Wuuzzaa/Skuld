@@ -10,6 +10,7 @@ import { LoadingState } from '@/components/ui/spinner';
 import { formatCurrency, formatNumber, getClaudeAnalysisUrl } from '@/lib/utils';
 import { X, ExternalLink, HelpCircle, ChevronDown, ChevronRight, Info, AlertTriangle, TrendingUp, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { RslBacktestPanel } from '@/components/RslBacktestPanel';
 
 function RslZoneBadge({ zone }: { zone: string }) {
   const config: Record<string, { label: string; cls: string }> = {
@@ -81,6 +82,7 @@ export default function RslMomentumPage() {
   const [showGuide, setShowGuide] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [showExplain, setShowExplain] = useState(false);
+  const [showBacktest, setShowBacktest] = useState(false);
 
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ['rsl-momentum', params],
@@ -587,6 +589,18 @@ export default function RslMomentumPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Portfolio Backtest */}
+      <div className="border-t border-border/50 pt-4">
+        <Button variant="outline" onClick={() => setShowBacktest((v) => !v)}>
+          {showBacktest ? 'Hide' : 'Show'} Portfolio Backtest
+        </Button>
+        {showBacktest && (
+          <div className="mt-4">
+            <RslBacktestPanel />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

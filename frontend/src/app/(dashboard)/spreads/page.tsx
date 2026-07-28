@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DataTable, Column } from '@/components/ui/data-table';
 import { LoadingState } from '@/components/ui/spinner';
 import { formatCurrency, formatPercent, formatNumber, exportToCSV } from '@/lib/utils';
+import { SpreadBacktestPanel } from '@/components/SpreadBacktestPanel';
 import {
   TrendingUp, TrendingDown, Filter, ExternalLink,
   ChevronDown, X, BarChart3, Activity, Download
@@ -660,6 +661,7 @@ export default function SpreadsPage() {
           </CardContent>
         </Card>
       )}
+      {selectedRow && <SpreadBacktestPanel spread={selectedRow} />}
     </div>
   );
 }

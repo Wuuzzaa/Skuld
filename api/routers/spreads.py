@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, Depends, Query
 import pandas as pd
+from pydantic import BaseModel
 
 from api.core.auth import get_current_user
 from api.core.database import query_dataframe, query_sql_file, df_to_json_safe
@@ -93,4 +94,66 @@ async def get_spreads(
 
     result = df_to_json_safe(spreads_df)
     cache.set("spreads", {**params, "risk_free_rate": risk_free_rate}, result, ttl=300)  # 5 min cache
+    return result
+
+
+class SpreadBacktestOverride(BaseModel):
+    entry_sell_price: float | None = None
+    entry_buy_price: float | None = None
+    exit_sell_price: float | None = None
+    exit_buy_price: float | None = None
+    start_transaction_cost: float | None = None
+    exit_transaction_cost: float | None = None
+
+
+class SpreadBacktestRequest(BaseModel):
+    symbol: str
+    sell_option_osi: str
+    buy_option_osi: str
+    sell_strike: float
+    buy_strike: float
+    sell_last_option_price: float
+    buy_last_option_price: float
+    expiration_date: str
+    entry_date: str
+    compare_date: str
+    override: SpreadBacktestOverride | None = None
+
+
+@router.post("/backtest")
+async def backtest_spread(
+    request: SpreadBacktestRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """Time-travel exit simulation for a vertical spread."""
+    params = request.model_dump()
+
+    cached = cache.get("spread_backtest", params)
+    if cached is not None:
+        return cached
+
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from src.spreads_backtest import simulate_spread_exit
+
+    spread = {
+        "symbol": request.symbol,
+        "sell_option_osi": request.sell_option_osi,
+        "buy_option_osi": request.buy_option_osi,
+        "sell_strike": request.sell_strike,
+        "buy_strike": request.buy_strike,
+        "sell_last_option_price": request.sell_last_option_price,
+        "buy_last_option_price": request.buy_last_option_price,
+        "expiration_date": request.expiration_date,
+    }
+    # Only pass override keys the caller actually set.
+    override = None
+    if request.override is not None:
+        override = {k: v for k, v in request.override.model_dump().items() if v is not None}
+        override = override or None
+
+    result = simulate_spread_exit(spread, request.entry_date, request.compare_date, override)
+
+    cache.set("spread_backtest", params, result, ttl=300)
     return result
