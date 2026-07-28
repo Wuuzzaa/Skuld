@@ -119,16 +119,28 @@ if st.session_state["eps_candidates_df"] is not None:
 
     # Sektor-Filter (client-seitig, aus geladenen Daten)
     available_sectors = sorted(df["company_sector"].dropna().unique().tolist()) if "company_sector" in df.columns else []
-    if available_sectors:
-        selected_sectors = st.multiselect(
-            "Sektor-Filter",
-            options=available_sectors,
-            default=[],
-            placeholder="Alle Sektoren anzeigen",
-            key="eps_sector_filter",
+
+    filter_col1, filter_col2 = st.columns([3, 1])
+    with filter_col1:
+        if available_sectors:
+            selected_sectors = st.multiselect(
+                "Sektor-Filter",
+                options=available_sectors,
+                default=[],
+                placeholder="Alle Sektoren anzeigen",
+                key="eps_sector_filter",
+            )
+            if selected_sectors:
+                df = df[df["company_sector"].isin(selected_sectors)]
+    with filter_col2:
+        safe_puts_only = st.toggle(
+            "✅ Nur mit Safe-Put",
+            value=False,
+            key="eps_safe_puts_only",
+            help="Nur Symbole anzeigen, für die mindestens ein Put unterhalb des Expected Move existiert",
         )
-        if selected_sectors:
-            df = df[df["company_sector"].isin(selected_sectors)]
+        if safe_puts_only and "has_safe_put" in df.columns:
+            df = df[df["has_safe_put"] == True]
 
     st.subheader(f"Earnings-Kandidaten — {len(df)} gefunden")
     st.caption("Zeile anklicken um verfügbare Puts für das Symbol zu sehen.")
@@ -150,6 +162,7 @@ if st.session_state["eps_candidates_df"] is not None:
         "Symbol":    df["symbol"],
         "Name":      df.get("company_name", pd.Series("—", index=df.index)).fillna("—").astype(str).str.slice(0, 28),
         "Sektor":    df.get("company_sector", pd.Series("—", index=df.index)).fillna("—"),
+        "Safe Put":  df.get("has_safe_put", pd.Series(False, index=df.index)).apply(lambda v: "✅" if v else "—"),
         "Earnings":  df["earnings_date"].astype(str),
         "Tage":      df["days_to_earnings"].astype("Int64"),
         "Kurs ($)":  df["live_stock_price"].apply(lambda v: f"{v:.2f}" if pd.notna(v) else "—"),

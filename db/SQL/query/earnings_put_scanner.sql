@@ -24,7 +24,8 @@ SELECT
     c.dividend_classification,
     c.profit_margin,
     c.company_sector,
-    c.company_industry
+    c.company_industry,
+    COALESCE(safe_check.has_safe_put, 0)::boolean AS has_safe_put
 FROM (
     -- One row per symbol: earnings metadata
     SELECT DISTINCT ON (o.symbol)
@@ -75,4 +76,17 @@ JOIN LATERAL (
       AND o3.premium_option_price > 0
     LIMIT 1
 ) op ON true
+-- Check: does at least one safe put exist (strike below safe threshold)?
+LEFT JOIN LATERAL (
+    SELECT 1 AS has_safe_put
+    FROM "OptionDataMerged" o4
+    WHERE o4.symbol = c.symbol
+      AND o4.contract_type = 'put'
+      AND o4.expiration_date > c.earnings_date::date
+      AND o4.days_to_expiration BETWEEN 1 AND 21
+      AND o4.open_interest > 10
+      AND o4.premium_option_price > 0
+      AND o4.strike_price < (s."FinData_currentPrice" - (oc.premium_option_price + op.premium_option_price))
+    LIMIT 1
+) safe_check ON true
 ORDER BY c.days_to_earnings ASC, c.symbol ASC
