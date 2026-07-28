@@ -292,6 +292,7 @@ if st.session_state.get("eps_selected_symbol"):
     live_price    = symbol_row.get("live_stock_price")
     expected_move = symbol_row.get("expected_move")
     earnings_date = symbol_row.get("earnings_date")
+    iv_rank       = float(symbol_row["iv_rank"]) if pd.notna(symbol_row.get("iv_rank")) else None
 
     safety_threshold = (float(live_price) - float(expected_move)
                         if pd.notna(live_price) and pd.notna(expected_move) else None)
