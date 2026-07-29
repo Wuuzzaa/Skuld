@@ -46,17 +46,269 @@ Delta ~0.6–0.7: slightly less ITM, more upside potential
 
 import logging
 import os
+from datetime import date
 
+import numpy as np
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 
 from config import PATH_DATABASE_QUERY_FOLDER
 from src.database import select_into_dataframe
 from src.logger_config import setup_logging
+from src.sector_rotation import (
+    RotationParameters, load_sector_rotation_price_history,
+    calculate_sector_rotation, build_latest_sector_snapshot,
+)
 
 setup_logging(component="streamlit", log_level=logging.DEBUG, console_output=True)
 logger = logging.getLogger(os.path.basename(__file__))
 logger.debug(f"Start Page: {os.path.basename(__file__)}")
+
+# ── Quadrant-Helpers (identisch Roll & Screen) ────────────────────────────────
+_QUADRANT_EMOJI = {
+    "Leading":   "🟢",
+    "Improving": "🟡",
+    "Weakening": "🟠",
+    "Lagging":   "🔴",
+    "Unbekannt": "⚪",
+}
+_QUADRANT_COLOR = {
+    "Leading":   "#00d4aa",
+    "Improving": "#f59e0b",
+    "Weakening": "#f97316",
+    "Lagging":   "#ef4444",
+    "Unbekannt": "#64748b",
+}
+
+
+@st.cache_data(ttl=600)
+def _load_sector_quadrants() -> dict:
+    """Gibt {sector_en: quadrant} zurück — identisch zur Sektor-Rotation-Seite."""
+    try:
+        params = RotationParameters()
+        today = date.today().isoformat()
+        price_history = load_sector_rotation_price_history(today, params)
+        if price_history is None or price_history.empty:
+            return {}
+        rotation_data = calculate_sector_rotation(price_history, params)
+        if rotation_data.empty:
+            return {}
+        snapshot = build_latest_sector_snapshot(rotation_data)
+        etf_to_en = {
+            "XLC": "Communication Services", "XLY": "Consumer Cyclical",
+            "XLP": "Consumer Defensive",     "XLE": "Energy",
+            "XLF": "Financial Services",     "XLV": "Healthcare",
+            "XLI": "Industrials",            "XLB": "Basic Materials",
+            "XLRE": "Real Estate",           "XLK": "Technology",
+            "XLU": "Utilities",
+        }
+        result = {}
+        for _, row in snapshot.iterrows():
+            etf = row["symbol"]
+            en = etf_to_en.get(etf)
+            if en:
+                result[en] = row["quadrant"]
+        return result
+    except Exception:
+        return {}
+
+
+def _sector_badge_html(sector: str, quadrant: str) -> str:
+    emoji = _QUADRANT_EMOJI.get(quadrant, "⚪")
+    color = _QUADRANT_COLOR.get(quadrant, "#64748b")
+    return (
+        f'<span style="display:inline-flex;align-items:center;gap:6px;'
+        f'background:rgba(255,255,255,0.05);border:1px solid {color}44;'
+        f'border-radius:20px;padding:3px 10px;font-size:12px;color:{color};'
+        f'font-family:\'DM Sans\',sans-serif;font-weight:500;">'
+        f'{emoji} {sector} · {quadrant}</span>'
+    )
+
+
+@st.cache_data(ttl=300)
+def _load_iv_history(symbol: str) -> pd.DataFrame | None:
+    return select_into_dataframe(
+        query="""
+            SELECT date, symbol,
+                   ROUND(iv::numeric * 100, 2)       AS iv,
+                   ROUND(iv_rank::numeric, 2)          AS iv_rank,
+                   ROUND(iv_percentile::numeric, 2)    AS iv_percentile
+            FROM "StockImpliedVolatilityMassiveHistory"
+            WHERE symbol = :symbol
+              AND date >= CURRENT_DATE - INTERVAL '365 days'
+              AND date <= CURRENT_DATE
+            ORDER BY date ASC
+        """,
+        params={"symbol": symbol},
+    )
+
+
+def _render_iv_chart(symbol: str):
+    iv_df = _load_iv_history(symbol)
+    if iv_df is None or iv_df.empty:
+        st.caption("Keine IV-Rank-Historie verfügbar.")
+        return
+
+    iv_df = iv_df.sort_values("date")
+    iv_df["date"] = pd.to_datetime(iv_df["date"])
+
+    iv_vals = iv_df["iv_rank"].dropna()
+    p25 = iv_vals.quantile(0.25)
+    p50 = iv_vals.quantile(0.50)
+    p75 = iv_vals.quantile(0.75)
+
+    _theme_base = st.get_option("theme.base")
+    _theme_bg   = st.get_option("theme.backgroundColor") or ""
+    if _theme_base == "light":
+        _dark = False
+    elif _theme_base == "dark":
+        _dark = True
+    else:
+        _bg = _theme_bg.lstrip("#")
+        _dark = True
+        if len(_bg) == 6:
+            try:
+                r, g, b = int(_bg[0:2], 16), int(_bg[2:4], 16), int(_bg[4:6], 16)
+                _dark = (0.299 * r + 0.587 * g + 0.114 * b) < 128
+            except ValueError:
+                pass
+
+    _paper = "#1a1a2e" if _dark else "#ffffff"
+    _plot  = "#16213e" if _dark else "#f8fafc"
+    _text  = "#e2e8f0" if _dark else "#1e293b"
+    _grid  = "rgba(255,255,255,0.08)" if _dark else "rgba(0,0,0,0.06)"
+
+    fig = go.Figure()
+
+    # Bänder
+    fig.add_hrect(y0=60, y1=100, fillcolor="rgba(34,197,94,0.08)", line_width=0,
+                  annotation_text="Teuer (gut zum Verkaufen)", annotation_position="top left",
+                  annotation_font_size=10, annotation_font_color="#22c55e")
+    fig.add_hrect(y0=0, y1=40, fillcolor="rgba(239,68,68,0.06)", line_width=0,
+                  annotation_text="Günstig (dünne Prämie)", annotation_position="bottom left",
+                  annotation_font_size=10, annotation_font_color="#ef4444")
+
+    # Perzentil-Linien
+    for pval, label, color in [(p25, "P25", "#64748b"), (p50, "Median", "#94a3b8"), (p75, "P75", "#64748b")]:
+        fig.add_hline(y=pval, line_dash="dot", line_color=color, line_width=1,
+                      annotation_text=f"{label} {pval:.0f}%", annotation_position="right",
+                      annotation_font_size=9)
+
+    # IV-Rank-Linie
+    fig.add_trace(go.Scatter(
+        x=iv_df["date"], y=iv_df["iv_rank"],
+        mode="lines",
+        name="IV Rank",
+        line=dict(color="#f59e0b", width=2),
+        fill="tozeroy",
+        fillcolor="rgba(245,158,11,0.10)",
+        hovertemplate="%{x|%d.%m.%Y}<br>IV Rank: %{y:.0f}%<extra></extra>",
+    ))
+
+    # IV (reine %-Linie, sekundäre Y-Achse)
+    if "iv" in iv_df.columns:
+        fig.add_trace(go.Scatter(
+            x=iv_df["date"], y=iv_df["iv"],
+            mode="lines",
+            name="IV %",
+            line=dict(color="#818cf8", width=1.5, dash="dot"),
+            yaxis="y2",
+            hovertemplate="%{x|%d.%m.%Y}<br>IV: %{y:.1f}%<extra></extra>",
+        ))
+
+    fig.update_layout(
+        height=260,
+        margin=dict(l=0, r=60, t=8, b=0),
+        paper_bgcolor=_paper,
+        plot_bgcolor=_plot,
+        font=dict(color=_text, size=11),
+        legend=dict(orientation="h", y=1.08, x=0, font_size=10),
+        xaxis=dict(showgrid=False, zeroline=False),
+        yaxis=dict(title="IV Rank %", range=[0, 105], gridcolor=_grid, zeroline=False),
+        yaxis2=dict(title="IV %", overlaying="y", side="right",
+                    showgrid=False, zeroline=False, range=[0, 150]),
+        hovermode="x unified",
+    )
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+
+def _render_payoff_chart(stock: float, strike: float, premium: float,
+                          net_debit: float, dte: int):
+    """Payoff-Diagramm für ITM Covered Call am Verfall."""
+    _theme_base = st.get_option("theme.base")
+    _dark = _theme_base != "light"
+    _paper = "#1a1a2e" if _dark else "#ffffff"
+    _plot  = "#16213e" if _dark else "#f8fafc"
+    _text  = "#e2e8f0" if _dark else "#1e293b"
+    _grid  = "rgba(255,255,255,0.08)" if _dark else "rgba(0,0,0,0.06)"
+
+    lo = net_debit * 0.70
+    hi = stock * 1.15
+    prices = np.linspace(lo, hi, 300)
+
+    # ITM Covered Call P&L: max profit cap at strike, loss below breakeven
+    pnl = np.where(
+        prices >= strike,
+        (strike - net_debit) * 100,          # capped upside
+        (prices - net_debit) * 100            # loss zone
+    )
+
+    breakeven = net_debit
+    max_profit = (strike - net_debit) * 100
+
+    fig = go.Figure()
+
+    # Profit zone fill
+    fig.add_trace(go.Scatter(
+        x=prices, y=np.maximum(pnl, 0),
+        fill="tozeroy", fillcolor="rgba(34,197,94,0.12)",
+        line=dict(width=0), showlegend=False, hoverinfo="skip",
+    ))
+    # Loss zone fill
+    fig.add_trace(go.Scatter(
+        x=prices, y=np.minimum(pnl, 0),
+        fill="tozeroy", fillcolor="rgba(239,68,68,0.12)",
+        line=dict(width=0), showlegend=False, hoverinfo="skip",
+    ))
+    # P&L line
+    fig.add_trace(go.Scatter(
+        x=prices, y=pnl,
+        mode="lines",
+        name="P&L",
+        line=dict(color="#22c55e", width=2.5),
+        hovertemplate="Kurs: $%{x:.2f}<br>P&L: $%{y:.0f}<extra></extra>",
+    ))
+
+    # Vertikale Linien
+    for x, label, color in [
+        (breakeven, f"Breakeven ${breakeven:.2f}", "#ef4444"),
+        (strike,    f"Strike ${strike:.2f}",        "#f59e0b"),
+        (stock,     f"Kurs ${stock:.2f}",            "#818cf8"),
+    ]:
+        fig.add_vline(x=x, line_dash="dash", line_color=color, line_width=1.5,
+                      annotation_text=label, annotation_position="top",
+                      annotation_font_size=10, annotation_font_color=color)
+
+    # Max-Profit-Linie
+    fig.add_hline(y=max_profit, line_dash="dot", line_color="#22c55e", line_width=1,
+                  annotation_text=f"Max +${max_profit:.0f}", annotation_position="right",
+                  annotation_font_size=10, annotation_font_color="#22c55e")
+    fig.add_hline(y=0, line_color="rgba(255,255,255,0.2)", line_width=1)
+
+    fig.update_layout(
+        height=280,
+        margin=dict(l=0, r=60, t=8, b=0),
+        paper_bgcolor=_paper,
+        plot_bgcolor=_plot,
+        font=dict(color=_text, size=11),
+        xaxis=dict(title="Aktienkurs bei Verfall ($)", gridcolor=_grid, zeroline=False),
+        yaxis=dict(title="P&L pro Kontrakt ($)", gridcolor=_grid, zeroline=False),
+        hovermode="x unified",
+        showlegend=False,
+    )
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
 
 # ── Page header ───────────────────────────────────────────────────────────────
 st.title("ITM Covered Call Scanner")
@@ -103,114 +355,181 @@ for key, default in [
     if key not in st.session_state:
         st.session_state[key] = default
 
+# ── Sektor-Quadranten laden ───────────────────────────────────────────────────
+sector_quadrants = _load_sector_quadrants()   # {sector_en: quadrant}
+all_quadrants = ["Leading", "Improving", "Weakening", "Lagging"]
+available_quadrants = sorted({q for q in sector_quadrants.values() if q in all_quadrants})
+all_sectors_with_quadrant = sorted(sector_quadrants.keys())
+
 # ── Filter controls ───────────────────────────────────────────────────────────
 st.subheader("Scanner Filters")
 
-col1, col2, col3 = st.columns(3)
-with col1:
-    dte_min, dte_max = st.slider(
-        "DTE Range (days to expiration)",
-        min_value=7, max_value=90,
-        value=(21, 45), step=1,
-        key="cc_dte",
-        help="Sweet spot: 21–45 days. Theta decay is fastest here.",
-    )
-with col2:
-    delta_target = st.slider(
-        "Delta Target",
-        min_value=0.50, max_value=0.95,
-        value=0.80, step=0.05,
-        key="cc_delta",
-        help="0.8 = deep ITM, more protection. 0.6 = slightly ITM, more upside.",
-    )
-with col3:
-    delta_target_max = st.slider(
-        "Max Delta",
-        min_value=0.70, max_value=0.99,
-        value=0.90, step=0.01,
-        key="cc_max_delta_top",
-        help="Exclude extremely deep ITM calls. Above 0.90 the assigned return becomes unstable.",
-    )
+# --- Gruppe 1: Laufzeit & Delta ---
+with st.container():
+    st.markdown("##### Laufzeit & Delta")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        dte_min, dte_max = st.slider(
+            "DTE Range (days to expiration)",
+            min_value=7, max_value=90,
+            value=(21, 45), step=1,
+            key="cc_dte",
+            help="Sweet spot: 21–45 days. Theta decay is fastest here.",
+        )
+    with col2:
+        delta_target = st.slider(
+            "Delta Target",
+            min_value=0.50, max_value=0.95,
+            value=0.80, step=0.05,
+            key="cc_delta",
+            help="0.8 = deep ITM, more protection. 0.6 = slightly ITM, more upside.",
+        )
+    with col3:
+        delta_target_max = st.slider(
+            "Max Delta",
+            min_value=0.70, max_value=0.99,
+            value=0.90, step=0.01,
+            key="cc_max_delta_top",
+            help="Exclude extremely deep ITM calls. Above 0.90 the assigned return becomes unstable.",
+        )
 
-col4, col5, col6 = st.columns(3)
-with col4:
-    min_annualized = st.number_input(
-        "Min Annualized Return %",
-        min_value=0, max_value=200,
-        value=10, step=5,
-        key="cc_min_ann",
-        help="Untergrenze der annualisierten Rendite. Default 10% zeigt auch moderate Trades.",
-    )
-with col5:
-    max_annualized = st.number_input(
-        "Max Annualized Return %",
-        min_value=10, max_value=1000,
-        value=30, step=10,
-        key="cc_max_ann",
-        help="Cap utopian values. Anything above ~100% is usually a data artefact or illiquid option.",
-    )
-with col6:
-    min_market_cap_b = st.number_input(
-        "Min Market Cap ($B)",
-        min_value=0.0, max_value=50.0,
-        value=1.0, step=0.5,
-        format="%.1f",
-        key="cc_min_cap",
-    )
+st.markdown("---")
 
-col7, col8, col9 = st.columns(3)
-with col7:
-    min_oi = st.number_input(
-        "Min Open Interest",
-        min_value=0, max_value=1000,
-        value=50, step=25,
-        key="cc_min_oi",
-    )
-with col8:
-    min_downside = st.slider(
-        "Min Downside Protection %",
-        min_value=0, max_value=40,
-        value=10, step=1,
-        key="cc_min_downside",
-        help="Filter out positions with insufficient downside buffer.",
-    )
-with col9:
-    price_min = st.number_input(
-        "Min Stock Price ($)",
-        min_value=0.0, max_value=10000.0,
-        value=0.0, step=5.0, format="%.0f",
-        key="cc_price_min",
-        help="Nur Aktien mit Kurs ≥ diesem Wert. 0 = keine Untergrenze.",
-    )
+# --- Gruppe 2: Rendite & Schutz ---
+with st.container():
+    st.markdown("##### Rendite & Schutz")
+    col4, col5, col6 = st.columns(3)
+    with col4:
+        min_annualized = st.number_input(
+            "Min Annualized Return %",
+            min_value=0, max_value=200,
+            value=10, step=5,
+            key="cc_min_ann",
+            help="Untergrenze der annualisierten Rendite.",
+        )
+    with col5:
+        max_annualized = st.number_input(
+            "Max Annualized Return %",
+            min_value=10, max_value=1000,
+            value=30, step=10,
+            key="cc_max_ann",
+            help="Cap utopian values. Above ~100% is usually a data artefact or illiquid option.",
+        )
+    with col6:
+        min_downside = st.slider(
+            "Min Downside Protection %",
+            min_value=0, max_value=40,
+            value=10, step=1,
+            key="cc_min_downside",
+            help="Filter out positions with insufficient downside buffer.",
+        )
 
-col10, col11, col12 = st.columns(3)
-with col10:
-    min_iv_rank = st.number_input(
-        "Min IV Rank",
-        min_value=0, max_value=100,
-        value=50, step=5,
-        key="cc_min_iv_rank",
-        help="PowerOptions uses IV Rank >= 50 to ensure options are expensive enough to sell.",
-    )
-with col11:
-    min_premium = st.number_input(
-        "Min Option Bid ($)",
-        min_value=0.0, max_value=10.0,
-        value=0.20, step=0.10,
-        format="%.2f",
-        key="cc_min_premium",
-        help="Minimum option bid price. Avoids illiquid penny options.",
-    )
-with col12:
-    price_max = st.number_input(
-        "Max Stock Price ($)",
-        min_value=0.0, max_value=10000.0,
-        value=0.0, step=5.0, format="%.0f",
-        key="cc_price_max",
-        help="Nur Aktien mit Kurs ≤ diesem Wert. 0 = keine Obergrenze.",
-    )
+st.markdown("---")
 
-scan_btn = st.button("Scan for Covered Calls", type="primary")
+# --- Gruppe 3: Aktie & Liquidität ---
+with st.container():
+    st.markdown("##### Aktie & Liquidität")
+    col7, col8, col9 = st.columns(3)
+    with col7:
+        price_min = st.number_input(
+            "Min Stock Price ($)",
+            min_value=0.0, max_value=10000.0,
+            value=0.0, step=5.0, format="%.0f",
+            key="cc_price_min",
+            help="0 = keine Untergrenze.",
+        )
+    with col8:
+        price_max = st.number_input(
+            "Max Stock Price ($)",
+            min_value=0.0, max_value=10000.0,
+            value=0.0, step=5.0, format="%.0f",
+            key="cc_price_max",
+            help="0 = keine Obergrenze.",
+        )
+    with col9:
+        min_market_cap_b = st.number_input(
+            "Min Market Cap ($B)",
+            min_value=0.0, max_value=50.0,
+            value=1.0, step=0.5,
+            format="%.1f",
+            key="cc_min_cap",
+        )
+
+    col10, col11, col12 = st.columns(3)
+    with col10:
+        min_oi = st.number_input(
+            "Min Open Interest",
+            min_value=0, max_value=1000,
+            value=50, step=25,
+            key="cc_min_oi",
+        )
+    with col11:
+        min_iv_rank = st.number_input(
+            "Min IV Rank",
+            min_value=0, max_value=100,
+            value=50, step=5,
+            key="cc_min_iv_rank",
+            help="PowerOptions: IV Rank >= 50 ensures options are expensive enough to sell.",
+        )
+    with col12:
+        min_premium = st.number_input(
+            "Min Option Bid ($)",
+            min_value=0.0, max_value=10.0,
+            value=0.20, step=0.10,
+            format="%.2f",
+            key="cc_min_premium",
+            help="Minimum option bid price. Avoids illiquid penny options.",
+        )
+
+st.markdown("---")
+
+# --- Gruppe 4: Sektor-Status ---
+with st.container():
+    st.markdown("##### Sektor-Status")
+
+    if sector_quadrants:
+        sec_col1, sec_col2, sec_col3 = st.columns([2, 2, 1])
+        with sec_col1:
+            sector_filter = st.multiselect(
+                "Sektor-Filter",
+                options=all_sectors_with_quadrant,
+                default=[],
+                key="cc_sector_filter",
+                help="Nur Aktien aus diesen Sektoren zeigen. Leer = alle.",
+                placeholder="Alle Sektoren",
+            )
+        with sec_col2:
+            quadrant_filter = st.multiselect(
+                "Quadrant-Filter (Sektor-Status)",
+                options=available_quadrants,
+                default=[],
+                key="cc_quadrant_filter",
+                placeholder="Alle Quadranten",
+                help="🟢 Leading = Stärke. 🟠 Weakening / 🔴 Lagging = schwächer (konservativere Covered Calls).",
+                format_func=lambda q: f"{_QUADRANT_EMOJI.get(q, '⚪')} {q}",
+            )
+        with sec_col3:
+            exclude_leading = st.toggle(
+                "Ohne Leading",
+                value=False,
+                key="cc_exclude_leading",
+                help="Blendet Aktien aus Leading-Sektoren aus — für konservativere, defensivere Covered Calls.",
+            )
+
+        # Aktuellen Sektor-Status als Übersicht anzeigen
+        if sector_quadrants:
+            badges = " &nbsp; ".join(
+                _sector_badge_html(s, q) for s, q in sorted(sector_quadrants.items())
+            )
+            st.markdown(f"<div style='margin:4px 0 2px 0;line-height:2.2;'>{badges}</div>",
+                        unsafe_allow_html=True)
+    else:
+        sector_filter = []
+        quadrant_filter = []
+        exclude_leading = False
+        st.caption("Sektor-Rotation-Daten nicht verfügbar.")
+
+scan_btn = st.button("🔍 Scan for Covered Calls", type="primary")
 
 # ── Load data ─────────────────────────────────────────────────────────────────
 if scan_btn:
@@ -242,6 +561,12 @@ if scan_btn:
                     if col in raw_df.columns:
                         raw_df[col] = pd.to_numeric(raw_df[col], errors="coerce")
 
+                # Sektor-Quadrant anreichern
+                if sector_quadrants and "company_sector" in raw_df.columns:
+                    raw_df["sektor_quadrant"] = raw_df["company_sector"].map(sector_quadrants).fillna("Unbekannt")
+                else:
+                    raw_df["sektor_quadrant"] = "Unbekannt"
+
                 # Apply post-filters
                 df = raw_df[
                     (raw_df["annualized_return_pct"] >= min_annualized) &
@@ -250,7 +575,7 @@ if scan_btn:
                     (raw_df["delta"] <= delta_target_max)
                 ].copy()
 
-                # IV Rank filter (skip rows where iv_rank is NaN)
+                # IV Rank filter
                 if min_iv_rank > 0:
                     df = df[df["iv_rank"].isna() | (df["iv_rank"] >= min_iv_rank)]
 
@@ -258,11 +583,19 @@ if scan_btn:
                 if min_premium > 0:
                     df = df[df["premium"] >= min_premium]
 
-                # Stock price range filter (0 = keine Grenze)
+                # Stock price range filter
                 if price_min > 0:
                     df = df[df["stock_price"] >= price_min]
                 if price_max > 0:
                     df = df[df["stock_price"] <= price_max]
+
+                # Sektor-Filter
+                if sector_filter:
+                    df = df[df["company_sector"].isin(sector_filter)]
+                if quadrant_filter:
+                    df = df[df["sektor_quadrant"].isin(quadrant_filter)]
+                if exclude_leading:
+                    df = df[df["sektor_quadrant"] != "Leading"]
 
                 if df.empty:
                     st.warning("All results filtered out. Try lowering Min Annualized Return or Min Downside Protection.")
@@ -290,16 +623,21 @@ if st.session_state["cc_df"] is not None:
         if pd.isna(days_earn):
             return "—"
         if days_earn <= (dte or 99):
-            return "Earnings before expiry"
-        return f"Safe ({int(days_earn)}d)"
+            return "⚠️ vor Verfall"
+        return f"✅ Safe ({int(days_earn)}d)"
+
+    def _quadrant_cell(row):
+        q = row.get("sektor_quadrant", "Unbekannt")
+        emoji = _QUADRANT_EMOJI.get(q, "⚪")
+        return f"{emoji} {q}"
 
     display_df = pd.DataFrame({
         "Symbol":        df["symbol"],
-        "Sector":        df["company_sector"].fillna("—"),
+        "Sektor":        df["company_sector"].fillna("—"),
+        "Quadrant":      df.apply(_quadrant_cell, axis=1),
         "Stock ($)":     df["stock_price"].apply(lambda v: f"{v:.2f}"),
         "Strike ($)":    df["strike_price"].apply(lambda v: f"{v:.2f}"),
         "Premium ($)":   df["premium"].apply(lambda v: f"{v:.2f}"),
-        "Investment ($)": df["stock_price"].apply(lambda v: f"{v * 100:,.0f}"),
         "DTE":           df["dte"].astype("Int64"),
         "Expiry":        df["expiration_date"].astype(str),
         "Net Debit ($)": df["net_debit"].apply(lambda v: f"{v:.2f}"),
@@ -310,6 +648,30 @@ if st.session_state["cc_df"] is not None:
         "IV Rank":       df["iv_rank"].apply(lambda v: f"{v:.0f}%" if pd.notna(v) else "—"),
         "Earnings":      df.apply(_earnings_flag, axis=1),
     })
+
+    # Post-scan Tabellenfilter (wie Roll & Screen)
+    tf1, tf2, tf3 = st.columns([2, 2, 1])
+    tbl_sectors = tf1.multiselect(
+        "Sektor (Tabelle)",
+        options=sorted(df["company_sector"].dropna().unique()),
+        default=[],
+        key="cc_tbl_sector",
+        placeholder="Alle",
+    )
+    tbl_quadrants = tf2.multiselect(
+        "Quadrant (Tabelle)",
+        options=sorted(df["sektor_quadrant"].unique()),
+        default=[],
+        key="cc_tbl_quadrant",
+        placeholder="Alle",
+        format_func=lambda q: f"{_QUADRANT_EMOJI.get(q, '⚪')} {q}",
+    )
+
+    view = display_df.copy()
+    if tbl_sectors:
+        view = view[view["Sektor"].isin(tbl_sectors)]
+    if tbl_quadrants:
+        view = view[view["Quadrant"].str.contains("|".join(tbl_quadrants), na=False)]
 
     # Colour-code by annualized return
     def _highlight(row):
@@ -323,12 +685,12 @@ if st.session_state["cc_df"] is not None:
             return ["background-color: rgba(120, 80, 0, 0.18)"] * len(row)
         return [""] * len(row)
 
-    styled = display_df.style.apply(_highlight, axis=1).hide(axis="index")
+    styled = view.style.apply(_highlight, axis=1).hide(axis="index")
 
     event = st.dataframe(
         styled,
         use_container_width=True,
-        height=min(700, 40 + 35 * len(display_df)),
+        height=min(700, 40 + 35 * len(view)),
         selection_mode="single-row",
         on_select="rerun",
         key="cc_table",
@@ -340,7 +702,8 @@ if st.session_state["cc_df"] is not None:
     selected = event.selection.rows if hasattr(event, "selection") else []
     if selected:
         idx = selected[0]
-        r = df.iloc[idx]
+        # Map view-row back to underlying df row
+        r = df.iloc[view.index[idx]] if hasattr(view, "index") else df.iloc[idx]
 
         symbol       = r["symbol"]
         stock        = float(r["stock_price"])
@@ -357,6 +720,8 @@ if st.session_state["cc_df"] is not None:
         expiry       = str(r["expiration_date"])
         earnings     = str(r.get("earnings_date", "—"))
         days_earn    = r.get("days_to_earnings")
+        sector_en    = str(r.get("company_sector", ""))
+        quadrant     = str(r.get("sektor_quadrant", "Unbekannt"))
 
         breakeven    = round(net_debit, 2)
         max_profit   = round((strike - net_debit) * 100, 2)
@@ -397,13 +762,16 @@ if st.session_state["cc_df"] is not None:
         st.divider()
         st.subheader(f"Trade Analysis — {symbol}")
 
-        # ── Großes, präsentes Ergebnis-Banner (grün ≥30 / amber ≥15 / grau) ──
+        # ── Banner ────────────────────────────────────────────────────────────
         if annualized >= 30:
             _bg, _brd, _tag = "#166534", "#22c55e", "🟢 STARK"
         elif annualized >= 15:
             _bg, _brd, _tag = "#854d0e", "#f59e0b", "🟡 SOLIDE"
         else:
             _bg, _brd, _tag = "#374151", "#9ca3af", "⚪ MODERAT"
+
+        sector_badge = _sector_badge_html(sector_en, quadrant) if sector_en else ""
+
         st.markdown(
             f"<div style='background:{_bg};border:2px solid {_brd};border-radius:10px;"
             f"padding:14px 18px;margin:6px 0 12px 0;'>"
@@ -414,17 +782,28 @@ if st.session_state["cc_df"] is not None:
             f"<br><span style='color:#e5e7eb;font-size:13px;'>"
             f"{symbol} @ ${stock:.2f} &nbsp;·&nbsp; Strike ${strike:.2f} &nbsp;·&nbsp; "
             f"Net Debit ${net_debit:.2f} &nbsp;·&nbsp; Breakeven ${breakeven:.2f} &nbsp;·&nbsp; "
-            f"Downside-Puffer {protection:.1f}% &nbsp;·&nbsp; Verfall {expiry}</span>"
+            f"Downside-Puffer {protection:.1f}% &nbsp;·&nbsp; Verfall {expiry}"
+            f"</span>"
+            f"<br><span style='margin-top:6px;display:inline-block;'>{sector_badge}</span>"
             f"</div>", unsafe_allow_html=True)
 
         # Metrics row
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("Net Debit", f"${net_debit:.2f}", help="Dein realer Einstand pro Aktie (Kurs − Prämie)")
         m2.metric("Assigned Return", f"{assigned_ret:.2f}%", help="Gewinn, wenn die Aktie am Verfall ausgeübt/abgerufen wird")
-        m3.metric("Annualized Return", f"{annualized:.1f}%", help="Auf ein Jahr hochgerechnet — vergleichbar über Laufzeiten")
-        m4.metric("Downside Protection", f"{protection:.1f}%", help="Wie weit die Aktie fallen darf, bis du ins Minus kommst (Prämie / Kurs)")
+        m3.metric("Annualized Return", f"{annualized:.1f}%", help="Auf ein Jahr hochgerechnet")
+        m4.metric("Downside Protection", f"{protection:.1f}%", help="Wie weit die Aktie fallen darf, bis du ins Minus kommst")
 
-        # ── Erklär-Blöcke: kompakt, mit Icons, in Expandern ──────────────────
+        # ── Graphen nebeneinander ─────────────────────────────────────────────
+        chart_col1, chart_col2 = st.columns(2)
+        with chart_col1:
+            st.markdown("**📊 Payoff bei Verfall**")
+            _render_payoff_chart(stock, strike, premium, net_debit, dte)
+        with chart_col2:
+            st.markdown("**📈 IV-Rank Historie (1 Jahr)**")
+            _render_iv_chart(symbol)
+
+        # ── Erklär-Blöcke ─────────────────────────────────────────────────────
         with st.expander("🧮 Wie berechnen sich die Kennzahlen?", expanded=True):
             st.markdown(f"""
 | Kennzahl | Rechnung | Ergebnis |
