@@ -702,8 +702,8 @@ if st.session_state["cc_df"] is not None:
     selected = event.selection.rows if hasattr(event, "selection") else []
     if selected:
         idx = selected[0]
-        # Map view-row back to underlying df row
-        r = df.iloc[view.index[idx]] if hasattr(view, "index") else df.iloc[idx]
+        # view.index carries the original df positional index after filtering
+        r = df.loc[view.index[idx]]
 
         symbol       = r["symbol"]
         stock        = float(r["stock_price"])
