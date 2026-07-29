@@ -25,6 +25,8 @@ st.title("SKULD - Option Viewer")
 
 # Define pages
 analyst_prices = st.Page("pages/analyst_prices.py", title="Analyst Prices")
+universe = st.Page("pages/universe.py", title="Universum")
+delta_portfolio = st.Page("pages/delta_portfolio.py", title="Delta Portfolio")
 watchlist = st.Page("pages/watchlist.py", title="Watchlist")
 spreads = st.Page("pages/spreads.py", title="Spreads")
 marrieds = st.Page("pages/married_put_analysis.py", title="Married Puts")
@@ -47,6 +49,8 @@ admin_jobs = st.Page("pages/admin_jobs.py", title="Admin - Jobs")
 page = st.navigation(
     [
         analyst_prices,
+        universe,
+        delta_portfolio,
         watchlist,
         spreads,
         iron_condors,
