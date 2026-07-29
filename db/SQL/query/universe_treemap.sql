@@ -7,13 +7,13 @@ SELECT
     s.company_name,
     s.company_sector,
     s.company_industry,
-    s."LIVE_STOCK_PRICE"                                                AS stock_price,
+    s.live_stock_price                                                  AS stock_price,
     s."Summary_previousClose"                                           AS prev_close,
     CASE
         WHEN s."Summary_previousClose" IS NOT NULL
              AND s."Summary_previousClose" > 0
         THEN ROUND(
-            ((s."LIVE_STOCK_PRICE" - s."Summary_previousClose")
+            ((s.live_stock_price - s."Summary_previousClose")
              / s."Summary_previousClose" * 100.0)::numeric, 2)
         ELSE NULL
     END                                                                 AS price_change_pct,
@@ -36,8 +36,8 @@ FROM
     ) AS o ON s.symbol = o.symbol
 WHERE
     s.company_sector IS NOT NULL
-    AND s."LIVE_STOCK_PRICE" IS NOT NULL
-    AND s."LIVE_STOCK_PRICE" > 0
+    AND s.live_stock_price IS NOT NULL
+    AND s.live_stock_price > 0
 ORDER BY
     s.company_sector,
     s.company_industry,
