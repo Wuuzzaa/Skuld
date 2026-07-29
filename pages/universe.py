@@ -258,28 +258,41 @@ fig.update_layout(
 )
 
 # Click-Event für Drilldown
-event = st.plotly_chart(
+st.plotly_chart(
     fig,
     use_container_width=True,
-    on_select="rerun",
     key="uni_treemap",
 )
 
-# Drilldown-Logik: auf Kachel geklickt
-if event and hasattr(event, "selection") and event.selection:
-    pts = event.selection.get("points", [])
-    if pts:
-        clicked_label = pts[0].get("label") or pts[0].get("id")
-        if clicked_label:
-            if not drill_sector:
-                # Klick auf Sektor → Sektor-Drilldown
-                if clicked_label in df["company_sector"].values:
-                    st.session_state["universe_drilldown_sector"] = clicked_label
-                    st.rerun()
-            elif not drill_industry:
-                # Klick auf Branche → Branchen-Drilldown
-                if clicked_label in df["company_industry"].values:
-                    st.session_state["universe_drilldown_industry"] = clicked_label
+# ── Drilldown-Buttons (Plotly Treemap on_select funktioniert nicht zuverlässig) ──
+if not drill_sector:
+    # Sektor-Buttons zeigen
+    all_df = st.session_state["universe_df"].copy()
+    if min_cap > 0:
+        all_df = all_df[all_df["market_cap_b"].isna() | (all_df["market_cap_b"] >= min_cap)]
+    if options_filter == "Nur mit Optionen":
+        all_df = all_df[all_df["has_options"] == True]
+    sectors = sorted(all_df["company_sector"].dropna().unique())
+    st.markdown("**Sektor auswählen:**")
+    btn_cols = st.columns(min(len(sectors), 6))
+    for i, sec in enumerate(sectors):
+        count = len(all_df[all_df["company_sector"] == sec])
+        with btn_cols[i % 6]:
+            if st.button(f"{sec}\n({count})", key=f"uni_sec_{sec}", use_container_width=True):
+                st.session_state["universe_drilldown_sector"] = sec
+                st.rerun()
+
+elif not drill_industry:
+    # Branchen-Buttons für den gewählten Sektor
+    industries = sorted(df["company_industry"].dropna().unique())
+    if industries:
+        st.markdown(f"**Branche in {drill_sector}:**")
+        btn_cols = st.columns(min(len(industries), 5))
+        for i, ind in enumerate(industries):
+            count = len(df[df["company_industry"] == ind])
+            with btn_cols[i % 5]:
+                if st.button(f"{ind}\n({count})", key=f"uni_ind_{ind}", use_container_width=True):
+                    st.session_state["universe_drilldown_industry"] = ind
                     st.rerun()
 
 # ── Detail-Tabelle unter der Treemap ─────────────────────────────────────────
