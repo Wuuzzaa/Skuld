@@ -9,10 +9,173 @@ import streamlit as st
 from config import PATH_DATABASE_QUERY_FOLDER
 from src.database import select_into_dataframe
 from src.logger_config import setup_logging
+from src.llm_client import LLMClient, LLMProviderError
 
 setup_logging(component="streamlit", log_level=logging.DEBUG, console_output=True)
 logger = logging.getLogger(os.path.basename(__file__))
 logger.debug(f"Start Page: {os.path.basename(__file__)}")
+
+# ── AI-Assistent ──────────────────────────────────────────────────────────────
+_EPS_AI_SYSTEM_PROMPT = (
+    "Du bist ein erfahrener Optionshändler spezialisiert auf die Earnings IV-Crush-Strategie "
+    "(Cash-Secured Puts vor Earnings verkaufen). Du bewertest konkret ob der beschriebene Put "
+    "eine gute oder schlechte Idee ist — basierend ausschließlich auf den gegebenen Zahlen. "
+    "Keine allgemeinen Floskeln. Nenne konkrete Stärken und Risiken mit Bezug auf die Daten. "
+    "Antworte auf Deutsch, präzise und strukturiert."
+)
+
+_EPS_AI_FORMAT_INSTRUCTION = (
+    "Bewerte diesen Earnings-Put-Trade in folgender Struktur:\n\n"
+    "**Urteil:** [🟢 Gute Idee / 🟡 Akzeptabel mit Vorbehalt / 🔴 Schlechte Idee] — 1 Satz warum.\n\n"
+    "**Stärken** (max 3 Stichpunkte)\n\n"
+    "**Risiken** (max 3 Stichpunkte)\n\n"
+    "**Fazit:** 1–2 Sätze Empfehlung."
+)
+
+
+def _provider_picker_eps(chat_key: str):
+    pc1, pc2 = st.columns([2, 2])
+    with pc1:
+        choice = st.radio(
+            "KI-Modell",
+            options=["DeepSeek", "Kimi (K3)"],
+            horizontal=True,
+            key=f"{chat_key}_provider",
+            help="DeepSeek = schnell & günstig. Kimi K3 = 1M-Kontext, kann Web-Recherche.",
+        )
+    provider = "kimi" if choice.startswith("Kimi") else "deepseek"
+    web_search = False
+    with pc2:
+        if provider == "kimi":
+            web_search = st.checkbox(
+                "🌐 Web-Recherche (Kimi sucht live im Netz)",
+                key=f"{chat_key}_web",
+                help="Kimi sucht aktuelle News und Earnings-Daten.",
+            )
+        else:
+            st.caption("Web-Recherche nur mit Kimi verfügbar.")
+    return provider, web_search
+
+
+def _render_eps_ai_chat(
+    symbol: str,
+    stock_price: float,
+    strike: float,
+    premium: float,
+    dte: int,
+    delta: float | None,
+    iv_rank: float | None,
+    hv: float | None,
+    exp_move: float | None,
+    exp_move_pct: float | None,
+    safety_threshold: float | None,
+    earnings_date: str,
+    sector: str,
+    is_safe: bool,
+    breakeven: float,
+    max_gain: float,
+    prob_assign: float | None,
+):
+    st.divider()
+    st.markdown("### 🤖 KI-Analyse")
+    st.caption("Die KI bewertet ob dieser Put-Verkauf eine gute Idee ist. Danach kannst du frei nachfragen.")
+
+    chat_key = f"eps_ai_{symbol}_{strike:.1f}_{dte}"
+    msgs_key = f"{chat_key}_messages"
+    ctx_key  = f"{chat_key}_context"
+    prov_key = f"{chat_key}_provider_used"
+    started  = bool(st.session_state.get(msgs_key))
+
+    if not started:
+        _provider, _web = _provider_picker_eps(chat_key)
+        if st.button("🤖 Analyse anfordern", type="primary", key=f"{chat_key}_btn"):
+            safe_str   = "✅ Safe Zone (unter Expected Move)" if is_safe else "⚠️ Innerhalb Expected Move"
+            iv_str     = f"{iv_rank:.0f}%" if iv_rank is not None else "n/a"
+            hv_str     = f"{hv:.1f}%" if hv is not None else "n/a"
+            delta_str  = f"{delta:.3f}" if delta is not None else "n/a"
+            em_str     = f"±{exp_move:.2f} ({exp_move_pct:.1f}%)" if exp_move else "n/a"
+            prob_str   = f"{prob_assign:.1f}%" if prob_assign is not None else "n/a"
+            thresh_str = f"{safety_threshold:.2f}" if safety_threshold else "n/a"
+
+            context = (
+                f"Symbol: {symbol} | Sektor: {sector}\n"
+                f"Aktienkurs: {stock_price:.2f} | Earnings: {earnings_date}\n"
+                f"Strike: {strike:.2f} | DTE: {dte} | {safe_str}\n"
+                f"Prämie: {premium:.2f} | Breakeven: {breakeven:.2f} | Max Gewinn: {max_gain:.2f}/Kontrakt\n"
+                f"Delta: {delta_str} | Zuweisungswahrscheinlichkeit: {prob_str}\n"
+                f"IV Rank: {iv_str} | HV 30d: {hv_str}\n"
+                f"Expected Move: {em_str} | Safe-Strike-Schwelle: {thresh_str}\n"
+            )
+            _prov_label = "Kimi" if _provider == "kimi" else "DeepSeek"
+            with st.spinner(f"{_prov_label} analysiert den Trade…"):
+                try:
+                    response = LLMClient().chat_completion_messages(
+                        _provider,
+                        messages=[
+                            {"role": "system", "content": f"{_EPS_AI_SYSTEM_PROMPT}\n\nTrade-Daten:\n{context}"},
+                            {"role": "user",   "content": _EPS_AI_FORMAT_INSTRUCTION},
+                        ],
+                        temperature=0.2,
+                        max_tokens=900,
+                        web_search=_web,
+                    )
+                    st.session_state[ctx_key]  = context
+                    st.session_state[msgs_key] = [
+                        {"role": "user",      "content": _EPS_AI_FORMAT_INSTRUCTION},
+                        {"role": "assistant", "content": response.text},
+                    ]
+                    st.session_state[f"{chat_key}_model"] = response.model
+                    st.session_state[prov_key] = {"provider": _provider, "web_search": _web}
+                    st.rerun()
+                except LLMProviderError as e:
+                    st.error(f"{_prov_label}-Fehler: {e}")
+                except Exception as e:
+                    st.error(f"Fehler: {e}")
+        return
+
+    # ── Phase 2: Chat läuft ───────────────────────────────────────────────────
+    _prov_state = st.session_state.get(prov_key, {"provider": "deepseek", "web_search": False})
+    _provider   = _prov_state["provider"]
+    _web        = _prov_state["web_search"]
+    _prov_label = "Kimi" if _provider == "kimi" else "DeepSeek"
+    model       = st.session_state.get(f"{chat_key}_model", "?")
+    st.caption(f"Modell: {model} · Kontext: {symbol} Put {strike:.1f}")
+
+    for m in st.session_state[msgs_key]:
+        if m["role"] == "user" and m["content"] == _EPS_AI_FORMAT_INSTRUCTION:
+            continue
+        with st.chat_message(m["role"]):
+            st.markdown(m["content"])
+
+    if user_msg := st.chat_input(f"Rückfrage an {_prov_label}…", key=f"{chat_key}_input"):
+        with st.chat_message("user"):
+            st.markdown(user_msg)
+        context  = st.session_state.get(ctx_key, "")
+        history  = st.session_state[msgs_key]
+        api_msgs = (
+            [{"role": "system", "content": f"{_EPS_AI_SYSTEM_PROMPT}\n\nTrade-Daten:\n{context}"}]
+            + history
+            + [{"role": "user", "content": user_msg}]
+        )
+        with st.chat_message("assistant"):
+            with st.spinner(f"{_prov_label} denkt nach…"):
+                try:
+                    response = LLMClient().chat_completion_messages(
+                        _provider, messages=api_msgs, temperature=0.3, max_tokens=900, web_search=_web,
+                    )
+                    st.markdown(response.text)
+                    history.append({"role": "user",      "content": user_msg})
+                    history.append({"role": "assistant", "content": response.text})
+                    st.session_state[msgs_key] = history
+                except LLMProviderError as e:
+                    st.error(f"{_prov_label}-Fehler: {e} — Frage nicht gespeichert.")
+                except Exception as e:
+                    st.error(f"Fehler: {e} — Frage nicht gespeichert.")
+
+    if st.button("🗑️ Chat zurücksetzen", key=f"{chat_key}_reset"):
+        for k in (msgs_key, ctx_key, f"{chat_key}_model", prov_key):
+            st.session_state.pop(k, None)
+        st.rerun()
 
 # ── Page header ───────────────────────────────────────────────────────────────
 st.title("Earnings Put Scanner")
@@ -618,6 +781,32 @@ if st.session_state.get("eps_selected_symbol"):
 
 **Delta** — Je näher an 0, desto weiter OTM und sicherer. −0.10 bis −0.25 ist typisch für diese Strategie.
 """)
+
+                # ── KI-Analyse ────────────────────────────────────────────────
+                _hv_for_ai = float(symbol_row["historical_volatility_30d"]) if pd.notna(symbol_row.get("historical_volatility_30d")) else None
+                _sector_for_ai = str(symbol_row.get("company_sector", "—"))
+                _prob_for_ai = round(abs(p_delta) * 100, 1) if p_delta else None
+                _thresh_for_ai = safety_threshold
+
+                _render_eps_ai_chat(
+                    symbol=symbol,
+                    stock_price=float(live_price) if pd.notna(live_price) else 0.0,
+                    strike=p_strike,
+                    premium=p_premium,
+                    dte=p_dte,
+                    delta=p_delta,
+                    iv_rank=iv_rank,
+                    hv=_hv_for_ai,
+                    exp_move=float(expected_move) if pd.notna(expected_move) else None,
+                    exp_move_pct=float(symbol_row["expected_move_pct"]) if pd.notna(symbol_row.get("expected_move_pct")) else None,
+                    safety_threshold=_thresh_for_ai,
+                    earnings_date=str(earnings_date),
+                    sector=_sector_for_ai,
+                    is_safe=p_below,
+                    breakeven=p_breakeven,
+                    max_gain=p_max_gain,
+                    prob_assign=_prob_for_ai,
+                )
             else:
                 st.caption("Zeile anklicken für detaillierte Analyse.")
 
