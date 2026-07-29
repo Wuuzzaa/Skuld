@@ -536,10 +536,10 @@ if st.session_state.get("eps_selected_symbol"):
                                            annotation_position="top left",
                                            annotation_font_size=11, annotation_font_color="#10b981")
 
-                    # Wahrscheinlichkeit < safety_threshold berechnen
+                    # Wahrscheinlichkeit < safety_threshold berechnen (math.erf = kein scipy nötig)
                     if safety_threshold:
-                        from scipy import stats as _stats
-                        prob_below = _stats.norm.cdf(safety_threshold, loc=price, scale=sigma) * 100
+                        import math
+                        prob_below = (1 + math.erf((safety_threshold - price) / (sigma * math.sqrt(2)))) / 2 * 100
                         fig_prob.add_annotation(
                             x=safety_threshold - sigma * 0.3,
                             y=ys_prob.max() * 0.6,
