@@ -165,11 +165,19 @@ else:
 
 # Aggregieren für Sektor/Branche-Ebene
 if group_col in ("company_sector", "company_industry"):
+    def _wavg_color(grp):
+        """Market-Cap-gewichteter Durchschnitt der Performance."""
+        sub = df.loc[grp.index, ["market_cap_b", color_col]].dropna(subset=[color_col])
+        if sub.empty:
+            return 0.0
+        weights = sub["market_cap_b"].fillna(1.0).clip(lower=0.01)
+        return float(np.average(sub[color_col], weights=weights))
+
     agg = df.groupby(group_col, dropna=False).agg(
-        _size_val =("_size_val", "sum"),
-        _color_val=(color_col,   lambda x: x.dropna().mean() if not x.dropna().empty else 0),
-        count     =("symbol",    "count"),
+        _size_val=("_size_val", "sum"),
+        count    =("symbol",    "count"),
     ).reset_index()
+    agg["_color_val"] = df.groupby(group_col, dropna=False).apply(_wavg_color).values
     agg["label_text"] = agg[group_col]
     agg["hover_text"] = agg.apply(
         lambda r: (
