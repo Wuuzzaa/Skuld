@@ -803,42 +803,76 @@ if st.session_state["cc_df"] is not None:
             st.markdown("**📈 IV-Rank Historie (1 Jahr)**")
             _render_iv_chart(symbol)
 
-        # ── Erklär-Blöcke ─────────────────────────────────────────────────────
-        with st.expander("🧮 Wie berechnen sich die Kennzahlen?", expanded=True):
-            st.markdown(f"""
-| Kennzahl | Rechnung | Ergebnis |
-|---|---|---|
-| **Net Debit** | ${stock:.2f} Kurs − ${premium:.2f} Prämie | **${net_debit:.2f}** |
-| **Assigned Return** | (${strike:.2f} Strike − ${net_debit:.2f} Einstand) / ${net_debit:.2f} × 100 | **{assigned_ret:.2f}%** |
-| **Annualized Return** | {assigned_ret:.2f}% / {dte} Tage × 365 | **{annualized:.1f}%** |
-| **Downside Protection** | ${premium:.2f} Prämie / ${stock:.2f} Kurs × 100 | **{protection:.1f}%** |
-""")
+        # ── Kennzahlen-Tabelle als HTML (kein $ in f-string Markdown) ─────────
+        st.markdown("**🧮 Kennzahlen**")
+        st.markdown(
+            f"<table style='width:100%;border-collapse:collapse;font-size:13px;'>"
+            f"<thead><tr style='border-bottom:1px solid rgba(255,255,255,0.15);'>"
+            f"<th style='text-align:left;padding:6px 10px;color:#94a3b8;font-weight:500;'>Kennzahl</th>"
+            f"<th style='text-align:left;padding:6px 10px;color:#94a3b8;font-weight:500;'>Rechnung</th>"
+            f"<th style='text-align:right;padding:6px 10px;color:#94a3b8;font-weight:500;'>Ergebnis</th>"
+            f"</tr></thead><tbody>"
+            f"<tr style='border-bottom:1px solid rgba(255,255,255,0.06);'>"
+            f"<td style='padding:6px 10px;'>Net Debit</td>"
+            f"<td style='padding:6px 10px;color:#9ca3af;'>{stock:.2f} Kurs − {premium:.2f} Prämie</td>"
+            f"<td style='padding:6px 10px;text-align:right;font-weight:700;'>{net_debit:.2f}</td></tr>"
+            f"<tr style='border-bottom:1px solid rgba(255,255,255,0.06);'>"
+            f"<td style='padding:6px 10px;'>Assigned Return</td>"
+            f"<td style='padding:6px 10px;color:#9ca3af;'>({strike:.2f} − {net_debit:.2f}) / {net_debit:.2f} × 100</td>"
+            f"<td style='padding:6px 10px;text-align:right;font-weight:700;'>{assigned_ret:.2f}%</td></tr>"
+            f"<tr style='border-bottom:1px solid rgba(255,255,255,0.06);'>"
+            f"<td style='padding:6px 10px;'>Annualized Return</td>"
+            f"<td style='padding:6px 10px;color:#9ca3af;'>{assigned_ret:.2f}% / {dte} Tage × 365</td>"
+            f"<td style='padding:6px 10px;text-align:right;font-weight:700;color:#22c55e;'>{annualized:.1f}%</td></tr>"
+            f"<tr>"
+            f"<td style='padding:6px 10px;'>Downside Protection</td>"
+            f"<td style='padding:6px 10px;color:#9ca3af;'>{premium:.2f} Prämie / {stock:.2f} Kurs × 100</td>"
+            f"<td style='padding:6px 10px;text-align:right;font-weight:700;color:#f59e0b;'>{protection:.1f}%</td></tr>"
+            f"</tbody></table>",
+            unsafe_allow_html=True,
+        )
 
-        with st.expander("📊 Gewinn & Verlust am Verfall", expanded=True):
-            st.markdown(f"""
-- 🟢 **Bestfall — Aktie über ${strike:.2f}:** Aktien werden abgerufen → **+${max_profit:.2f} pro Kontrakt** (+{assigned_ret:.2f}%). Mehr geht nicht (Gewinn gedeckelt).
-- ⚪ **Breakeven bei ${breakeven:.2f}:** genau dein Einstand → $0.
-- 🔴 **Unter ${breakeven:.2f}:** Verlust = (${breakeven:.2f} − Kurs) × 100 pro Kontrakt. Die Prämie hat dich bis hier abgefedert ({protection:.1f}% Puffer).
-""")
+        st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 
-        with st.expander("🚪 Früher Ausstieg — 50%-Regel", expanded=False):
-            st.markdown(f"""
-Gängige Praxis: schließen, wenn die Prämie auf 50% gefallen ist.
-
-- Verkauft für: **${premium:.2f}**
-- Zurückkaufen bei: **${close_50pct:.2f}** (buy-to-close)
-- Gewinn: **${round(premium - close_50pct, 2):.2f} pro Aktie** in ≤ {dte} Tagen → dann Kapital in die nächste Chance.
-""")
-
-        with st.expander("📈 Volatilität, Earnings & Delta", expanded=False):
-            _delta_txt = ("Sehr tief im Geld — hohe Zuteilungs-Wahrscheinlichkeit, faktisch ein fixer Income-Trade."
+        # ── G&V + Exit nebeneinander ───────────────────────────────────────────
+        pnl_col, exit_col = st.columns(2)
+        with pnl_col:
+            earn_safe = not (pd.notna(days_earn) and days_earn <= dte)
+            earn_icon = "✅" if earn_safe else "⚠️"
+            earn_txt  = (f"Earnings {earnings} — nach Verfall, kein IV-Crush-Risiko."
+                         if earn_safe else
+                         f"Earnings {earnings} ({int(days_earn)}d) VOR Verfall! IV-Crush-Risiko.")
+            st.markdown(
+                f"<div style='background:rgba(255,255,255,0.04);border-radius:8px;padding:14px 16px;height:100%;'>"
+                f"<div style='font-size:12px;font-weight:600;color:#94a3b8;letter-spacing:.05em;margin-bottom:8px;'>📊 G&amp;V BEI VERFALL</div>"
+                f"<div style='margin-bottom:6px;'>🟢 <b>Bestfall</b> — Aktie über {strike:.2f}: Aktien abgerufen → "
+                f"<span style='color:#22c55e;font-weight:700;'>+{max_profit:.2f} / Kontrakt</span> (+{assigned_ret:.2f}%)</div>"
+                f"<div style='margin-bottom:6px;'>⚪ <b>Breakeven</b> bei {breakeven:.2f} → 0</div>"
+                f"<div style='margin-bottom:10px;'>🔴 <b>Unter {breakeven:.2f}</b>: Verlust = ({breakeven:.2f} − Kurs) × 100. "
+                f"Prämie puffert {protection:.1f}%.</div>"
+                f"<div style='font-size:12px;color:#9ca3af;'>{earn_icon} {earn_txt}</div>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+        with exit_col:
+            _delta_txt = ("Sehr tief im Geld — faktisch fixer Income-Trade."
                           if delta_val >= 0.8 else
-                          "Moderat im Geld — ausgewogenes Verhältnis aus Prämie und Zuteilungs-Wahrscheinlichkeit.")
-            st.markdown(f"""
-- **Volatilität:** {iv_comment} {iv_hv_text}
-- **Earnings:** {earn_warning}
-- **Delta {delta_val:.3f}:** die Option bewegt sich ~${delta_val:.2f} je $1 Aktienbewegung; Zuteilungs-Wahrscheinlichkeit am Verfall ≈ **{delta_val*100:.0f}%**. {_delta_txt}
-""")
+                          "Moderat im Geld — ausgewogenes Verhältnis.")
+            iv_hv_short = ""
+            if iv_hv_text:
+                iv_hv_short = f"<div style='margin-bottom:6px;color:#9ca3af;font-size:12px;'>{iv_hv_text}</div>"
+            st.markdown(
+                f"<div style='background:rgba(255,255,255,0.04);border-radius:8px;padding:14px 16px;height:100%;'>"
+                f"<div style='font-size:12px;font-weight:600;color:#94a3b8;letter-spacing:.05em;margin-bottom:8px;'>🚪 EXIT &amp; VOLATILITÄT</div>"
+                f"<div style='margin-bottom:6px;'><b>50%-Regel:</b> Zurückkaufen bei "
+                f"<span style='color:#a78bfa;font-weight:700;'>{close_50pct:.2f}</span> "
+                f"→ Gewinn <span style='color:#22c55e;font-weight:700;'>{round(premium - close_50pct, 2):.2f} / Aktie</span></div>"
+                f"<div style='margin-bottom:6px;'><b>Delta {delta_val:.3f}</b> → Zuteilung ≈ {delta_val*100:.0f}%. {_delta_txt}</div>"
+                f"{iv_hv_short}"
+                f"<div style='font-size:12px;color:#9ca3af;'>{iv_comment}</div>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
 
     else:
         st.caption("Click a row to see detailed trade analysis and P&L breakdown.")
