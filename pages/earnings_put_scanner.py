@@ -56,19 +56,19 @@ with col2:
 with col3:
     max_pe = st.number_input("Max P/E Ratio", min_value=1, max_value=500, value=100, step=5, key="eps_max_pe")
 
-col4, col5, col6, col7 = st.columns(4)
+col4, col5, col6 = st.columns(3)
 with col4:
     min_iv_rank = st.number_input("Min IV Rank %", min_value=0, max_value=100, value=40, step=5, key="eps_min_iv_rank")
 with col5:
     max_iv_rank = st.number_input("Max IV Rank %", min_value=0, max_value=100, value=100, step=5, key="eps_max_iv_rank")
 with col6:
-    price_min = st.number_input("Min Kurs ($)", min_value=0.0, max_value=10000.0,
-                                 value=0.0, step=5.0, format="%.0f", key="eps_price_min",
-                                 help="Nur Aktien mit Kurs ≥ diesem Wert. 0 = keine Untergrenze.")
-with col7:
-    price_max = st.number_input("Max Kurs ($)", min_value=0.0, max_value=10000.0,
-                                 value=0.0, step=5.0, format="%.0f", key="eps_price_max",
-                                 help="Nur Aktien mit Kurs ≤ diesem Wert. 0 = keine Obergrenze.")
+    price_min, price_max = st.slider(
+        "Kursbereich ($)",
+        min_value=0, max_value=1000,
+        value=(0, 200), step=5,
+        key="eps_price_range",
+        help="Nur Aktien in diesem Kursbereich. Max 1000 = keine Obergrenze.",
+    )
 
 scan_btn = st.button("Kandidaten suchen", type="primary")
 
@@ -96,7 +96,7 @@ if scan_btn:
                 df = df[df["iv_rank"].isna() | ((df["iv_rank"] >= min_iv_rank) & (df["iv_rank"] <= max_iv_rank))]
                 if price_min > 0:
                     df = df[df["live_stock_price"].isna() | (df["live_stock_price"] >= price_min)]
-                if price_max > 0:
+                if price_max < 1000:
                     df = df[df["live_stock_price"].isna() | (df["live_stock_price"] <= price_max)]
 
                 if df.empty:
