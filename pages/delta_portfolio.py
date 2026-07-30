@@ -606,6 +606,139 @@ def _render_hedge_suggestions(positions: list[dict], total_delta: float):
 
 _render_hedge_suggestions(positions, total_delta)
 
+# ── Konkrete Hedge-Kandidaten aus DB ─────────────────────────────────────────
+st.divider()
+st.subheader("🔍 Konkrete Hedge-Kandidaten (live aus DB)")
+st.caption("OTM-Puts auf deine Positionen — gefiltert nach Liquidität, Delta und IV Rank.")
+
+@st.cache_data(ttl=300)
+def _fetch_hedge_candidates(symbol: str, stock_price: float) -> pd.DataFrame | None:
+    """Lädt OTM-Puts 5-15% unter aktuellem Kurs, DTE 30-90, liquid."""
+    try:
+        df = select_into_dataframe(
+            query="""
+                SELECT
+                    symbol,
+                    strike_price,
+                    expiration_date,
+                    days_to_expiration,
+                    ROUND(premium_option_price::numeric, 2)   AS praemie,
+                    ROUND(greeks_delta::numeric, 3)            AS delta,
+                    ROUND(implied_volatility::numeric * 100, 1) AS iv_pct,
+                    ROUND(iv_rank::numeric, 1)                 AS iv_rank,
+                    open_interest                              AS oi,
+                    ROUND(expected_move::numeric, 2)           AS exp_move
+                FROM "OptionDataMerged"
+                WHERE symbol = :symbol
+                  AND contract_type = 'put'
+                  AND strike_price BETWEEN :strike_lo AND :strike_hi
+                  AND days_to_expiration BETWEEN 25 AND 95
+                  AND open_interest >= 100
+                  AND premium_option_price >= 0.20
+                ORDER BY days_to_expiration ASC, ABS(greeks_delta) DESC
+                LIMIT 6
+            """,
+            params={
+                "symbol": symbol,
+                "strike_lo": round(stock_price * 0.82, 2),
+                "strike_hi": round(stock_price * 0.97, 2),
+            },
+        )
+        return df if df is not None and not df.empty else None
+    except Exception as e:
+        logger.warning(f"Hedge-Kandidaten Fehler {symbol}: {e}")
+        return None
+
+
+hc_col1, hc_col2 = st.columns([2, 1])
+with hc_col1:
+    hc_symbols_all = list({p["symbol"] for p in positions})
+    hc_symbol = st.selectbox(
+        "Symbol",
+        options=hc_symbols_all,
+        key="hc_symbol",
+        help="Puts auf welches Symbol suchen?",
+    )
+with hc_col2:
+    hc_spy = st.toggle("+ SPY/SPX Index-Hedge zeigen", value=True, key="hc_spy")
+
+if hc_symbol:
+    hc_price = _fetch_stock_price(hc_symbol)
+    if hc_price:
+        hc_df = _fetch_hedge_candidates(hc_symbol, hc_price)
+        if hc_df is not None:
+            st.markdown(f"**{hc_symbol} — aktuell ${hc_price:.2f}** · Zeigt OTM Puts 3–18% unter Kurs, DTE 25–95")
+
+            # Puffer % berechnen
+            hc_df["puffer_%"] = ((hc_price - hc_df["strike_price"]) / hc_price * 100).round(1)
+            hc_df["kosten_kontrakt"] = (hc_df["praemie"] * 100).round(0).astype(int)
+
+            # Spalten aufbereiten
+            disp = hc_df[[
+                "strike_price", "expiration_date", "days_to_expiration",
+                "puffer_%", "praemie", "kosten_kontrakt",
+                "delta", "iv_pct", "iv_rank", "oi",
+            ]].copy()
+            disp.columns = [
+                "Strike", "Verfall", "DTE",
+                "Puffer %", "Prämie $", "Kosten/Kontrakt $",
+                "Delta", "IV %", "IV Rank", "OI",
+            ]
+
+            def _color_row(row):
+                try:
+                    iv = float(row["IV Rank"])
+                    if iv >= 60:
+                        return ["background-color: rgba(239,68,68,0.12)"] * len(row)
+                    elif iv >= 40:
+                        return ["background-color: rgba(245,158,11,0.10)"] * len(row)
+                except Exception:
+                    pass
+                return [""] * len(row)
+
+            st.dataframe(
+                disp.style.apply(_color_row, axis=1).hide(axis="index"),
+                use_container_width=True,
+                height=min(280, 45 + 38 * len(disp)),
+            )
+            st.caption("🔴 IV Rank ≥ 60 = teuer (als Hedge ungünstig, Prämie hoch) · 🟡 40–60 = fair · weiß = günstig")
+        else:
+            st.info(f"Keine liquiden OTM-Puts für {hc_symbol} in der DB gefunden.")
+    else:
+        st.warning(f"Kein Kurs für {hc_symbol} in der DB.")
+
+if hc_spy:
+    st.markdown("---")
+    st.markdown("**SPY — Index-Hedge (Portfolio-Absicherung)**")
+    spy_price = _fetch_stock_price("SPY")
+    if spy_price:
+        spy_df = _fetch_hedge_candidates("SPY", spy_price)
+        if spy_df is not None:
+            spy_df["puffer_%"] = ((spy_price - spy_df["strike_price"]) / spy_price * 100).round(1)
+            spy_df["kosten_kontrakt"] = (spy_df["praemie"] * 100).round(0).astype(int)
+            disp_spy = spy_df[[
+                "strike_price", "expiration_date", "days_to_expiration",
+                "puffer_%", "praemie", "kosten_kontrakt", "delta", "iv_pct", "iv_rank", "oi",
+            ]].copy()
+            disp_spy.columns = ["Strike", "Verfall", "DTE", "Puffer %", "Prämie $", "Kosten/Kontrakt $", "Delta", "IV %", "IV Rank", "OI"]
+
+            # Wie viele SPY-Kontrakte für ~100% Portfolio-Hedge?
+            total_notional = sum(
+                ((_fetch_stock_price(p["symbol"]) or 0) * p["qty"])
+                for p in positions if p["type"] == "stock"
+            )
+            if spy_price and total_notional > 0:
+                contracts_needed = round(total_notional / (spy_price * 100))
+                st.caption(f"SPY aktuell ${spy_price:.2f} · Für ~100% Absicherung deiner Aktienposition (${total_notional:,.0f}) brauchst du ca. **{contracts_needed} SPY-Put-Kontrakte**")
+
+            st.dataframe(
+                disp_spy.style.hide(axis="index"),
+                use_container_width=True,
+                height=min(280, 45 + 38 * len(disp_spy)),
+            )
+        else:
+            st.info("Keine SPY-Puts in der DB gefunden.")
+
 # ── Risikograf (Risk Navigator) ───────────────────────────────────────────────
 st.divider()
 st.subheader("📉 Risikograf — Portfolio-Simulation")
