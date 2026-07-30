@@ -1004,17 +1004,41 @@ for idx, pos in enumerate(positions):
         premium = entry_val if entry_val > 0 else 0.5
 
         if rn_vix_mode:
-            # IV-angepasste Prämie: bei Marktfall steigt IV, Long-Puts werden wertvoller
             pnl_arr = np.zeros(len(price_range))
             for j, p in enumerate(price_range):
                 drop = max((_base_price - p) / _base_price, 0.0)
                 iv_mult = _vix_iv_multiplier(drop)
-                # Long Put profitiert von IV-Anstieg (Vega-Effekt): Prämie sinkt weniger / steigt
                 adjusted_premium = premium * iv_mult if pos["direction"] == "Long" and pos["contract_type"] == "put" else premium
                 pnl_arr[j] = _payoff_option(
                     pos["contracts"], pos["direction"], pos["contract_type"],
                     pos["strike"], adjusted_premium, p,
                 )
+        elif rn_iv_shift > 0 and pos["strike"] and pos.get("expiry"):
+            # Manueller IV-Shift: Black-Scholes mit erhöhter IV neu bewerten
+            from src.black_scholes import CallValue, PutValue
+            try:
+                # DTE aus Verfall berechnen
+                from datetime import datetime as _dt
+                dte_days = max(1, (_dt.strptime(pos["expiry"], "%Y-%m-%d") - _dt.now()).days)
+                # Basis-IV aus Prämie rückrechnen (Näherung: IV ~ Prämie / Kurs * sqrt(365/DTE))
+                base_iv = (premium / _base_price) * (365 / dte_days) ** 0.5
+                shifted_iv = base_iv * (1 + rn_iv_shift / 100)
+                r = 0.04  # Risikofreier Zins
+                pnl_arr = np.zeros(len(price_range))
+                for j, p in enumerate(price_range):
+                    if pos["contract_type"] == "call":
+                        new_val = CallValue(p, pos["strike"], shifted_iv, dte_days, r)
+                    else:
+                        new_val = PutValue(p, pos["strike"], shifted_iv, dte_days, r)
+                    sign = 1 if pos["direction"] == "Long" else -1
+                    pnl_arr[j] = sign * (new_val - premium) * pos["contracts"] * 100
+            except Exception:
+                # Fallback: lineare Skalierung der Prämie
+                pnl_arr = np.array([
+                    _payoff_option(pos["contracts"], pos["direction"], pos["contract_type"],
+                                   pos["strike"], premium * (1 + rn_iv_shift / 200), p)
+                    for p in price_range
+                ])
         else:
             pnl_arr = np.array([
                 _payoff_option(
