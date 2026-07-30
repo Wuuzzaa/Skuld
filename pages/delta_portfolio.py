@@ -609,11 +609,10 @@ _render_hedge_suggestions(positions, total_delta)
 # ── Konkrete Hedge-Kandidaten aus DB ─────────────────────────────────────────
 st.divider()
 st.subheader("🔍 Konkrete Hedge-Kandidaten (live aus DB)")
-st.caption("OTM-Puts auf deine Positionen — gefiltert nach Liquidität, Delta und IV Rank.")
+st.caption("Zeile anklicken → konkrete Kosten- und Schutz-Rechnung erscheint darunter.")
 
 @st.cache_data(ttl=300)
 def _fetch_hedge_candidates(symbol: str, stock_price: float) -> pd.DataFrame | None:
-    """Lädt OTM-Puts 5-15% unter aktuellem Kurs, DTE 30-90, liquid."""
     try:
         df = select_into_dataframe(
             query="""
@@ -622,12 +621,11 @@ def _fetch_hedge_candidates(symbol: str, stock_price: float) -> pd.DataFrame | N
                     strike_price,
                     expiration_date,
                     days_to_expiration,
-                    ROUND(premium_option_price::numeric, 2)   AS praemie,
-                    ROUND(greeks_delta::numeric, 3)            AS delta,
+                    ROUND(premium_option_price::numeric, 2)    AS praemie,
+                    ROUND(greeks_delta::numeric, 3)             AS delta,
                     ROUND(implied_volatility::numeric * 100, 1) AS iv_pct,
-                    ROUND(iv_rank::numeric, 1)                 AS iv_rank,
-                    open_interest                              AS oi,
-                    ROUND(expected_move::numeric, 2)           AS exp_move
+                    ROUND(iv_rank::numeric, 1)                  AS iv_rank,
+                    open_interest                               AS oi
                 FROM "OptionDataMerged"
                 WHERE symbol = :symbol
                   AND contract_type = 'put'
@@ -636,7 +634,7 @@ def _fetch_hedge_candidates(symbol: str, stock_price: float) -> pd.DataFrame | N
                   AND open_interest >= 100
                   AND premium_option_price >= 0.20
                 ORDER BY days_to_expiration ASC, ABS(greeks_delta) DESC
-                LIMIT 6
+                LIMIT 8
             """,
             params={
                 "symbol": symbol,
@@ -650,94 +648,229 @@ def _fetch_hedge_candidates(symbol: str, stock_price: float) -> pd.DataFrame | N
         return None
 
 
-hc_col1, hc_col2 = st.columns([2, 1])
-with hc_col1:
-    hc_symbols_all = list({p["symbol"] for p in positions})
-    hc_symbol = st.selectbox(
-        "Symbol",
-        options=hc_symbols_all,
-        key="hc_symbol",
-        help="Puts auf welches Symbol suchen?",
-    )
-with hc_col2:
-    hc_spy = st.toggle("+ SPY/SPX Index-Hedge zeigen", value=True, key="hc_spy")
+def _render_hedge_detail(row: dict, stock_price: float, qty_or_notional: float, is_index: bool = False):
+    """Zeigt konkrete Kosten/Schutz-Rechnung für einen ausgewählten Put."""
+    strike   = float(row["Strike"])
+    praemie  = float(row["Prämie $"])
+    dte      = int(row["DTE"])
+    puffer   = float(row["Puffer %"])
 
-if hc_symbol:
-    hc_price = _fetch_stock_price(hc_symbol)
-    if hc_price:
-        hc_df = _fetch_hedge_candidates(hc_symbol, hc_price)
-        if hc_df is not None:
-            st.markdown(f"**{hc_symbol} — aktuell ${hc_price:.2f}** · Zeigt OTM Puts 3–18% unter Kurs, DTE 25–95")
-
-            # Puffer % berechnen
-            hc_df["puffer_%"] = ((hc_price - hc_df["strike_price"]) / hc_price * 100).round(1)
-            hc_df["kosten_kontrakt"] = (hc_df["praemie"] * 100).round(0).astype(int)
-
-            # Spalten aufbereiten
-            disp = hc_df[[
-                "strike_price", "expiration_date", "days_to_expiration",
-                "puffer_%", "praemie", "kosten_kontrakt",
-                "delta", "iv_pct", "iv_rank", "oi",
-            ]].copy()
-            disp.columns = [
-                "Strike", "Verfall", "DTE",
-                "Puffer %", "Prämie $", "Kosten/Kontrakt $",
-                "Delta", "IV %", "IV Rank", "OI",
-            ]
-
-            def _color_row(row):
-                try:
-                    iv = float(row["IV Rank"])
-                    if iv >= 60:
-                        return ["background-color: rgba(239,68,68,0.12)"] * len(row)
-                    elif iv >= 40:
-                        return ["background-color: rgba(245,158,11,0.10)"] * len(row)
-                except Exception:
-                    pass
-                return [""] * len(row)
-
-            st.dataframe(
-                disp.style.apply(_color_row, axis=1).hide(axis="index"),
-                use_container_width=True,
-                height=min(280, 45 + 38 * len(disp)),
-            )
-            st.caption("🔴 IV Rank ≥ 60 = teuer (als Hedge ungünstig, Prämie hoch) · 🟡 40–60 = fair · weiß = günstig")
-        else:
-            st.info(f"Keine liquiden OTM-Puts für {hc_symbol} in der DB gefunden.")
+    if is_index:
+        # SPY: Notional in $ → Kontraktanzahl
+        contracts = max(1, round(qty_or_notional / (stock_price * 100)))
     else:
-        st.warning(f"Kein Kurs für {hc_symbol} in der DB.")
+        # Einzelwert: Stückzahl → Kontraktanzahl (je 100 Aktien 1 Kontrakt)
+        contracts = max(1, round(qty_or_notional / 100))
 
-if hc_spy:
-    st.markdown("---")
-    st.markdown("**SPY — Index-Hedge (Portfolio-Absicherung)**")
+    kosten_gesamt = praemie * 100 * contracts
+    schutz_ab     = stock_price * (1 - puffer / 100)
+    max_gewinn    = (strike - praemie) * 100 * contracts
+    breakeven_put = strike - praemie
+
+    # Szenarien
+    szenarien = [(-10, "normaler Rücksetzer"), (-20, "Korrektur"), (-40, "Crash")]
+    szen_rows = []
+    for drop_pct, label in szenarien:
+        preis_dann  = stock_price * (1 + drop_pct / 100)
+        intrinsic   = max(strike - preis_dann, 0)
+        put_wert    = (intrinsic - praemie) * 100 * contracts
+        aktien_vl   = (preis_dann - stock_price) * qty_or_notional / stock_price if not is_index else (drop_pct / 100) * qty_or_notional
+        netto       = aktien_vl + put_wert
+        szen_rows.append({
+            "Szenario": f"{drop_pct}% ({label})",
+            "Aktien-Verlust $": f"${aktien_vl:+,.0f}",
+            "Put-Gewinn $": f"${put_wert:+,.0f}",
+            "Netto $": f"${netto:+,.0f}",
+            "Abgefedert %": f"{abs(put_wert / aktien_vl * 100):.0f}%" if aktien_vl != 0 else "—",
+        })
+
+    iv_rank = float(row["IV Rank"]) if row["IV Rank"] != "—" else None
+    iv_color = "#ef4444" if (iv_rank or 0) >= 60 else ("#f59e0b" if (iv_rank or 0) >= 40 else "#22c55e")
+    iv_label = "teuer — schlechter Zeitpunkt" if (iv_rank or 0) >= 60 else ("fair" if (iv_rank or 0) >= 40 else "günstig — guter Zeitpunkt")
+
+    st.markdown(
+        f"<div style='background:rgba(96,165,250,0.08);border-left:4px solid #60a5fa;"
+        f"border-radius:6px;padding:14px 18px;margin:8px 0 12px 0;'>"
+        f"<b style='color:#f1f5f9;font-size:15px;'>{row['Symbol'] if 'Symbol' in row else ''} "
+        f"Put {strike:.0f} · Verfall {row['Verfall']} · {dte} DTE</b><br>"
+        f"<span style='color:#9ca3af;font-size:12px;'>"
+        f"Prämie <b style='color:#e2e8f0;'>${praemie:.2f}</b> · "
+        f"{contracts} Kontrakt{'e' if contracts > 1 else ''} · "
+        f"<b>Gesamtkosten: ${kosten_gesamt:,.0f}</b> · "
+        f"Puffer bis Strike: <b>{puffer:.1f}%</b> (Schutz ab ${schutz_ab:.2f}) · "
+        f"IV Rank: <b style='color:{iv_color};'>{iv_rank:.0f}% — {iv_label}</b>"
+        f"</span></div>",
+        unsafe_allow_html=True,
+    )
+
+    detail1, detail2, detail3 = st.columns(3)
+    detail1.metric("Kosten (einmalig)", f"${kosten_gesamt:,.0f}", help="Prämie × 100 × Kontrakte — das zahlst du")
+    detail2.metric("Max. Gewinn des Puts", f"${max_gewinn:,.0f}", help=f"Wenn Kurs auf 0 fällt: (Strike − Prämie) × 100 × Kontrakte")
+    detail3.metric("Put Breakeven", f"${breakeven_put:.2f}", help="Ab diesem Kurs bei Verfall verdient der Put Geld")
+
+    st.markdown("**Schutzwirkung in verschiedenen Szenarien:**")
+    st.dataframe(pd.DataFrame(szen_rows).set_index("Szenario"), use_container_width=True)
+    st.caption(f"Annahme: {contracts} Kontrakt{'e' if contracts > 1 else ''} × ${praemie:.2f} Prämie. Aktien-Verlust basiert auf aktuellem Kurs ${stock_price:.2f}.")
+
+
+# ── Tabs: Einzelwert / SPY / VIX ─────────────────────────────────────────────
+tab_single, tab_spy, tab_vix = st.tabs(["📌 Einzelwert-Hedge", "📊 SPY Index-Hedge", "⚡ VIX-Hedge"])
+
+# ── Tab 1: Einzelwert ─────────────────────────────────────────────────────────
+with tab_single:
+    hc_symbols_all = sorted({p["symbol"] for p in positions})
+    hc_symbol = st.selectbox("Symbol auswählen", options=hc_symbols_all, key="hc_symbol")
+
+    if hc_symbol:
+        hc_price = _fetch_stock_price(hc_symbol)
+        hc_qty   = sum(p["qty"] for p in positions if p["type"] == "stock" and p["symbol"] == hc_symbol)
+        if hc_price:
+            hc_df = _fetch_hedge_candidates(hc_symbol, hc_price)
+            if hc_df is not None:
+                hc_df["puffer_%"] = ((hc_price - hc_df["strike_price"]) / hc_price * 100).round(1)
+                hc_df["kosten_kontrakt"] = (hc_df["praemie"] * 100).round(0).astype(int)
+                disp = hc_df[["strike_price","expiration_date","days_to_expiration","puffer_%","praemie","kosten_kontrakt","delta","iv_pct","iv_rank","oi"]].copy()
+                disp.columns = ["Strike","Verfall","DTE","Puffer %","Prämie $","Kosten/Kontrakt $","Delta","IV %","IV Rank","OI"]
+                disp.insert(0, "Symbol", hc_symbol)
+
+                st.markdown(f"**{hc_symbol}** · Kurs ${hc_price:.2f} · {hc_qty} Stück im Portfolio")
+                sel = st.dataframe(
+                    disp.style.hide(axis="index"),
+                    use_container_width=True,
+                    on_select="rerun",
+                    selection_mode="single-row",
+                    key="hc_sel_single",
+                    height=min(310, 45 + 38 * len(disp)),
+                )
+                st.caption("🔴 IV Rank ≥ 60 = teuer · 🟡 40–60 = fair · weiß = günstig als Hedge")
+
+                rows_sel = sel.selection.get("rows", []) if sel and sel.selection else []
+                if rows_sel:
+                    _render_hedge_detail(disp.iloc[rows_sel[0]].to_dict(), hc_price, float(hc_qty))
+            else:
+                st.info(f"Keine liquiden OTM-Puts für {hc_symbol} in der DB.")
+        else:
+            st.warning(f"Kein Kurs für {hc_symbol} in der DB.")
+
+# ── Tab 2: SPY ────────────────────────────────────────────────────────────────
+with tab_spy:
     spy_price = _fetch_stock_price("SPY")
-    if spy_price:
+    total_notional = sum(
+        ((_fetch_stock_price(p["symbol"]) or 0) * p["qty"])
+        for p in positions if p["type"] == "stock"
+    )
+    if spy_price and total_notional > 0:
         spy_df = _fetch_hedge_candidates("SPY", spy_price)
         if spy_df is not None:
             spy_df["puffer_%"] = ((spy_price - spy_df["strike_price"]) / spy_price * 100).round(1)
             spy_df["kosten_kontrakt"] = (spy_df["praemie"] * 100).round(0).astype(int)
-            disp_spy = spy_df[[
-                "strike_price", "expiration_date", "days_to_expiration",
-                "puffer_%", "praemie", "kosten_kontrakt", "delta", "iv_pct", "iv_rank", "oi",
-            ]].copy()
-            disp_spy.columns = ["Strike", "Verfall", "DTE", "Puffer %", "Prämie $", "Kosten/Kontrakt $", "Delta", "IV %", "IV Rank", "OI"]
+            disp_spy = spy_df[["strike_price","expiration_date","days_to_expiration","puffer_%","praemie","kosten_kontrakt","delta","iv_pct","iv_rank","oi"]].copy()
+            disp_spy.columns = ["Strike","Verfall","DTE","Puffer %","Prämie $","Kosten/Kontrakt $","Delta","IV %","IV Rank","OI"]
+            disp_spy.insert(0, "Symbol", "SPY")
 
-            # Wie viele SPY-Kontrakte für ~100% Portfolio-Hedge?
-            total_notional = sum(
-                ((_fetch_stock_price(p["symbol"]) or 0) * p["qty"])
-                for p in positions if p["type"] == "stock"
+            contracts_full = max(1, round(total_notional / (spy_price * 100)))
+            st.markdown(
+                f"**SPY** · Kurs ${spy_price:.2f} · "
+                f"Dein Aktien-Notional: **${total_notional:,.0f}** · "
+                f"Volle Absicherung: **{contracts_full} Kontrakte**"
             )
-            if spy_price and total_notional > 0:
-                contracts_needed = round(total_notional / (spy_price * 100))
-                st.caption(f"SPY aktuell ${spy_price:.2f} · Für ~100% Absicherung deiner Aktienposition (${total_notional:,.0f}) brauchst du ca. **{contracts_needed} SPY-Put-Kontrakte**")
-
-            st.dataframe(
+            sel_spy = st.dataframe(
                 disp_spy.style.hide(axis="index"),
                 use_container_width=True,
-                height=min(280, 45 + 38 * len(disp_spy)),
+                on_select="rerun",
+                selection_mode="single-row",
+                key="hc_sel_spy",
+                height=min(310, 45 + 38 * len(disp_spy)),
             )
+            st.caption("Zeile anklicken → Kosten- und Schutzrechnung für dein gesamtes Portfolio")
+
+            rows_spy = sel_spy.selection.get("rows", []) if sel_spy and sel_spy.selection else []
+            if rows_spy:
+                _render_hedge_detail(disp_spy.iloc[rows_spy[0]].to_dict(), spy_price, total_notional, is_index=True)
         else:
             st.info("Keine SPY-Puts in der DB gefunden.")
+    else:
+        st.info("Kein SPY-Kurs oder keine Aktienposition vorhanden.")
+
+# ── Tab 3: VIX ────────────────────────────────────────────────────────────────
+with tab_vix:
+    st.markdown("### ⚡ VIX-Call als Crash-Hedge")
+    st.markdown(
+        "Der **VIX (Volatility Index)** misst die erwartete Schwankungsbreite des S&P 500. "
+        "Er steigt stark wenn der Markt fällt — oft überproportional:\n\n"
+        "| Marktfall | VIX-Reaktion (historisch) |\n"
+        "|---|---|\n"
+        "| −10% | +50–80% |\n"
+        "| −20% | +100–150% |\n"
+        "| −35% (2020 Covid) | +300% |\n"
+        "| −55% (2008 Finanzkrise) | +400% |\n\n"
+        "**Long VIX Calls** profitieren also direkt von Crashes — auch wenn deine Aktien nicht direkt "
+        "im S&P 500 sind, korreliert der VIX mit Gesamtmarkt-Stress."
+    )
+    st.divider()
+
+    @st.cache_data(ttl=300)
+    def _fetch_vix_data() -> dict:
+        """Lädt aktuellen VIX-Stand aus DB falls vorhanden, sonst None."""
+        try:
+            df = select_into_dataframe(
+                query='SELECT close FROM "StockPricesYahoo" WHERE symbol = :sym ORDER BY date DESC LIMIT 1',
+                params={"sym": "^VIX"},
+            )
+            if df is not None and not df.empty:
+                return {"level": float(df.iloc[0]["close"]), "source": "DB"}
+        except Exception:
+            pass
+        return {"level": None, "source": None}
+
+    vix_data = _fetch_vix_data()
+    vix_level = vix_data["level"]
+
+    if vix_level:
+        vix_col1, vix_col2 = st.columns(2)
+        if vix_level < 15:
+            vix_farbe, vix_status = "#22c55e", "🟢 Sehr niedrig — VIX-Calls sehr günstig"
+        elif vix_level < 20:
+            vix_farbe, vix_status = "#86efac", "🟢 Niedrig — guter Einstiegszeitpunkt"
+        elif vix_level < 30:
+            vix_farbe, vix_status = "#f59e0b", "🟡 Erhöht — Calls teurer, aber noch sinnvoll"
+        else:
+            vix_farbe, vix_status = "#ef4444", "🔴 Hoch — Crash läuft bereits, Calls sehr teuer"
+
+        vix_col1.markdown(
+            f"<div style='background:rgba(255,255,255,0.05);border-radius:8px;padding:16px;text-align:center;'>"
+            f"<div style='color:#9ca3af;font-size:12px;'>Aktueller VIX</div>"
+            f"<div style='color:{vix_farbe};font-size:36px;font-weight:800;'>{vix_level:.1f}</div>"
+            f"<div style='color:{vix_farbe};font-size:12px;'>{vix_status}</div>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+        with vix_col2:
+            st.markdown("**Was bedeutet der VIX-Level?**")
+            st.markdown(
+                "- **< 15**: Markt schläft — idealer Zeitpunkt für günstige VIX-Calls\n"
+                "- **15–20**: Normal — VIX-Calls als Versicherung sinnvoll\n"
+                "- **20–30**: Erhöhte Nervosität — Calls bereits teurer\n"
+                "- **> 30**: Panik — Calls sehr teuer, Crash läuft schon"
+            )
+    else:
+        st.info("VIX-Daten nicht in DB (^VIX Symbol). Aktuellen Wert auf finance.yahoo.com/quote/%5EVIX prüfen.")
+
+    st.divider()
+    st.markdown("**Wie handelt man VIX-Calls?**")
+    st.markdown(
+        "VIX-Optionen laufen auf **CBOE** und sind nicht wie normale Aktienoptionen — "
+        "sie sind europäisch (nur am Verfall ausübbar) und settlement ist cash-based.\n\n"
+        "**Typische Strategie:**\n"
+        "- Kauf VIX Calls mit Strike 20–25 (OTM) wenn VIX unter 15\n"
+        "- DTE 30–60 Tage\n"
+        "- Position: klein halten (1–3% des Portfoliowerts) — die Calls verfallen oft wertlos\n"
+        "- Bei Crash: VIX springt auf 40–80, Calls × 5–20 im Wert\n\n"
+        "**Kosten-Beispiel** (VIX = 14, Strike 20 Call, 45 DTE): ca. $150–200 pro Kontrakt\n"
+        "**Bei VIX = 40**: selber Call ca. $2.000–3.000 wert → ~10–15× Return\n\n"
+        "⚠️ **VIX-Calls sind kein Direktersatz für Put-Hedges** — sie korrelieren mit "
+        "Marktangst, aber nicht 1:1 mit deinen Einzelwert-Verlusten. Am besten in Kombination."
+    )
 
 # ── Risikograf (Risk Navigator) ───────────────────────────────────────────────
 st.divider()
