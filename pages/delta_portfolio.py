@@ -446,52 +446,165 @@ else:
                     unsafe_allow_html=True,
                 )
 
-# ── Delta-History Chart ───────────────────────────────────────────────────────
+# ── Hedge-Vorschläge ─────────────────────────────────────────────────────────
 st.divider()
-st.subheader("📈 Delta-Historie (letzte 60 Tage)")
-st.caption("Delta-Verlauf der einzelnen Optionspositionen über Zeit.")
+st.subheader("💡 Hedge- & Diversifikations-Vorschläge")
+st.caption("Automatische Analyse deines Portfolios auf Klumpenrisiken und Lücken.")
 
-option_positions = [p for p in positions if p["type"] == "option"]
-if not option_positions:
-    st.caption("Keine Optionspositionen — History-Chart nur für Optionen verfügbar.")
-else:
-    _dark  = st.get_option("theme.base") != "light"
-    _paper = "#1a1a2e" if _dark else "#ffffff"
-    _plot  = "#16213e" if _dark else "#f8fafc"
-    _text  = "#e2e8f0" if _dark else "#1e293b"
-    _grid  = "rgba(255,255,255,0.08)" if _dark else "rgba(0,0,0,0.06)"
 
-    fig = go.Figure()
-    colors = ["#60a5fa", "#f59e0b", "#22c55e", "#a78bfa", "#f43f5e", "#34d399"]
+@st.cache_data(ttl=3600)
+def _fetch_sectors(symbols: tuple) -> dict[str, str]:
+    """Lädt Sektor für eine Liste von Symbolen aus StockAssetProfilesYahoo."""
+    if not symbols:
+        return {}
+    try:
+        placeholders = ", ".join([f":s{i}" for i in range(len(symbols))])
+        params = {f"s{i}": s for i, s in enumerate(symbols)}
+        df = select_into_dataframe(
+            query=f'SELECT symbol, sector FROM "StockAssetProfilesYahoo" WHERE symbol IN ({placeholders})',
+            params=params,
+        )
+        if df is not None and not df.empty:
+            return dict(zip(df["symbol"], df["sector"].fillna("Unbekannt")))
+    except Exception:
+        pass
+    return {}
 
-    for i, pos in enumerate(option_positions):
-        hist = _fetch_delta_history(pos["symbol"], pos["strike"], pos["expiry"], pos["contract_type"])
-        if hist is None:
-            continue
-        hist["date"] = pd.to_datetime(hist["date"])
-        hist["greeks_delta"] = pd.to_numeric(hist["greeks_delta"], errors="coerce")
-        sign = 1 if pos.get("direction", "Long") == "Long" else -1
-        hist["pos_delta"] = sign * pos["contracts"] * 100 * hist["greeks_delta"]
 
-        label = f"{pos['symbol']} {pos['contract_type'].upper()} {pos['strike']:.0f} ({pos['expiry']})"
-        fig.add_trace(go.Scatter(
-            x=hist["date"], y=hist["pos_delta"],
-            mode="lines", name=label,
-            line=dict(color=colors[i % len(colors)], width=2),
-            hovertemplate=f"{label}<br>%{{x|%d.%m.%Y}}<br>Delta: %{{y:+.1f}}<extra></extra>",
-        ))
+def _render_hedge_suggestions(positions: list[dict], total_delta: float):
+    stock_syms = list({p["symbol"] for p in positions if p["type"] == "stock"})
+    option_syms = list({p["symbol"] for p in positions if p["type"] == "option"})
+    all_syms = list(set(stock_syms + option_syms))
 
-    fig.add_hline(y=0, line=dict(color="rgba(255,255,255,0.3)", width=1, dash="dash"))
-    fig.update_layout(
-        height=300, margin=dict(l=0, r=0, t=8, b=0),
-        paper_bgcolor=_paper, plot_bgcolor=_plot,
-        font=dict(color=_text, size=11),
-        legend=dict(orientation="h", y=1.1, font_size=10),
-        xaxis=dict(gridcolor=_grid, zeroline=False),
-        yaxis=dict(title="Position-Delta", gridcolor=_grid, zeroline=False),
-        hovermode="x unified",
-    )
-    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    sector_map = _fetch_sectors(tuple(all_syms))
+
+    suggestions = []
+
+    # ── 1. Gesamt-Delta zu bullish ────────────────────────────────────────────
+    if total_delta > 200:
+        suggestions.append({
+            "typ": "🔴 Kritisch",
+            "titel": "Sehr hohes Netto-Delta — starkes Klumpenrisiko Long",
+            "detail": f"Dein Netto-Delta ist **{total_delta:+.0f}**. Bei einem Markteinbruch von 10% verlierst du rechnerisch ~{total_delta * 0.10:.0f} × Kurswert.",
+            "vorschlag": "Erwäge **Index-Puts (SPX/SPY)** als Tail-Hedge oder **Short Calls** auf deine größten Positionen um Delta zu reduzieren.",
+        })
+    elif total_delta > 100:
+        suggestions.append({
+            "typ": "🟡 Hinweis",
+            "titel": "Erhöhtes Netto-Delta",
+            "detail": f"Netto-Delta **{total_delta:+.0f}** — Portfolio ist klar bullish ausgerichtet.",
+            "vorschlag": "Ein partieller Hedge mit **2–3 ATM-Puts** auf SPY oder deine größte Einzelposition würde das Risiko deutlich reduzieren.",
+        })
+    elif total_delta < -50:
+        suggestions.append({
+            "typ": "🟡 Hinweis",
+            "titel": "Hohes negatives Delta — bearish ausgerichtet",
+            "detail": f"Netto-Delta **{total_delta:+.0f}** — Portfolio profitiert von fallenden Kursen.",
+            "vorschlag": "Falls kein bewusster Hedge: **Long Calls oder Bull Put Spreads** um Delta zu neutralisieren.",
+        })
+
+    # ── 2. Sektor-Klumpen ─────────────────────────────────────────────────────
+    sector_counts: dict[str, list[str]] = {}
+    for sym in stock_syms:
+        sec = sector_map.get(sym, "Unbekannt")
+        sector_counts.setdefault(sec, []).append(sym)
+
+    dominant = [(sec, syms) for sec, syms in sector_counts.items() if len(syms) >= 2]
+    for sec, syms in dominant:
+        suggestions.append({
+            "typ": "🟡 Hinweis",
+            "titel": f"Sektor-Klumpen: {sec}",
+            "detail": f"**{', '.join(syms)}** sind alle im selben Sektor. Ein sektorspezifischer Schock (z.B. Regulierung, Rohstoffpreise) trifft alle gleichzeitig.",
+            "vorschlag": f"Diversifikation durch Positionen in anderen Sektoren — oder **Short Calls** auf {syms[0]} als partiellen Hedge.",
+        })
+
+    # ── 3. Fehlende Sektoren ──────────────────────────────────────────────────
+    covered_sectors = set(sector_map.get(s, "") for s in stock_syms)
+    diversification_sectors = {
+        "Energy": ("XLE", "Energie — negativer Ölpreis-Korrelation zum Tech-Sektor"),
+        "Consumer Staples": ("XLP", "Defensive Konsumgüter — Rezessions-Hedge"),
+        "Utilities": ("XLU", "Versorger — steigen oft wenn Zinsen fallen"),
+        "Healthcare": ("XLV", "Gesundheit — weitgehend konjunkturunabhängig"),
+        "Financial Services": ("XLF", "Finanzwerte — profitieren von steigenden Zinsen"),
+    }
+    missing = [(sec, etf, desc) for sec, (etf, desc) in diversification_sectors.items() if sec not in covered_sectors]
+    if len(missing) >= 3:
+        etf_list = ", ".join(f"**{etf}**" for _, etf, _ in missing[:3])
+        suggestions.append({
+            "typ": "🔵 Diversifikation",
+            "titel": "Kaum Sektor-Diversifikation",
+            "detail": f"Dein Portfolio enthält keine Positionen in: {', '.join(s for s, _, _ in missing)}.",
+            "vorschlag": f"Sektor-ETFs als einfache Beimischung: {etf_list} — oder Covered Calls auf bestehende Positionen finanzieren den Kauf.",
+        })
+
+    # ── 4. Einzelne Riesenpositionen ──────────────────────────────────────────
+    stock_positions = [p for p in positions if p["type"] == "stock"]
+    if stock_positions:
+        prices = {p["symbol"]: _fetch_stock_price(p["symbol"]) for p in stock_positions}
+        notionals = {
+            p["symbol"]: (prices.get(p["symbol"]) or 0) * p["qty"]
+            for p in stock_positions
+        }
+        total_notional = sum(notionals.values())
+        if total_notional > 0:
+            for sym, val in notionals.items():
+                pct = val / total_notional * 100
+                if pct > 40:
+                    suggestions.append({
+                        "typ": "🔴 Kritisch",
+                        "titel": f"{sym} macht {pct:.0f}% deines Aktien-Notionals aus",
+                        "detail": f"**${val:,.0f}** in {sym} — Einzelwert-Klumpenrisiko. Ein -20% Move in {sym} kostet ~${val * 0.20:,.0f}.",
+                        "vorschlag": f"**Protective Put** auf {sym} (z.B. 10% OTM, 60–90 DTE) als direkter Hedge. Oder **Covered Call** verkaufen um den Hedge zu finanzieren.",
+                    })
+
+    # ── 5. Kein Tail-Hedge ────────────────────────────────────────────────────
+    long_puts = [p for p in positions if p["type"] == "option" and p["contract_type"] == "put" and p["direction"] == "Long"]
+    if not long_puts and total_delta > 50:
+        suggestions.append({
+            "typ": "🟡 Hinweis",
+            "titel": "Kein Long-Put-Hedge im Portfolio",
+            "detail": "Du hast keine Long-Put-Position. Bei einem schnellen Absturz (-20%+) gibt es keinen automatischen Gegengewicht.",
+            "vorschlag": "**1–2 SPY/SPX Puts** weit OTM (5–10% unter aktuellem Kurs, 60–90 DTE) als Tail-Risk-Hedge — kosten wenig, wirken bei echten Crashes.",
+        })
+
+    # ── 6. Spreads ohne Gegenleg ──────────────────────────────────────────────
+    short_puts = {(p["symbol"], p["expiry"]) for p in positions if p["type"] == "option" and p["contract_type"] == "put" and p["direction"] == "Short"}
+    long_put_keys = {(p["symbol"], p["expiry"]) for p in positions if p["type"] == "option" and p["contract_type"] == "put" and p["direction"] == "Long"}
+    naked_shorts = short_puts - long_put_keys
+    if naked_shorts:
+        syms_naked = list({s for s, _ in naked_shorts})[:3]
+        suggestions.append({
+            "typ": "🔴 Kritisch",
+            "titel": f"Nackte Short Puts ohne Long-Leg: {', '.join(syms_naked)}",
+            "detail": "Short Puts ohne schützendes Long-Leg haben theoretisch unbegrenztes Verlustrisiko bis 0.",
+            "vorschlag": "**Bull Put Spread** — kauf einen weiter OTM Put dazu um das maximale Verlustrisiko zu begrenzen.",
+        })
+
+    # ── Ausgabe ───────────────────────────────────────────────────────────────
+    if not suggestions:
+        st.success("✅ Keine kritischen Klumpenrisiken erkannt. Portfolio ist gut diversifiziert.")
+        return
+
+    color_map = {"🔴 Kritisch": "#7f1d1d", "🟡 Hinweis": "#78350f", "🔵 Diversifikation": "#1e3a5f"}
+    border_map = {"🔴 Kritisch": "#ef4444", "🟡 Hinweis": "#f59e0b", "🔵 Diversifikation": "#60a5fa"}
+
+    for s in suggestions:
+        bg  = color_map.get(s["typ"], "#1e293b")
+        brd = border_map.get(s["typ"], "#64748b")
+        st.markdown(
+            f"<div style='background:{bg};border-left:4px solid {brd};"
+            f"border-radius:6px;padding:12px 16px;margin-bottom:10px;'>"
+            f"<div style='color:{brd};font-size:12px;font-weight:700;margin-bottom:4px;'>{s['typ']}</div>"
+            f"<div style='color:#f1f5f9;font-size:14px;font-weight:700;margin-bottom:6px;'>{s['titel']}</div>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+        st.markdown(s["detail"])
+        st.markdown(f"**Vorschlag:** {s['vorschlag']}")
+        st.markdown("---")
+
+
+_render_hedge_suggestions(positions, total_delta)
 
 # ── Risikograf (Risk Navigator) ───────────────────────────────────────────────
 st.divider()
