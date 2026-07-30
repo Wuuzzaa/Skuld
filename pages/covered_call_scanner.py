@@ -434,7 +434,7 @@ with st.container():
         price_min = st.number_input(
             "Min Stock Price ($)",
             min_value=0.0, max_value=10000.0,
-            value=0.0, step=5.0, format="%.0f",
+            value=0.0, step=50.0, format="%.0f",
             key="cc_price_min",
             help="0 = keine Untergrenze.",
         )
@@ -442,7 +442,7 @@ with st.container():
         price_max = st.number_input(
             "Max Stock Price ($)",
             min_value=0.0, max_value=10000.0,
-            value=0.0, step=5.0, format="%.0f",
+            value=500.0, step=50.0, format="%.0f",
             key="cc_price_max",
             help="0 = keine Obergrenze.",
         )
@@ -467,9 +467,9 @@ with st.container():
         min_iv_rank = st.number_input(
             "Min IV Rank",
             min_value=0, max_value=100,
-            value=50, step=5,
+            value=0, step=5,
             key="cc_min_iv_rank",
-            help="PowerOptions: IV Rank >= 50 ensures options are expensive enough to sell.",
+            help="0 = kein Filter. PowerOptions empfiehlt >= 50 wenn Options teuer sein sollen.",
         )
     with col12:
         min_premium = st.number_input(
