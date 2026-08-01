@@ -768,11 +768,24 @@ with tab_spy:
             disp_spy.columns = ["Strike","Verfall","DTE","Puffer %","Prämie $","Kosten/Kontrakt $","Delta","IV %","IV Rank","OI"]
             disp_spy.insert(0, "Symbol", "SPY")
 
-            contracts_full = max(1, round(total_notional / (spy_price * 100)))
+            # Hedge-Anteil: wieviel % des Portfolios absichern (100% = volle Deckung)
+            spy_hedge_pct = st.slider(
+                "Wieviel % des Portfolios absichern?", 10, 100, 50, 5, key="spy_hedge_pct",
+                help="100% = volle Notional-Deckung. 50% = halbes Portfolio absichern (weniger Kontrakte, weniger Kosten).",
+            )
+            hedge_notional = total_notional * spy_hedge_pct / 100.0
+            contracts_hedge = max(1, round(hedge_notional / (spy_price * 100)))
+
+            # Prämienkosten je Strike für DIESE Kontraktzahl + % vom Portfolio
+            disp_spy.insert(1, "Kosten gesamt $",
+                            (spy_df["praemie"] * 100 * contracts_hedge).round(0).astype(int).values)
+            disp_spy.insert(2, "% Portfolio",
+                            ((spy_df["praemie"] * 100 * contracts_hedge) / total_notional * 100).round(2).values)
+
             st.markdown(
                 f"**SPY** · Kurs ${spy_price:.2f} · "
                 f"Dein Aktien-Notional: **${total_notional:,.0f}** · "
-                f"Volle Absicherung: **{contracts_full} Kontrakte**"
+                f"{spy_hedge_pct}%-Absicherung (${hedge_notional:,.0f}): **{contracts_hedge} Kontrakt{'e' if contracts_hedge > 1 else ''}**"
             )
             sel_spy = st.dataframe(
                 disp_spy.style.hide(axis="index"),
@@ -782,11 +795,11 @@ with tab_spy:
                 key="hc_sel_spy",
                 height=min(310, 45 + 38 * len(disp_spy)),
             )
-            st.caption("Zeile anklicken → Kosten- und Schutzrechnung für dein gesamtes Portfolio")
+            st.caption("Spalte '% Portfolio' = reine Prämienkosten des Hedges. Zeile anklicken → volle Szenario-Rechnung.")
 
             rows_spy = sel_spy.selection.get("rows", []) if sel_spy and sel_spy.selection else []
             if rows_spy:
-                _render_hedge_detail(disp_spy.iloc[rows_spy[0]].to_dict(), spy_price, total_notional, is_index=True)
+                _render_hedge_detail(disp_spy.iloc[rows_spy[0]].to_dict(), spy_price, hedge_notional, is_index=True)
         else:
             st.info("Keine SPY-Puts in der DB gefunden.")
     else:
