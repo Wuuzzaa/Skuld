@@ -544,6 +544,7 @@ if scan_btn:
                     "dte_max":        dte_max,
                     "min_oi":         min_oi,
                     "min_market_cap": int(min_market_cap_b * 1e9),
+                    "min_iv_rank":    min_iv_rank,
                 },
             )
 

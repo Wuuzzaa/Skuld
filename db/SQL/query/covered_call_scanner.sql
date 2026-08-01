@@ -45,6 +45,9 @@ WITH candidates AS (
         AND o.premium_option_price > 0
         AND s."FinData_currentPrice" BETWEEN 10 AND 500
         AND s."Summary_marketCap"   > :min_market_cap
+        -- IV-Rank-Gate (Konsistenz zu IC/Spreads-Scanner). :min_iv_rank <= 0 = aus.
+        -- NULL-iv_rank wird durchgelassen (kein Ausschluss bei fehlendem Wert).
+        AND (:min_iv_rank <= 0 OR o.iv_rank IS NULL OR o.iv_rank >= :min_iv_rank)
         -- Exclude earnings during the holding period
         AND (o.days_to_earnings > o.days_to_expiration OR o.days_to_earnings IS NULL)
 )
