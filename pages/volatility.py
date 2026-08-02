@@ -12,6 +12,7 @@ Four sub-tabs covering different angles of Implied Volatility analysis:
 import logging
 import os
 
+import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -53,6 +54,61 @@ def _load_timetravel(date, sql_path, params=None):
 @st.cache_data(ttl=300)
 def _load_live(sql_path, params=None):
     return select_into_dataframe(sql_file_path=sql_path, params=params or {})
+
+
+@st.cache_data(ttl=3600)
+def _compute_hv_rank_pctl() -> pd.DataFrame:
+    """Load 13 months of daily close prices and compute per-symbol HV Rank and HV Pctl in Python.
+    Returns a DataFrame with columns: symbol, hv_current, hv_rank, hv_percentile."""
+    prices = select_into_dataframe(query="""
+        SELECT symbol, snapshot_date AS date, adjclose
+        FROM "StockPricesYahooHistoryDaily"
+        WHERE snapshot_date >= CURRENT_DATE - INTERVAL '13 months'
+          AND adjclose > 0
+        UNION ALL
+        SELECT symbol, CURRENT_DATE AS date, adjclose
+        FROM "StockPricesYahoo"
+        WHERE adjclose > 0
+        ORDER BY symbol, date
+    """)
+    if prices is None or prices.empty:
+        return pd.DataFrame(columns=["symbol", "hv_current", "hv_rank", "hv_percentile"])
+
+    prices["date"] = pd.to_datetime(prices["date"])
+    prices = prices.sort_values(["symbol", "date"]).reset_index(drop=True)
+
+    # log returns — only where prev_close > 0 (avoids LN of negative/zero)
+    prices["prev_close"] = prices.groupby("symbol")["adjclose"].shift(1)
+    valid = prices["prev_close"].notna() & (prices["prev_close"] > 0) & (prices["adjclose"] > 0)
+    prices.loc[valid, "log_return"] = np.log(
+        prices.loc[valid, "adjclose"] / prices.loc[valid, "prev_close"]
+    )
+
+    # rolling 30d HV annualised per symbol
+    def _rolling_hv(grp):
+        grp = grp.sort_values("date")
+        grp["hv_30d"] = grp["log_return"].rolling(30, min_periods=15).std() * np.sqrt(252)
+        return grp
+
+    prices = prices.groupby("symbol", group_keys=False).apply(_rolling_hv)
+    prices = prices.dropna(subset=["hv_30d"])
+
+    # per-symbol stats
+    rows = []
+    for sym, grp in prices.groupby("symbol"):
+        grp = grp.sort_values("date")
+        hv_series = grp["hv_30d"].dropna()
+        if len(hv_series) < 5:
+            continue
+        hv_current = float(hv_series.iloc[-1])
+        hv_high    = float(hv_series.max())
+        hv_low     = float(hv_series.min())
+        hv_rank    = ((hv_current - hv_low) / (hv_high - hv_low) * 100) if (hv_high - hv_low) > 0 else 0.0
+        hv_pctl    = float((hv_series < hv_current).sum() / len(hv_series) * 100)
+        rows.append({"symbol": sym, "hv_current": hv_current,
+                     "hv_rank": round(hv_rank, 1), "hv_percentile": round(hv_pctl, 0)})
+
+    return pd.DataFrame(rows)
 
 
 def _iv_color(iv_chg):
@@ -195,17 +251,25 @@ with tab2:
     # ── Sub-tab: IV/HV Ratio ──────────────────────────────────────────────────
     with subtab_ratio:
         with st.expander("Filters", expanded=True):
-            r1, r2, r3 = st.columns(3)
+            r1, r2, r3, r4, r5 = st.columns(5)
             with r1:
                 min_ivhv = st.number_input("Min IV/HV", 0.0, 10.0, 0.0, step=0.1, key="t2r_min_ivhv")
             with r2:
                 min_ivr_t2 = st.number_input("Min IV Rank", 0, 100, 0, key="t2r_min_ivr")
             with r3:
                 min_ivp_t2 = st.number_input("Min IV Pctl", 0, 100, 0, key="t2r_min_ivp")
+            with r4:
+                min_hvr_t2 = st.number_input("Min HV Rank", 0, 100, 0, key="t2r_min_hvr")
+            with r5:
+                min_hvp_t2 = st.number_input("Min HV Pctl", 0, 100, 0, key="t2r_min_hvp")
 
         with st.spinner("Loading IV/HV Ratio…"):
             sql_t2r = PATH_DATABASE_QUERY_FOLDER / "volatility_iv_hv_ratio.sql"
             df2r = _load_timetravel(selected_date, sql_t2r)
+            # HV Rank / HV Percentile berechnet in Python (vermeidet SQL LN-Fehler bei negativen Kursen)
+            hv_stats = _compute_hv_rank_pctl()
+            if not hv_stats.empty and not df2r.empty:
+                df2r = df2r.merge(hv_stats[["symbol", "hv_rank", "hv_percentile"]], on="symbol", how="left")
 
         if df2r.empty:
             st.warning("No data available.")
@@ -213,7 +277,9 @@ with tab2:
             mask2r = (
                 (df2r["iv_hv_ratio"].fillna(0) >= min_ivhv) &
                 (df2r["iv_rank"].fillna(0) >= min_ivr_t2) &
-                (df2r["iv_percentile"].fillna(0) >= min_ivp_t2)
+                (df2r["iv_percentile"].fillna(0) >= min_ivp_t2) &
+                (df2r["hv_rank"].fillna(0) >= min_hvr_t2) &
+                (df2r["hv_percentile"].fillna(0) >= min_hvp_t2)
             )
             df2r_f = df2r[mask2r].copy()
             st.markdown(f"**{len(df2r_f)} symbols**")
@@ -222,6 +288,7 @@ with tab2:
                 "symbol", "name", "imp_vol", "iv_chg",
                 "hv_30d", "iv_hv_ratio",
                 "iv_rank", "iv_percentile",
+                "hv_rank", "hv_percentile",
                 "earnings_date"
             ]].copy()
             disp2r["earnings_date"] = pd.to_datetime(disp2r["earnings_date"], errors="coerce").dt.strftime("%m/%d/%y")
@@ -240,6 +307,8 @@ with tab2:
                     "iv_hv_ratio":   st.column_config.NumberColumn("IV/HV", format="%.2f"),
                     "iv_rank":       st.column_config.NumberColumn("IV Rank", format="%.2f%%"),
                     "iv_percentile": st.column_config.NumberColumn("IV Pctl", format="%.0f%%"),
+                    "hv_rank":       st.column_config.NumberColumn("HV Rank", format="%.1f%%", help="HV Rank (berechnet in Python aus Kurshistorie)"),
+                    "hv_percentile": st.column_config.NumberColumn("HV Pctl", format="%.0f%%", help="HV Percentile (berechnet in Python aus Kurshistorie)"),
                     "earnings_date": st.column_config.TextColumn("Earnings"),
                 },
                 hide_index=True,
