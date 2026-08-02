@@ -10,6 +10,7 @@ import { DataTable, Column } from '@/components/ui/data-table';
 import { LoadingState } from '@/components/ui/spinner';
 import { formatCurrency, formatPercent, formatNumber, exportToCSV } from '@/lib/utils';
 import { SpreadBacktestPanel } from '@/components/SpreadBacktestPanel';
+import { SpreadPayoffChart } from '@/components/SpreadPayoffChart';
 import {
   TrendingUp, TrendingDown, Filter, ExternalLink,
   ChevronDown, X, BarChart3, Activity, Download
@@ -569,6 +570,12 @@ export default function SpreadsPage() {
                 <p className="text-xs font-medium truncate">{selectedRow.company_industry}</p>
               </div>
             </div>
+
+            {/* Payoff-Chart mit Hover-P&L */}
+            <SpreadPayoffChart
+              spread={selectedRow}
+              strategyType={params.strategy_type === 'credit' ? 'credit' : 'debit'}
+            />
 
             {/* Leg details table */}
             <div className="rounded-lg overflow-hidden border border-border/40">
