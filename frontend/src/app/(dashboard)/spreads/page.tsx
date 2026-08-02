@@ -11,6 +11,7 @@ import { LoadingState } from '@/components/ui/spinner';
 import { formatCurrency, formatPercent, formatNumber, exportToCSV } from '@/lib/utils';
 import { SpreadBacktestPanel } from '@/components/SpreadBacktestPanel';
 import { SpreadPayoffChart } from '@/components/SpreadPayoffChart';
+import { SymbolChartPanel } from '@/components/SymbolChartPanel';
 import {
   TrendingUp, TrendingDown, Filter, ExternalLink,
   ChevronDown, X, BarChart3, Activity, Download
@@ -73,6 +74,7 @@ export default function SpreadsPage() {
   const [selectedExpiration, setSelectedExpiration] = useState('');
   const [selectedRow, setSelectedRow] = useState<any>(null);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [chartSymbol, setChartSymbol] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(true);
   const [expTypeFilter, setExpTypeFilter] = useState<'all' | 'Monthly' | 'Weekly' | 'Daily'>('all');
   const [sectorFilter, setSectorFilter] = useState<string[]>([]);
@@ -518,9 +520,13 @@ export default function SpreadsPage() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-lg flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded bg-primary/20 text-primary text-sm font-bold">
+                <button
+                  onClick={() => setChartSymbol(selectedRow.symbol)}
+                  className="px-2 py-0.5 rounded bg-primary/20 text-primary text-sm font-bold hover:bg-primary/30 transition-colors cursor-pointer"
+                  title="Chart-Panel öffnen"
+                >
                   {selectedRow.symbol}
-                </span>
+                </button>
                 <span className="text-muted-foreground font-normal text-sm">
                   {selectedRow.option_type?.toUpperCase()} {params.strategy_type === 'credit' ? 'Credit' : 'Debit'} Spread
                 </span>
@@ -669,6 +675,8 @@ export default function SpreadsPage() {
         </Card>
       )}
       {selectedRow && <SpreadBacktestPanel spread={selectedRow} />}
+
+      {chartSymbol && <SymbolChartPanel symbol={chartSymbol} onClose={() => setChartSymbol(null)} />}
     </div>
   );
 }

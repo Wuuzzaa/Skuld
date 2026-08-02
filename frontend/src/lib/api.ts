@@ -134,6 +134,11 @@ export async function getSymbolDetails(symbol: string) {
   return data;
 }
 
+export async function getSymbolChart(symbol: string, range = '6M') {
+  const { data } = await api.get(`/symbols/${symbol}/chart`, { params: { range } });
+  return data;
+}
+
 // Universe
 export async function getUniverse() {
   const { data } = await api.get('/universe/');
