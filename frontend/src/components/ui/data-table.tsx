@@ -101,7 +101,7 @@ export function DataTable({
     );
   }
 
-  const cellPadding = compact ? 'px-3 py-2' : 'px-4 py-3';
+  const cellPadding = compact ? 'px-3 py-2.5' : 'px-4 py-3.5';
 
   return (
     <div className={cn('overflow-auto border border-border rounded-lg bg-card', className)} style={{ maxHeight }}>

@@ -333,3 +333,37 @@ export async function getBrowserPuts(params: Record<string, any>) {
   const { data } = await api.get('/roll-and-screen/browser/puts', { params: cleanParams });
   return data;
 }
+
+// Delta Portfolio — read-only market-data lookups (positions live in the browser)
+export async function getOptionDelta(params: {
+  symbol: string;
+  strike: number;
+  expiry: string;
+  contract_type: 'call' | 'put';
+}): Promise<{ delta: number | null }> {
+  const { data } = await api.get('/delta-portfolio/option-delta', { params });
+  return data;
+}
+
+export async function getStockPrices(symbols: string[]): Promise<Record<string, number | null>> {
+  if (!symbols.length) return {};
+  const { data } = await api.get('/delta-portfolio/stock-price', {
+    params: { symbols: symbols.join(',') },
+  });
+  return data;
+}
+
+export async function getSectors(symbols: string[]): Promise<Record<string, string>> {
+  if (!symbols.length) return {};
+  const { data } = await api.get('/delta-portfolio/sectors', {
+    params: { symbols: symbols.join(',') },
+  });
+  return data;
+}
+
+export async function getHedgeCandidates(symbol: string, stock_price: number) {
+  const { data } = await api.get('/delta-portfolio/hedge-candidates', {
+    params: { symbol, stock_price },
+  });
+  return data;
+}

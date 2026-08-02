@@ -25,6 +25,7 @@ import {
   Wallet,
   Settings,
   RefreshCw,
+  Gauge,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { LoadingState } from '@/components/ui/spinner';
@@ -42,6 +43,7 @@ const navItems = [
   { href: '/roll-and-screen', label: 'Roll & Screen', icon: RefreshCw, color: 'text-cyan-600' },
   { href: '/married-puts', label: 'Married Puts', icon: Shield, color: 'text-purple-600' },
   { href: '/position-insurance', label: 'Insurance', icon: Shield, color: 'text-orange-600' },
+  { href: '/delta-portfolio', label: 'Delta Portfolio', icon: Gauge, color: 'text-emerald-600' },
   { href: '/analyst-prices', label: 'Analyst Prices', icon: Target, color: 'text-cyan-600' },
   { href: '/sector-rotation', label: 'Sector Rotation', icon: PieChart, color: 'text-pink-600' },
   { href: '/expected-value', label: 'Expected Value', icon: Calculator, color: 'text-yellow-600' },

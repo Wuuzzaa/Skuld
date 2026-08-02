@@ -30,6 +30,7 @@ from api.routers import (
     earnings_put_scanner,
     covered_call_scanner,
     roll_and_screen,
+    delta_portfolio,
 )
 
 
@@ -79,6 +80,7 @@ app.include_router(earnings_put_scanner.router, prefix="/api/earnings-put-scanne
 app.include_router(covered_call_scanner.router, prefix="/api/covered-call-scanner", tags=["Covered Call Scanner"])
 app.include_router(roll_and_screen.router, prefix="/api/roll-and-screen", tags=["Roll & Screen"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
+app.include_router(delta_portfolio.router, prefix="/api/delta-portfolio", tags=["Delta Portfolio"])
 
 
 @app.get("/api/health")
