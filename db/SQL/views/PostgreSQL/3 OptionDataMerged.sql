@@ -35,6 +35,11 @@ SELECT
 	-- a.strike_stock_price_difference,
     -- a.strike_stock_price_difference_ptc,
 
+	-- OptionAggregations
+	a.total_day_volume,
+	a.call_volume_pct,
+	a.put_volume_pct,
+
     -- Stock Data
 	b.live_stock_price,
     b.earnings_date,

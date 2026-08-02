@@ -27,6 +27,11 @@ SELECT
 	a."day_vwap",
 	a."day_last_updated", 
 
+	-- OptionAggregations
+	b.total_day_volume,
+	b.call_volume_pct,
+	100 - b.call_volume_pct AS put_volume_pct,
+
 	-- OptionPricingMetrics
 	CASE WHEN (A.EXPIRATION_DATE::DATE - CURRENT_DATE) >= 0 THEN (A.EXPIRATION_DATE::DATE - CURRENT_DATE) ELSE 0 END AS DAYS_TO_EXPIRATION,
 	ROUND(a.day_close::NUMERIC, 2) AS PREMIUM_OPTION_PRICE,
@@ -46,3 +51,5 @@ FROM
 	-- AND a.symbol = d.symbol
 	-- LEFT OUTER JOIN "TableLastUpdated" AS tlu
 	-- ON tlu.table_name = 'OptionDataMassive'
+	LEFT OUTER JOIN "OptionAggregations" AS b
+	ON a.symbol = b.symbol
