@@ -37,7 +37,9 @@ current_data AS (
         historical_volatility_30d AS hv_30d,
         iv_rank,
         iv_percentile,
-        earnings_date
+        earnings_date,
+        total_day_volume,
+        put_volume_pct
     FROM "OptionDataMerged"
     WHERE implied_volatility IS NOT NULL AND implied_volatility > 0
       AND historical_volatility_30d IS NOT NULL AND historical_volatility_30d > 0
@@ -56,6 +58,8 @@ SELECT
     c.iv_rank,
     c.iv_percentile,
     c.earnings_date,
+    c.total_day_volume,
+    c.put_volume_pct,
     -- direction flag for Python-side filtering
     CASE WHEN c.imp_vol > COALESCE(y.iv_yesterday, c.imp_vol) THEN 'rising'
          WHEN c.imp_vol < COALESCE(y.iv_yesterday, c.imp_vol) THEN 'falling'

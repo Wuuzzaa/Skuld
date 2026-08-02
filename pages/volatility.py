@@ -135,7 +135,7 @@ with tab1:
         disp1 = df1_f[[
             "symbol", "name", "imp_vol", "iv_chg",
             "hv_30d", "iv_hv_ratio", "iv_rank", "iv_percentile",
-            "earnings_date"
+            "total_day_volume", "put_volume_pct", "earnings_date"
         ]].copy()
         disp1["earnings_date"] = pd.to_datetime(disp1["earnings_date"], errors="coerce").dt.strftime("%m/%d/%y")
 
@@ -153,6 +153,8 @@ with tab1:
                 "iv_hv_ratio":        st.column_config.NumberColumn("IV/HV", format="%.2f"),
                 "iv_rank":            st.column_config.NumberColumn("IV Rank", format="%.2f%%"),
                 "iv_percentile":      st.column_config.NumberColumn("IV Pctl", format="%.0f%%"),
+                "total_day_volume":   st.column_config.NumberColumn("Options Vol", format="%d"),
+                "put_volume_pct":     st.column_config.NumberColumn("Put Vol %", format="%.1f%%", help="Put volume as % of total options volume"),
                 "earnings_date":      st.column_config.TextColumn("Earnings"),
             },
             hide_index=True,
@@ -289,7 +291,7 @@ with tab2:
                 "symbol", "name", "imp_vol", "iv_chg",
                 "iv_5d_1m_pct", "iv_hv_ratio",
                 "iv_rank", "iv_percentile",
-                "earnings_date"
+                "earnings_date", "total_day_volume", "put_volume_pct"
             ]].copy()
             disp2rf["earnings_date"] = pd.to_datetime(disp2rf["earnings_date"], errors="coerce").dt.strftime("%m/%d/%y")
 
@@ -308,6 +310,8 @@ with tab2:
                     "iv_rank":              st.column_config.NumberColumn("IV Rank", format="%.2f%%"),
                     "iv_percentile":        st.column_config.NumberColumn("IV Pctl", format="%.0f%%"),
                     "earnings_date":        st.column_config.TextColumn("Earnings"),
+                    "total_day_volume":     st.column_config.NumberColumn("Options Vol", format="%d"),
+                    "put_volume_pct":       st.column_config.NumberColumn("Put Vol %", format="%.1f%%"),
                 },
                 hide_index=True,
                 width="stretch",

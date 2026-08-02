@@ -1,5 +1,4 @@
 -- Tab 1: IV Rank & IV Percentile Overview
--- Joins current IV stats with yesterday's IV for change calculation
 WITH
 current_iv_stats AS (
     SELECT DISTINCT ON (symbol)
@@ -9,7 +8,9 @@ current_iv_stats AS (
         implied_volatility AS imp_vol,
         historical_volatility_30d AS hv_30d,
         earnings_date,
-        company_name
+        company_name,
+        total_day_volume,
+        put_volume_pct
     FROM "OptionDataMerged"
     WHERE iv_rank IS NOT NULL
       AND iv_percentile IS NOT NULL
@@ -18,9 +19,7 @@ current_iv_stats AS (
     ORDER BY symbol, implied_volatility DESC
 ),
 yesterday_iv AS (
-    SELECT
-        symbol,
-        iv AS iv_yesterday
+    SELECT symbol, iv AS iv_yesterday
     FROM "StockImpliedVolatilityMassiveHistoryDaily"
     WHERE snapshot_date = (
         SELECT MAX(snapshot_date)
@@ -38,12 +37,11 @@ SELECT
         ELSE NULL
     END                                                               AS iv_chg,
     c.hv_30d,
-    CASE
-        WHEN c.hv_30d > 0 THEN c.imp_vol / c.hv_30d
-        ELSE NULL
-    END                                                               AS iv_hv_ratio,
+    CASE WHEN c.hv_30d > 0 THEN c.imp_vol / c.hv_30d ELSE NULL END   AS iv_hv_ratio,
     c.iv_rank,
     c.iv_percentile,
+    c.total_day_volume,
+    c.put_volume_pct,
     c.earnings_date
 FROM current_iv_stats c
 LEFT JOIN yesterday_iv y ON c.symbol = y.symbol
