@@ -221,7 +221,7 @@ def get_page_spreads(df: pd.DataFrame, strategy_type: str = 'credit', iv_correct
         'symbol', 'Company', 'earnings_date', 'earnings_warning', 'close', 
         'analyst_mean_target', 'company_industry', 'company_sector', 
         'historical_volatility_30d', 'iv_rank', 'iv_percentile',
-        'spread_width', 'net_credit', 'max_profit', 'max_profit%', 'max_loss', 'risk_reward',
+        'spread_width', 'net_credit', 'max_profit', 'max_profit%', 'risk_reward',
         'break_even', 'break_even%', 'bpr', 'profit_to_bpr', 'spread_theta',
         'expected_value', 'iv_correction_factor', 'APDI', 'APDI_EV', 'optionstrat_url',
         'sell_strike', 'sell_option_osi', 'sell_last_option_price', 'sell_delta', 'sell_iv', '%_otm',
