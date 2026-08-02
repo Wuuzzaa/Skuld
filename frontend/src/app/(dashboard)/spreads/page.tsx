@@ -69,6 +69,7 @@ export default function SpreadsPage() {
     min_sell_iv: 0.1,
     max_sell_iv: 2.0,
     min_max_profit: 30,
+    max_max_profit: 0,
     risk_free_rate: 4.3,
   });
   const [selectedExpiration, setSelectedExpiration] = useState('');
@@ -129,13 +130,15 @@ export default function SpreadsPage() {
   const filteredSpreads = useMemo(() => {
     return (spreads || []).filter((row: any) => {
       if (row.max_profit < params.min_max_profit) return false;
+      if (params.max_max_profit > 0 && row.max_profit > params.max_max_profit) return false;
       if (row.sell_iv < params.min_sell_iv) return false;
       if (row.sell_iv > params.max_sell_iv) return false;
+      if (params.min_iv_percentile > 0 && (row.iv_percentile ?? 0) < params.min_iv_percentile) return false;
       if (sectorFilter.length && !sectorFilter.includes(row.company_sector)) return false;
       if (industryFilter.length && !industryFilter.includes(row.company_industry)) return false;
       return true;
     });
-  }, [spreads, params.min_max_profit, params.min_sell_iv, params.max_sell_iv, sectorFilter, industryFilter]);
+  }, [spreads, params.min_max_profit, params.max_max_profit, params.min_sell_iv, params.max_sell_iv, params.min_iv_percentile, sectorFilter, industryFilter]);
 
   // Summary stats
   const stats = useMemo(() => {
@@ -386,6 +389,10 @@ export default function SpreadsPage() {
                 <Input type="number" value={params.min_max_profit} onChange={(e) => setParams({ ...params, min_max_profit: +e.target.value })} className="h-8 mt-1" />
               </div>
               <div>
+                <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Max Profit ($)</label>
+                <Input type="number" value={params.max_max_profit} onChange={(e) => setParams({ ...params, max_max_profit: +e.target.value })} className="h-8 mt-1" placeholder="0 = kein Limit" />
+              </div>
+              <div>
                 <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Min IV</label>
                 <Input type="number" step="0.05" value={params.min_sell_iv} onChange={(e) => setParams({ ...params, min_sell_iv: +e.target.value })} className="h-8 mt-1" />
               </div>
@@ -397,19 +404,23 @@ export default function SpreadsPage() {
                 <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Min IV Rank</label>
                 <Input type="number" value={params.min_iv_rank} onChange={(e) => setParams({ ...params, min_iv_rank: +e.target.value })} className="h-8 mt-1" />
               </div>
+              <div>
+                <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Min IV Percentile</label>
+                <Input type="number" value={params.min_iv_percentile} onChange={(e) => setParams({ ...params, min_iv_percentile: +e.target.value })} className="h-8 mt-1" />
+              </div>
             </div>
 
             {/* Sector filter */}
-            {availableSectors.length > 0 && (
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Sektor</label>
-                  {sectorFilter.length > 0 && (
-                    <button onClick={() => { setSectorFilter([]); setIndustryFilter([]); }} className="text-[11px] text-muted-foreground hover:text-foreground underline">
-                      Auswahl löschen
-                    </button>
-                  )}
-                </div>
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Sektor</label>
+                {sectorFilter.length > 0 && (
+                  <button onClick={() => { setSectorFilter([]); setIndustryFilter([]); }} className="text-[11px] text-muted-foreground hover:text-foreground underline">
+                    Auswahl löschen
+                  </button>
+                )}
+              </div>
+              {availableSectors.length > 0 ? (
                 <div className="flex flex-wrap gap-1.5">
                   {availableSectors.map((s) => (
                     <Badge
@@ -427,22 +438,24 @@ export default function SpreadsPage() {
                     </Badge>
                   ))}
                 </div>
-              </div>
-            )}
+              ) : (
+                <p className="text-[11px] text-muted-foreground italic">Sektoren erscheinen nach dem Laden der Ergebnisse.</p>
+              )}
+            </div>
 
-            {/* Industry filter — only shown after sector selection */}
-            {availableIndustries.length > 0 && (
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="text-[11px] text-muted-foreground uppercase tracking-wider">
-                    Industrie {sectorFilter.length > 0 ? `(${sectorFilter.join(', ')})` : ''}
-                  </label>
-                  {industryFilter.length > 0 && (
-                    <button onClick={() => setIndustryFilter([])} className="text-[11px] text-muted-foreground hover:text-foreground underline">
-                      Auswahl löschen
-                    </button>
-                  )}
-                </div>
+            {/* Industry filter */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] text-muted-foreground uppercase tracking-wider">
+                  Industrie {sectorFilter.length > 0 ? `(${sectorFilter.join(', ')})` : ''}
+                </label>
+                {industryFilter.length > 0 && (
+                  <button onClick={() => setIndustryFilter([])} className="text-[11px] text-muted-foreground hover:text-foreground underline">
+                    Auswahl löschen
+                  </button>
+                )}
+              </div>
+              {availableIndustries.length > 0 ? (
                 <div className="flex flex-wrap gap-1.5">
                   {availableIndustries.map((ind) => (
                     <Badge
@@ -458,8 +471,12 @@ export default function SpreadsPage() {
                     </Badge>
                   ))}
                 </div>
-              </div>
-            )}
+              ) : (
+                <p className="text-[11px] text-muted-foreground italic">
+                  {sectorFilter.length ? 'Keine Industrien in der Auswahl.' : 'Industrien erscheinen nach dem Laden der Ergebnisse.'}
+                </p>
+              )}
+            </div>
           </CardContent>
         </Card>
       )}
