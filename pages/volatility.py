@@ -195,15 +195,13 @@ with tab2:
     # ── Sub-tab: IV/HV Ratio ──────────────────────────────────────────────────
     with subtab_ratio:
         with st.expander("Filters", expanded=True):
-            r1, r2, r3, r4 = st.columns(4)
+            r1, r2, r3 = st.columns(3)
             with r1:
                 min_ivhv = st.number_input("Min IV/HV", 0.0, 10.0, 0.0, step=0.1, key="t2r_min_ivhv")
             with r2:
                 min_ivr_t2 = st.number_input("Min IV Rank", 0, 100, 0, key="t2r_min_ivr")
             with r3:
                 min_ivp_t2 = st.number_input("Min IV Pctl", 0, 100, 0, key="t2r_min_ivp")
-            with r4:
-                min_hvr_t2 = st.number_input("Min HV Rank", 0, 100, 0, key="t2r_min_hvr")
 
         with st.spinner("Loading IV/HV Ratio…"):
             sql_t2r = PATH_DATABASE_QUERY_FOLDER / "volatility_iv_hv_ratio.sql"
@@ -215,8 +213,7 @@ with tab2:
             mask2r = (
                 (df2r["iv_hv_ratio"].fillna(0) >= min_ivhv) &
                 (df2r["iv_rank"].fillna(0) >= min_ivr_t2) &
-                (df2r["iv_percentile"].fillna(0) >= min_ivp_t2) &
-                (df2r["hv_rank"].fillna(0) >= min_hvr_t2)
+                (df2r["iv_percentile"].fillna(0) >= min_ivp_t2)
             )
             df2r_f = df2r[mask2r].copy()
             st.markdown(f"**{len(df2r_f)} symbols**")
@@ -225,7 +222,6 @@ with tab2:
                 "symbol", "name", "imp_vol", "iv_chg",
                 "hv_30d", "iv_hv_ratio",
                 "iv_rank", "iv_percentile",
-                "hv_rank", "hv_percentile",
                 "earnings_date"
             ]].copy()
             disp2r["earnings_date"] = pd.to_datetime(disp2r["earnings_date"], errors="coerce").dt.strftime("%m/%d/%y")
@@ -244,8 +240,6 @@ with tab2:
                     "iv_hv_ratio":   st.column_config.NumberColumn("IV/HV", format="%.2f"),
                     "iv_rank":       st.column_config.NumberColumn("IV Rank", format="%.2f%%"),
                     "iv_percentile": st.column_config.NumberColumn("IV Pctl", format="%.0f%%"),
-                    "hv_rank":       st.column_config.NumberColumn("HV Rank", format="%.2f%%"),
-                    "hv_percentile": st.column_config.NumberColumn("HV Pctl", format="%.0f%%"),
                     "earnings_date": st.column_config.TextColumn("Earnings"),
                 },
                 hide_index=True,
