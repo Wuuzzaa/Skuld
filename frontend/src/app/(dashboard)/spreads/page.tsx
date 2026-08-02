@@ -155,6 +155,22 @@ export default function SpreadsPage() {
 
   const columns: Column[] = [
     {
+      key: '__chart',
+      label: '',
+      sortable: false,
+      align: 'center',
+      width: '44px',
+      format: (_v: any, row: any) => (
+        <button
+          onClick={(e) => { e.stopPropagation(); setChartSymbol(row.symbol); }}
+          title="Chart öffnen"
+          className="inline-flex items-center justify-center p-1 rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+        >
+          <BarChart3 className="w-4 h-4" />
+        </button>
+      ),
+    },
+    {
       key: 'symbol',
       label: 'Symbol',
       sortable: true,
