@@ -1632,14 +1632,36 @@ def _render_screener_table(df: pd.DataFrame, sel_key: str, top_n: int = 5):
         _name = str(r.get("company_name") or "").strip()
         if len(_name) > 28:
             _name = _name[:27] + "…"
+
+        _price      = float(r["price"]) if r.get("price") is not None and pd.notna(r.get("price")) else None
+        _strike     = float(r["put_strike"]) if r.get("put_strike") is not None and pd.notna(r.get("put_strike")) else None
+        _premium    = float(r["put_premium"]) if r.get("put_premium") is not None and pd.notna(r.get("put_premium")) else None
+        _delta      = float(r["put_delta"]) if r.get("put_delta") is not None and pd.notna(r.get("put_delta")) else None
+        _breakeven  = float(r["breakeven"]) if r.get("breakeven") is not None and pd.notna(r.get("breakeven")) else None
+
+        _moneyness   = round((_strike - _price) / _price * 100, 2) if _strike and _price else None
+        _pct_be      = round((_breakeven - _price) / _price * 100, 2) if _breakeven and _price else None
+        _profit_prob = round((1 - abs(_delta)) * 100, 1) if _delta is not None else None
+
         rows.append({
             "★": "★" if i < top_n else "",
             "Symbol": r["symbol"],
             "Name": _name,
-            "Kurs": float(r["price"]) if r.get("price") is not None and pd.notna(r.get("price")) else None,
-            "Ann.%": round(float(r.get("annualized_pct") or 0), 1),
-            "DTE": int(r["put_dte"]) if r.get("put_dte") not in (None, "--") and pd.notna(r.get("put_dte")) else None,
+            "Kurs": _price,
+            "Exp Date": str(r.get("put_expiry", "—")),
+            "Strike": _strike,
+            "Moneyness%": _moneyness,
+            "Last ($)": _premium,
+            "BE (Last)": _breakeven,
+            "%BE": _pct_be,
+            "Volume": int(r["put_volume"]) if r.get("put_volume") is not None and pd.notna(r.get("put_volume")) else None,
+            "OI": int(r["put_oi"]) if r.get("put_oi") is not None and pd.notna(r.get("put_oi")) else None,
             "IV-Rank": round(float(iv_rank), 0) if iv_rank is not None and pd.notna(iv_rank) else None,
+            "Delta": _delta,
+            "Return%": round(float(r.get("premium_pct") or 0), 2),
+            "Ann.%": round(float(r.get("annualized_pct") or 0), 1),
+            "Profit Prob%": _profit_prob,
+            "DTE": int(r["put_dte"]) if r.get("put_dte") not in (None, "--") and pd.notna(r.get("put_dte")) else None,
             "Score": f"{score_val}/{score_max_v}",
             "_score_pct": (score_val / score_max_v) if score_max_v else 0.0,
             "Sektor": f"{r.get('sektor_ampel', '⚪')} {r.get('sector', '') or ''}".strip(),
@@ -1682,19 +1704,30 @@ def _render_screener_table(df: pd.DataFrame, sel_key: str, top_n: int = 5):
         on_select="rerun",
         selection_mode="single-row",
         key="screener_row_pick",
-        column_order=["★", "Symbol", "Name", "Kurs", "Ann.%", "DTE", "IV-Rank", "Score", "Sektor", "Warum ★"],
+        column_order=["★", "Symbol", "Name", "Kurs", "Exp Date", "Strike", "Moneyness%",
+                      "Last ($)", "BE (Last)", "%BE", "Volume", "OI",
+                      "IV-Rank", "Delta", "Return%", "Ann.%", "Profit Prob%",
+                      "DTE", "Score", "Sektor", "Warum ★"],
         column_config={
-            "★": st.column_config.TextColumn("★", width="small", help="Top-Kandidat der Shortlist"),
-            "Name": st.column_config.TextColumn("Name", width="medium", help="Unternehmensname"),
-            "Kurs": st.column_config.NumberColumn("Kurs", format="$%.2f"),
-            "Ann.%": st.column_config.NumberColumn("Ann.%", format="%.1f%%"),
-            "DTE": st.column_config.NumberColumn("DTE", format="%dd"),
-            "IV-Rank": st.column_config.NumberColumn("IV-Rank", format="%.0f"),
-            "Score": st.column_config.TextColumn(
-                "Score", width="small",
-                help="Shortlist-Score: 9/9 grün (top), niedriger = gelb/rot. Spalte 'Warum ★' zeigt die Punkte.",
-            ),
-            "Warum ★": st.column_config.TextColumn("Warum ★", width="medium"),
+            "★":            st.column_config.TextColumn("★", width="small", help="Top-Kandidat der Shortlist"),
+            "Name":         st.column_config.TextColumn("Name", width="medium"),
+            "Kurs":         st.column_config.NumberColumn("Kurs", format="$%.2f"),
+            "Exp Date":     st.column_config.TextColumn("Exp Date", width="small"),
+            "Strike":       st.column_config.NumberColumn("Strike", format="$%.2f"),
+            "Moneyness%":   st.column_config.NumberColumn("Moneyness", format="%.2f%%", help="(Strike − Kurs) / Kurs × 100; negativ = OTM"),
+            "Last ($)":     st.column_config.NumberColumn("Last ($)", format="$%.2f", help="Last Price (kein Bid/Ask verfügbar)"),
+            "BE (Last)":    st.column_config.NumberColumn("BE (Last)", format="$%.2f", help="Break Even = Strike − Last Price"),
+            "%BE":          st.column_config.NumberColumn("%BE", format="%.2f%%", help="(Break Even − Kurs) / Kurs × 100"),
+            "Volume":       st.column_config.NumberColumn("Volume", format="%d"),
+            "OI":           st.column_config.NumberColumn("Open Int", format="%d"),
+            "IV-Rank":      st.column_config.NumberColumn("IV-Rank", format="%.0f"),
+            "Delta":        st.column_config.NumberColumn("Delta", format="%.3f"),
+            "Return%":      st.column_config.NumberColumn("Return%", format="%.2f%%", help="Put Premium / Strike × 100"),
+            "Ann.%":        st.column_config.NumberColumn("Ann.%", format="%.1f%%"),
+            "Profit Prob%": st.column_config.NumberColumn("Profit Prob", format="%.1f%%", help="≈ (1 − |Delta|) × 100"),
+            "DTE":          st.column_config.NumberColumn("DTE", format="%dd"),
+            "Score":        st.column_config.TextColumn("Score", width="small", help="Shortlist-Score"),
+            "Warum ★":      st.column_config.TextColumn("Warum ★", width="medium"),
         },
     )
 

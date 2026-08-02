@@ -97,6 +97,29 @@ def _calculate_spread_metrics(df: pd.DataFrame, strategy_type: str = 'credit', i
     # % Out-of-the-Money (OTM)
     df["%_otm"] = (df["sell_strike"] - df["close"]).abs() / df["close"] * 100
 
+    # Net Credit / Net Debit (using Last Price, no Bid/Ask available)
+    # Credit spreads: positive = premium received
+    # Debit spreads:  negative = premium paid (net_credit < 0 means net debit)
+    df["net_credit"] = df["sell_last_option_price"] - df["buy_last_option_price"]
+
+    # Break Even — depends on strategy type and option type:
+    #   Bull Put  (credit, put):  sell_strike - net_credit
+    #   Bear Call (credit, call): sell_strike + net_credit
+    #   Bull Call (debit,  call): sell_strike - net_credit  (net_credit is negative → adds)
+    #   Bear Put  (debit,  put):  sell_strike + net_credit  (net_credit is negative → subtracts)
+    is_credit = strategy_type == "credit"
+    is_put = df["option_type"] == "put"
+
+    df["break_even"] = (
+        (df["sell_strike"] - df["net_credit"]).where(is_credit & is_put)
+        .fillna((df["sell_strike"] + df["net_credit"]).where(is_credit & ~is_put))
+        .fillna((df["sell_strike"] - df["net_credit"]).where(~is_credit & ~is_put))
+        .fillna(df["sell_strike"] + df["net_credit"])  # debit put
+    )
+
+    # Break Even % = distance from current price to break even
+    df["break_even%"] = (df["break_even"] - df["close"]) / df["close"] * 100
+
     # Black-Scholes theoretical prices
     is_call = df['option_type'] == 'call'
     df['sell_bs_price'] = df.apply(
@@ -107,6 +130,13 @@ def _calculate_spread_metrics(df: pd.DataFrame, strategy_type: str = 'credit', i
     # Calculate all generic metrics
     metrics_df = df.apply(lambda r: _calculate_metrics_for_row(r, strategy_type, iv_correction=iv_correction), axis=1)
     df = pd.concat([df, metrics_df], axis=1)
+
+    # Max Profit % = Max Profit / (Max Profit + Max Loss) * 100
+    total = df["max_profit"] + df["max_loss"]
+    df["max_profit%"] = (df["max_profit"] / total * 100).where(total > 0)
+
+    # Risk/Reward Ratio = Max Loss / Max Profit
+    df["risk_reward"] = (df["max_loss"] / df["max_profit"]).where(df["max_profit"] > 0)
 
     # Filter out invalid spreads
     df = df[df['max_profit'] > 0].copy()
@@ -191,7 +221,8 @@ def get_page_spreads(df: pd.DataFrame, strategy_type: str = 'credit', iv_correct
         'symbol', 'Company', 'earnings_date', 'earnings_warning', 'close', 
         'analyst_mean_target', 'company_industry', 'company_sector', 
         'historical_volatility_30d', 'iv_rank', 'iv_percentile',
-        'spread_width', 'max_profit', 'bpr', 'profit_to_bpr', 'spread_theta', 
+        'spread_width', 'net_credit', 'max_profit', 'max_profit%', 'max_loss', 'risk_reward',
+        'break_even', 'break_even%', 'bpr', 'profit_to_bpr', 'spread_theta',
         'expected_value', 'iv_correction_factor', 'APDI', 'APDI_EV', 'optionstrat_url',
         'sell_strike', 'sell_option_osi', 'sell_last_option_price', 'sell_delta', 'sell_iv', '%_otm',
         'sell_theta', 'sell_open_interest', 'sell_expected_move', 'sell_day_volume',
