@@ -53,7 +53,7 @@ export default function CoveredCallsPage() {
   const [selectedExpiration, setSelectedExpiration] = useState('');
   const [selectedRow, setSelectedRow] = useState<any>(null);
   const [expTypeFilter, setExpTypeFilter] = useState<'all' | 'Monthly' | 'Weekly' | 'Daily'>('all');
-  const [showProFilters, setShowProFilters] = useState(false);
+  const [showProFilters, setShowProFilters] = useState(true);
   const [showExplain, setShowExplain] = useState(false);
 
   const { data: expirations, isLoading: loadingExp } = useQuery({

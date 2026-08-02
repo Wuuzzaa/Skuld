@@ -73,7 +73,7 @@ export default function SpreadsPage() {
   const [selectedExpiration, setSelectedExpiration] = useState('');
   const [selectedRow, setSelectedRow] = useState<any>(null);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
-  const [showFilters, setShowFilters] = useState(false);
+  const [showFilters, setShowFilters] = useState(true);
   const [expTypeFilter, setExpTypeFilter] = useState<'all' | 'Monthly' | 'Weekly' | 'Daily'>('all');
   const [sectorFilter, setSectorFilter] = useState<string[]>([]);
   const [industryFilter, setIndustryFilter] = useState<string[]>([]);

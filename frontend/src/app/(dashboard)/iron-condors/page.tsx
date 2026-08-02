@@ -26,7 +26,7 @@ export default function IronCondorsPage() {
   const [expCall, setExpCall] = useState('');
   const [selectedRow, setSelectedRow] = useState<any>(null);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
-  const [showFilters, setShowFilters] = useState(false);
+  const [showFilters, setShowFilters] = useState(true);
   const [expTypeFilter, setExpTypeFilter] = useState<'all' | 'Monthly' | 'Weekly' | 'Daily'>('all');
 
   const { data: expirations } = useQuery({
