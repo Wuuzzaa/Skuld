@@ -3,48 +3,77 @@
 @tailwind utilities;
 
 @layer base {
-  /* Light mode (default) */
+  /* ─────────────────────────────────────────────────────────────────────
+     Option-Alpha-inspiriertes Theme (hell als Default).
+     Ruhiger, luftiger Look: fast-weißer Grund, grünes Primary/Ring,
+     kühles neutrales Grau, dezente Border. Grün = positiv, Rot = negativ.
+     ───────────────────────────────────────────────────────────────────── */
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222 47% 11%;
-    --card: 0 0% 98%;
-    --card-foreground: 222 47% 11%;
-    --primary: 217 91% 50%;
+    --background: 210 20% 99%;      /* fast weiß, minimal kühl */
+    --foreground: 222 24% 16%;      /* kräftige, dunkle Zahlen/Text */
+
+    --card: 0 0% 100%;              /* Karten rein weiß, heben sich per Border ab */
+    --card-foreground: 222 24% 16%;
+
+    --primary: 152 54% 40%;         /* OA-Grün (#2FA36B-nah) */
     --primary-foreground: 0 0% 100%;
-    --secondary: 220 14% 93%;
-    --secondary-foreground: 222 47% 11%;
-    --muted: 220 14% 96%;
-    --muted-foreground: 220 9% 46%;
-    --accent: 220 14% 93%;
-    --accent-foreground: 222 47% 11%;
-    --destructive: 0 72% 51%;
+
+    --secondary: 210 16% 95%;       /* ruhiger grauer Fill */
+    --secondary-foreground: 222 24% 16%;
+
+    --muted: 210 16% 96%;           /* Tabellen-Header, dezente Flächen */
+    --muted-foreground: 220 9% 46%; /* graue Uppercase-Labels */
+
+    --accent: 152 45% 94%;          /* softer grüner Akzent-Grund */
+    --accent-foreground: 152 54% 26%;
+
+    --destructive: 0 66% 60%;       /* OA-Rot (#DC5757-nah) */
     --destructive-foreground: 0 0% 100%;
-    --border: 220 13% 87%;
-    --input: 220 13% 87%;
-    --ring: 217 91% 50%;
-    --radius: 0.5rem;
+
+    /* Semantische Trading-Farben — überall gleich für grün/rot Zahlen */
+    --positive: 152 54% 38%;
+    --negative: 0 66% 57%;
+    --warning: 38 78% 48%;
+    --info: 214 84% 56%;
+
+    --border: 220 16% 91%;          /* sehr dezente Trennlinien */
+    --input: 220 16% 88%;
+    --ring: 152 54% 40%;            /* Fokus = OA-Grün */
+    --radius: 0.625rem;             /* etwas weichere Rundung (OA) */
   }
 
-  /* Dark mode */
+  /* Dark-Mode: OA-Sprache auf dunklem Grund (Toggle bleibt funktional) */
   .dark {
-    --background: 222 47% 6%;
-    --foreground: 210 40% 95%;
-    --card: 222 47% 8%;
-    --card-foreground: 210 40% 95%;
-    --primary: 217 91% 60%;
-    --primary-foreground: 222 47% 6%;
-    --secondary: 217 33% 17%;
-    --secondary-foreground: 210 40% 95%;
-    --muted: 217 33% 14%;
-    --muted-foreground: 215 20% 55%;
-    --accent: 217 33% 17%;
-    --accent-foreground: 210 40% 95%;
-    --destructive: 0 62% 50%;
-    --destructive-foreground: 210 40% 95%;
-    --border: 217 33% 17%;
-    --input: 217 33% 17%;
-    --ring: 217 91% 60%;
-    --radius: 0.5rem;
+    --background: 222 30% 8%;
+    --foreground: 210 30% 94%;
+
+    --card: 222 28% 11%;
+    --card-foreground: 210 30% 94%;
+
+    --primary: 152 52% 46%;
+    --primary-foreground: 222 30% 8%;
+
+    --secondary: 217 24% 18%;
+    --secondary-foreground: 210 30% 94%;
+
+    --muted: 217 24% 15%;
+    --muted-foreground: 215 16% 60%;
+
+    --accent: 152 30% 20%;
+    --accent-foreground: 152 40% 80%;
+
+    --destructive: 0 60% 55%;
+    --destructive-foreground: 210 30% 94%;
+
+    --positive: 152 52% 52%;
+    --negative: 0 66% 62%;
+    --warning: 38 80% 58%;
+    --info: 214 84% 62%;
+
+    --border: 217 24% 18%;
+    --input: 217 24% 18%;
+    --ring: 152 52% 46%;
+    --radius: 0.625rem;
   }
 }
 
@@ -54,6 +83,15 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* Systemschrift-Stack wie moderne SaaS-Dashboards (OA) */
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+      Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  /* Tabellenzahlen tabellarisch ausrichten (OA-Zahlenkolonnen) */
+  table {
+    font-variant-numeric: tabular-nums;
   }
 }
 

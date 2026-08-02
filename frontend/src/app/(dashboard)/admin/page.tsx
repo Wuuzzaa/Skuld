@@ -235,7 +235,7 @@ function LogViewer() {
                 key={i}
                 className={cn(
                   'py-0.5',
-                  line.includes('ERROR') && 'text-red-400',
+                  line.includes('ERROR') && 'text-negative',
                   line.includes('WARNING') && 'text-yellow-400',
                 )}
               >
@@ -418,12 +418,12 @@ function JobTrigger() {
         </div>
 
         {trigger.isSuccess && !isLiveViewing && (
-          <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-3 py-2 rounded-md text-sm">
+          <div className="bg-emerald-500/10 border border-emerald-500/30 text-positive px-3 py-2 rounded-md text-sm">
             Job <strong>{trigger.data?.mode}</strong> triggered (PID: {trigger.data?.pid}).
           </div>
         )}
         {trigger.isError && (
-          <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-3 py-2 rounded-md text-sm">
+          <div className="bg-red-500/10 border border-red-500/30 text-negative px-3 py-2 rounded-md text-sm">
             Failed: {(trigger.error as any)?.response?.data?.detail || 'Unknown error'}
           </div>
         )}
@@ -436,8 +436,8 @@ function JobTrigger() {
             <div className="flex items-center gap-3">
               <h3 className="text-sm font-semibold">Live Log Output</h3>
               {isLiveViewing && (
-                <span className="flex items-center gap-1.5 text-xs text-emerald-400">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="flex items-center gap-1.5 text-xs text-positive">
+                  <span className="w-2 h-2 rounded-full bg-positive animate-pulse" />
                   Streaming — {liveLog.mode}
                 </span>
               )}
@@ -450,14 +450,14 @@ function JobTrigger() {
               {isLiveViewing ? (
                 <button
                   onClick={stopPolling}
-                  className="px-2 py-1 text-xs bg-red-500/20 text-red-400 border border-red-500/30 rounded hover:bg-red-500/30"
+                  className="px-2 py-1 text-xs bg-red-500/20 text-negative border border-red-500/30 rounded hover:bg-red-500/30"
                 >
                   Stop
                 </button>
               ) : (
                 <button
                   onClick={() => startPolling(liveLog.component, liveLog.date, liveLog.filename)}
-                  className="px-2 py-1 text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded hover:bg-emerald-500/30"
+                  className="px-2 py-1 text-xs bg-emerald-500/20 text-positive border border-emerald-500/30 rounded hover:bg-emerald-500/30"
                 >
                   Resume
                 </button>
@@ -480,9 +480,9 @@ function JobTrigger() {
                   key={i}
                   className={cn(
                     'py-0.5',
-                    line.includes('ERROR') && 'text-red-400',
+                    line.includes('ERROR') && 'text-negative',
                     line.includes('WARNING') && 'text-yellow-400',
-                    line.includes('SUCCESS') && 'text-emerald-400',
+                    line.includes('SUCCESS') && 'text-positive',
                   )}
                 >
                   {line}
@@ -526,11 +526,11 @@ function JobTrigger() {
                 <div key={job.mode} className="flex items-center gap-3 text-sm">
                   <span className={cn(
                     'w-2 h-2 rounded-full',
-                    job.alive ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'
+                    job.alive ? 'bg-positive animate-pulse' : 'bg-negative'
                   )} />
                   <span className="font-mono">{job.mode}</span>
                   <span className="text-muted-foreground">PID: {job.pid}</span>
-                  <span className={job.alive ? 'text-emerald-400' : 'text-red-400'}>
+                  <span className={job.alive ? 'text-positive' : 'text-negative'}>
                     {job.alive ? 'running' : 'stale lockfile'}
                   </span>
                   {startStr && (
@@ -642,9 +642,9 @@ function ActivityView() {
                   <td className="px-3 py-1.5">
                     <span className={cn(
                       'px-1.5 py-0.5 rounded text-xs',
-                      row.operation_type === 'INSERT' && 'bg-emerald-500/20 text-emerald-400',
+                      row.operation_type === 'INSERT' && 'bg-emerald-500/20 text-positive',
                       row.operation_type === 'UPDATE' && 'bg-blue-500/20 text-blue-400',
-                      row.operation_type === 'DELETE' && 'bg-red-500/20 text-red-400',
+                      row.operation_type === 'DELETE' && 'bg-red-500/20 text-negative',
                       row.operation_type === 'TRUNCATE' && 'bg-yellow-500/20 text-yellow-400',
                     )}>
                       {row.operation_type}
@@ -682,11 +682,11 @@ function JobHistory() {
 
   const statusBadge = (status: string) => {
     const styles: Record<string, string> = {
-      success: 'bg-emerald-500/20 text-emerald-400',
-      failed: 'bg-red-500/20 text-red-400',
+      success: 'bg-emerald-500/20 text-positive',
+      failed: 'bg-red-500/20 text-negative',
       partial: 'bg-yellow-500/20 text-yellow-400',
       timeout: 'bg-orange-500/20 text-orange-400',
-      oom: 'bg-red-500/20 text-red-400',
+      oom: 'bg-red-500/20 text-negative',
       unknown: 'bg-zinc-500/20 text-zinc-400',
     };
     const labels: Record<string, string> = {
@@ -756,11 +756,11 @@ function JobHistory() {
           <p className="text-xs text-muted-foreground">Total Runs</p>
         </div>
         <div className="bg-card border border-border rounded-lg p-3 text-center">
-          <p className="text-2xl font-bold text-emerald-400">{successRuns}</p>
+          <p className="text-2xl font-bold text-positive">{successRuns}</p>
           <p className="text-xs text-muted-foreground">Successful</p>
         </div>
         <div className="bg-card border border-border rounded-lg p-3 text-center">
-          <p className="text-2xl font-bold text-red-400">{failedRuns}</p>
+          <p className="text-2xl font-bold text-negative">{failedRuns}</p>
           <p className="text-xs text-muted-foreground">Failed</p>
         </div>
       </div>
@@ -816,8 +816,8 @@ function JobHistory() {
                       <tr className="border-b border-border/50">
                         <td colSpan={7} className="px-3 py-2">
                           <div className="bg-red-500/5 border border-red-500/20 rounded-md p-3">
-                            <p className="text-xs font-medium text-red-400 mb-1">Errors:</p>
-                            <pre className="text-xs font-mono text-red-300/80 whitespace-pre-wrap">
+                            <p className="text-xs font-medium text-negative mb-1">Errors:</p>
+                            <pre className="text-xs font-mono text-negative/80 whitespace-pre-wrap">
                               {run.error_summary}
                             </pre>
                           </div>

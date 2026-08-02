@@ -94,7 +94,7 @@ export default function WatchlistPage() {
 
   const getPriceColor = (currentPrice: number | null, level: number | null) => {
     if (!currentPrice || !level) return '';
-    if (currentPrice <= level) return 'text-emerald-400 font-bold';
+    if (currentPrice <= level) return 'text-positive font-bold';
     return '';
   };
 
@@ -256,7 +256,7 @@ export default function WatchlistPage() {
                       {editingId === item.id ? (
                         <>
                           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleSaveEdit(item.id)}>
-                            <Save className="w-3.5 h-3.5 text-emerald-400" />
+                            <Save className="w-3.5 h-3.5 text-positive" />
                           </Button>
                           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditingId(null); setEditValues({}); }}>
                             <X className="w-3.5 h-3.5" />
@@ -269,11 +269,11 @@ export default function WatchlistPage() {
                           </Button>
                           {deleteConfirmId === item.id ? (
                             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => deleteMutation.mutate(item.id)}>
-                              <span className="text-xs text-red-400 font-bold">!</span>
+                              <span className="text-xs text-negative font-bold">!</span>
                             </Button>
                           ) : (
                             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setDeleteConfirmId(item.id)}>
-                              <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                              <Trash2 className="w-3.5 h-3.5 text-negative" />
                             </Button>
                           )}
                         </>

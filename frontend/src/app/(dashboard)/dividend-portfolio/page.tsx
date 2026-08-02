@@ -14,7 +14,7 @@ function StatCard({ label, value, sub, highlight }: { label: string; value: stri
       highlight ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-card border-border/40'
     }`}>
       <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">{label}</span>
-      <span className={`text-lg font-bold ${highlight ? 'text-emerald-400' : 'text-foreground'}`}>{value}</span>
+      <span className={`text-lg font-bold ${highlight ? 'text-positive' : 'text-foreground'}`}>{value}</span>
       {sub && <span className="text-[10px] text-muted-foreground">{sub}</span>}
     </div>
   );
@@ -119,7 +119,7 @@ export default function DividendPortfolioPage() {
       format: (v: string) => <span className="text-[10px] text-cyan-400 font-mono">{v}</span> },
     { key: 'score_total', label: 'Score', sortable: true, align: 'center', width: '55px',
       format: (v: number) => (
-        <span className={`font-bold text-xs ${v >= 23 ? 'text-emerald-400' : v >= 18 ? 'text-yellow-400' : 'text-muted-foreground'}`}>
+        <span className={`font-bold text-xs ${v >= 23 ? 'text-positive' : v >= 18 ? 'text-yellow-400' : 'text-muted-foreground'}`}>
           {v}/33
         </span>
       )},
@@ -149,7 +149,7 @@ export default function DividendPortfolioPage() {
       {/* Header */}
       <div>
         <h1 className="text-xl font-bold flex items-center gap-2">
-          <Wallet className="h-5 w-5 text-emerald-400" />
+          <Wallet className="h-5 w-5 text-positive" />
           Dividend Portfolio Builder
         </h1>
         <p className="text-xs text-muted-foreground mt-0.5">
@@ -166,7 +166,7 @@ export default function DividendPortfolioPage() {
             </label>
             <input type="number" step="25" min="10" value={params.target_monthly_eur}
               onChange={e => setParams({...params, target_monthly_eur: +e.target.value})}
-              className="w-full px-3 py-2 rounded-lg bg-background border border-primary/30 text-lg font-bold text-emerald-400 focus:border-primary focus:outline-none" />
+              className="w-full px-3 py-2 rounded-lg bg-background border border-primary/30 text-lg font-bold text-positive focus:border-primary focus:outline-none" />
           </div>
           <div className="space-y-1">
             <label className="text-[10px] uppercase text-muted-foreground font-medium">EUR/USD</label>
@@ -224,7 +224,7 @@ export default function DividendPortfolioPage() {
           )}
           {summary.target_coverage_pct > 0 && (
             <span className={`text-xs font-medium ${
-              summary.target_coverage_pct >= 95 ? 'text-emerald-400' : 'text-yellow-400'
+              summary.target_coverage_pct >= 95 ? 'text-positive' : 'text-yellow-400'
             }`}>
               Ziel-Erreichung: {summary.target_coverage_pct}%
             </span>

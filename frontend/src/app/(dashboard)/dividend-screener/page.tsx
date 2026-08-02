@@ -19,10 +19,10 @@ function StatCard({ label, value, sub }: { label: string; value: string; sub?: s
 }
 
 function ScoreBadge({ score }: { score: number }) {
-  let color = 'bg-red-500/20 text-red-400';
+  let color = 'bg-red-500/20 text-negative';
   let label = 'DISCARD';
   if (score >= 23) {
-    color = 'bg-emerald-500/20 text-emerald-400';
+    color = 'bg-emerald-500/20 text-positive';
     label = 'BUY';
   } else if (score >= 12) {
     color = 'bg-yellow-500/20 text-yellow-400';

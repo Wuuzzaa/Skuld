@@ -13,7 +13,7 @@ import {
 } from 'recharts';
 
 function StatTile({ label, value, tone }: { label: string; value: string; tone?: 'pos' | 'neg' }) {
-  const cls = tone === 'pos' ? 'text-emerald-400' : tone === 'neg' ? 'text-red-400' : 'text-foreground';
+  const cls = tone === 'pos' ? 'text-positive' : tone === 'neg' ? 'text-negative' : 'text-foreground';
   return (
     <div className="flex flex-col gap-0.5 p-3 bg-card rounded-lg border border-border/40">
       <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">{label}</span>
@@ -113,7 +113,7 @@ export function RslBacktestPanel() {
         </CardContent>
       </Card>
 
-      {mutation.isError && <p className="text-sm text-red-400">Backtest failed. Check date range / data availability.</p>}
+      {mutation.isError && <p className="text-sm text-negative">Backtest failed. Check date range / data availability.</p>}
 
       {r && Object.keys(summary).length > 0 && (
         <>

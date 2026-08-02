@@ -309,10 +309,10 @@ export default function CorrelationPage() {
                         : ''}
                   </span>
                   {vsAll.stats.most_correlated && (
-                    <span>Most correlated: <span className="text-emerald-400 font-medium">{vsAll.stats.most_correlated.symbol} ({vsAll.stats.most_correlated.correlation.toFixed(2)})</span></span>
+                    <span>Most correlated: <span className="text-positive font-medium">{vsAll.stats.most_correlated.symbol} ({vsAll.stats.most_correlated.correlation.toFixed(2)})</span></span>
                   )}
                   {vsAll.stats.most_inverse && (
-                    <span>Most inverse: <span className="text-red-400 font-medium">{vsAll.stats.most_inverse.symbol} ({vsAll.stats.most_inverse.correlation.toFixed(2)})</span></span>
+                    <span>Most inverse: <span className="text-negative font-medium">{vsAll.stats.most_inverse.symbol} ({vsAll.stats.most_inverse.correlation.toFixed(2)})</span></span>
                   )}
                 </div>
               )}
@@ -328,12 +328,12 @@ export default function CorrelationPage() {
                       title="Open pair detail"
                     >
                       <span className="w-16 text-left font-medium">{c.symbol}</span>
-                      <span className={`w-16 text-right tabular-nums ${pos ? 'text-emerald-400' : 'text-red-400'}`}>
+                      <span className={`w-16 text-right tabular-nums ${pos ? 'text-positive' : 'text-negative'}`}>
                         {c.correlation.toFixed(3)}
                       </span>
                       <span className="flex-1 h-2 rounded-full bg-muted/30 overflow-hidden">
                         <span
-                          className={`block h-full ${pos ? 'bg-emerald-400/60' : 'bg-red-400/60'}`}
+                          className={`block h-full ${pos ? 'bg-positive/60' : 'bg-negative/60'}`}
                           style={{ width: `${pct}%` }}
                         />
                       </span>
@@ -423,7 +423,7 @@ export default function CorrelationPage() {
                     <span>Linear relationship between returns. Most common. Sensitive to outliers.</span>
                   </li>
                   <li className="flex gap-2">
-                    <span className="w-16 font-mono font-medium text-emerald-400 flex-shrink-0">Spearman</span>
+                    <span className="w-16 font-mono font-medium text-positive flex-shrink-0">Spearman</span>
                     <span>Rank-based. Captures monotonic (not just linear) relationships. More robust to outliers.</span>
                   </li>
                   <li className="flex gap-2">
@@ -556,9 +556,9 @@ export default function CorrelationPage() {
             <Card className="border-border/40">
               <CardContent className="pt-3 pb-3">
                 <p className="text-[11px] text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                  <TrendingDown className="w-3 h-3 text-red-400" /> Lowest
+                  <TrendingDown className="w-3 h-3 text-negative" /> Lowest
                 </p>
-                <p className="text-xl font-bold font-mono mt-0.5 text-red-400">{data.stats.min_correlation.toFixed(3)}</p>
+                <p className="text-xl font-bold font-mono mt-0.5 text-negative">{data.stats.min_correlation.toFixed(3)}</p>
               </CardContent>
             </Card>
           </div>
@@ -655,7 +655,7 @@ export default function CorrelationPage() {
             <Card className="border-border/40">
               <CardContent className="pt-3">
                 <h3 className="text-sm font-semibold mb-2 flex items-center gap-1.5">
-                  <Minus className="w-3.5 h-3.5 text-emerald-400" /> Least Correlated (Best Diversifiers)
+                  <Minus className="w-3.5 h-3.5 text-positive" /> Least Correlated (Best Diversifiers)
                 </h3>
                 <div className="space-y-1">
                   {data.least_correlated.map((pair: { pair: string; correlation: number }, idx: number) => (
@@ -718,7 +718,7 @@ function PairDetailPanel({
     return (
       <Card className="border-red-500/20 bg-red-500/5">
         <CardContent className="pt-4 pb-4 flex items-center justify-between">
-          <span className="text-sm text-red-400">{detail?.error || 'Failed to load pair data'}</span>
+          <span className="text-sm text-negative">{detail?.error || 'Failed to load pair data'}</span>
           <button onClick={onClose} className="p-1 hover:bg-secondary/50 rounded"><X className="w-4 h-4" /></button>
         </CardContent>
       </Card>
@@ -756,7 +756,7 @@ function PairDetailPanel({
           <div className="bg-secondary/30 rounded-md px-3 py-2">
             <p className="text-[10px] text-muted-foreground uppercase">{stats.symbol_a.symbol}</p>
             <p className="text-sm font-mono font-medium">${stats.symbol_a.end_price}</p>
-            <p className={`text-[10px] font-mono ${stats.symbol_a.total_return >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+            <p className={`text-[10px] font-mono ${stats.symbol_a.total_return >= 0 ? 'text-positive' : 'text-negative'}`}>
               {stats.symbol_a.total_return >= 0 ? '+' : ''}{stats.symbol_a.total_return}% total
             </p>
             <p className="text-[10px] text-muted-foreground">σ {stats.symbol_a.std_return.toFixed(2)}%/day</p>
@@ -764,7 +764,7 @@ function PairDetailPanel({
           <div className="bg-secondary/30 rounded-md px-3 py-2">
             <p className="text-[10px] text-muted-foreground uppercase">{stats.symbol_b.symbol}</p>
             <p className="text-sm font-mono font-medium">${stats.symbol_b.end_price}</p>
-            <p className={`text-[10px] font-mono ${stats.symbol_b.total_return >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+            <p className={`text-[10px] font-mono ${stats.symbol_b.total_return >= 0 ? 'text-positive' : 'text-negative'}`}>
               {stats.symbol_b.total_return >= 0 ? '+' : ''}{stats.symbol_b.total_return}% total
             </p>
             <p className="text-[10px] text-muted-foreground">σ {stats.symbol_b.std_return.toFixed(2)}%/day</p>

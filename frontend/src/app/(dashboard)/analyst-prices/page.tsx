@@ -83,15 +83,15 @@ export default function AnalystPricesPage() {
           </div>
           <div className="flex flex-col gap-1 p-3 bg-card rounded-lg border border-border/40">
             <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Undervalued</span>
-            <span className="text-lg font-bold text-emerald-400">{stats.upside}</span>
+            <span className="text-lg font-bold text-positive">{stats.upside}</span>
           </div>
           <div className="flex flex-col gap-1 p-3 bg-card rounded-lg border border-border/40">
             <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Overvalued</span>
-            <span className="text-lg font-bold text-red-400">{stats.downside}</span>
+            <span className="text-lg font-bold text-negative">{stats.downside}</span>
           </div>
           <div className="flex flex-col gap-1 p-3 bg-card rounded-lg border border-border/40">
             <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Avg Upside</span>
-            <span className="text-lg font-bold text-emerald-400">{formatPercent(stats.avgUpside)}</span>
+            <span className="text-lg font-bold text-positive">{formatPercent(stats.avgUpside)}</span>
           </div>
         </div>
       )}

@@ -45,7 +45,7 @@ function StatCard({ label, value, sub, trend }: { label: string; value: string; 
     <div className="flex flex-col gap-1 p-3 bg-card rounded-lg border border-border/40">
       <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">{label}</span>
       <span className={`text-lg font-bold ${
-        trend === 'up' ? 'text-emerald-400' : trend === 'down' ? 'text-red-400' : 'text-foreground'
+        trend === 'up' ? 'text-positive' : trend === 'down' ? 'text-negative' : 'text-foreground'
       }`}>
         {value}
       </span>
@@ -199,7 +199,7 @@ export default function SpreadsPage() {
       sortable: true,
       align: 'right',
       format: (v: number) => (
-        <span className={`inline-flex items-center gap-1 ${v >= 30 ? 'text-emerald-400' : 'text-muted-foreground'}`}>
+        <span className={`inline-flex items-center gap-1 ${v >= 30 ? 'text-positive' : 'text-muted-foreground'}`}>
           {formatNumber(v, 0)}
           {v >= 50 && <Activity className="w-3 h-3" />}
         </span>
@@ -493,7 +493,7 @@ export default function SpreadsPage() {
       ) : expError ? (
         <Card className="border-red-500/30 bg-red-500/5">
           <CardContent className="pt-4">
-            <p className="text-sm text-red-400">Fehler beim Laden der Expirations: {(expErrorMsg as any)?.message || 'API nicht erreichbar'}</p>
+            <p className="text-sm text-negative">Fehler beim Laden der Expirations: {(expErrorMsg as any)?.message || 'API nicht erreichbar'}</p>
             <p className="text-xs text-muted-foreground mt-1">Prüfe ob die API läuft: /api/health/db</p>
           </CardContent>
         </Card>
@@ -534,7 +534,7 @@ export default function SpreadsPage() {
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
               <div className="p-2 rounded bg-muted/30">
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Max Profit</p>
-                <p className="text-base font-bold text-emerald-400">{formatCurrency(selectedRow.max_profit)}</p>
+                <p className="text-base font-bold text-positive">{formatCurrency(selectedRow.max_profit)}</p>
               </div>
               <div className="p-2 rounded bg-muted/30">
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground">BPR</p>
@@ -542,13 +542,13 @@ export default function SpreadsPage() {
               </div>
               <div className="p-2 rounded bg-muted/30">
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Expected Value</p>
-                <p className={`text-base font-bold ${selectedRow.expected_value >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                <p className={`text-base font-bold ${selectedRow.expected_value >= 0 ? 'text-positive' : 'text-negative'}`}>
                   {formatCurrency(selectedRow.expected_value)}
                 </p>
               </div>
               <div className="p-2 rounded bg-muted/30">
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground">APDI</p>
-                <p className={`text-base font-bold ${selectedRow.APDI > 0 ? 'text-emerald-400' : 'text-muted-foreground'}`}>
+                <p className={`text-base font-bold ${selectedRow.APDI > 0 ? 'text-positive' : 'text-muted-foreground'}`}>
                   {formatPercent(selectedRow.APDI)}
                 </p>
               </div>
@@ -589,7 +589,7 @@ export default function SpreadsPage() {
                   <tr className="border-t border-border/30">
                     <td className="px-3 py-2">
                       <span className="inline-flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-red-400" />
+                        <span className="w-2 h-2 rounded-full bg-negative" />
                         <span className="font-medium">
                           {params.strategy_type === 'credit' ? 'Short' : 'Long'} {selectedRow.option_type}
                         </span>
@@ -599,7 +599,7 @@ export default function SpreadsPage() {
                     <td className="px-3 py-2 text-right font-mono">{formatCurrency(selectedRow.sell_last_option_price)}</td>
                     <td className="px-3 py-2 text-right font-mono">
                       {selectedRow.sell_bs_price != null ? (
-                        <span className={selectedRow.sell_last_option_price > selectedRow.sell_bs_price ? 'text-emerald-400' : 'text-red-400'}>
+                        <span className={selectedRow.sell_last_option_price > selectedRow.sell_bs_price ? 'text-positive' : 'text-negative'}>
                           {formatCurrency(selectedRow.sell_bs_price)}
                         </span>
                       ) : <span className="text-muted-foreground">—</span>}
@@ -612,7 +612,7 @@ export default function SpreadsPage() {
                   <tr className="border-t border-border/30">
                     <td className="px-3 py-2">
                       <span className="inline-flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                        <span className="w-2 h-2 rounded-full bg-positive" />
                         <span className="font-medium">
                           {params.strategy_type === 'credit' ? 'Long' : 'Short'} {selectedRow.option_type}
                         </span>
@@ -622,7 +622,7 @@ export default function SpreadsPage() {
                     <td className="px-3 py-2 text-right font-mono">{formatCurrency(selectedRow.buy_last_option_price)}</td>
                     <td className="px-3 py-2 text-right font-mono">
                       {selectedRow.buy_bs_price != null ? (
-                        <span className={selectedRow.buy_last_option_price > selectedRow.buy_bs_price ? 'text-emerald-400' : 'text-red-400'}>
+                        <span className={selectedRow.buy_last_option_price > selectedRow.buy_bs_price ? 'text-positive' : 'text-negative'}>
                           {formatCurrency(selectedRow.buy_bs_price)}
                         </span>
                       ) : <span className="text-muted-foreground">—</span>}

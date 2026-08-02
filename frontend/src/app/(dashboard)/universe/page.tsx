@@ -106,7 +106,7 @@ export default function UniversePage() {
       sortable: true,
       align: 'right',
       format: (v: number) => v ? (
-        <span className={`font-mono ${v >= 1.2 ? 'text-emerald-400' : v >= 1.0 ? 'text-foreground' : 'text-red-400'}`}>
+        <span className={`font-mono ${v >= 1.2 ? 'text-positive' : v >= 1.0 ? 'text-foreground' : 'text-negative'}`}>
           {formatNumber(v, 3)}
         </span>
       ) : <span className="text-muted-foreground">—</span>,
@@ -251,7 +251,7 @@ export default function UniversePage() {
       ) : isError ? (
         <Card className="border-red-500/30 bg-red-500/5">
           <CardContent className="pt-4">
-            <p className="text-sm text-red-400">Fehler beim Laden: {(error as any)?.message || 'API nicht erreichbar'}</p>
+            <p className="text-sm text-negative">Fehler beim Laden: {(error as any)?.message || 'API nicht erreichbar'}</p>
             <p className="text-xs text-muted-foreground mt-1">Prüfe ob die API läuft: /api/health/db</p>
           </CardContent>
         </Card>

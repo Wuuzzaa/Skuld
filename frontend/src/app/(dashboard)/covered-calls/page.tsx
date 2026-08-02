@@ -14,7 +14,7 @@ function StatCard({ label, value, trend }: { label: string; value: string; trend
     <div className="flex flex-col gap-1 p-3 bg-card rounded-lg border border-border/40">
       <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">{label}</span>
       <span className={`text-lg font-bold ${
-        trend === 'up' ? 'text-emerald-400' : trend === 'down' ? 'text-red-400' : 'text-foreground'
+        trend === 'up' ? 'text-positive' : trend === 'down' ? 'text-negative' : 'text-foreground'
       }`}>
         {value}
       </span>
@@ -398,7 +398,7 @@ export default function CoveredCallsPage() {
           {/* === TRADE ACTION SUMMARY === */}
           <div className="p-4 rounded-lg border border-emerald-500/30" style={{ background: 'linear-gradient(135deg, #1a3a2a 0%, #0d1f17 100%)' }}>
             <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">Trade Action</p>
-            <p className="text-xl font-bold text-emerald-400">
+            <p className="text-xl font-bold text-positive">
               BUY 100x {selectedRow.symbol} @ {formatCurrency(selectedRow.stock_price)}
               <span className="mx-2 text-muted-foreground">|</span>
               SELL 1x {selectedRow.symbol} {formatCurrency(selectedRow.strike_price)} Call @ {formatCurrency(selectedRow.premium)}
@@ -418,8 +418,8 @@ export default function CoveredCallsPage() {
             <div><span className="text-muted-foreground">Strike:</span> <span className="font-medium">{formatCurrency(selectedRow.strike_price)}</span></div>
             <div><span className="text-muted-foreground">Premium:</span> <span className="font-medium">{formatCurrency(selectedRow.premium)}</span></div>
             <div><span className="text-muted-foreground">Net Debit:</span> <span className="font-medium">{formatCurrency(selectedRow.net_debit)}</span></div>
-            <div><span className="text-muted-foreground">Annualized:</span> <span className="font-medium text-emerald-400">{formatPercent(selectedRow.annualized_return)}</span></div>
-            <div><span className="text-muted-foreground">Assigned:</span> <span className="font-medium text-emerald-400">{formatPercent(selectedRow.assigned_return)}</span></div>
+            <div><span className="text-muted-foreground">Annualized:</span> <span className="font-medium text-positive">{formatPercent(selectedRow.annualized_return)}</span></div>
+            <div><span className="text-muted-foreground">Assigned:</span> <span className="font-medium text-positive">{formatPercent(selectedRow.assigned_return)}</span></div>
             <div><span className="text-muted-foreground">Protection:</span> <span className="font-medium">{formatPercent(selectedRow.downside_protection)}</span></div>
             <div><span className="text-muted-foreground">Delta:</span> <span className="font-medium">{formatNumber(selectedRow.delta)}</span></div>
           </div>
@@ -429,7 +429,7 @@ export default function CoveredCallsPage() {
             <div><span className="text-muted-foreground">Investment (100 shares):</span> <span className="font-medium">{formatCurrency(selectedRow.investment)}</span></div>
             <div><span className="text-muted-foreground">Premium Income:</span> <span className="font-medium">{formatCurrency(selectedRow.premium_income)}</span></div>
             <div><span className="text-muted-foreground">Net Cost:</span> <span className="font-medium">{formatCurrency(selectedRow.net_cost)}</span></div>
-            <div><span className="text-muted-foreground">Max Profit:</span> <span className="font-medium text-emerald-400">{formatCurrency(selectedRow.max_profit)}</span></div>
+            <div><span className="text-muted-foreground">Max Profit:</span> <span className="font-medium text-positive">{formatCurrency(selectedRow.max_profit)}</span></div>
           </div>
 
           {/* PowerOptions Indicators */}
@@ -497,7 +497,7 @@ export default function CoveredCallsPage() {
                   <div className="ml-4 mt-1">
                     (Strike + Premium - Stock) / Net Debit<br/>
                     (${strike?.toFixed(2)} + ${premium?.toFixed(2)} - ${stock?.toFixed(2)}) / ${netDebit?.toFixed(2)}<br/>
-                    = ${(strike + premium - stock)?.toFixed(2)} / ${netDebit?.toFixed(2)} = <span className="font-bold text-emerald-400">{assignedReturn?.toFixed(1)}%</span>
+                    = ${(strike + premium - stock)?.toFixed(2)} / ${netDebit?.toFixed(2)} = <span className="font-bold text-positive">{assignedReturn?.toFixed(1)}%</span>
                   </div>
                 </div>
 
@@ -505,7 +505,7 @@ export default function CoveredCallsPage() {
                   <span className="text-muted-foreground">Annualized Return</span> (auf 365 Tage hochgerechnet):
                   <div className="ml-4 mt-1">
                     Assigned Return x (365 / DTE)<br/>
-                    {assignedReturn?.toFixed(1)}% x (365 / {dte}) = {assignedReturn?.toFixed(1)}% x {(365 / dte)?.toFixed(2)} = <span className="font-bold text-emerald-400">{annualizedReturn?.toFixed(1)}%</span>
+                    {assignedReturn?.toFixed(1)}% x (365 / {dte}) = {assignedReturn?.toFixed(1)}% x {(365 / dte)?.toFixed(2)} = <span className="font-bold text-positive">{annualizedReturn?.toFixed(1)}%</span>
                   </div>
                 </div>
 
@@ -529,7 +529,7 @@ export default function CoveredCallsPage() {
                     <div>Investment = 100 x ${stock?.toFixed(2)} = <span className="font-bold">${(stock * 100)?.toLocaleString(undefined, {maximumFractionDigits: 0})}</span></div>
                     <div>Premium Income = 100 x ${premium?.toFixed(2)} = <span className="font-bold">${(premium * 100)?.toLocaleString(undefined, {maximumFractionDigits: 0})}</span></div>
                     <div>Net Cost = 100 x ${netDebit?.toFixed(2)} = <span className="font-bold">${(netDebit * 100)?.toLocaleString(undefined, {maximumFractionDigits: 0})}</span></div>
-                    <div>Max Profit = 100 x (Strike - Stock + Premium) = 100 x ${(strike - stock + premium)?.toFixed(2)} = <span className="font-bold text-emerald-400">${((strike - stock + premium) * 100)?.toLocaleString(undefined, {maximumFractionDigits: 0})}</span></div>
+                    <div>Max Profit = 100 x (Strike - Stock + Premium) = 100 x ${(strike - stock + premium)?.toFixed(2)} = <span className="font-bold text-positive">${((strike - stock + premium) * 100)?.toLocaleString(undefined, {maximumFractionDigits: 0})}</span></div>
                   </div>
                 </div>
               </div>

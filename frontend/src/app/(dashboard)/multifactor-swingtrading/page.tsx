@@ -46,7 +46,7 @@ export default function MultifactorSwingtradingPage() {
       sortable: true,
       align: 'right',
       format: (v: number) => (
-        <span className={`font-bold ${v >= 400 ? 'text-emerald-400' : v >= 300 ? 'text-yellow-400' : 'text-foreground'}`}>
+        <span className={`font-bold ${v >= 400 ? 'text-positive' : v >= 300 ? 'text-yellow-400' : 'text-foreground'}`}>
           {formatNumber(v, 1)}
         </span>
       ),
@@ -210,7 +210,7 @@ export default function MultifactorSwingtradingPage() {
               </div>
               <div className="p-2 rounded bg-muted/30">
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground">1Y Perf</p>
-                <p className={`text-base font-bold ${(selectedRow['1_year_price_appreciation'] || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                <p className={`text-base font-bold ${(selectedRow['1_year_price_appreciation'] || 0) >= 0 ? 'text-positive' : 'text-negative'}`}>
                   {formatPercent((selectedRow['1_year_price_appreciation'] || 0) * 100)}
                 </p>
               </div>

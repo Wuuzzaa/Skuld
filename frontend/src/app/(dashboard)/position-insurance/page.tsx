@@ -82,14 +82,14 @@ export default function PositionInsurancePage() {
           </div>
           <div className="flex flex-col gap-1 p-3 bg-card rounded-lg border border-border/40">
             <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Your P/L</span>
-            <span className={`text-lg font-bold inline-flex items-center gap-1 ${profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+            <span className={`text-lg font-bold inline-flex items-center gap-1 ${profit >= 0 ? 'text-positive' : 'text-negative'}`}>
               {profit >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
               {formatCurrency(profit)}
             </span>
           </div>
           <div className="flex flex-col gap-1 p-3 bg-card rounded-lg border border-border/40">
             <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">P/L %</span>
-            <span className={`text-lg font-bold ${profitPct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+            <span className={`text-lg font-bold ${profitPct >= 0 ? 'text-positive' : 'text-negative'}`}>
               {profitPct.toFixed(1)}%
             </span>
           </div>
@@ -100,7 +100,7 @@ export default function PositionInsurancePage() {
       {data?.puts?.length > 0 && (
         <div className="space-y-2">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-red-400" />
+            <span className="w-2 h-2 rounded-full bg-negative" />
             Protective Puts ({data.puts.length})
           </h2>
           <DataTable data={data.puts} columns={putColumns} defaultSort={{ key: 'days_to_expiration', direction: 'asc' }} striped />
@@ -111,7 +111,7 @@ export default function PositionInsurancePage() {
       {data?.calls?.length > 0 && (
         <div className="space-y-2">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400" />
+            <span className="w-2 h-2 rounded-full bg-positive" />
             Financing Calls ({data.calls.length})
           </h2>
           <DataTable data={data.calls} columns={putColumns} defaultSort={{ key: 'days_to_expiration', direction: 'asc' }} striped />

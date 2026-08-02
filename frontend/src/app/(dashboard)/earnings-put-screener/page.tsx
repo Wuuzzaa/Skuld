@@ -110,7 +110,7 @@ export default function EarningsPutScreenerPage() {
       align: 'right',
       format: (v: number) =>
         v == null ? '—' : (
-          <span className={v >= 60 ? 'text-emerald-400 font-medium' : v >= 40 ? 'text-yellow-400' : 'text-muted-foreground'}>
+          <span className={v >= 60 ? 'text-positive font-medium' : v >= 40 ? 'text-yellow-400' : 'text-muted-foreground'}>
             {v.toFixed(0)}%
           </span>
         ),
@@ -131,7 +131,7 @@ export default function EarningsPutScreenerPage() {
       label: '',
       sortable: false,
       format: (v: boolean) =>
-        v ? <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> : <Shield className="w-3.5 h-3.5 text-muted-foreground/40" />,
+        v ? <ShieldCheck className="w-3.5 h-3.5 text-positive" /> : <Shield className="w-3.5 h-3.5 text-muted-foreground/40" />,
     },
     { key: 'expiration_date', label: 'Expiry', sortable: true, format: (v: string) => v ? String(v).split('T')[0] : '—' },
     { key: 'days_to_expiration', label: 'DTE', sortable: true, align: 'right' },
@@ -318,8 +318,8 @@ export default function EarningsPutScreenerPage() {
                 onChange={(e) => setSafeOnly(e.target.checked)}
                 className="rounded border-border"
               />
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="text-xs font-medium text-emerald-400">Nur Safe Zone</span>
+              <ShieldCheck className="w-3.5 h-3.5 text-positive" />
+              <span className="text-xs font-medium text-positive">Nur Safe Zone</span>
             </label>
           </div>
 
@@ -364,12 +364,12 @@ export default function EarningsPutScreenerPage() {
                 </div>
 
                 {p.is_safe ? (
-                  <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-emerald-950/40 border border-emerald-500/20 text-emerald-400 text-xs">
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-emerald-950/40 border border-emerald-500/20 text-positive text-xs">
                     <ShieldCheck className="w-4 h-4 flex-shrink-0" />
                     Safe Zone — Strike liegt unterhalb des Expected Move. Der Kurs müsste weiter fallen als der Markt erwartet.
                   </div>
                 ) : (
-                  <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-red-950/30 border border-red-500/20 text-red-400 text-xs">
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-red-950/30 border border-red-500/20 text-negative text-xs">
                     <Shield className="w-4 h-4 flex-shrink-0" />
                     Strike liegt innerhalb des Expected Move — realistisches Zuweisungsrisiko nach Earnings.
                   </div>
@@ -383,7 +383,7 @@ export default function EarningsPutScreenerPage() {
                   </div>
                   <div className="p-2 rounded bg-muted/30">
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Prämie pro Kontrakt</p>
-                    <p className="font-bold text-emerald-400">{maxGain != null ? `$${maxGain.toFixed(2)}` : '—'}</p>
+                    <p className="font-bold text-positive">{maxGain != null ? `$${maxGain.toFixed(2)}` : '—'}</p>
                   </div>
                   <div className="p-2 rounded bg-muted/30">
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Breakeven</p>
@@ -399,7 +399,7 @@ export default function EarningsPutScreenerPage() {
                   </div>
                   <div className="p-2 rounded bg-muted/30">
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Gewinn bei 90%</p>
-                    <p className="font-bold text-emerald-400">{profit90 != null ? `$${(profit90 * 100).toFixed(2)} / Kontrakt` : '—'}</p>
+                    <p className="font-bold text-positive">{profit90 != null ? `$${(profit90 * 100).toFixed(2)} / Kontrakt` : '—'}</p>
                   </div>
                   <div className="p-2 rounded bg-muted/30">
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Zuweisungswahrsch.</p>

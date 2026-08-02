@@ -34,6 +34,11 @@ module.exports = {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
+        // Semantische Trading-Farben (grün/rot Zahlen, überall gleich)
+        positive: 'hsl(var(--positive))',
+        negative: 'hsl(var(--negative))',
+        warning: 'hsl(var(--warning))',
+        info: 'hsl(var(--info))',
       },
       borderRadius: {
         lg: 'var(--radius)',

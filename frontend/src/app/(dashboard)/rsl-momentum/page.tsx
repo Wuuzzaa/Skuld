@@ -14,11 +14,11 @@ import { RslBacktestPanel } from '@/components/RslBacktestPanel';
 
 function RslZoneBadge({ zone }: { zone: string }) {
   const config: Record<string, { label: string; cls: string }> = {
-    overheated: { label: 'ÜBERHITZT', cls: 'bg-red-500/15 text-red-400 border-red-500/30' },
+    overheated: { label: 'ÜBERHITZT', cls: 'bg-red-500/15 text-negative border-red-500/30' },
     very_strong: { label: 'SEHR STARK', cls: 'bg-amber-500/15 text-amber-400 border-amber-500/30' },
     strong: { label: 'STARK', cls: 'bg-blue-500/15 text-blue-400 border-blue-500/30' },
-    normal: { label: 'NORMAL', cls: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' },
-    weak: { label: 'SCHWACH', cls: 'bg-red-500/15 text-red-400 border-red-500/30' },
+    normal: { label: 'NORMAL', cls: 'bg-emerald-500/15 text-positive border-emerald-500/30' },
+    weak: { label: 'SCHWACH', cls: 'bg-red-500/15 text-negative border-red-500/30' },
   };
   const c = config[zone] || config.normal;
   return <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold border ${c.cls}`}>{c.label}</span>;
@@ -31,8 +31,8 @@ function MarketRegimeBanner({ regime }: { regime: any }) {
     bull: {
       bg: 'bg-emerald-500/5',
       border: 'border-emerald-500/30',
-      icon: <TrendingUp className="w-4 h-4 text-emerald-400" />,
-      text: 'text-emerald-400',
+      icon: <TrendingUp className="w-4 h-4 text-positive" />,
+      text: 'text-positive',
     },
     caution: {
       bg: 'bg-amber-500/5',
@@ -43,8 +43,8 @@ function MarketRegimeBanner({ regime }: { regime: any }) {
     bear: {
       bg: 'bg-red-500/5',
       border: 'border-red-500/30',
-      icon: <Shield className="w-4 h-4 text-red-400" />,
-      text: 'text-red-400',
+      icon: <Shield className="w-4 h-4 text-negative" />,
+      text: 'text-negative',
     },
   };
 
@@ -108,7 +108,7 @@ export default function RslMomentumPage() {
       label: 'Symbol',
       sortable: true,
       format: (v: string, row: any) => (
-        <span className={`font-semibold ${row.is_top_pick ? 'text-emerald-400' : row.filtered_out ? 'text-muted-foreground/50' : 'text-foreground'}`}>
+        <span className={`font-semibold ${row.is_top_pick ? 'text-positive' : row.filtered_out ? 'text-muted-foreground/50' : 'text-foreground'}`}>
           {v} {row.is_top_pick && '\u2605'}
         </span>
       ),
@@ -121,7 +121,7 @@ export default function RslMomentumPage() {
       sortable: true,
       align: 'right',
       format: (v: number) => (
-        <span className={`font-bold ${v >= 2.0 ? 'text-red-400' : v >= 1.3 ? 'text-emerald-400' : v >= 1.0 ? 'text-foreground' : 'text-red-400'}`}>
+        <span className={`font-bold ${v >= 2.0 ? 'text-negative' : v >= 1.3 ? 'text-positive' : v >= 1.0 ? 'text-foreground' : 'text-negative'}`}>
           {formatNumber(v, 4)}
         </span>
       ),
@@ -153,7 +153,7 @@ export default function RslMomentumPage() {
       format: (v: number | null) => {
         if (v == null) return <span className="text-muted-foreground text-xs">—</span>;
         const isClose = v < 14;
-        return <span className={`text-xs font-mono ${isClose ? 'text-red-400 font-bold' : 'text-muted-foreground'}`}>{v}d</span>;
+        return <span className={`text-xs font-mono ${isClose ? 'text-negative font-bold' : 'text-muted-foreground'}`}>{v}d</span>;
       },
     },
     {
@@ -162,7 +162,7 @@ export default function RslMomentumPage() {
       sortable: true,
       align: 'right',
       format: (v: number) => (
-        <span className={v >= 75 ? 'text-emerald-400' : v >= 50 ? 'text-foreground' : 'text-red-400'}>
+        <span className={v >= 75 ? 'text-positive' : v >= 50 ? 'text-foreground' : 'text-negative'}>
           {formatNumber(v, 1)}%
         </span>
       ),
@@ -174,8 +174,8 @@ export default function RslMomentumPage() {
       align: 'center',
       format: (v: boolean) => (
         v
-          ? <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-400">HOLD</span>
-          : <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-500/10 text-red-400">EXIT</span>
+          ? <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-positive">HOLD</span>
+          : <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-500/10 text-negative">EXIT</span>
       ),
     },
   ];
@@ -186,7 +186,7 @@ export default function RslMomentumPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold">RSL Momentum Rotation</h1>
-          {isFetching && <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />}
+          {isFetching && <div className="w-2 h-2 rounded-full bg-positive animate-pulse" />}
         </div>
         <Button
           variant="ghost"
@@ -260,7 +260,7 @@ export default function RslMomentumPage() {
             onClick={() => setParams({ ...params, market_filter: !params.market_filter })}
             className={`px-2 py-1 rounded text-[10px] font-semibold border transition-colors ${
               params.market_filter
-                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                ? 'bg-emerald-500/10 text-positive border-emerald-500/30'
                 : 'bg-muted/30 text-muted-foreground border-border/30'
             }`}
           >
@@ -279,7 +279,7 @@ export default function RslMomentumPage() {
             </span>
           )}
           {filtersApplied.earnings_filtered > 0 && (
-            <span className="px-2 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">
+            <span className="px-2 py-0.5 rounded bg-red-500/10 text-negative border border-red-500/20">
               {filtersApplied.earnings_filtered} Earnings-gefiltert
             </span>
           )}
@@ -290,14 +290,14 @@ export default function RslMomentumPage() {
       {topPicks.length > 0 && !isLoading && (
         <Card className="border-emerald-500/20 bg-card/80">
           <CardContent className="pt-4">
-            <h3 className="text-sm font-semibold text-emerald-400 mb-3">
+            <h3 className="text-sm font-semibold text-positive mb-3">
               Top {params.top_n} Picks (max {params.max_per_sector} per sector)
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
               {topPicks.map((stock: any) => (
                 <div key={stock.symbol} className="p-3 rounded-lg bg-muted/30 border border-emerald-500/20">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-emerald-400">{stock.symbol}</span>
+                    <span className="font-bold text-positive">{stock.symbol}</span>
                     <div className="flex items-center gap-1.5">
                       <RslZoneBadge zone={stock.rsl_zone} />
                       <span className="text-xs text-muted-foreground">#{stock.rank}</span>
@@ -317,7 +317,7 @@ export default function RslMomentumPage() {
                     )}
                   </div>
                   {stock.rsl_zone === 'overheated' && (
-                    <div className="mt-2 flex items-center gap-1 text-[10px] text-red-400">
+                    <div className="mt-2 flex items-center gap-1 text-[10px] text-negative">
                       <AlertTriangle className="w-3 h-3" />
                       Mean-Reversion-Risiko
                     </div>
@@ -338,7 +338,7 @@ export default function RslMomentumPage() {
           </div>
           <div className="flex flex-col gap-1 p-3 bg-card rounded-lg border border-border/40">
             <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Above Threshold</span>
-            <span className="text-lg font-bold text-emerald-400">{summary.above_threshold}</span>
+            <span className="text-lg font-bold text-positive">{summary.above_threshold}</span>
           </div>
           <div className="flex flex-col gap-1 p-3 bg-card rounded-lg border border-border/40">
             <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Avg RSL (Top Picks)</span>
@@ -350,7 +350,7 @@ export default function RslMomentumPage() {
           </div>
           <div className="flex flex-col gap-1 p-3 bg-card rounded-lg border border-border/40">
             <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Überhitzt (RSL{'>'}2)</span>
-            <span className={`text-lg font-bold ${summary.overheated_count > 0 ? 'text-red-400' : 'text-muted-foreground'}`}>
+            <span className={`text-lg font-bold ${summary.overheated_count > 0 ? 'text-negative' : 'text-muted-foreground'}`}>
               {summary.overheated_count || 0}
             </span>
           </div>
@@ -435,17 +435,17 @@ export default function RslMomentumPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className={`px-2 py-0.5 rounded text-sm font-bold ${
-                  selectedRow.is_top_pick ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'
+                  selectedRow.is_top_pick ? 'bg-emerald-500/20 text-positive' : 'bg-amber-500/20 text-amber-400'
                 }`}>
                   {selectedRow.symbol}
                 </span>
                 <span className="text-sm text-muted-foreground">{selectedRow.company_name}</span>
                 {selectedRow.is_top_pick && (
-                  <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-400 font-medium">TOP PICK</span>
+                  <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/10 text-positive font-medium">TOP PICK</span>
                 )}
                 <RslZoneBadge zone={selectedRow.rsl_zone} />
                 {selectedRow.rsl_zone === 'overheated' && (
-                  <span className="flex items-center gap-1 text-[10px] text-red-400">
+                  <span className="flex items-center gap-1 text-[10px] text-negative">
                     <AlertTriangle className="w-3 h-3" /> Mean-Reversion
                   </span>
                 )}
@@ -458,9 +458,9 @@ export default function RslMomentumPage() {
             {/* Overheated Warning */}
             {selectedRow.rsl_zone === 'overheated' && (
               <div className="flex items-start gap-2 p-3 rounded-lg bg-red-500/5 border border-red-500/20">
-                <AlertTriangle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
+                <AlertTriangle className="w-4 h-4 text-negative mt-0.5 shrink-0" />
                 <div>
-                  <p className="text-sm font-medium text-red-400">Mean-Reversion-Risiko</p>
+                  <p className="text-sm font-medium text-negative">Mean-Reversion-Risiko</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     RSL {'>'}2.0 bedeutet Kurs {formatNumber((selectedRow.rsl - 1) * 100, 0)}% über SMA200. Historisch fallen solche Extremwerte
                     oft 20-40% zurück. Erwäge: kleinere Position, engerer Stop-Loss, oder Teilverkauf.
@@ -476,7 +476,7 @@ export default function RslMomentumPage() {
               </div>
               <div className="p-2 rounded bg-muted/30">
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground">RSL</p>
-                <p className={`text-base font-bold ${selectedRow.rsl >= 2.0 ? 'text-red-400' : selectedRow.rsl >= 1.0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                <p className={`text-base font-bold ${selectedRow.rsl >= 2.0 ? 'text-negative' : selectedRow.rsl >= 1.0 ? 'text-positive' : 'text-negative'}`}>
                   {formatNumber(selectedRow.rsl, 4)}
                 </p>
               </div>
@@ -498,11 +498,11 @@ export default function RslMomentumPage() {
               </div>
               <div className="p-2 rounded bg-muted/30">
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Earnings</p>
-                <p className={`text-base font-bold ${selectedRow.dte != null && selectedRow.dte < 14 ? 'text-red-400' : 'text-foreground'}`}>
+                <p className={`text-base font-bold ${selectedRow.dte != null && selectedRow.dte < 14 ? 'text-negative' : 'text-foreground'}`}>
                   {selectedRow.dte != null ? `${selectedRow.dte}d` : '—'}
                 </p>
                 {selectedRow.dte != null && selectedRow.dte < 14 && (
-                  <p className="text-[10px] text-red-400 mt-0.5">Earnings bald!</p>
+                  <p className="text-[10px] text-negative mt-0.5">Earnings bald!</p>
                 )}
               </div>
             </div>

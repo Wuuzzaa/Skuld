@@ -115,7 +115,7 @@ export default function ExpectedValuePage() {
           {options.map((opt, i) => (
             <div key={i} className="flex gap-3 items-center p-3 rounded-lg border border-border/40 bg-muted/20">
               <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                opt.type.includes('Sold') ? 'bg-red-400' : 'bg-emerald-400'
+                opt.type.includes('Sold') ? 'bg-negative' : 'bg-positive'
               }`} />
               <div className="flex-1">
                 <label className="text-[10px] text-muted-foreground uppercase">Strike</label>
@@ -134,7 +134,7 @@ export default function ExpectedValuePage() {
                   <option>Call Bought</option>
                 </select>
               </div>
-              <Button variant="ghost" size="sm" onClick={() => removeOption(i)} className="h-7 w-7 p-0 text-muted-foreground hover:text-red-400">
+              <Button variant="ghost" size="sm" onClick={() => removeOption(i)} className="h-7 w-7 p-0 text-muted-foreground hover:text-negative">
                 <X className="w-3.5 h-3.5" />
               </Button>
             </div>
@@ -153,7 +153,7 @@ export default function ExpectedValuePage() {
         <div className="grid grid-cols-3 gap-3">
           <div className="flex flex-col gap-1 p-4 bg-card rounded-lg border border-border/40">
             <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Expected Value</span>
-            <span className={`text-2xl font-bold ${mutation.data.expected_value >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+            <span className={`text-2xl font-bold ${mutation.data.expected_value >= 0 ? 'text-positive' : 'text-negative'}`}>
               ${mutation.data.expected_value}
             </span>
           </div>

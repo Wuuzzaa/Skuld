@@ -18,7 +18,7 @@ interface Props {
 }
 
 function Metric({ label, value, tone }: { label: string; value: string; tone?: 'pos' | 'neg' }) {
-  const cls = tone === 'pos' ? 'text-emerald-400' : tone === 'neg' ? 'text-red-400' : 'text-foreground';
+  const cls = tone === 'pos' ? 'text-positive' : tone === 'neg' ? 'text-negative' : 'text-foreground';
   return (
     <div>
       <p className="text-xs text-muted-foreground">{label}</p>

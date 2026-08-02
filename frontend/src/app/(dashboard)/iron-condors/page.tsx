@@ -232,11 +232,11 @@ export default function IronCondorsPage() {
           </div>
           <div className="flex flex-col gap-1 p-3 bg-card rounded-lg border border-border/40">
             <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Avg Profit</span>
-            <span className="text-lg font-bold text-emerald-400">{formatCurrency(stats.avgProfit)}</span>
+            <span className="text-lg font-bold text-positive">{formatCurrency(stats.avgProfit)}</span>
           </div>
           <div className="flex flex-col gap-1 p-3 bg-card rounded-lg border border-border/40">
             <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Avg EV</span>
-            <span className={`text-lg font-bold ${stats.avgEV >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{formatCurrency(stats.avgEV)}</span>
+            <span className={`text-lg font-bold ${stats.avgEV >= 0 ? 'text-positive' : 'text-negative'}`}>{formatCurrency(stats.avgEV)}</span>
           </div>
           <div className="flex flex-col gap-1 p-3 bg-card rounded-lg border border-border/40">
             <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Best Trade</span>
@@ -275,7 +275,7 @@ export default function IronCondorsPage() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="p-2 rounded bg-muted/30">
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Max Profit</p>
-                <p className="text-base font-bold text-emerald-400">{formatCurrency(selectedRow.max_profit)}</p>
+                <p className="text-base font-bold text-positive">{formatCurrency(selectedRow.max_profit)}</p>
               </div>
               <div className="p-2 rounded bg-muted/30">
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground">BPR</p>
@@ -283,7 +283,7 @@ export default function IronCondorsPage() {
               </div>
               <div className="p-2 rounded bg-muted/30">
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Expected Value</p>
-                <p className={`text-base font-bold ${selectedRow.expected_value >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{formatCurrency(selectedRow.expected_value)}</p>
+                <p className={`text-base font-bold ${selectedRow.expected_value >= 0 ? 'text-positive' : 'text-negative'}`}>{formatCurrency(selectedRow.expected_value)}</p>
               </div>
               <div className="p-2 rounded bg-muted/30">
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground">IV Rank</p>
@@ -306,12 +306,12 @@ export default function IronCondorsPage() {
                 </thead>
                 <tbody>
                   <tr className="border-t border-border/30">
-                    <td className="px-3 py-2"><span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-400" /><span className="font-medium">Short Put</span></span></td>
+                    <td className="px-3 py-2"><span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-negative" /><span className="font-medium">Short Put</span></span></td>
                     <td className="px-3 py-2 text-right font-mono">{formatCurrency(selectedRow.sell_strike_put)}</td>
                     <td className="px-3 py-2 text-right font-mono">{formatCurrency(selectedRow.sell_last_option_price_put)}</td>
                     <td className="px-3 py-2 text-right font-mono">
                       {selectedRow.sell_bs_price_put != null ? (
-                        <span className={selectedRow.sell_last_option_price_put > selectedRow.sell_bs_price_put ? 'text-emerald-400' : 'text-red-400'}>{formatCurrency(selectedRow.sell_bs_price_put)}</span>
+                        <span className={selectedRow.sell_last_option_price_put > selectedRow.sell_bs_price_put ? 'text-positive' : 'text-negative'}>{formatCurrency(selectedRow.sell_bs_price_put)}</span>
                       ) : <span className="text-muted-foreground">—</span>}
                     </td>
                     <td className="px-3 py-2 text-right font-mono">{formatNumber(selectedRow.sell_delta_put, 3)}</td>
@@ -319,12 +319,12 @@ export default function IronCondorsPage() {
                     <td className="px-3 py-2 text-right font-mono">{selectedRow.sell_open_interest_put?.toLocaleString()}</td>
                   </tr>
                   <tr className="border-t border-border/30">
-                    <td className="px-3 py-2"><span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-400" /><span className="font-medium">Long Put</span></span></td>
+                    <td className="px-3 py-2"><span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-positive" /><span className="font-medium">Long Put</span></span></td>
                     <td className="px-3 py-2 text-right font-mono">{formatCurrency(selectedRow.buy_strike_put)}</td>
                     <td className="px-3 py-2 text-right font-mono">{formatCurrency(selectedRow.buy_last_option_price_put)}</td>
                     <td className="px-3 py-2 text-right font-mono">
                       {selectedRow.buy_bs_price_put != null ? (
-                        <span className={selectedRow.buy_last_option_price_put > selectedRow.buy_bs_price_put ? 'text-emerald-400' : 'text-red-400'}>{formatCurrency(selectedRow.buy_bs_price_put)}</span>
+                        <span className={selectedRow.buy_last_option_price_put > selectedRow.buy_bs_price_put ? 'text-positive' : 'text-negative'}>{formatCurrency(selectedRow.buy_bs_price_put)}</span>
                       ) : <span className="text-muted-foreground">—</span>}
                     </td>
                     <td className="px-3 py-2 text-right font-mono">{formatNumber(selectedRow.buy_delta_put, 3)}</td>
@@ -332,12 +332,12 @@ export default function IronCondorsPage() {
                     <td className="px-3 py-2 text-right font-mono">{selectedRow.buy_open_interest_put?.toLocaleString()}</td>
                   </tr>
                   <tr className="border-t border-border/30">
-                    <td className="px-3 py-2"><span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-400" /><span className="font-medium">Short Call</span></span></td>
+                    <td className="px-3 py-2"><span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-negative" /><span className="font-medium">Short Call</span></span></td>
                     <td className="px-3 py-2 text-right font-mono">{formatCurrency(selectedRow.sell_strike_call)}</td>
                     <td className="px-3 py-2 text-right font-mono">{formatCurrency(selectedRow.sell_last_option_price_call)}</td>
                     <td className="px-3 py-2 text-right font-mono">
                       {selectedRow.sell_bs_price_call != null ? (
-                        <span className={selectedRow.sell_last_option_price_call > selectedRow.sell_bs_price_call ? 'text-emerald-400' : 'text-red-400'}>{formatCurrency(selectedRow.sell_bs_price_call)}</span>
+                        <span className={selectedRow.sell_last_option_price_call > selectedRow.sell_bs_price_call ? 'text-positive' : 'text-negative'}>{formatCurrency(selectedRow.sell_bs_price_call)}</span>
                       ) : <span className="text-muted-foreground">—</span>}
                     </td>
                     <td className="px-3 py-2 text-right font-mono">{formatNumber(selectedRow.sell_delta_call, 3)}</td>
@@ -345,12 +345,12 @@ export default function IronCondorsPage() {
                     <td className="px-3 py-2 text-right font-mono">{selectedRow.sell_open_interest_call?.toLocaleString()}</td>
                   </tr>
                   <tr className="border-t border-border/30">
-                    <td className="px-3 py-2"><span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-400" /><span className="font-medium">Long Call</span></span></td>
+                    <td className="px-3 py-2"><span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-positive" /><span className="font-medium">Long Call</span></span></td>
                     <td className="px-3 py-2 text-right font-mono">{formatCurrency(selectedRow.buy_strike_call)}</td>
                     <td className="px-3 py-2 text-right font-mono">{formatCurrency(selectedRow.buy_last_option_price_call)}</td>
                     <td className="px-3 py-2 text-right font-mono">
                       {selectedRow.buy_bs_price_call != null ? (
-                        <span className={selectedRow.buy_last_option_price_call > selectedRow.buy_bs_price_call ? 'text-emerald-400' : 'text-red-400'}>{formatCurrency(selectedRow.buy_bs_price_call)}</span>
+                        <span className={selectedRow.buy_last_option_price_call > selectedRow.buy_bs_price_call ? 'text-positive' : 'text-negative'}>{formatCurrency(selectedRow.buy_bs_price_call)}</span>
                       ) : <span className="text-muted-foreground">—</span>}
                     </td>
                     <td className="px-3 py-2 text-right font-mono">{formatNumber(selectedRow.buy_delta_call, 3)}</td>

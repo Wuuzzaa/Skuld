@@ -238,7 +238,7 @@ function PutScreenerTab() {
                   <div className="space-y-1">
                     {breakdown.breakdown.map((c: any) => (
                       <div key={c.key} className="flex items-center gap-2 text-sm py-1 border-b border-border/30 last:border-0">
-                        <span className={`flex-shrink-0 w-5 ${c.erreicht ? 'text-emerald-400' : 'text-red-400'}`}>
+                        <span className={`flex-shrink-0 w-5 ${c.erreicht ? 'text-positive' : 'text-negative'}`}>
                           {c.erreicht ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}
                         </span>
                         <span className="flex-1">{c.label}</span>
@@ -324,9 +324,9 @@ function PlaceholderTab({ label }: { label: string }) {
 
 function AmpelBadge({ value }: { value: string }) {
   const map: Record<string, string> = {
-    gruen: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+    gruen: 'bg-emerald-500/15 text-positive border-emerald-500/30',
     gelb: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
-    rot: 'bg-red-500/15 text-red-400 border-red-500/30',
+    rot: 'bg-red-500/15 text-negative border-red-500/30',
   };
   const cls = map[String(value).toLowerCase()] || 'bg-muted/30 text-muted-foreground border-border/30';
   return <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border ${cls}`}>{String(value).toUpperCase()}</span>;

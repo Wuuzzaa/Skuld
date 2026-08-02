@@ -69,7 +69,7 @@ export default function MarriedPutsPage() {
       sortable: true,
       format: (v: string) => (
         <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium ${
-          v === 'Champion' ? 'bg-emerald-500/20 text-emerald-400' :
+          v === 'Champion' ? 'bg-emerald-500/20 text-positive' :
           v === 'Contender' ? 'bg-blue-500/20 text-blue-400' :
           v === 'Challenger' ? 'bg-yellow-500/20 text-yellow-400' :
           'bg-secondary text-muted-foreground'
@@ -115,7 +115,7 @@ export default function MarriedPutsPage() {
           </div>
           <div className="flex flex-col gap-1 p-3 bg-card rounded-lg border border-border/40">
             <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Avg ROI%</span>
-            <span className="text-lg font-bold text-emerald-400">{formatPercent(stats.avgROI)}</span>
+            <span className="text-lg font-bold text-positive">{formatPercent(stats.avgROI)}</span>
           </div>
           <div className="flex flex-col gap-1 p-3 bg-card rounded-lg border border-border/40">
             <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Avg Investment</span>
@@ -204,7 +204,7 @@ export default function MarriedPutsPage() {
               </div>
               <div className="p-2 rounded bg-muted/30">
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground">ROI (Annual)</p>
-                <p className="text-base font-bold text-emerald-400">{formatPercent(selectedRow.roi_annualized_pct)}</p>
+                <p className="text-base font-bold text-positive">{formatPercent(selectedRow.roi_annualized_pct)}</p>
               </div>
               <div className="p-2 rounded bg-muted/30">
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Total Investment</p>
@@ -212,7 +212,7 @@ export default function MarriedPutsPage() {
               </div>
               <div className="p-2 rounded bg-muted/30">
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Min Profit</p>
-                <p className="text-base font-bold text-emerald-400">{formatCurrency(selectedRow.minimum_potential_profit)}</p>
+                <p className="text-base font-bold text-positive">{formatCurrency(selectedRow.minimum_potential_profit)}</p>
               </div>
             </div>
           </CardContent>

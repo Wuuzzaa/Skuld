@@ -32,13 +32,13 @@ type SortDirection = 'asc' | 'desc' | null;
 function getColorClass(value: number | null | undefined, type: string): string {
   if (value == null) return '';
   if (type === 'pnl' || type === 'percent') {
-    if (value > 0) return 'text-emerald-400 font-medium';
-    if (value < 0) return 'text-red-400 font-medium';
+    if (value > 0) return 'text-positive font-medium';
+    if (value < 0) return 'text-negative font-medium';
     return 'text-muted-foreground';
   }
   if (type === 'iv') {
-    if (value >= 0.6) return 'text-orange-400 font-medium';
-    if (value >= 0.4) return 'text-yellow-400';
+    if (value >= 0.6) return 'text-warning font-medium';
+    if (value >= 0.4) return 'text-warning/80';
     return '';
   }
   return '';
@@ -101,14 +101,14 @@ export function DataTable({
     );
   }
 
-  const cellPadding = compact ? 'px-2.5 py-1.5' : 'px-3 py-2.5';
+  const cellPadding = compact ? 'px-3 py-2' : 'px-4 py-3';
 
   return (
-    <div className={cn('overflow-auto border border-border/50 rounded-lg bg-card/50', className)} style={{ maxHeight }}>
+    <div className={cn('overflow-auto border border-border rounded-lg bg-card', className)} style={{ maxHeight }}>
       <table className="w-full text-sm">
         <thead className={cn(
           stickyHeader && 'sticky top-0 z-10',
-          'bg-muted/90 backdrop-blur-sm border-b border-border/50'
+          'bg-muted border-b border-border'
         )}>
           <tr>
             {cols.map((col) => (
@@ -117,7 +117,7 @@ export function DataTable({
                 onClick={() => (col.sortable !== false) && handleSort(col.key)}
                 className={cn(
                   cellPadding,
-                  'text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap select-none',
+                  'text-[11px] font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap select-none',
                   col.align === 'right' && 'text-right',
                   col.align === 'center' && 'text-center',
                   col.sortable !== false && 'cursor-pointer hover:text-foreground transition-colors group'
@@ -146,12 +146,12 @@ export function DataTable({
               key={i}
               onClick={() => onRowClick?.(row, i)}
               className={cn(
-                'border-t border-border/30 transition-all duration-150',
+                'border-t border-border/60 transition-colors duration-150',
                 onRowClick && 'cursor-pointer',
                 selectedIndex === i
                   ? 'bg-primary/10 border-l-2 border-l-primary'
-                  : 'hover:bg-accent/40',
-                striped && i % 2 === 1 && 'bg-muted/20'
+                  : 'hover:bg-muted/60',
+                striped && i % 2 === 1 && 'bg-muted/30'
               )}
             >
               {cols.map((col) => {
