@@ -69,6 +69,7 @@ DEFAULTS = {
     'show_only_spreads_with_no_earnings_warning': DEFAULT_SHOW_ONLY_SPREADS_WITH_NO_EARNINGS_WARNING,
     'delta_target': DEFAULT_DELTA_TARGET,
     'spread_width': DEFAULT_SPREAD_WIDTH,
+    'spread_exact': False,
     'option_type': DEFAULT_OPTION_TYPE,
     'min_day_volume': DEFAULT_MIN_DAY_VOLUME,
     'min_open_interest': DEFAULT_MIN_OPEN_INTEREST,
@@ -182,6 +183,11 @@ with st.expander("Configuration and Filters", expanded=True):
             step=1,
             key="spread_width",
             help="Sucht alle Breiten von 1 bis zu diesem Wert. Pro Symbol wird der Spread mit dem höchsten Max Profit angezeigt.",
+        )
+        spread_exact = st.checkbox(
+            "Nur exakt diese Breite",
+            key="spread_exact",
+            help="Aktiviert: nur Spreads mit genau dieser Breite. Deaktiviert: alle Breiten von 1 bis Max.",
         )
 
     with col4:
@@ -321,12 +327,14 @@ def _cached_get_page_spreads(df, strategy_type, iv_correction, risk_free_rate):
 
 # Calculate the spread values with a loading indicator
 with st.spinner("Calculating spreads..."):
+    spread_exact = st.session_state.get("spread_exact", False)
     params = {
         "expiration_date": expiration_date,
         "option_type": option_type,
         "delta_target": st.session_state.delta_target,
         "min_open_interest": min_open_interest,
         "spread_width": spread_width,
+        "spread_width_min": spread_width if spread_exact else 1,
         "min_day_volume": min_day_volume,
         "min_iv_rank": min_iv_rank,
         "min_iv_percentile": min_iv_percentile,

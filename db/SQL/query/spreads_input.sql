@@ -101,13 +101,13 @@ INNER JOIN
         CASE
             WHEN :strategy_type = 'credit' THEN
                 CASE
-                    WHEN sell.option_type = 'put'  THEN buy.strike BETWEEN sell.strike - :spread_width AND sell.strike - 1
-                    WHEN sell.option_type = 'call' THEN buy.strike BETWEEN sell.strike + 1 AND sell.strike + :spread_width
+                    WHEN sell.option_type = 'put'  THEN buy.strike BETWEEN sell.strike - :spread_width AND sell.strike - :spread_width_min
+                    WHEN sell.option_type = 'call' THEN buy.strike BETWEEN sell.strike + :spread_width_min AND sell.strike + :spread_width
                 END
             WHEN :strategy_type = 'debit' THEN
                 CASE
-                    WHEN sell.option_type = 'put'  THEN buy.strike BETWEEN sell.strike + 1 AND sell.strike + :spread_width
-                    WHEN sell.option_type = 'call' THEN buy.strike BETWEEN sell.strike - :spread_width AND sell.strike - 1
+                    WHEN sell.option_type = 'put'  THEN buy.strike BETWEEN sell.strike + :spread_width_min AND sell.strike + :spread_width
+                    WHEN sell.option_type = 'call' THEN buy.strike BETWEEN sell.strike - :spread_width AND sell.strike - :spread_width_min
                 END
         END
     )
