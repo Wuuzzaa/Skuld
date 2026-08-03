@@ -35,6 +35,32 @@ WITH FilteredOptions AS (
         AND (:min_iv_percentile <= 0 OR iv_percentile IS NULL OR iv_percentile >= :min_iv_percentile)
 ),
 
+-- Buy-Leg: nur Mindest-OI=1, kein Volume-Filter — Liquidität beim Kauf weniger kritisch
+BuyOptions AS (
+    SELECT
+        option_osi,
+        symbol,
+        expiration_date,
+        contract_type AS option_type,
+        strike_price AS strike,
+        day_close AS last_option_price,
+        abs(greeks_delta) AS delta,
+        implied_volatility AS iv,
+        greeks_theta AS theta,
+        open_interest AS option_open_interest,
+        expected_move,
+        day_volume,
+        day_last_updated,
+        last_updated_option_data,
+        last_updated_stock_data
+    FROM
+        "OptionDataMerged" AS a
+    WHERE
+        open_interest >= 1
+        AND expiration_date = :expiration_date
+        AND contract_type = :option_type
+),
+
 TargetOptions AS (
     SELECT
         *,
@@ -92,7 +118,7 @@ SELECT
 FROM
     TargetOptions sell
 INNER JOIN
-    FilteredOptions buy
+    BuyOptions buy
     ON sell.symbol = buy.symbol
     AND sell.expiration_date = buy.expiration_date
     AND sell.option_type = buy.option_type
