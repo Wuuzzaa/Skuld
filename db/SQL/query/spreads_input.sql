@@ -31,8 +31,8 @@ WITH FilteredOptions AS (
     WHERE
         open_interest >= :min_open_interest
         AND day_volume >= :min_day_volume
-        AND iv_rank >= :min_iv_rank
-        AND iv_percentile >= :min_iv_percentile
+        AND (:min_iv_rank <= 0 OR iv_rank IS NULL OR iv_rank >= :min_iv_rank)
+        AND (:min_iv_percentile <= 0 OR iv_percentile IS NULL OR iv_percentile >= :min_iv_percentile)
 ),
 
 TargetOptions AS (
@@ -96,17 +96,18 @@ INNER JOIN
     ON sell.symbol = buy.symbol
     AND sell.expiration_date = buy.expiration_date
     AND sell.option_type = buy.option_type
-    AND buy.strike = (
+    AND buy.strike != sell.strike
+    AND (
         CASE
-            WHEN :strategy_type = 'credit' THEN 
+            WHEN :strategy_type = 'credit' THEN
                 CASE
-                    WHEN sell.option_type = 'put' THEN sell.strike - :spread_width
-                    WHEN sell.option_type = 'call' THEN sell.strike + :spread_width
+                    WHEN sell.option_type = 'put'  THEN buy.strike BETWEEN sell.strike - :spread_width AND sell.strike - 1
+                    WHEN sell.option_type = 'call' THEN buy.strike BETWEEN sell.strike + 1 AND sell.strike + :spread_width
                 END
             WHEN :strategy_type = 'debit' THEN
                 CASE
-                    WHEN sell.option_type = 'put' THEN sell.strike + :spread_width
-                    WHEN sell.option_type = 'call' THEN sell.strike - :spread_width
+                    WHEN sell.option_type = 'put'  THEN buy.strike BETWEEN sell.strike + 1 AND sell.strike + :spread_width
+                    WHEN sell.option_type = 'call' THEN buy.strike BETWEEN sell.strike - :spread_width AND sell.strike - 1
                 END
         END
     )

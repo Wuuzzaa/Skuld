@@ -176,11 +176,12 @@ with st.expander("Configuration and Filters", expanded=True):
 
     with col3:
         spread_width = st.number_input(
-            "Spread Width",
+            "Max Spread Width",
             min_value=1,
             max_value=20,
             step=1,
-            key="spread_width"
+            key="spread_width",
+            help="Sucht alle Breiten von 1 bis zu diesem Wert. Pro Symbol wird der Spread mit dem höchsten Max Profit angezeigt.",
         )
 
     with col4:
