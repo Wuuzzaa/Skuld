@@ -47,9 +47,6 @@ DEFAULT_SHOW_ONLY_SPREADS_WITH_NO_EARNINGS_WARNING = True
 DEFAULT_DELTA_TARGET = 0.2
 DEFAULT_SPREAD_WIDTH = 5
 DEFAULT_OPTION_TYPE = "put"
-DEFAULT_DTE_MODE = "single"  # "single" or "range"
-DEFAULT_DTE_RANGE_MIN = 21
-DEFAULT_DTE_RANGE_MAX = 45
 DEFAULT_MIN_DAY_VOLUME = 20
 DEFAULT_MIN_OPEN_INTEREST = 100
 DEFAULT_MIN_SELL_IV = 0.3
@@ -73,9 +70,6 @@ DEFAULTS = {
     'delta_target': DEFAULT_DELTA_TARGET,
     'spread_width': DEFAULT_SPREAD_WIDTH,
     'spread_exact': False,
-    'dte_mode': DEFAULT_DTE_MODE,
-    'dte_range_min': DEFAULT_DTE_RANGE_MIN,
-    'dte_range_max': DEFAULT_DTE_RANGE_MAX,
     'option_type': DEFAULT_OPTION_TYPE,
     'min_day_volume': DEFAULT_MIN_DAY_VOLUME,
     'min_open_interest': DEFAULT_MIN_OPEN_INTEREST,
@@ -144,83 +138,26 @@ with st.expander("Configuration and Filters", expanded=True):
             st.session_state.show_daily
         )
 
-        if not filtered_dates_df.empty:
-            dte_min_available = int(filtered_dates_df['days_to_expiration'].min())
-            dte_max_available = int(filtered_dates_df['days_to_expiration'].max())
-        else:
-            dte_min_available, dte_max_available = 1, 90
-
-        # Im Range-Modus immer alle Daten als Basis (Checkboxen nur für Einzeldatum relevant), max. 90 DTE
-        all_dates_df = dates_df[dates_df['days_to_expiration'] <= 90] if not dates_df.empty else filtered_dates_df
-
-        dte_mode = st.radio(
-            "DTE Modus",
-            options=["single", "range"],
-            format_func=lambda x: "Einzelnes Datum" if x == "single" else "DTE-Bereich (Slider)",
-            horizontal=True,
-            key="dte_mode",
-        )
-
-        if dte_mode == "single":
-            # DTE labels ("5 DTE - Friday 2026-01-16 - Monthly/Weekly/Daily")
-            dte_labels = [
-                (
-                    f"{int(row['days_to_expiration'])} DTE - "
-                    f"{pd.to_datetime(row['expiration_date']).strftime('%A')}  "
-                    f"{row['expiration_date']} - "
-                    f"{get_expiration_type(row['expiration_date'])}"
-                )
-                for _, row in filtered_dates_df.iterrows()
-            ]
-
-            if not dte_labels:
-                st.warning("No expiration dates match the selected filters.")
-                st.stop()
-
-            selected_label = st.selectbox("Expiration Date", dte_labels, index=min(1, len(dte_labels)-1))
-            selected_index = dte_labels.index(selected_label)
-            expiration_dates = [filtered_dates_df.iloc[selected_index]['expiration_date']]
-            expiration_date = expiration_dates[0]
-            logging.debug(f"Single mode — expiration_date: {expiration_date}")
-
-        else:
-            # Slider mode — pick DTE range, collect all matching expiration dates
-            # Slider-Grenzen aus allen verfügbaren Daten (unabhängig von Monthly/Weekly/Daily)
-            if not all_dates_df.empty:
-                slider_min = int(all_dates_df['days_to_expiration'].min())
-                slider_max = min(int(all_dates_df['days_to_expiration'].max()), 90)
-            else:
-                slider_min, slider_max = 1, 90
-
-            dte_range = st.slider(
-                "DTE Bereich",
-                min_value=slider_min,
-                max_value=slider_max,
-                value=(
-                    max(slider_min, st.session_state.dte_range_min),
-                    min(slider_max, st.session_state.dte_range_max),
-                ),
-                step=1,
-                key="dte_range_slider",
-                help="Alle Verfalltermine in diesem DTE-Fenster werden gescannt. Monthly/Weekly/Daily-Filter gilt weiterhin.",
+        # DTE labels ("5 DTE - Friday 2026-01-16 - Monthly/Weekly/Daily")
+        dte_labels = [
+            (
+                f"{int(row['days_to_expiration'])} DTE - "
+                f"{pd.to_datetime(row['expiration_date']).strftime('%A')}  "
+                f"{row['expiration_date']} - "
+                f"{get_expiration_type(row['expiration_date'])}"
             )
-            st.session_state.dte_range_min = dte_range[0]
-            st.session_state.dte_range_max = dte_range[1]
+            for _, row in filtered_dates_df.iterrows()
+        ]
 
-            mask = (
-                (all_dates_df['days_to_expiration'] >= dte_range[0]) &
-                (all_dates_df['days_to_expiration'] <= dte_range[1])
-            )
-            range_dates_df = all_dates_df[mask]
+        if not dte_labels:
+            st.warning("No expiration dates match the selected filters.")
+            st.stop()
 
-            if range_dates_df.empty:
-                st.warning("Keine Verfalltermine im gewählten DTE-Bereich.")
-                st.stop()
-
-            expiration_dates = range_dates_df['expiration_date'].tolist()
-            expiration_date = expiration_dates[0]  # für Abwärtskompatibilität
-            st.caption(f"{len(expiration_dates)} Verfalltermine: {', '.join(str(d) for d in expiration_dates)}")
-            logging.debug(f"Range mode — expiration_dates: {expiration_dates}")
+        selected_label = st.selectbox("Expiration Date", dte_labels, index=min(1, len(dte_labels)-1))
+        selected_index = dte_labels.index(selected_label)
+        expiration_dates = [filtered_dates_df.iloc[selected_index]['expiration_date']]
+        expiration_date = expiration_dates[0]
+        logging.debug(f"Extracted selected expiration date: {expiration_date}")
 
     with col2:
         # Suggest different delta for debit
