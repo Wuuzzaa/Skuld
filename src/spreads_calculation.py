@@ -217,10 +217,10 @@ def get_page_spreads(df: pd.DataFrame, strategy_type: str = 'credit', iv_correct
     if df.empty:
         return df
 
-    # Keep only the best spread per symbol (highest max_profit across all widths up to spread_width_max)
+    # Keep only the best spread per symbol+expiration (highest max_profit across all widths up to spread_width_max)
     df = (
         df.sort_values("max_profit", ascending=False)
-        .drop_duplicates(subset=["symbol"], keep="first")
+        .drop_duplicates(subset=["symbol", "expiration_date"], keep="first")
         .reset_index(drop=True)
     )
 
