@@ -347,7 +347,7 @@ with st.spinner("Calculating spreads..."):
         _cached_select_into_dataframe(date=selected_date, sql_file_path=sql_file_path, params=_build_params(exp_date))
         for exp_date in expiration_dates
     ]
-    df = pd.concat([f for f in raw_frames if not f.empty], ignore_index=True) if raw_frames else pd.DataFrame()
+    df = pd.concat([f for f in raw_frames if not f.empty], ignore_index=True) if any(not f.empty for f in raw_frames) else pd.DataFrame()
 
     # Deterministischer Cache-Key aus allen relevanten Parametern
     cache_key = f"{selected_date}|{','.join(str(d) for d in sorted(expiration_dates))}|{option_type}|{st.session_state.delta_target}|{min_open_interest}|{spread_width}|{spread_exact}|{min_day_volume}|{min_iv_rank}|{min_iv_percentile}|{strategy_type}|{st.session_state.iv_correction}|{st.session_state.risk_free_rate}"
