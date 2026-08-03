@@ -382,7 +382,7 @@ def _cached_select_into_dataframe(date, sql_file_path, params):
 
 
 @st.cache_data(ttl=300)  # 5 Minuten
-def _cached_get_page_spreads(df, strategy_type, iv_correction, risk_free_rate):
+def _cached_get_page_spreads(cache_key: str, df, strategy_type, iv_correction, risk_free_rate):
     return get_page_spreads(df, strategy_type=strategy_type, iv_correction=iv_correction, risk_free_rate=risk_free_rate)
 
 
@@ -412,9 +412,12 @@ with st.spinner("Calculating spreads..."):
     ]
     df = pd.concat([f for f in raw_frames if not f.empty], ignore_index=True) if raw_frames else pd.DataFrame()
 
+    # Deterministischer Cache-Key aus allen relevanten Parametern
+    cache_key = f"{selected_date}|{','.join(str(d) for d in sorted(expiration_dates))}|{option_type}|{st.session_state.delta_target}|{min_open_interest}|{spread_width}|{spread_exact}|{min_day_volume}|{min_iv_rank}|{min_iv_percentile}|{strategy_type}|{st.session_state.iv_correction}|{st.session_state.risk_free_rate}"
+
     logging.debug(f"Loaded {len(df)} rows from DB across {len(expiration_dates)} expiration date(s)")
 
-    spreads_df = _cached_get_page_spreads(df, strategy_type=strategy_type, iv_correction=st.session_state.iv_correction, risk_free_rate=st.session_state.risk_free_rate / 100)
+    spreads_df = _cached_get_page_spreads(cache_key, df, strategy_type=strategy_type, iv_correction=st.session_state.iv_correction, risk_free_rate=st.session_state.risk_free_rate / 100)
 
 # Apply spread filters
 filtered_df = spreads_df.copy()
