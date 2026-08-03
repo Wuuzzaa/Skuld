@@ -150,6 +150,9 @@ with st.expander("Configuration and Filters", expanded=True):
         else:
             dte_min_available, dte_max_available = 1, 90
 
+        # Im Range-Modus immer alle Daten als Basis (Checkboxen nur für Einzeldatum relevant)
+        all_dates_df = dates_df if not dates_df.empty else filtered_dates_df
+
         dte_mode = st.radio(
             "DTE Modus",
             options=["single", "range"],
@@ -182,26 +185,33 @@ with st.expander("Configuration and Filters", expanded=True):
 
         else:
             # Slider mode — pick DTE range, collect all matching expiration dates
+            # Slider-Grenzen aus allen verfügbaren Daten (unabhängig von Monthly/Weekly/Daily)
+            if not all_dates_df.empty:
+                slider_min = int(all_dates_df['days_to_expiration'].min())
+                slider_max = int(all_dates_df['days_to_expiration'].max())
+            else:
+                slider_min, slider_max = 1, 90
+
             dte_range = st.slider(
                 "DTE Bereich",
-                min_value=dte_min_available,
-                max_value=dte_max_available,
+                min_value=slider_min,
+                max_value=slider_max,
                 value=(
-                    max(dte_min_available, st.session_state.dte_range_min),
-                    min(dte_max_available, st.session_state.dte_range_max),
+                    max(slider_min, st.session_state.dte_range_min),
+                    min(slider_max, st.session_state.dte_range_max),
                 ),
                 step=1,
                 key="dte_range_slider",
-                help="Alle Verfalltermine in diesem DTE-Fenster werden gescannt.",
+                help="Alle Verfalltermine in diesem DTE-Fenster werden gescannt. Monthly/Weekly/Daily-Filter gilt weiterhin.",
             )
             st.session_state.dte_range_min = dte_range[0]
             st.session_state.dte_range_max = dte_range[1]
 
             mask = (
-                (filtered_dates_df['days_to_expiration'] >= dte_range[0]) &
-                (filtered_dates_df['days_to_expiration'] <= dte_range[1])
+                (all_dates_df['days_to_expiration'] >= dte_range[0]) &
+                (all_dates_df['days_to_expiration'] <= dte_range[1])
             )
-            range_dates_df = filtered_dates_df[mask]
+            range_dates_df = all_dates_df[mask]
 
             if range_dates_df.empty:
                 st.warning("Keine Verfalltermine im gewählten DTE-Bereich.")
