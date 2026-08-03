@@ -150,8 +150,8 @@ with st.expander("Configuration and Filters", expanded=True):
         else:
             dte_min_available, dte_max_available = 1, 90
 
-        # Im Range-Modus immer alle Daten als Basis (Checkboxen nur für Einzeldatum relevant)
-        all_dates_df = dates_df if not dates_df.empty else filtered_dates_df
+        # Im Range-Modus immer alle Daten als Basis (Checkboxen nur für Einzeldatum relevant), max. 90 DTE
+        all_dates_df = dates_df[dates_df['days_to_expiration'] <= 90] if not dates_df.empty else filtered_dates_df
 
         dte_mode = st.radio(
             "DTE Modus",
@@ -188,7 +188,7 @@ with st.expander("Configuration and Filters", expanded=True):
             # Slider-Grenzen aus allen verfügbaren Daten (unabhängig von Monthly/Weekly/Daily)
             if not all_dates_df.empty:
                 slider_min = int(all_dates_df['days_to_expiration'].min())
-                slider_max = int(all_dates_df['days_to_expiration'].max())
+                slider_max = min(int(all_dates_df['days_to_expiration'].max()), 90)
             else:
                 slider_min, slider_max = 1, 90
 
