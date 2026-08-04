@@ -1,5 +1,6 @@
 """
-Roll-Kalkulation für Cash-Secured Puts — reine Rechenlogik, keine DB, kein Streamlit.
+Roll-Kalkulation für Cash-Secured Puts und nackte Short Calls —
+reine Rechenlogik, keine DB, kein Streamlit.
 
 Grundlage: "Optionen unschlagbar handeln", Kap. 3 (Rollen), am Originaltext
 verifiziert 2026-07-11 (Buch 27. Juni 2026.pdf, S. 71-99).
@@ -13,13 +14,15 @@ Oberstes Ziel ist immer, den Basispreis (die Gewinnschwelle) zu senken.
 Kernformeln (buchverifiziert, alle Prämien absolut in $/Kontrakt):
 
     Saldo/Netto-Prämie   netto = P_eroeffnung + n*P_neu - P_heute
-    Neue Gewinnschwelle  GS    = K2 - netto / (n * 100)
+    PUT  Neue GS          GS    = K2 - netto / (n * 100)   GS senken = besser
+    CALL Neue GS          GS    = K2 + netto / (n * 100)   GS heben  = besser
     Kapital nötig        cap   = K2 * n * 100
 
-Hinweis zur Design-Spec: Die Spec verkürzte die Netto-Definition an einer Stelle
-auf "P_neu - P_heute". Das ergibt jedoch nicht die Buch-Salden (Szenario 1-3:
-+110/+190/+170 $). Maßgeblich ist die obige Buch-Formel — die zugehörigen
-Unit-Tests (tests/test_roll_support_calc.py) prüfen exakt diese Buch-Zahlen.
+Short-Call-Spezifika:
+    Innerer Wert  = max(0, S - K)   (ITM wenn Kurs ÜBER Strike)
+    Breakeven     = K + Prämie/Aktie
+    Roll-Ziel: Strike höher (weiter OTM), GS heben
+    Ampel: GS verbessert = breakeven_new > breakeven_old
 
 Alle Kernberechnungen werden bewusst NICHT gecacht (immer frisch gerechnet).
 """
@@ -27,7 +30,7 @@ from __future__ import annotations
 
 
 def ampel(netto: float, breakeven_new: float, breakeven_old: float) -> str:
-    """Bewertet einen Roll-Kandidaten nach der Buch-Logik.
+    """Bewertet einen Roll-Kandidaten nach der Buch-Logik (Put: GS senken).
 
     ✅  Netto-Prämie > 0 UND neue Gewinnschwelle < alte Gewinnschwelle
     ⚠️  Netto-Prämie > 0 ABER Gewinnschwelle nicht verbessert
@@ -40,28 +43,49 @@ def ampel(netto: float, breakeven_new: float, breakeven_old: float) -> str:
     return "⚠️"
 
 
+def ampel_call(netto: float, breakeven_new: float, breakeven_old: float) -> str:
+    """Bewertet einen Roll-Kandidaten für Short Calls (GS heben = besser).
+
+    ✅  Netto-Prämie > 0 UND neue Gewinnschwelle > alte Gewinnschwelle
+    ⚠️  Netto-Prämie > 0 ABER Gewinnschwelle nicht verbessert
+    ❌  Netto-Prämie <= 0 (der Roll kostet unterm Strich drauf)
+    """
+    if netto <= 0:
+        return "❌"
+    if breakeven_new > breakeven_old:
+        return "✅"
+    return "⚠️"
+
+
 def position_status(K: float, S: float, P_eroeffnung: float,
-                    P_heute: float, n: int) -> dict:
+                    P_heute: float, n: int,
+                    option_type: str = "put") -> dict:
     """Kennzahlen für den Block "Aktuelle Position".
 
     Args:
-        K:            Strike des bestehenden Puts.
+        K:            Strike der bestehenden Option.
         S:            Aktueller Aktienkurs.
         P_eroeffnung: Ursprünglich vereinnahmte Prämie, absolut $/Kontrakt.
-        P_heute:      Aktueller Put-Preis (Schließungskosten), absolut $/Kontrakt.
+        P_heute:      Aktueller Optionspreis (Schließungskosten), absolut $/Kontrakt.
         n:            Anzahl Kontrakte.
+        option_type:  "put" (default) oder "call".
 
     Returns:
         dict mit pnl_pct, pnl_abs, inner_value, time_value, breakeven_old.
-    
+
     Hinweis: Zeitwert kann theoretisch nicht negativ sein (Arbitrage-Gesetz).
     Falls Daten fehlerhaft → max(0, TV) sichert Realismus.
     """
-    inner_value = max(0.0, K - S) * 100.0          # innerer Wert pro Kontrakt in $
-    time_value = max(0.0, P_heute - inner_value)   # Restzeitwert (min. 0!)
-    breakeven_old = K - P_eroeffnung / 100.0       # alte Gewinnschwelle je Aktie
-    pnl_abs = (P_eroeffnung - P_heute) * n         # G/V absolut
-    pnl_pct = (P_eroeffnung - P_heute) / P_eroeffnung * 100.0  # G/V in %
+    if option_type == "call":
+        inner_value = max(0.0, S - K) * 100.0         # Call ITM wenn Kurs > Strike
+        breakeven_old = K + P_eroeffnung / 100.0      # Call BE = Strike + Prämie
+    else:
+        inner_value = max(0.0, K - S) * 100.0         # Put ITM wenn Kurs < Strike
+        breakeven_old = K - P_eroeffnung / 100.0      # Put BE = Strike - Prämie
+
+    time_value = max(0.0, P_heute - inner_value)      # Restzeitwert (min. 0!)
+    pnl_abs = (P_eroeffnung - P_heute) * n            # G/V absolut (identisch für put/call)
+    pnl_pct = (P_eroeffnung - P_heute) / P_eroeffnung * 100.0
 
     return {
         "inner_value": inner_value,
@@ -73,7 +97,8 @@ def position_status(K: float, S: float, P_eroeffnung: float,
 
 
 def pnl_breakdown(K: float, S: float, P_eroeffnung: float,
-                  P_heute: float, n: int) -> dict:
+                  P_heute: float, n: int,
+                  option_type: str = "put") -> dict:
     """Kontobuch-Herleitung des G/V der bestehenden Position (reine Anzeige-Hilfe).
 
     Verändert keine Zahlen — nutzt position_status() und macht die
@@ -83,21 +108,29 @@ def pnl_breakdown(K: float, S: float, P_eroeffnung: float,
         dict mit pnl_abs, pnl_pct, breakeven_old, im_gewinn, grund, lines.
         lines: [{label, formel, wert, einheit, summe}]. summe=True → Zwischensumme.
     """
-    pos = position_status(K=K, S=S, P_eroeffnung=P_eroeffnung, P_heute=P_heute, n=n)
+    pos = position_status(K=K, S=S, P_eroeffnung=P_eroeffnung, P_heute=P_heute,
+                          n=n, option_type=option_type)
     p_open_share = P_eroeffnung / 100.0
     p_today_share = P_heute / 100.0
     einnahme = P_eroeffnung * n          # was beim Verkauf aufs Konto kam
     rueckkauf = -(P_heute * n)           # was der Rückkauf heute kostet
     im_gewinn = pos["pnl_abs"] >= 0
     diff_share = p_open_share - p_today_share
+
+    opt_label = "Call" if option_type == "call" else "Put"
     if im_gewinn:
-        grund = (f"Im Gewinn, weil der Put seit dem Verkauf um "
+        grund = (f"Im Gewinn, weil der {opt_label} seit dem Verkauf um "
                  f"${abs(diff_share):.2f}/Aktie billiger geworden ist "
-                 f"(Zeitwert-Verfall und/oder Kursanstieg).")
+                 f"(Zeitwert-Verfall und/oder günstige Kursentwicklung).")
     else:
-        grund = (f"Im Verlust, weil der Put seit dem Verkauf um "
+        grund = (f"Im Verlust, weil der {opt_label} seit dem Verkauf um "
                  f"${abs(diff_share):.2f}/Aktie teurer geworden ist "
-                 f"(Kurs gefallen und/oder Volatilität gestiegen).")
+                 f"(ungünstige Kursentwicklung und/oder Volatilität gestiegen).")
+
+    if option_type == "call":
+        be_formel = f"Strike {K:.2f} + Prämie {p_open_share:.2f}"
+    else:
+        be_formel = f"Strike {K:.2f} − Prämie {p_open_share:.2f}"
 
     lines = [
         {
@@ -123,7 +156,7 @@ def pnl_breakdown(K: float, S: float, P_eroeffnung: float,
         },
         {
             "label": "Gewinnschwelle",
-            "formel": f"Strike {K:.2f} − Prämie {p_open_share:.2f}",
+            "formel": be_formel,
             "wert": pos["breakeven_old"],
             "einheit": "$/Aktie",
             "summe": False,
@@ -140,7 +173,8 @@ def pnl_breakdown(K: float, S: float, P_eroeffnung: float,
 
 
 def roll_candidate(stufe: int, K: float, K2: float, P_eroeffnung: float,
-                   P_heute: float, P_neu: float, n: int) -> dict:
+                   P_heute: float, P_neu: float, n: int,
+                   option_type: str = "put") -> dict:
     """Berechnet einen konkreten Roll-Kandidaten einer Stufe.
 
     Args:
@@ -148,21 +182,28 @@ def roll_candidate(stufe: int, K: float, K2: float, P_eroeffnung: float,
         K:            Alter Strike (für alte Gewinnschwelle).
         K2:           Neuer Strike.
         P_eroeffnung: Ursprüngliche Prämie, absolut $/Kontrakt.
-        P_heute:      Schließungskosten des alten Puts, absolut $/Kontrakt (n=alt).
-        P_neu:        Prämie des neuen Puts, absolut $/Kontrakt.
-        n:            Kontraktanzahl des NEUEN Puts (Stufe 3: verdoppelt).
+        P_heute:      Schließungskosten der alten Option, absolut $/Kontrakt (n=alt).
+        P_neu:        Prämie der neuen Option, absolut $/Kontrakt.
+        n:            Kontraktanzahl des NEUEN Kontrakts (Stufe 3: verdoppelt).
+        option_type:  "put" (default) oder "call".
 
     Returns:
         dict mit stufe, netto_abs, netto_pro_aktie, breakeven_new,
         breakeven_old, kapital_noetig, ampel.
     """
-    # Saldo inkl. Eröffnungsprämie (Buch): das alte 1er-Paket wird geschlossen,
-    # das neue n-Paket eröffnet.
     netto_abs = P_eroeffnung + n * P_neu - P_heute
     netto_pro_aktie = netto_abs / (n * 100.0)
 
-    breakeven_new = K2 - netto_abs / (n * 100.0)
-    breakeven_old = K - P_eroeffnung / 100.0
+    if option_type == "call":
+        # Call: GS = Strike + Netto/Aktie — höhere GS ist besser (weiter vom Kurs weg)
+        breakeven_new = K2 + netto_abs / (n * 100.0)
+        breakeven_old = K + P_eroeffnung / 100.0
+        ampel_val = ampel_call(netto_abs, breakeven_new, breakeven_old)
+    else:
+        breakeven_new = K2 - netto_abs / (n * 100.0)
+        breakeven_old = K - P_eroeffnung / 100.0
+        ampel_val = ampel(netto_abs, breakeven_new, breakeven_old)
+
     kapital_noetig = K2 * n * 100.0
 
     return {
@@ -172,18 +213,24 @@ def roll_candidate(stufe: int, K: float, K2: float, P_eroeffnung: float,
         "breakeven_new": breakeven_new,
         "breakeven_old": breakeven_old,
         "kapital_noetig": kapital_noetig,
-        "ampel": ampel(netto_abs, breakeven_new, breakeven_old),
+        "ampel": ampel_val,
     }
 
 
 def roll_candidate_explained(stufe: int, K: float, K2: float, P_eroeffnung: float,
-                             P_heute: float, P_neu: float, n: int) -> dict:
+                             P_heute: float, P_neu: float, n: int,
+                             option_type: str = "put") -> dict:
     """Wie roll_candidate(), plus 'steps': Klartext-Herleitung für die UI.
 
     Verändert keine Zahlen — reine Zusatz-Transparenz (Formel + eingesetzte Werte).
     """
     base = roll_candidate(stufe=stufe, K=K, K2=K2, P_eroeffnung=P_eroeffnung,
-                          P_heute=P_heute, P_neu=P_neu, n=n)
+                          P_heute=P_heute, P_neu=P_neu, n=n, option_type=option_type)
+    if option_type == "call":
+        gs_formel = f"K2 {K2:.2f} + Netto {base['netto_abs']:.0f} / ({n}×100)"
+    else:
+        gs_formel = f"K2 {K2:.2f} − Netto {base['netto_abs']:.0f} / ({n}×100)"
+
     steps = [
         {
             "label": "Netto-Prämie",
@@ -192,12 +239,12 @@ def roll_candidate_explained(stufe: int, K: float, K2: float, P_eroeffnung: floa
         },
         {
             "label": "Neue Gewinnschwelle",
-            "formel": f"K2 {K2:.2f} − Netto {base['netto_abs']:.0f} / ({n}×100)",
+            "formel": gs_formel,
             "wert": base["breakeven_new"],
         },
         {
             "label": "Alte Gewinnschwelle",
-            "formel": f"K {K:.2f} − Eröffnung {P_eroeffnung:.0f} / 100",
+            "formel": f"K {K:.2f} {'+ ' if option_type == 'call' else '− '}Eröffnung {P_eroeffnung:.0f} / 100",
             "wert": base["breakeven_old"],
         },
         {

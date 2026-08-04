@@ -4,6 +4,7 @@ from src.roll_support_calc import (
     roll_candidate,
     roll_candidate_explained,
     ampel,
+    ampel_call,
 )
 
 
@@ -19,6 +20,18 @@ def test_ampel_rot_wenn_netto_nicht_positiv():
     assert ampel(netto=-5.0, breakeven_new=27.0, breakeven_old=29.0) == "❌"
 
 
+def test_ampel_call_gruen_wenn_netto_positiv_und_gs_gestiegen():
+    assert ampel_call(netto=10.0, breakeven_new=210.0, breakeven_old=205.0) == "✅"
+
+
+def test_ampel_call_gelb_wenn_gs_nicht_gestiegen():
+    assert ampel_call(netto=10.0, breakeven_new=204.0, breakeven_old=205.0) == "⚠️"
+
+
+def test_ampel_call_rot_wenn_netto_nicht_positiv():
+    assert ampel_call(netto=-5.0, breakeven_new=210.0, breakeven_old=205.0) == "❌"
+
+
 def test_position_status_verlust():
     # Put mit K=30 eröffnet für 100$, heute 210$ wert -> Verlust.
     pos = position_status(K=30.0, S=28.0, P_eroeffnung=100.0, P_heute=210.0, n=1)
@@ -26,6 +39,23 @@ def test_position_status_verlust():
     assert round(pos["pnl_abs"], 2) == -110.00          # (100 - 210) * 1
     assert round(pos["inner_value"], 2) == 200.00       # max(0, 30-28)*100
     assert round(pos["time_value"], 2) == 10.00         # 210 - 200
+
+
+def test_position_status_call_breakeven_und_innerer_wert():
+    # Short Call K=200, Kurs S=210 (ITM), Prämie 300$/Kontrakt eröffnet, heute 500$.
+    pos = position_status(K=200.0, S=210.0, P_eroeffnung=300.0, P_heute=500.0, n=1,
+                          option_type="call")
+    assert round(pos["breakeven_old"], 2) == 203.00     # 200 + 300/100
+    assert round(pos["inner_value"], 2) == 1000.0       # max(0, 210-200)*100
+    assert round(pos["pnl_abs"], 2) == -200.00          # (300 - 500) * 1
+
+
+def test_position_status_call_otm_kein_innerer_wert():
+    # Short Call K=200, Kurs S=163 (OTM) -> innerer Wert = 0.
+    pos = position_status(K=200.0, S=163.0, P_eroeffnung=135.0, P_heute=495.0, n=1,
+                          option_type="call")
+    assert round(pos["inner_value"], 2) == 0.0          # OTM: max(0, 163-200)*100
+    assert round(pos["breakeven_old"], 2) == 201.35     # 200 + 135/100
 
 
 def test_roll_candidate_szenario1_stufe1_gruen():
@@ -39,13 +69,23 @@ def test_roll_candidate_szenario1_stufe1_gruen():
 
 def test_roll_candidate_szenario3_stufe3_zwei_kontrakte():
     # Stufe3 K2=27.50, P_neu=285$, 2 Kontrakte, Eröffnung 100$, heute 400$.
-    # Buch-Netto-Formel: P_eroeffnung + n*P_neu - P_heute = 100 + 2*285 - 400 = 270.
     r = roll_candidate(stufe=3, K=30.0, K2=27.50,
                        P_eroeffnung=100.0, P_heute=400.0, P_neu=285.0, n=2)
     assert round(r["netto_abs"], 2) == 270.00           # 100 + 2*285 - 400
     assert round(r["breakeven_new"], 2) == 26.15        # 27.50 - 270/(2*100)
     assert round(r["kapital_noetig"], 2) == 5500.00     # 27.50 * 2 * 100
     assert r["ampel"] == "✅"
+
+
+def test_roll_candidate_call_hoehere_gs_ist_gruen():
+    # Short Call K=200, rollen auf K2=210 (höher = besser), netto positiv.
+    r = roll_candidate(stufe=1, K=200.0, K2=210.0,
+                       P_eroeffnung=135.0, P_heute=495.0, P_neu=400.0, n=1,
+                       option_type="call")
+    assert round(r["netto_abs"], 2) == 40.0             # 135 + 400 - 495
+    assert round(r["breakeven_new"], 2) == 210.40       # 210 + 40/100
+    assert round(r["breakeven_old"], 2) == 201.35       # 200 + 135/100
+    assert r["ampel"] == "✅"                           # GS gestiegen = gut
 
 
 def test_roll_candidate_explained_liefert_herleitung():
@@ -73,7 +113,6 @@ def test_pnl_breakdown_gewinn_summe_stimmt():
     assert b["im_gewinn"] is True
     assert round(b["pnl_abs"], 2) == 150.00            # (300 - 150) * 1
     assert round(b["breakeven_old"], 2) == 47.00       # 50 - 300/100
-    # Einnahme-Zeile (+) und Rückkauf-Zeile (−) summieren sich auf pnl_abs:
     einnahme = next(l for l in b["lines"] if l["label"] == "Beim Verkauf eingenommen")
     rueckkauf = next(l for l in b["lines"] if l["label"] == "Rückkauf kostet heute")
     assert round(einnahme["wert"], 2) == 300.00
@@ -102,3 +141,12 @@ def test_pnl_breakdown_hat_gewinnschwelle_zeile():
     gs = next(l for l in b["lines"] if l["label"] == "Gewinnschwelle")
     assert round(gs["wert"], 2) == 47.00
     assert gs["einheit"] == "$/Aktie"
+
+
+def test_pnl_breakdown_call_breakeven_formel():
+    # Short Call K=200, Prämie 135$/Kontrakt -> BE = 201.35
+    b = pnl_breakdown(K=200.0, S=163.0, P_eroeffnung=135.0, P_heute=495.0, n=1,
+                      option_type="call")
+    gs = next(l for l in b["lines"] if l["label"] == "Gewinnschwelle")
+    assert round(gs["wert"], 2) == 201.35              # 200 + 135/100
+    assert "+" in gs["formel"]                         # Call-Formel hat +

@@ -231,6 +231,15 @@ def _load_put_history(symbol, entry_date, dte_min, dte_max):
 
 
 @st.cache_data(ttl=300)
+def _load_call_history(symbol, entry_date, dte_min, dte_max):
+    return select_into_dataframe(
+        sql_file_path=PATH_DATABASE_QUERY_FOLDER / "roll_call_history.sql",
+        params={"symbol": symbol, "entry_date": str(entry_date),
+                "dte_min": int(dte_min), "dte_max": int(dte_max)},
+    )
+
+
+@st.cache_data(ttl=300)
 def _load_spread_open_history(symbol, entry_date, expiration_date):
     """Historische Kette (put+call) EINES Verfalls am Eröffnungstag des Spreads.
 
@@ -250,6 +259,18 @@ def _load_roll_candidates(symbol, K, dte_min, dte_max,
                           min_oi=50, min_vol=10, delta_min=-1.0, delta_max=-0.05):
     return select_into_dataframe(
         sql_file_path=PATH_DATABASE_QUERY_FOLDER / "roll_candidates.sql",
+        params={"symbol": symbol, "K": float(K),
+                "dte_min": int(dte_min), "dte_max": int(dte_max),
+                "min_oi": int(min_oi), "min_vol": int(min_vol),
+                "delta_min": float(delta_min), "delta_max": float(delta_max)},
+    )
+
+
+@st.cache_data(ttl=300)
+def _load_call_candidates(symbol, K, dte_min, dte_max,
+                          min_oi=50, min_vol=10, delta_min=0.05, delta_max=1.0):
+    return select_into_dataframe(
+        sql_file_path=PATH_DATABASE_QUERY_FOLDER / "roll_call_candidates.sql",
         params={"symbol": symbol, "K": float(K),
                 "dte_min": int(dte_min), "dte_max": int(dte_max),
                 "min_oi": int(min_oi), "min_vol": int(min_vol),
@@ -509,8 +530,10 @@ def _render_iv_chart(symbol: str):
 # ---------------------------------------------------------------------------
 def _render_position_card(symbol: str, K: float, S: float, p_today_share: float,
                            P_eroeffnung: float, P_heute: float, n: int,
-                           expiration_date, price_src: str):
-    pos = position_status(K=K, S=S, P_eroeffnung=P_eroeffnung, P_heute=P_heute, n=int(n))
+                           expiration_date, price_src: str,
+                           option_type: str = "put"):
+    pos = position_status(K=K, S=S, P_eroeffnung=P_eroeffnung, P_heute=P_heute,
+                          n=int(n), option_type=option_type)
     dte_rest = (_parse_date(expiration_date) - date.today()).days
 
     pnl_pct = pos["pnl_pct"]
@@ -522,6 +545,8 @@ def _render_position_card(symbol: str, K: float, S: float, p_today_share: float,
     pnl_abs_sign = "+" if pnl_abs >= 0 else ""
     status_label = "IM GEWINN" if pnl_pct >= 0 else "IM VERLUST"
     status_color = "#00d4aa" if pnl_pct >= 0 else "#ef4444"
+    opt_label = "Call" if option_type == "call" else "Put"
+    price_label = f"{opt_label} heute"
 
     html = f"""
     <style>
@@ -600,7 +625,7 @@ def _render_position_card(symbol: str, K: float, S: float, p_today_share: float,
     </style>
     <div class="pos-card">
         <div class="pos-header">
-            <div class="pos-symbol">{symbol} · ${K:.2f} Put · {n}×</div>
+            <div class="pos-symbol">{symbol} · ${K:.2f} {opt_label} · {n}×</div>
             <div class="pos-status">{status_label} {pnl_sign}{pnl_pct:.1f}%</div>
         </div>
         <div class="pos-grid">
@@ -609,7 +634,7 @@ def _render_position_card(symbol: str, K: float, S: float, p_today_share: float,
                 <div class="pos-value">${S:.2f}</div>
             </div>
             <div class="pos-cell">
-                <div class="pos-label">Put heute</div>
+                <div class="pos-label">{price_label}</div>
                 <div class="pos-value">${p_today_share:.2f}</div>
             </div>
             <div class="pos-cell">
@@ -675,29 +700,42 @@ def _render_pnl_breakdown(b: dict) -> None:
 # Tab 2 -- Roller
 # ---------------------------------------------------------------------------
 def render_roller_tab():
-    st.subheader("🔄 Roller -- bestehenden Cash-Secured Put rollen")
+    st.subheader("🔄 Roller -- bestehenden Short Put oder Short Call rollen")
 
     with st.expander("ℹ️ Wie funktioniert das Rollen? (Konzept)", expanded=False):
         st.markdown("""
 **Warum rollen?**
-Wenn dein Put im Verlust ist (der Kurs der Aktie ist unter deinen Strike gefallen),
-kannst du den alten Put zurückkaufen und gleichzeitig einen neuen verkaufen --
-idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle senkst.
+Wenn deine Position im Verlust ist, kannst du die alte Option zurückkaufen und gleichzeitig
+eine neue verkaufen — idealerweise so, dass du netto noch Prämie einnimmst und deine
+Gewinnschwelle verbesserst.
+
+**Short Put — Roll-Ziel:** Gewinnschwelle senken (tieferer Strike)
+**Short Call — Roll-Ziel:** Gewinnschwelle heben (höherer Strike, weiter OTM)
 
 **Die 3 Stufen (Buch Kap. 3):**
 | Stufe | Was passiert | Ziel |
 |-------|-------------|------|
-| **1** | Niedrigerer Strike, gleiche Anzahl Kontrakte | GS senken, wenig Kapital |
-| **2** | Gleicher Strike, gleiche Anzahl | GS senken wenn kein tieferer Strike möglich |
-| **3** | Niedrigerer Strike, doppelte Kontrakte | GS maximal senken, mehr Kapital nötig |
+| **↕️ Vertikal** | Besserer Strike, gleiche Anzahl Kontrakte | GS verbessern, wenig Kapital |
+| **↔️ Horizontal** | Gleicher Strike, gleiche Anzahl | Mehr Zeit wenn kein besserer Strike möglich |
+| **✖️2 Verdoppeln** | Besserer Strike, doppelte Kontrakte | GS maximal verbessern, mehr Kapital nötig |
 
 **Ampel-Logik:**
-- ✅ Netto-Prämie positiv UND neue Gewinnschwelle niedriger als alte
+- ✅ Netto-Prämie positiv UND Gewinnschwelle verbessert
 - ⚠️ Netto-Prämie positiv, aber GS wird nicht besser
 - ❌ Roll kostet drauf (netto negativ) -- kein sinnvoller Roll möglich
 
 **Netto-Prämie** = Eröffnungsprämie + neue Prämie × Kontrakte − Rückkaufpreis
 """)
+
+    # ── Put / Call Wahl ──────────────────────────────────────────────────────
+    option_type = st.radio(
+        "Optionstyp",
+        options=["put", "call"],
+        format_func=lambda x: "📉 Short Put" if x == "put" else "📈 Short Call (nackt)",
+        horizontal=True,
+        key="roll_option_type",
+    )
+    is_call = option_type == "call"
 
     symbols = _load_symbols()
     if not symbols:
@@ -713,20 +751,21 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
         st.info("Symbol wählen -- erst dann werden Historie und Kurse geladen.")
         return
 
-    # Reset "Puts laden"-State bei Symbol-/Datum-Wechsel
+    # Reset bei Symbol- oder Typ-Wechsel
     prev_key = st.session_state.get("_roll_search_key")
-    curr_key = str(symbol)
+    curr_key = f"{symbol}_{option_type}"
     if prev_key != curr_key:
         st.session_state["roll_puts_searched"] = False
         st.session_state["_roll_search_key"] = curr_key
 
+    opt_label = "Call" if is_call else "Put"
     col_date, col_dte1, col_dte2 = st.columns([2, 1, 1])
     entry_date = col_date.date_input(
-        "Einstiegsdatum (Eröffnung des Puts)",
+        f"Einstiegsdatum (Eröffnung des {opt_label}s)",
         value=st.session_state.get("roll_entry_date_val", date.today()),
         max_value=date.today(),
         key="roll_entry_date_val",
-        help="Wähle den Tag an dem du den Put verkauft hast.",
+        help=f"Wähle den Tag an dem du den {opt_label} verkauft hast.",
     )
     if not entry_date:
         return
@@ -743,26 +782,30 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
     show_weekly  = fc2.checkbox("Weekly",  value=True, key="roll_weekly")
     show_daily   = fc3.checkbox("Daily",   value=False, key="roll_daily")
     with fc4:
-        if st.button("🔍 Puts laden", key="roll_load_puts", type="primary"):
+        if st.button(f"🔍 {opt_label}s laden", key="roll_load_puts", type="primary"):
             st.session_state["roll_puts_searched"] = True
     if not st.session_state.get("roll_puts_searched"):
-        st.info("Datum + DTE einstellen und 'Puts laden' klicken.")
+        st.info(f"Datum + DTE einstellen und '{opt_label}s laden' klicken.")
         return
 
-    with st.spinner("Lade Put-Historie…"):
-        hist_df = _load_put_history(symbol, entry_date, dte_min, dte_max)
+    with st.spinner(f"Lade {opt_label}-Historie…"):
+        hist_df = (_load_call_history if is_call else _load_put_history)(
+            symbol, entry_date, dte_min, dte_max
+        )
     if hist_df is None or hist_df.empty:
-        st.warning(f"Keine Puts für {symbol} am {entry_date} im DTE-Bereich {dte_min}-{dte_max} gefunden.")
+        st.warning(f"Keine {opt_label}s für {symbol} am {entry_date} im DTE-Bereich {dte_min}-{dte_max} gefunden.")
         return
 
     hist_df = filter_by_expiration_type(hist_df, "expiration_date",
                                         show_monthly, show_weekly, show_daily)
     if hist_df.empty:
-        st.warning("Keine Puts für die gewählten Verfallstypen.")
+        st.warning(f"Keine {opt_label}s für die gewählten Verfallstypen.")
         return
 
+    # Puts: höchster Strike zuerst; Calls: niedrigster Strike zuerst
     hist_df = (hist_df
-               .sort_values(["expiration_date", "strike_price"], ascending=[True, False])
+               .sort_values(["expiration_date", "strike_price"],
+                            ascending=[True, is_call])
                .reset_index(drop=True))
 
     exp_options = (hist_df[["expiration_date", "days_to_expiration"]]
@@ -785,7 +828,7 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
     chosen_exp = exp_labels[chosen_label]
 
     exp_df = (hist_df[hist_df["expiration_date"] == chosen_exp]
-              .sort_values("strike_price", ascending=True)
+              .sort_values("strike_price", ascending=is_call)
               .reset_index(drop=True))
 
     st.markdown("**2. Deinen Strike anklicken:**")
@@ -793,7 +836,6 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
     if "roll_strike_selected_idx" not in st.session_state:
         st.session_state.roll_strike_selected_idx = None
 
-    # Reset Strike-Auswahl wenn Verfall wechselt
     prev_exp = st.session_state.get("_roll_prev_exp")
     if prev_exp != str(chosen_exp):
         st.session_state.roll_strike_selected_idx = None
@@ -836,25 +878,25 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
     if selected_idx is None:
         st.info("👆 Strike-Kachel anklicken.")
         return
-    put = exp_df.iloc[selected_idx]
+    opt_row = exp_df.iloc[selected_idx]
 
-    K = float(put["strike_price"])
-    option_osi = put["option_osi"]
-    expiration_date = put["expiration_date"]
+    K = float(opt_row["strike_price"])
+    option_osi = opt_row["option_osi"]
+    expiration_date = opt_row["expiration_date"]
 
-    p_open_suggest = float(put["premium_option_price"])
+    p_open_suggest = float(opt_row["premium_option_price"])
     st.markdown("### 🛠️ Tatsächliche Ausführungskurse (Optional)")
     override = st.checkbox(
         "Echten Eröffnungs-Fill manuell eintragen",
         value=False,
-        help="Ersetzt den historischen Tagesschluss durch deinen realen Verkaufspreis. "
-             "Relevant wenn dein Fill deutlich vom day_close abwich.",
+        help=f"Ersetzt den historischen Tagesschluss durch deinen realen Verkaufspreis. "
+             f"Relevant wenn dein Fill deutlich vom day_close abwich.",
     )
     if override:
         p_open_suggest = st.number_input(
-            "Eröffnungsprämie je Aktie ($)", min_value=0.0,
+            f"Eröffnungsprämie je Aktie ($)", min_value=0.0,
             value=p_open_suggest, step=0.01, format="%.2f",
-            help="Was hast du beim Verkauf des Puts erhalten? (je Aktie, nicht je Kontrakt)",
+            help=f"Was hast du beim Verkauf des {opt_label}s erhalten? (je Aktie, nicht je Kontrakt)",
         )
     P_eroeffnung = p_open_suggest * 100.0
 
@@ -865,7 +907,7 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
         S = f_stock.result()
 
     if p_today_share is None:
-        st.error("Aktueller Put-Preis nicht ermittelbar.")
+        st.error(f"Aktueller {opt_label}-Preis nicht ermittelbar.")
         return
     if S is None:
         st.error("Aktueller Aktienkurs nicht ermittelbar.")
@@ -875,16 +917,21 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
     st.divider()
     st.markdown("### 📊 Aktuelle Position")
     pos = _render_position_card(symbol, K, S, p_today_share, P_eroeffnung, P_heute,
-                                int(n_contracts), expiration_date, price_src)
+                                int(n_contracts), expiration_date, price_src,
+                                option_type=option_type)
 
     with st.expander("🧮 Wie rechnet sich das? (G/V der Position)", expanded=False):
         _render_pnl_breakdown(
             pnl_breakdown(K=K, S=S, P_eroeffnung=P_eroeffnung,
-                          P_heute=P_heute, n=int(n_contracts))
+                          P_heute=P_heute, n=int(n_contracts),
+                          option_type=option_type)
         )
 
     # ── Ludwig Restzeitwert-Analyse ──────────────────────────────────────────
-    innerer_wert_share = max(0.0, K - S)
+    if is_call:
+        innerer_wert_share = max(0.0, S - K)
+    else:
+        innerer_wert_share = max(0.0, K - S)
     restzeitwert_share = max(0.0, p_today_share - innerer_wert_share)
     restzeitwert_pct = (restzeitwert_share / (P_eroeffnung / 100) * 100) if P_eroeffnung > 0 else 0
 
@@ -895,7 +942,7 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
         cols_lw[0].metric(
             "Restzeitwert",
             f"${restzeitwert_share:.2f}/Aktie",
-            help="Aktueller Put-Preis minus innerer Wert (max(0, Strike − Kurs)). Sinkt auf 0 bis Verfall.",
+            help=f"Aktueller {opt_label}-Preis minus innerer Wert. Sinkt auf 0 bis Verfall.",
         )
         cols_lw[1].metric(
             "Zeitwert % von Eröffnung",
@@ -909,7 +956,6 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
                 help="Tage bis Verfall. Ludwig: optimales Roll-Fenster 7–14 Tage vor Verfall.",
             )
 
-    # Ludwig Roll-Trigger Warnungen
     if restzeitwert_pct <= 15 and P_heute > 0:
         st.warning(
             f"⚡ **Ludwig Roll-Trigger:** Restzeitwert nur noch **{restzeitwert_pct:.1f}%** der Eröffnungsprämie "
@@ -930,30 +976,34 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
     elif dte_rest is not None and dte_rest <= 6:
         st.error(
             f"🚨 Nur noch **{dte_rest} Tage** bis Verfall — letzte Tage: Gamma sehr hoch, "
-            f"kleine Kursbewegungen können den Put-Preis stark bewegen. Sofort handeln oder laufen lassen."
+            f"kleine Kursbewegungen können den {opt_label}-Preis stark bewegen. Sofort handeln oder laufen lassen."
         )
 
-    # Roll-Kandidaten
+    # ── Roll-Kandidaten ──────────────────────────────────────────────────────
     st.divider()
     im_verlust = P_heute > P_eroeffnung
     if im_verlust:
-        st.error("🔴 Position im Verlust -- Rollen sinnvoll, um die Gewinnschwelle zu senken.")
+        st.error(f"🔴 Position im Verlust -- Rollen sinnvoll, um die Gewinnschwelle zu verbessern.")
     else:
-        st.success("🟢 Position im Gewinn -- Rollen optional (z. B. Laufzeit verlängern für mehr Prämie).")
+        st.success(f"🟢 Position im Gewinn -- Rollen optional (z. B. Laufzeit verlängern für mehr Prämie).")
 
     st.markdown("### 🎯 Roll-Kandidaten")
     with st.expander("ℹ️ Wie lese ich die Tabelle?", expanded=False):
-        st.markdown("""
+        if is_call:
+            st.markdown("""
+- **Netto absolut**: Gesamtprämie nach dem Roll -- positiv heißt du nimmst Geld ein
+- **GS-Delta**: Wie sehr sich deine Gewinnschwelle verbessert (▲ = höher = besser für Short Call)
+- **↕️ Vertikal** = höherer Strike (weiter OTM) · **↔️ Horizontal** = gleicher Strike, mehr Zeit · **✖️2 Verdoppeln** = höherer Strike, doppelte Kontrakte
+- 🟢 DTE-Farbe = 30–60 Tage (Buch-Optimum), 🟡 = 61–90 Tage (Ausnahme)
+""")
+        else:
+            st.markdown("""
 - **Netto absolut**: Gesamtprämie nach dem Roll -- positiv heißt du nimmst Geld ein
 - **Neue GS**: Deine neue Gewinnschwelle nach dem Roll (je niedriger, desto besser)
-- **Alte GS**: Deine aktuelle Gewinnschwelle (Vergleichswert)
-- **Kapital nötig**: Cash der als Sicherheit hinterlegt werden muss (Strike × Kontrakte × 100)
-- **Klick auf eine Zeile** → Plain-Language Erklärung was genau passiert
+- **↕️ Vertikal** = niedrigerer Strike (OTM) · **↔️ Horizontal** = gleicher Strike, mehr Zeit · **✖️2 Verdoppeln** = niedrigerer Strike, doppelte Kontrakte
 - 🟢 DTE-Farbe = 30–60 Tage (Buch-Optimum), 🟡 = 61–90 Tage (Ausnahme)
-- **↕️ Vertikal** = niedrigerer Strike (OTM), gleiche Kontrakte · **↔️ Horizontal** = gleicher Strike, nur Zeit · **✖️2 Verdoppeln** = niedrigerer Strike, doppelte Kontrakte
 """)
 
-    # Filter-Zeile für Roll-Kandidaten
     _fc1, _fc2, _fc3 = st.columns([1.5, 1.5, 4])
     _roll_90 = _fc1.checkbox(
         "Bis 90 DTE einbeziehen",
@@ -966,23 +1016,29 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
         "Min. Puffer % zum Kurs",
         min_value=0, max_value=30, value=0, step=1,
         key="roll_cand_puffer",
-        help="Nur Roll-Kandidaten anzeigen deren Strike mindestens X% unter dem aktuellen Kurs liegt. "
-             "0 = kein Filter (alle OTM-Strikes). 5% bei Kurs $141 → max Strike $134.",
+        help="Nur Roll-Kandidaten anzeigen deren Strike mindestens X% vom aktuellen Kurs entfernt liegt. "
+             "0 = kein Filter.",
     )
     _dte_max_cand = 90 if _roll_90 else 60
     if _roll_puffer > 0:
-        _fc3.caption(f"Puffer-Filter aktiv: Strike ≤ ${S * (1 - _roll_puffer/100):.2f} (= Kurs ${S:.2f} − {_roll_puffer}%)")
+        if is_call:
+            _fc3.caption(f"Puffer-Filter aktiv: Strike ≥ ${S * (1 + _roll_puffer/100):.2f} (= Kurs ${S:.2f} + {_roll_puffer}%)")
+        else:
+            _fc3.caption(f"Puffer-Filter aktiv: Strike ≤ ${S * (1 - _roll_puffer/100):.2f} (= Kurs ${S:.2f} − {_roll_puffer}%)")
     else:
-        _fc3.caption("Puffer-Filter inaktiv — alle OTM-Strikes (< aktueller Kurs) werden angezeigt.")
+        _fc3.caption("Puffer-Filter inaktiv — alle OTM-Strikes werden angezeigt.")
 
+    if is_call:
+        cand = _load_call_candidates(symbol, K, 30, _dte_max_cand)
+    else:
+        cand = _load_roll_candidates(symbol, K, 30, _dte_max_cand)
 
-    cand = _load_roll_candidates(symbol, K, 30, _dte_max_cand)
     if cand is None or cand.empty:
         if not _roll_90:
-            st.warning("Keine Kandidaten in 30–60 DTE gefunden. Versuche 'Bis 90 DTE einbeziehen'.")
+            st.warning(f"Keine Kandidaten in 30–60 DTE gefunden. Versuche 'Bis 90 DTE einbeziehen'.")
         else:
-            st.warning("Keine aktuellen Put-Kandidaten (DTE 30-90, liquide) gefunden.")
-        _render_endgame_hint()
+            st.warning(f"Keine aktuellen {opt_label}-Kandidaten (DTE 30-90, liquide) gefunden.")
+        _render_endgame_hint(option_type)
         return
 
     cand = cand.copy()
@@ -992,29 +1048,50 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
     any_green = False
     breakeven_old = pos["breakeven_old"]
 
-    # Puffer-Grenze berechnen: Strike muss ≤ S * (1 - puffer/100)
-    _strike_max_otm = S * (1 - _roll_puffer / 100) if _roll_puffer > 0 else S
+    if is_call:
+        # OTM für Calls = Strike ÜBER dem Kurs; Puffer hebt die Mindestgrenze
+        _strike_min_otm = S * (1 + _roll_puffer / 100) if _roll_puffer > 0 else S
+        # ↕️ Vertikal: höherer Strike als K (weiter OTM)
+        st1 = cand[cand["strike_price"] > _strike_min_otm].sort_values(
+            ["strike_price", "days_to_expiration"], ascending=[True, True]
+        )
+        # ↔️ Horizontal: gleicher Strike
+        st2_raw = cand[cand["strike_price"] == K]
+        itm_pct = (S - K) / K * 100 if K > 0 else 0
+        # ✖️2 Verdoppeln: höherer Strike, doppelte Kontrakte
+        st3 = cand[cand["strike_price"] > _strike_min_otm].sort_values(
+            ["strike_price", "days_to_expiration"], ascending=[True, True]
+        )
+    else:
+        _strike_max_otm = S * (1 - _roll_puffer / 100) if _roll_puffer > 0 else S
+        st1 = cand[cand["strike_price"] < _strike_max_otm].sort_values(
+            ["strike_price", "days_to_expiration"], ascending=[False, True]
+        )
+        st2_raw = cand[cand["strike_price"] == K]
+        itm_pct = (K - S) / K * 100 if K > 0 else 0
+        st3 = cand[cand["strike_price"] < _strike_max_otm].sort_values(
+            ["strike_price", "days_to_expiration"], ascending=[False, True]
+        )
 
-    # Kandidaten je Kategorie vorbereiten (Logik identisch zu den alten Stufen 1/2/3,
-    # nur unter benannten Reitern präsentiert).
-    # ↕️ Vertikal (= Stufe 1): OTM-Strikes (< aktueller Kurs S), mit optionalem Puffer
-    st1 = cand[cand["strike_price"] < _strike_max_otm].sort_values(
-        ["strike_price", "days_to_expiration"], ascending=[False, True]
-    )
-    # ↔️ Horizontal (= Stufe 2): gleicher Strike wie K — nur wenn K selbst OTM oder max 15% ITM
-    st2_raw = cand[cand["strike_price"] == K]
-    itm_pct = (K - S) / K * 100 if K > 0 else 0
-    # ✖️2 Verdoppeln (= Stufe 3): OTM-Strikes mit Puffer, doppelte Kontrakte
-    st3 = cand[cand["strike_price"] < _strike_max_otm].sort_values(
-        ["strike_price", "days_to_expiration"], ascending=[False, True]
-    )
+    if is_call:
+        tab_v_label = "↕️ Vertikal"
+        tab_v_caption = "Strike heben (weiter OTM), gleiche Laufzeit-Klasse, gleiche Kontraktzahl."
+        tab_x2_caption = "Höherer Strike (weiter OTM), doppelte Kontraktzahl — maximale GS-Verbesserung, mehr Kapital nötig."
+        tab_v_title = "↕️ Vertikal — höherer Strike (OTM), gleiche Kontrakte"
+        tab_x2_title = "✖️2 Verdoppeln — höherer Strike (OTM), Kontrakte verdoppelt"
+    else:
+        tab_v_label = "↕️ Vertikal"
+        tab_v_caption = "Strike senken (OTM), gleiche Laufzeit-Klasse, gleiche Kontraktzahl."
+        tab_x2_caption = "Niedrigerer Strike (OTM), doppelte Kontraktzahl — maximale GS-Senkung, mehr Kapital nötig."
+        tab_v_title = "↕️ Vertikal — niedrigerer Basispreis (OTM), gleiche Kontrakte"
+        tab_x2_title = "✖️2 Verdoppeln — niedrigerer Basispreis (OTM), Kontrakte verdoppelt"
 
-    tab_v, tab_h, tab_x2 = st.tabs(["↕️ Vertikal", "↔️ Horizontal", "✖️2 Verdoppeln"])
+    tab_v, tab_h, tab_x2 = st.tabs([tab_v_label, "↔️ Horizontal", "✖️2 Verdoppeln"])
 
     with tab_v:
-        st.caption("Strike senken (OTM), gleiche Laufzeit-Klasse, gleiche Kontraktzahl.")
-        any_green |= _render_stufe(1, st1, K, P_eroeffnung, P_heute, int(n_contracts), breakeven_old,
-                                   "↕️ Vertikal — niedrigerer Basispreis (OTM), gleiche Kontrakte")
+        st.caption(tab_v_caption)
+        any_green |= _render_stufe(1, st1, K, P_eroeffnung, P_heute, int(n_contracts),
+                                   breakeven_old, tab_v_title, option_type=option_type)
 
     with tab_h:
         st.caption("Gleicher Strike, nur Zeit kaufen (späterer Verfall).")
@@ -1026,18 +1103,18 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
             st2 = st2_raw.iloc[0:0]
         else:
             st2 = st2_raw
-        any_green |= _render_stufe(2, st2, K, P_eroeffnung, P_heute, int(n_contracts), breakeven_old,
-                                   "↔️ Horizontal — gleicher Basispreis, gleiche Kontrakte")
+        any_green |= _render_stufe(2, st2, K, P_eroeffnung, P_heute, int(n_contracts),
+                                   breakeven_old, "↔️ Horizontal — gleicher Basispreis, gleiche Kontrakte",
+                                   option_type=option_type)
 
     with tab_x2:
-        st.caption("Niedrigerer Strike (OTM), doppelte Kontraktzahl — maximale GS-Senkung, mehr Kapital nötig.")
-        any_green |= _render_stufe(3, st3, K, P_eroeffnung, P_heute, 2 * int(n_contracts), breakeven_old,
-                                   "✖️2 Verdoppeln — niedrigerer Basispreis (OTM), Kontrakte verdoppelt")
+        st.caption(tab_x2_caption)
+        any_green |= _render_stufe(3, st3, K, P_eroeffnung, P_heute, 2 * int(n_contracts),
+                                   breakeven_old, tab_x2_title, option_type=option_type)
 
     if not any_green:
-        _render_endgame_hint()
+        _render_endgame_hint(option_type)
 
-    # DeepSeek Roll-Assistent (unterhalb aller Stufen)
     _render_roll_ai_chat(
         symbol=symbol, K=K, S=S,
         P_eroeffnung=P_eroeffnung, P_heute=P_heute,
@@ -1046,7 +1123,8 @@ idealerweise so, dass du netto noch Prämie einnimmst und deine Gewinnschwelle s
     )
 
 
-def _render_stufe(stufe, df, K, P_eroeffnung, P_heute, n, breakeven_old, title):
+def _render_stufe(stufe, df, K, P_eroeffnung, P_heute, n, breakeven_old, title,
+                  option_type="put"):
     """Roll-Kandidaten als horizontale Karten -- Top-3 sofort sichtbar, Rest ausklappbar."""
     st.markdown(f"#### {title}")
     if df is None or df.empty:
@@ -1061,8 +1139,7 @@ def _render_stufe(stufe, df, K, P_eroeffnung, P_heute, n, breakeven_old, title):
         K2 = float(o["strike_price"])
         P_neu = float(o["premium_option_price"]) * 100.0
         r = roll_candidate(stufe=stufe, K=K, K2=K2, P_eroeffnung=P_eroeffnung,
-                           P_heute=P_heute, P_neu=P_neu, n=n)
-        # global_idx: eindeutig pro Stufe über Top-3 und Rest hinweg
+                           P_heute=P_heute, P_neu=P_neu, n=n, option_type=option_type)
         candidates.append({"global_idx": i, "K2": K2, "P_neu": P_neu,
                             "expiry": o["expiration_date"],
                             "dte": int(o["days_to_expiration"]),
@@ -1077,16 +1154,19 @@ def _render_stufe(stufe, df, K, P_eroeffnung, P_heute, n, breakeven_old, title):
     top3 = candidates[:3]
     rest = candidates[3:]
 
-    _render_candidate_cards(top3, stufe, K, P_eroeffnung, P_heute, n, breakeven_old)
+    _render_candidate_cards(top3, stufe, K, P_eroeffnung, P_heute, n, breakeven_old,
+                            option_type=option_type)
 
     if rest:
         with st.expander(f"Alle {len(candidates)} Kandidaten anzeigen"):
-            _render_candidate_cards(rest, stufe, K, P_eroeffnung, P_heute, n, breakeven_old)
+            _render_candidate_cards(rest, stufe, K, P_eroeffnung, P_heute, n, breakeven_old,
+                                    option_type=option_type)
 
     return any_green
 
 
-def _render_candidate_cards(candidates, stufe, K, P_eroeffnung, P_heute, n, breakeven_old):
+def _render_candidate_cards(candidates, stufe, K, P_eroeffnung, P_heute, n, breakeven_old,
+                            option_type="put"):
     """Rendert Kandidaten als 3-spaltige Karten-Reihen."""
     sel_key = f"stufe_{stufe}_sel"
 
@@ -1104,8 +1184,12 @@ def _render_candidate_cards(candidates, stufe, K, P_eroeffnung, P_heute, n, brea
         for col, cand in zip(cols, chunk):
             r = cand["result"]
             bg, border_c, accent = _AMPEL_STYLE.get(r["ampel"], ("#162032", "#2d3f55", "#64748b"))
-            gs_delta = breakeven_old - r["breakeven_new"]
-            gs_arrow = f"▼ ${gs_delta:.2f}" if gs_delta > 0 else (f"▲ ${abs(gs_delta):.2f}" if gs_delta < 0 else "=")
+            # Für Calls: GS steigen = gut (umgekehrt zu Puts)
+            if option_type == "call":
+                gs_delta = r["breakeven_new"] - breakeven_old
+            else:
+                gs_delta = breakeven_old - r["breakeven_new"]
+            gs_arrow = f"▲ ${gs_delta:.2f}" if gs_delta > 0 else (f"▼ ${abs(gs_delta):.2f}" if gs_delta < 0 else "=")
             gs_color = "#34d399" if gs_delta > 0 else ("#f87171" if gs_delta < 0 else "#94a3b8")
             netto_color = "#34d399" if r["netto_abs"] > 0 else "#f87171"
             dte_val = cand['dte']
@@ -1174,15 +1258,18 @@ def _render_candidate_cards(candidates, stufe, K, P_eroeffnung, P_heute, n, brea
                     cand = match[0]
                     exp = roll_candidate_explained(stufe=stufe, K=K, K2=cand["K2"],
                                                    P_eroeffnung=P_eroeffnung, P_heute=P_heute,
-                                                   P_neu=cand["P_neu"], n=n)
+                                                   P_neu=cand["P_neu"], n=n,
+                                                   option_type=option_type)
                     _render_roll_explanation(exp, K, cand["K2"], P_eroeffnung, P_heute,
-                                             cand["P_neu"], n, breakeven_old)
+                                             cand["P_neu"], n, breakeven_old,
+                                             option_type=option_type)
             except (ValueError, IndexError):
                 pass
 
 
 def _render_roll_explanation(exp: dict, K: float, K2: float, P_eroeffnung: float,
-                             P_heute: float, P_neu: float, n: int, breakeven_old: float):
+                             P_heute: float, P_neu: float, n: int, breakeven_old: float,
+                             option_type: str = "put"):
     """Plain-Language Roll-Erklärung statt Formel-Strings."""
     p_open_per_share = P_eroeffnung / 100
     p_today_per_share = P_heute / 100
@@ -1190,26 +1277,35 @@ def _render_roll_explanation(exp: dict, K: float, K2: float, P_eroeffnung: float
     netto = exp["netto_abs"]
     netto_per_share = netto / (n * 100)
     gs_new = exp["breakeven_new"]
-    gs_delta = breakeven_old - gs_new  # positiv = GS gesunken = gut
-    ampel = exp["ampel"]
+    opt_label = "Call" if option_type == "call" else "Put"
+    # Für Calls: GS steigen ist gut; für Puts: GS sinken ist gut
+    if option_type == "call":
+        gs_delta = gs_new - breakeven_old
+        gs_gut_text = f"Die Aktie darf nun weiter steigen, bevor du ins Minus gerätst."
+        gs_schlecht_text = f"das ist schlechter als vorher (GS gesunken)."
+    else:
+        gs_delta = breakeven_old - gs_new
+        gs_gut_text = f"Die Aktie darf nun weiter fallen, bevor du ins Minus gerätst."
+        gs_schlecht_text = f"das ist schlechter als vorher."
+    ampel_val = exp["ampel"]
 
     with st.container(border=True):
-        st.markdown(f"**{ampel} Was passiert bei diesem Roll?**")
+        st.markdown(f"**{ampel_val} Was passiert bei diesem Roll?**")
 
         col1, col2 = st.columns(2)
         with col1:
-            st.markdown("**Schritt 1 -- Alten Put schließen:**")
+            st.markdown(f"**Schritt 1 -- Alten {opt_label} schließen:**")
             st.markdown(
-                f"Du kaufst deinen bestehenden Put (Strike **${K:.2f}**) zurück. "
+                f"Du kaufst deinen bestehenden {opt_label} (Strike **${K:.2f}**) zurück. "
                 f"Du hast ihn damals für **${p_open_per_share:.2f}** verkauft, "
                 f"jetzt kostet er **${p_today_per_share:.2f}**. "
                 + ("Das ist ein **Gewinn** für dich." if p_today_per_share < p_open_per_share
-                   else "Das ist ein **Verlust** (Put ist teurer geworden).")
+                   else f"Das ist ein **Verlust** ({opt_label} ist teurer geworden).")
             )
         with col2:
-            st.markdown(f"**Schritt 2 -- Neuen Put eröffnen ({n}× Kontrakt{'e' if n > 1 else ''}):**")
+            st.markdown(f"**Schritt 2 -- Neuen {opt_label} eröffnen ({n}× Kontrakt{'e' if n > 1 else ''}):**")
             st.markdown(
-                f"Du verkaufst {'je ' if n > 1 else ''}**{n}×** einen neuen Put "
+                f"Du verkaufst {'je ' if n > 1 else ''}**{n}×** einen neuen {opt_label} "
                 f"(Strike **${K2:.2f}**) und nimmst dafür **${p_neu_per_share:.2f}** je Aktie ein."
             )
 
@@ -1228,29 +1324,34 @@ def _render_roll_explanation(exp: dict, K: float, K2: float, P_eroeffnung: float
 
         if gs_delta > 0:
             st.success(
-                f"✅ Deine Gewinnschwelle sinkt von **${breakeven_old:.2f}** auf **${gs_new:.2f}** "
-                f"(−${gs_delta:.2f}). Die Aktie darf nun weiter fallen, bevor du ins Minus gerätst."
+                f"✅ Deine Gewinnschwelle {'steigt' if option_type == 'call' else 'sinkt'} "
+                f"von **${breakeven_old:.2f}** auf **${gs_new:.2f}** "
+                f"({'+'if option_type == 'call' else '−'}${gs_delta:.2f}). {gs_gut_text}"
             )
         elif gs_delta == 0:
             st.warning("⚠️ Gewinnschwelle bleibt gleich -- Roll bringt keinen strukturellen Vorteil.")
         else:
             st.error(
-                f"❌ Gewinnschwelle steigt von ${breakeven_old:.2f} auf ${gs_new:.2f} -- "
-                f"das ist schlechter als vorher."
+                f"❌ Gewinnschwelle {'sinkt' if option_type == 'call' else 'steigt'} "
+                f"von ${breakeven_old:.2f} auf ${gs_new:.2f} -- {gs_schlecht_text}"
             )
 
         st.divider()
         st.markdown("**🧮 Der Roll als Kontoauszug (alt + neu als ein Geldfluss):**")
         netto = exp["netto_abs"]
         gesamt_vereinnahmt = P_eroeffnung + n * P_neu - P_heute
+        if option_type == "call":
+            gs_formel = f"K2 {K2:.2f} + {netto:.0f}/({n}×100)"
+        else:
+            gs_formel = f"K2 {K2:.2f} − {netto:.0f}/({n}×100)"
         roll_lines = [
-            f"Rückkauf alter Put: &nbsp; `{P_heute/100:.2f} $/Aktie × 100 × 1` &nbsp; = **{-P_heute:+.2f} $ gesamt**",
-            f"Verkauf neuer Put ({n}×): &nbsp; `{P_neu/100:.2f} $/Aktie × 100 × {n}` &nbsp; = **{n*P_neu:+.2f} $ gesamt**",
+            f"Rückkauf alter {opt_label}: &nbsp; `{P_heute/100:.2f} $/Aktie × 100 × 1` &nbsp; = **{-P_heute:+.2f} $ gesamt**",
+            f"Verkauf neuer {opt_label} ({n}×): &nbsp; `{P_neu/100:.2f} $/Aktie × 100 × {n}` &nbsp; = **{n*P_neu:+.2f} $ gesamt**",
             "---",
             f"**Netto aus dem Roll:** &nbsp; `{n*P_neu:.0f} − {P_heute:.0f}` &nbsp; = **{(n*P_neu - P_heute):+.2f} $ gesamt**",
             f"**Gesamt vereinnahmt (Eröffnung + neu − Rückkauf):** &nbsp; "
             f"`{P_eroeffnung:.0f} + {n*P_neu:.0f} − {P_heute:.0f}` &nbsp; = **{gesamt_vereinnahmt:+.2f} $ gesamt**",
-            f"**Neue Gewinnschwelle:** &nbsp; `K2 {K2:.2f} − {netto:.0f}/({n}×100)` &nbsp; "
+            f"**Neue Gewinnschwelle:** &nbsp; `{gs_formel}` &nbsp; "
             f"= **{exp['breakeven_new']:.2f} $/Aktie**",
         ]
         for rl in roll_lines:
@@ -1266,13 +1367,22 @@ def _render_roll_explanation(exp: dict, K: float, K2: float, P_eroeffnung: float
         )
 
 
-def _render_endgame_hint():
-    st.info(
-        "**Kein sinnvoller Put-Roll gefunden.** Nach Buchkonzept folgt jetzt das **Endspiel**: "
-        "Aktien andienen lassen und Covered Calls schreiben (asymmetrische Technik: 1 Call auf 200 Aktien, "
-        "Einstiegskurs über CC-Prämien bis zur Gewinnschwelle senken).\n\n"
-        "→ Nutze dafür den **ITM Covered Call Scanner** (Seite in der Navigation)."
-    )
+def _render_endgame_hint(option_type: str = "put"):
+    if option_type == "call":
+        st.info(
+            "**Kein sinnvoller Call-Roll gefunden.** Mögliche nächste Schritte:\n\n"
+            "- Strike weiter nach oben rollen (mehr Zeit kaufen, gleicher Strike)\n"
+            "- Position schließen und Verlust begrenzen\n"
+            "- Auf Covered Call wechseln wenn du die Aktie halten möchtest\n\n"
+            "→ Nutze den **ITM Covered Call Scanner** (Seite in der Navigation) für Covered-Call-Optionen."
+        )
+    else:
+        st.info(
+            "**Kein sinnvoller Put-Roll gefunden.** Nach Buchkonzept folgt jetzt das **Endspiel**: "
+            "Aktien andienen lassen und Covered Calls schreiben (asymmetrische Technik: 1 Call auf 200 Aktien, "
+            "Einstiegskurs über CC-Prämien bis zur Gewinnschwelle senken).\n\n"
+            "→ Nutze dafür den **ITM Covered Call Scanner** (Seite in der Navigation)."
+        )
 
 
 def _build_roll_ai_prompt(
