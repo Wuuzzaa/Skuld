@@ -210,14 +210,37 @@ with col12:
         help="Nur Aktien mit Kurs ≤ diesem Wert. 0 = keine Obergrenze.",
     )
 
+with st.expander("🎯 Quality Filters (Vorauswahl für realistische Trades)", expanded=True):
+    st.caption("Jeden Filter einzeln ein-/ausschalten. Aktiv = Haken gesetzt.")
+    qcol1, qcol2, qcol3 = st.columns(3)
+
+    with qcol1:
+        qf_max_ann = st.checkbox("Max Annualized ≤ 50%", value=True, key="qf_max_ann",
+            help="Returns über 50% p.a. sind meist Datenmüll oder illiquide Strikes.")
+        qf_min_ann = st.checkbox("Min Annualized ≥ 15%", value=True, key="qf_min_ann",
+            help="Unter 15% p.a. lohnt sich das Kapital-Risiko kaum.")
+
+    with qcol2:
+        qf_protection = st.checkbox("Min Downside Protection ≥ 10%", value=True, key="qf_protection",
+            help="Mindestens 10% Puffer bevor du Verlust machst.")
+        qf_mcap = st.checkbox("Min Market Cap ≥ $5B", value=True, key="qf_mcap",
+            help="Kleine Caps haben oft illiquide Options und hohe Bid/Ask-Spreads.")
+
+    with qcol3:
+        qf_earnings = st.checkbox("Earnings vor Verfall ausschließen", value=True, key="qf_earnings",
+            help="Aktien mit Earnings innerhalb der Halteperiode rausfiltern — IV-Crush-Risiko.")
+        qf_iv_rank = st.checkbox("Min IV Rank ≥ 30%", value=False, key="qf_iv_rank",
+            help="Nur Optionen verkaufen wenn IV erhöht ist. Deaktiviert = auch niedrige IV.")
+
+# Qualitätsfilter-Werte ableiten (überschreiben die manuellen Filter wenn aktiver Haken)
+_max_annualized  = 50   if qf_max_ann   else max_annualized
+_min_annualized  = 15   if qf_min_ann   else min_annualized
+_min_downside    = 10   if qf_protection else min_downside
+_min_market_cap  = 5.0  if qf_mcap      else min_market_cap_b
+_exclude_earnings = qf_earnings
+_min_iv_rank_eff = 30   if qf_iv_rank   else min_iv_rank
+
 scan_btn = st.button("Scan for Covered Calls", type="primary")
-exclude_earnings = st.checkbox(
-    "Earnings vor Verfall ausschließen",
-    value=False,
-    key="cc_exclude_earnings",
-    help="Aktien mit Earnings-Termin innerhalb der Halteperiode herausfiltern. "
-         "Deaktiviert = Earnings-Kandidaten werden angezeigt (mit Warnung in der Tabelle).",
-)
 
 # ── Load data ─────────────────────────────────────────────────────────────────
 if scan_btn:
@@ -253,17 +276,21 @@ if scan_btn:
                     if col in raw_df.columns:
                         raw_df[col] = pd.to_numeric(raw_df[col], errors="coerce")
 
-                # Apply post-filters
+                # Apply post-filters (Quality Filters überschreiben manuelle wenn aktiv)
                 df = raw_df[
-                    (raw_df["annualized_return_pct"] >= min_annualized) &
-                    (raw_df["annualized_return_pct"] <= max_annualized) &
-                    (raw_df["downside_protection_pct"] >= min_downside) &
+                    (raw_df["annualized_return_pct"] >= _min_annualized) &
+                    (raw_df["annualized_return_pct"] <= _max_annualized) &
+                    (raw_df["downside_protection_pct"] >= _min_downside) &
                     (raw_df["delta"] <= delta_target_max)
                 ].copy()
 
-                # IV Rank filter (skip rows where iv_rank is NaN)
-                if min_iv_rank > 0:
-                    df = df[df["iv_rank"].isna() | (df["iv_rank"] >= min_iv_rank)]
+                # IV Rank filter
+                if _min_iv_rank_eff > 0:
+                    df = df[df["iv_rank"].isna() | (df["iv_rank"] >= _min_iv_rank_eff)]
+
+                # Market Cap filter
+                if _min_market_cap > 0:
+                    df = df[df["market_cap_b"] >= _min_market_cap]
 
                 # Min option bid/premium filter
                 if min_premium > 0:
@@ -275,8 +302,8 @@ if scan_btn:
                 if price_max > 0:
                     df = df[df["stock_price"] <= price_max]
 
-                # Earnings-Filter (optional)
-                if exclude_earnings:
+                # Earnings-Filter
+                if _exclude_earnings:
                     df = df[
                         df["days_to_earnings"].isna() |
                         (df["days_to_earnings"] > df["dte"])
