@@ -452,10 +452,14 @@ if st.session_state["cc_df"] is not None:
         else:
             earn_warning = f"Earnings on {earnings} are after expiry — no IV crush risk for this position."
 
+        import plotly.graph_objects as go
+        import numpy as np
+        from src.ui_strategy_display import display_external_links
+
         st.divider()
         st.subheader(f"Trade Analysis — {symbol}")
 
-        # ── Großes, präsentes Ergebnis-Banner (grün ≥30 / amber ≥15 / grau) ──
+        # ── Banner ────────────────────────────────────────────────────────────
         if annualized >= 30:
             _bg, _brd, _tag = "#166534", "#22c55e", "🟢 STARK"
         elif annualized >= 15:
@@ -475,63 +479,191 @@ if st.session_state["cc_df"] is not None:
             f"Downside-Puffer {protection:.1f}% &nbsp;·&nbsp; Verfall {expiry}</span>"
             f"</div>", unsafe_allow_html=True)
 
+        # ── Firmeninfo + Sektor ───────────────────────────────────────────────
+        company_name = str(r.get("company_name", "")) or symbol
+        company_sector = str(r.get("company_sector", "")) or "—"
+        market_cap_b = float(r["market_cap_b"]) if pd.notna(r.get("market_cap_b")) else None
+        trailing_pe  = float(r["trailing_pe"])  if pd.notna(r.get("trailing_pe"))  else None
+        avg_volume   = float(r["avg_volume"])    if pd.notna(r.get("avg_volume"))   else None
+
+        fi1, fi2, fi3, fi4 = st.columns(4)
+        fi1.markdown(f"**{company_name}**  \n{company_sector}")
+        fi2.metric("Market Cap", f"${market_cap_b:.1f}B" if market_cap_b else "—")
+        fi3.metric("Trailing P/E", f"{trailing_pe:.1f}" if trailing_pe else "—")
+        fi4.metric("Avg Volume", f"{int(avg_volume/1e6):.1f}M" if avg_volume and avg_volume >= 1e6 else (f"{int(avg_volume/1e3):.0f}K" if avg_volume else "—"))
+
+        st.divider()
+
+        # ── Kennzahlen-Grid ───────────────────────────────────────────────────
         m1, m2, m3, m4, m5, m6 = st.columns(6)
-        m1.metric("Last Price",         f"${last_price:.2f}",    help="Last traded option price (no Bid/Ask available)")
-        m2.metric("Net Debit",          f"${net_debit:.2f}",     help="Stock Price − Last Price = your real cost basis")
-        m3.metric("Break Even",         f"${breakeven:.2f}",     help="Stock must stay above this for no loss")
-        m4.metric("Assigned Return",    f"{assigned_ret:.2f}%",  help="Profit if called away at expiry")
-        m5.metric("Annualized Return",  f"{annualized:.1f}%",    help="Normalized across expirations")
-        m6.metric("Downside Protection",f"{protection:.1f}%",    help="How far stock can fall before losing money")
+        m1.metric("Last Price",          f"${last_price:.2f}",   help="Letzter Handelspreis der Option")
+        m2.metric("Net Debit",           f"${net_debit:.2f}",    help="Kurs − Prämie = dein echter Einstand")
+        m3.metric("Break Even",          f"${breakeven:.2f}",    help="Aktie muss darüber bleiben für kein Verlust")
+        m4.metric("Assigned Return",     f"{assigned_ret:.2f}%", help="Gewinn wenn Aktien abgerufen werden")
+        m5.metric("Annualized Return",   f"{annualized:.1f}%",   help="Normiert auf 365 Tage")
+        m6.metric("Downside Protection", f"{protection:.1f}%",   help="Puffer bevor du Verlust machst")
 
-        m7, m8, m9, m10 = st.columns(4)
-        m7.metric("Moneyness",          f"{moneyness:.2f}%" if moneyness is not None else "—",    help="(Strike − Stock) / Stock × 100; negative = ITM")
-        m8.metric("Potential Return",   f"{potential_rtn:.2f}%" if potential_rtn is not None else "—", help="Upside from current price to strike")
-        m9.metric("Profit Probability", f"{profit_prob:.1f}%" if profit_prob is not None else "—",    help="≈ (1 − Delta) × 100: probability call expires OTM")
-        m10.metric("Max Profit / Contract", f"${max_profit_c:.2f}" if max_profit_c is not None else "—", help="(Strike − Net Debit) × 100")
+        m7, m8, m9, m10, m11, m12 = st.columns(6)
+        m7.metric("Moneyness",           f"{moneyness:.2f}%"     if moneyness    is not None else "—", help="(Strike−Kurs)/Kurs×100; negativ = ITM")
+        m8.metric("Potential Return",    f"{potential_rtn:.2f}%" if potential_rtn is not None else "—", help="Upside vom aktuellen Kurs bis Strike")
+        m9.metric("Profit Probability",  f"{profit_prob:.1f}%"   if profit_prob  is not None else "—", help="≈ (1−Delta)×100: Call verfällt OTM")
+        m10.metric("Max Profit/Contract",f"${max_profit_c:.2f}"  if max_profit_c is not None else "—", help="(Strike−NetDebit)×100")
+        m11.metric("IV Rank",            f"{iv_rank:.0f}%"       if iv_rank      is not None else "—", help="Wie teuer die Optionen historisch gesehen sind")
+        m12.metric("IV/HV Ratio",        f"{iv_hv_ratio:.2f}"    if iv_hv_ratio  is not None else "—", help="IV > 1.0 = Optionen teurer als realisierte Vola")
 
-        # ── Erklär-Blöcke: kompakt, mit Icons, in Expandern ──────────────────
-        with st.expander("🧮 Wie berechnen sich die Kennzahlen?", expanded=True):
+        # ── Payoff-Chart + IV-Gauge nebeneinander ─────────────────────────────
+        chart_col, gauge_col = st.columns([3, 1])
+
+        with chart_col:
+            price_range = np.linspace(stock * 0.70, stock * 1.15, 300)
+            pnl = np.where(
+                price_range >= strike,
+                (strike - net_debit) * 100,
+                (price_range - net_debit) * 100,
+            )
+            fig_payoff = go.Figure()
+            fig_payoff.add_shape(type="rect",
+                x0=stock * 0.70, x1=breakeven, y0=min(pnl) * 1.1, y1=0,
+                fillcolor="rgba(239,68,68,0.08)", line_width=0)
+            fig_payoff.add_shape(type="rect",
+                x0=breakeven, x1=stock * 1.15, y0=0, y1=max(pnl) * 1.1,
+                fillcolor="rgba(34,197,94,0.08)", line_width=0)
+            fig_payoff.add_trace(go.Scatter(
+                x=price_range, y=pnl,
+                mode="lines", line=dict(color="#3b82f6", width=3),
+                name="P&L bei Verfall",
+                hovertemplate="Kurs: $%{x:.2f}<br>P&L: $%{y:.2f}<extra></extra>",
+            ))
+            for xval, label, color, dash in [
+                (stock,     f"Kurs ${stock:.2f}",         "#f59e0b", "dot"),
+                (strike,    f"Strike ${strike:.2f}",      "#a78bfa", "dash"),
+                (breakeven, f"BE ${breakeven:.2f}",       "#ef4444", "dashdot"),
+            ]:
+                fig_payoff.add_vline(x=xval, line_color=color, line_dash=dash, line_width=1.5,
+                    annotation_text=label, annotation_position="top",
+                    annotation_font_color=color, annotation_font_size=11)
+            fig_payoff.add_hline(y=0, line_color="#6b7280", line_width=1)
+            fig_payoff.update_layout(
+                title=f"P&L bei Verfall — {symbol} ITM Covered Call",
+                xaxis_title="Aktienkurs bei Verfall ($)",
+                yaxis_title="P&L pro Kontrakt ($)",
+                height=340, margin=dict(l=10, r=10, t=40, b=10),
+                legend=dict(orientation="h", y=-0.15),
+                plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#e5e7eb"),
+                xaxis=dict(gridcolor="#374151"), yaxis=dict(gridcolor="#374151"),
+            )
+            st.plotly_chart(fig_payoff, use_container_width=True)
+
+        with gauge_col:
+            iv_gauge_val = iv_rank if iv_rank is not None else 0
+            fig_gauge = go.Figure(go.Indicator(
+                mode="gauge+number",
+                value=iv_gauge_val,
+                title={"text": "IV Rank %", "font": {"color": "#e5e7eb", "size": 13}},
+                number={"suffix": "%", "font": {"color": "#e5e7eb", "size": 22}},
+                gauge={
+                    "axis": {"range": [0, 100], "tickcolor": "#6b7280", "tickfont": {"color": "#9ca3af", "size": 10}},
+                    "bar": {"color": "#3b82f6", "thickness": 0.3},
+                    "bgcolor": "#1f2937",
+                    "bordercolor": "#374151",
+                    "steps": [
+                        {"range": [0, 30],  "color": "#374151"},
+                        {"range": [30, 50], "color": "#78350f"},
+                        {"range": [50, 100],"color": "#14532d"},
+                    ],
+                    "threshold": {"line": {"color": "#ef4444", "width": 3}, "thickness": 0.75, "value": 50},
+                },
+            ))
+            fig_gauge.update_layout(
+                height=220, margin=dict(l=10, r=10, t=30, b=10),
+                paper_bgcolor="rgba(0,0,0,0)", font=dict(color="#e5e7eb"),
+            )
+            st.plotly_chart(fig_gauge, use_container_width=True)
+            if iv_rank is not None:
+                if iv_rank >= 50:
+                    st.success(f"IV erhöht ({iv_rank:.0f}%) — guter Zeitpunkt zum Verkaufen")
+                elif iv_rank >= 30:
+                    st.warning(f"IV moderat ({iv_rank:.0f}%) — akzeptabel")
+                else:
+                    st.error(f"IV niedrig ({iv_rank:.0f}%) — Prämie ist dünn")
+
+        # ── Expander: Kennzahlen-Tabelle ──────────────────────────────────────
+        with st.expander("🧮 Wie berechnen sich die Kennzahlen?", expanded=False):
+            iv_pct_val = float(r["iv_pct"]) if pd.notna(r.get("iv_pct")) else None
             st.markdown(f"""
 | Kennzahl | Rechnung | Ergebnis |
 |---|---|---|
 | **Last Price** | Letzter Handelspreis der Option | **${last_price:.2f}** |
-| **Net Debit** | ${stock:.2f} Kurs − ${last_price:.2f} Last | **${net_debit:.2f}** |
-| **Break Even** | = Net Debit = ${net_debit:.2f} | **${breakeven:.2f}** ({f"{pct_be:.2f}%" if pct_be is not None else "—"} vom Kurs) |
-| **Moneyness** | (${strike:.2f} Strike − ${stock:.2f} Kurs) / ${stock:.2f} × 100 | **{f"{moneyness:.2f}%" if moneyness is not None else "—"}** |
+| **Net Debit** | ${stock:.2f} Kurs − ${last_price:.2f} Prämie | **${net_debit:.2f}** |
+| **Break Even** | = Net Debit | **${breakeven:.2f}** ({f"{pct_be:.2f}%" if pct_be is not None else "—"} vom Kurs) |
+| **Moneyness** | (${strike:.2f} − ${stock:.2f}) / ${stock:.2f} × 100 | **{f"{moneyness:.2f}%" if moneyness is not None else "—"}** |
 | **Assigned Return** | (${strike:.2f} − ${net_debit:.2f}) / ${net_debit:.2f} × 100 | **{assigned_ret:.2f}%** |
 | **Annualized Return** | {assigned_ret:.2f}% / {dte} Tage × 365 | **{annualized:.1f}%** |
 | **Downside Protection** | ${last_price:.2f} / ${stock:.2f} × 100 | **{protection:.1f}%** |
 | **Potential Return** | (${strike:.2f} − ${stock:.2f}) / ${stock:.2f} × 100 | **{f"{potential_rtn:.2f}%" if potential_rtn is not None else "—"}** |
 | **Profit Probability** | (1 − {delta_val:.3f}) × 100 | **{f"{profit_prob:.1f}%" if profit_prob is not None else "—"}** |
 | **Max Profit / Contract** | (${strike:.2f} − ${net_debit:.2f}) × 100 | **{f"${max_profit_c:.2f}" if max_profit_c is not None else "—"}** |
-| **IV/HV Ratio** | {f"{float(r['iv_pct']):.1f}% IV" if pd.notna(r.get("iv_pct")) else "IV?"} / {f"{hv:.1f}% HV" if hv else "HV?"} | **{f"{iv_hv_ratio:.2f}" if iv_hv_ratio is not None else "—"}** |
+| **IV/HV Ratio** | {f"{iv_pct_val:.1f}% IV" if iv_pct_val else "IV?"} / {f"{hv:.1f}% HV" if hv else "HV?"} | **{f"{iv_hv_ratio:.2f}" if iv_hv_ratio is not None else "—"}** |
 """)
 
-        with st.expander("📊 Gewinn & Verlust am Verfall", expanded=True):
+        # ── Expander: P&L Szenarien ───────────────────────────────────────────
+        with st.expander("📊 Gewinn & Verlust — Szenarien", expanded=True):
+            sc1, sc2, sc3 = st.columns(3)
+            sc1.success(f"**Bestfall**  \nAktie ≥ ${strike:.2f}  \n**+${max_profit:.2f}** pro Kontrakt  \n(+{assigned_ret:.2f}% in {dte}d)")
+            sc2.info(   f"**Breakeven**  \nAktie = ${breakeven:.2f}  \n**$0** — kein Gewinn, kein Verlust")
+            sc3.error(  f"**Schlimmfall**  \nAktie → $0  \nVerlust: **-${round(net_debit*100,2):.2f}**  \n(Puffer: {protection:.1f}% durch Prämie)")
             st.markdown(f"""
-- 🟢 **Bestfall — Aktie über ${strike:.2f}:** Aktien werden abgerufen → **+${max_profit:.2f} pro Kontrakt** (+{assigned_ret:.2f}%). Mehr geht nicht (Gewinn gedeckelt).
-- ⚪ **Breakeven bei ${breakeven:.2f}:** genau dein Einstand → $0.
-- 🔴 **Unter ${breakeven:.2f}:** Verlust = (${breakeven:.2f} − Kurs) × 100 pro Kontrakt. Die Prämie hat dich bis hier abgefedert ({protection:.1f}% Puffer).
+**Wie es funktioniert:**
+- Aktie **über ${strike:.2f}** bei Verfall → Aktien werden abgerufen, du behältst die volle Prämie. Gewinn gedeckelt auf **${max_profit:.2f}**.
+- Aktie **zwischen ${breakeven:.2f} und ${strike:.2f}** → Aktien nicht abgerufen, du behältst die Prämie aber weniger Gewinn durch Kursverlust.
+- Aktie **unter ${breakeven:.2f}** → Verlust. Die Prämie hat dich um **{protection:.1f}%** abgefedert.
 """)
 
+        # ── Expander: Früher Ausstieg ─────────────────────────────────────────
         with st.expander("🚪 Früher Ausstieg — 50%-Regel", expanded=False):
             st.markdown(f"""
-Gängige Praxis: schließen, wenn die Prämie auf 50% gefallen ist.
+Gängige Praxis: Position schließen wenn die Prämie auf **50%** gefallen ist (buy-to-close).
 
-- Verkauft für: **${last_price:.2f}**
-- Zurückkaufen bei: **${close_50pct:.2f}** (buy-to-close)
-- Gewinn: **${round(last_price - close_50pct, 2):.2f} pro Aktie** in ≤ {dte} Tagen → dann Kapital in die nächste Chance.
+| | Wert |
+|---|---|
+| Verkauft für (sell-to-open) | **${last_price:.2f}** |
+| Buy-to-close Ziel (50%) | **${close_50pct:.2f}** |
+| Realisierter Gewinn | **${round(last_price - close_50pct, 2):.2f} pro Aktie** |
+| Verbleibendes Risiko danach | $0 — Position geschlossen |
+
+Kapital nach 50%-Ausstieg sofort in die nächste Chance reinvestieren → höhere annualisierte Rendite als bis Verfall halten.
 """)
 
+        # ── Expander: Volatilität & Earnings ─────────────────────────────────
         with st.expander("📈 Volatilität, Earnings & Delta", expanded=False):
-            _delta_txt = ("Sehr tief im Geld — hohe Zuteilungs-Wahrscheinlichkeit, faktisch ein fixer Income-Trade."
-                          if delta_val >= 0.8 else
-                          "Moderat im Geld — ausgewogenes Verhältnis aus Prämie und Zuteilungs-Wahrscheinlichkeit.")
+            iv_pct_val = float(r["iv_pct"]) if pd.notna(r.get("iv_pct")) else None
+            _iv_hv_text = ""
+            if iv_pct_val and hv:
+                _iv_hv_text = (
+                    f"IV ({iv_pct_val:.1f}%) **über** HV 30d ({hv:.1f}%) — Optionen sind teurer als realisierte Bewegungen. Gut zum Verkaufen."
+                    if iv_pct_val > hv else
+                    f"IV ({iv_pct_val:.1f}%) **unter** HV 30d ({hv:.1f}%) — Optionen billig relativ zur realisierten Vola."
+                )
+            _delta_txt = (
+                "Sehr tief im Geld — hohe Zuteilungs-Wahrscheinlichkeit, faktisch ein fixer Income-Trade."
+                if delta_val >= 0.8 else
+                "Moderat im Geld — ausgewogenes Verhältnis aus Prämie und Zuteilungs-Wahrscheinlichkeit."
+            )
+            earn_icon = "⚠️" if pd.notna(days_earn) and days_earn <= dte else "✅"
             st.markdown(f"""
-- **Volatilität:** {iv_comment} {iv_hv_text}
-- **Earnings:** {earn_warning}
-- **Delta {delta_val:.3f}:** die Option bewegt sich ~${delta_val:.2f} je $1 Aktienbewegung; Zuteilungs-Wahrscheinlichkeit am Verfall ≈ **{delta_val*100:.0f}%**. {_delta_txt}
+**IV Rank:** {iv_comment}
+{_iv_hv_text}
+
+**{earn_icon} Earnings:** {earn_warning}
+
+**Delta {delta_val:.3f}:** Die Option bewegt sich ~${delta_val:.2f} je $1 Aktienbewegung.
+Zuteilungs-Wahrscheinlichkeit am Verfall ≈ **{delta_val*100:.0f}%**. {_delta_txt}
 """)
+
+        # ── Externe Links (Standard wie Spreads-Seite) ────────────────────────
+        st.divider()
+        display_external_links(symbol)
 
     else:
         st.caption("Click a row to see detailed trade analysis and P&L breakdown.")
