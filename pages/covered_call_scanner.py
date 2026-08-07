@@ -111,7 +111,7 @@ with col1:
     dte_min, dte_max = st.slider(
         "DTE Range (days to expiration)",
         min_value=7, max_value=90,
-        value=(21, 45), step=1,
+        value=(7, 90), step=1,
         key="cc_dte",
         help="Sweet spot: 21–45 days. Theta decay is fastest here.",
     )
@@ -137,17 +137,17 @@ with col4:
     min_annualized = st.number_input(
         "Min Annualized Return %",
         min_value=0, max_value=200,
-        value=10, step=5,
+        value=5, step=5,
         key="cc_min_ann",
-        help="Untergrenze der annualisierten Rendite. Default 10% zeigt auch moderate Trades.",
+        help="Untergrenze der annualisierten Rendite.",
     )
 with col5:
     max_annualized = st.number_input(
         "Max Annualized Return %",
         min_value=10, max_value=1000,
-        value=30, step=10,
+        value=200, step=10,
         key="cc_max_ann",
-        help="Cap utopian values. Anything above ~100% is usually a data artefact or illiquid option.",
+        help="Cap utopian values. Anything above ~200% is usually a data artefact or illiquid option.",
     )
 with col6:
     min_market_cap_b = st.number_input(
@@ -170,7 +170,7 @@ with col8:
     min_downside = st.slider(
         "Min Downside Protection %",
         min_value=0, max_value=40,
-        value=10, step=1,
+        value=0, step=1,
         key="cc_min_downside",
         help="Filter out positions with insufficient downside buffer.",
     )
@@ -188,9 +188,9 @@ with col10:
     min_iv_rank = st.number_input(
         "Min IV Rank",
         min_value=0, max_value=100,
-        value=50, step=5,
+        value=0, step=5,
         key="cc_min_iv_rank",
-        help="PowerOptions uses IV Rank >= 50 to ensure options are expensive enough to sell.",
+        help="0 = deaktiviert. IV Rank ≥ 50 stellt sicher dass Optionen teuer genug zum Verkaufen sind.",
     )
 with col11:
     min_premium = st.number_input(
@@ -211,6 +211,13 @@ with col12:
     )
 
 scan_btn = st.button("Scan for Covered Calls", type="primary")
+exclude_earnings = st.checkbox(
+    "Earnings vor Verfall ausschließen",
+    value=False,
+    key="cc_exclude_earnings",
+    help="Aktien mit Earnings-Termin innerhalb der Halteperiode herausfiltern. "
+         "Deaktiviert = Earnings-Kandidaten werden angezeigt (mit Warnung in der Tabelle).",
+)
 
 # ── Load data ─────────────────────────────────────────────────────────────────
 if scan_btn:
@@ -267,6 +274,13 @@ if scan_btn:
                     df = df[df["stock_price"] >= price_min]
                 if price_max > 0:
                     df = df[df["stock_price"] <= price_max]
+
+                # Earnings-Filter (optional)
+                if exclude_earnings:
+                    df = df[
+                        df["days_to_earnings"].isna() |
+                        (df["days_to_earnings"] > df["dte"])
+                    ]
 
                 if df.empty:
                     st.warning("All results filtered out. Try lowering Min Annualized Return or Min Downside Protection.")
