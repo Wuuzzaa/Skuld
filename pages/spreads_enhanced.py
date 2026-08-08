@@ -38,7 +38,11 @@ DEFAULT_SHOW_ONLY_SPREADS_WITH_NO_EARNINGS_TILL_EXPIRATION = True
 DEFAULT_SHOW_ONLY_SPREADS_WITH_NO_EARNINGS_WARNING = True
 DEFAULT_DELTA_TARGET = 0.2
 DEFAULT_SPREAD_WIDTH = 5
+DEFAULT_MAX_RISK = 1000.0  # $ pro Trade; Breite = floor(max_risk / (100 = shares_per_contract))
+CONTRACT_MULTIPLIER = 100   # shares_per_contract ist in dieser DB ueberall 100 (Aktien, ETFs, Indizes)
 DEFAULT_DELTA_CANDIDATES = 3
+DEFAULT_DTE_MIN = 0
+DEFAULT_DTE_MAX = 90
 DEFAULT_OPTION_TYPE = "put"
 DEFAULT_MIN_DAY_VOLUME = 20
 DEFAULT_MIN_OPEN_INTEREST = 100
@@ -74,9 +78,11 @@ DEFAULTS = {
     'enh_show_only_spreads_with_no_earnings_till_expiration': DEFAULT_SHOW_ONLY_SPREADS_WITH_NO_EARNINGS_TILL_EXPIRATION,
     'enh_show_only_spreads_with_no_earnings_warning': DEFAULT_SHOW_ONLY_SPREADS_WITH_NO_EARNINGS_WARNING,
     'enh_delta_target': DEFAULT_DELTA_TARGET,
-    'enh_spread_width': DEFAULT_SPREAD_WIDTH,
+    'enh_max_risk': DEFAULT_MAX_RISK,
     'enh_spread_exact': False,
     'enh_delta_candidates': DEFAULT_DELTA_CANDIDATES,
+    'enh_dte_min': DEFAULT_DTE_MIN,
+    'enh_dte_max': DEFAULT_DTE_MAX,
     'enh_asset_type': DEFAULT_ASSET_TYPE,
     'enh_sectors': [],  # leer = alle Sektoren
     'enh_option_type': DEFAULT_OPTION_TYPE,
@@ -118,6 +124,23 @@ def clear_all_filters():
     st.session_state.enh_sectors = []
 
 
+def _on_asset_type_change():
+    """Wenn auf 'Nur Indizes' gewechselt wird, sinnvolle Index-Defaults setzen.
+
+    Index-Optionen (I:SPX, I:RUT ...) haben ein grobes Strike-Raster und niedrigere IV
+    als Einzelaktien. Mit den Aktien-Defaults (Min IV 0.30, exakte Breite) kommt fast
+    nichts durch. Multiplier ist ueberall 100 -> Max Risiko 1000$ = bis 10 Punkte Breite.
+    """
+    if st.session_state.enh_asset_type == "index":
+        st.session_state.enh_min_sell_iv = 0.0
+        st.session_state.enh_max_risk = 1000.0   # -> Breite bis 10 Punkte
+        st.session_state.enh_spread_exact = False
+        st.session_state.enh_delta_candidates = 5
+        # Indizes haben keine Earnings -> Earnings-Filter stoeren nur
+        st.session_state.enh_show_only_spreads_with_no_earnings_till_expiration = False
+        st.session_state.enh_show_only_spreads_with_no_earnings_warning = False
+
+
 selected_date = render_date_filter(
     date_query='select date from (select date from "DatesHistory" union select current_date) as sub ORDER BY date DESC',
 )
@@ -145,24 +168,36 @@ with st.expander("Configuration and Filters", expanded=True):
             st.session_state.enh_show_daily
         )
 
-        dte_labels = [
-            (
-                f"{int(row['days_to_expiration'])} DTE - "
-                f"{pd.to_datetime(row['expiration_date']).strftime('%A')}  "
-                f"{row['expiration_date']} - "
-                f"{get_expiration_type(row['expiration_date'])}"
-            )
-            for _, row in filtered_dates_df.iterrows()
-        ]
+        # DTE-Range statt Einzeldatum: min/max Tage bis Verfall.
+        dte_lo, dte_hi = st.slider(
+            "DTE-Bereich (Tage bis Verfall)",
+            min_value=0,
+            max_value=int(max(90, filtered_dates_df['days_to_expiration'].max() if not filtered_dates_df.empty else 90)),
+            value=(int(st.session_state.enh_dte_min), int(st.session_state.enh_dte_max)),
+            step=1,
+            key="enh_dte_range",
+            help="Zeigt alle Verfallstermine in diesem Tagebereich (kombiniert mit Monthly/Weekly/Daily).",
+        )
+        st.session_state.enh_dte_min, st.session_state.enh_dte_max = dte_lo, dte_hi
 
-        if not dte_labels:
-            st.warning("No expiration dates match the selected filters.")
+        # Alle Termine im DTE-Fenster (Monthly/Weekly/Daily bereits angewandt)
+        range_dates_df = filtered_dates_df[
+            (filtered_dates_df['days_to_expiration'] >= dte_lo) &
+            (filtered_dates_df['days_to_expiration'] <= dte_hi)
+        ]
+        expiration_dates = range_dates_df['expiration_date'].tolist()
+
+        if not expiration_dates:
+            st.warning(
+                "Keine Verfallstermine im gewaehlten DTE-Bereich. "
+                "Bereich erweitern oder Monthly/Weekly/Daily anpassen."
+            )
             st.stop()
 
-        selected_label = st.selectbox("Expiration Date", dte_labels, index=min(1, len(dte_labels)-1))
-        selected_index = dte_labels.index(selected_label)
-        expiration_date = filtered_dates_df.iloc[selected_index]['expiration_date']
-        logging.debug(f"Extracted selected expiration date: {expiration_date}")
+        # Fuer Anzeige/Earnings-Logik: kleinstes Datum als Referenz
+        expiration_date = expiration_dates[0]
+        st.caption(f"{len(expiration_dates)} Verfallstermin(e) im Bereich {dte_lo}–{dte_hi} DTE")
+        logging.debug(f"DTE range {dte_lo}-{dte_hi} -> {len(expiration_dates)} dates")
 
     with col2:
         default_delta = 0.6 if st.session_state.enh_strategy_type == "debit" else 0.2
@@ -177,18 +212,26 @@ with st.expander("Configuration and Filters", expanded=True):
         st.session_state.enh_delta_target = delta_target
 
     with col3:
-        spread_width = st.number_input(
-            "Max Spread Width",
-            min_value=1,
-            max_value=20,
-            step=1,
-            key="enh_spread_width",
-            help="Sucht alle Breiten von 1 bis zu diesem Wert.",
+        max_risk = st.number_input(
+            "Max Risiko / Trade ($)",
+            min_value=100.0,
+            max_value=20000.0,
+            step=100.0,
+            format="%.0f",
+            key="enh_max_risk",
+            help=(
+                "Maximales Verlustrisiko pro Trade (worst case = Breite × 100). "
+                "1000$ = bis 10 Punkte/Dollar Spread-Breite. Gilt fuer Aktien, ETFs und "
+                "Indizes gleich (Multiplier ist ueberall 100). Bei Indizes sind 10 = 10 Punkte."
+            ),
         )
+        # Breite aus Risiko ableiten: 1 Punkt/Dollar Breite = 100$ Risiko (Multiplier 100)
+        spread_width = max(1, int(max_risk // CONTRACT_MULTIPLIER))
+        st.caption(f"→ max. Breite {spread_width} (= {spread_width * CONTRACT_MULTIPLIER}$ worst case)")
         spread_exact = st.checkbox(
             "Nur exakt diese Breite",
             key="enh_spread_exact",
-            help="Aktiviert: nur Spreads mit genau dieser Breite. Deaktiviert: alle Breiten von 1 bis Max.",
+            help="Aktiviert: nur Spreads mit genau der abgeleiteten Breite. Deaktiviert: alle Breiten von 1 bis Max.",
         )
 
     with col4:
@@ -299,9 +342,11 @@ with st.expander("Configuration and Filters", expanded=True):
             format_func=lambda k: ASSET_TYPE_LABELS[k],
             key="enh_asset_type",
             horizontal=False,
+            on_change=_on_asset_type_change,
             help=(
                 "Aktien = mit Sektor-Fundamentaldaten. ETFs = ohne Fundamentaldaten (z.B. SPY, QQQ). "
-                "Indizes = Symbol beginnt mit 'I:' (z.B. I:SPX, I:RUT)."
+                "Indizes = Symbol beginnt mit 'I:' (z.B. I:SPX, I:RUT). "
+                "Bei 'Nur Indizes' werden automatisch passende Defaults gesetzt (Min IV 0, Breite bis 10, Delta-Kandidaten 5)."
             ),
         )
     with col_at2:
@@ -344,34 +389,42 @@ def _cached_get_page_spreads_enhanced(cache_key: str, df, strategy_type, iv_corr
 with st.spinner("Calculating spreads..."):
     spread_exact = st.session_state.get("enh_spread_exact", False)
 
-    params = {
-        "expiration_date": expiration_date,
-        "option_type": option_type,
-        "delta_target": st.session_state.enh_delta_target,
-        "delta_candidates": int(delta_candidates),
-        "min_open_interest": min_open_interest,
-        "spread_width": spread_width,
-        "spread_width_min": spread_width if spread_exact else 1,
-        "min_day_volume": min_day_volume,
-        "min_iv_rank": min_iv_rank,
-        "min_iv_percentile": min_iv_percentile,
-        "strategy_type": strategy_type,
-        "asset_type": st.session_state.enh_asset_type,
-    }
-
-    logging.debug(f"Params for database query: {params}")
+    def _build_params(exp_date):
+        return {
+            "expiration_date": exp_date,
+            "option_type": option_type,
+            "delta_target": st.session_state.enh_delta_target,
+            "delta_candidates": int(delta_candidates),
+            "min_open_interest": min_open_interest,
+            "spread_width": spread_width,
+            "spread_width_min": spread_width if spread_exact else 1,
+            "min_day_volume": min_day_volume,
+            "min_iv_rank": min_iv_rank,
+            "min_iv_percentile": min_iv_percentile,
+            "strategy_type": strategy_type,
+            "asset_type": st.session_state.enh_asset_type,
+        }
 
     sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'spreads_enhanced_input.sql'
-    df = _cached_select_into_dataframe(date=selected_date, sql_file_path=sql_file_path, params=params)
+
+    # DTE-Range: pro Verfallstermin laden und zusammenfuehren
+    raw_frames = [
+        _cached_select_into_dataframe(date=selected_date, sql_file_path=sql_file_path, params=_build_params(exp_date))
+        for exp_date in expiration_dates
+    ]
+    df = (
+        pd.concat([f for f in raw_frames if not f.empty], ignore_index=True)
+        if any(not f.empty for f in raw_frames) else pd.DataFrame()
+    )
 
     cache_key = (
-        f"{selected_date}|{expiration_date}|{option_type}|{st.session_state.enh_delta_target}|"
+        f"{selected_date}|{','.join(str(d) for d in expiration_dates)}|{option_type}|{st.session_state.enh_delta_target}|"
         f"{delta_candidates}|{min_open_interest}|{spread_width}|{spread_exact}|{min_day_volume}|"
         f"{min_iv_rank}|{min_iv_percentile}|{strategy_type}|{st.session_state.enh_iv_correction}|"
         f"{st.session_state.enh_risk_free_rate}|{st.session_state.enh_asset_type}"
     )
 
-    logging.debug(f"Loaded {len(df)} rows from DB")
+    logging.debug(f"Loaded {len(df)} rows from DB across {len(expiration_dates)} date(s)")
 
     spreads_df = _cached_get_page_spreads_enhanced(
         cache_key, df,
@@ -407,13 +460,12 @@ if st.session_state.enh_show_only_positiv_expected_value:
 
 # Only spreads with no earnings till expiration
 today = pd.Timestamp.now().normalize()
-expiration_date_ts = pd.Timestamp(expiration_date).normalize()
 
 if st.session_state.enh_show_only_spreads_with_no_earnings_till_expiration:
-    earnings_mask = ~(
-        (pd.to_datetime(filtered_df['earnings_date']).dt.normalize() >= today) &
-        (pd.to_datetime(filtered_df['earnings_date']).dt.normalize() < expiration_date_ts)
-    )
+    # Zeilenweise gegen die jeweilige expiration_date der Zeile (DTE-Range = mehrere Termine)
+    _exp = pd.to_datetime(filtered_df['expiration_date']).dt.normalize()
+    _earn = pd.to_datetime(filtered_df['earnings_date']).dt.normalize()
+    earnings_mask = ~((_earn >= today) & (_earn < _exp))
     filtered_df = _apply_filter(filtered_df, earnings_mask, "No Earnings Till Expiration")
 
 # Earnings Warning Filter
