@@ -285,7 +285,7 @@ def get_page_spreads_enhanced(df: pd.DataFrame, strategy_type: str = 'credit', i
 
     columns = [
         'symbol', 'Company', 'earnings_date', 'earnings_warning', 'close',
-        'analyst_mean_target', 'company_industry', 'company_sector',
+        'analyst_mean_target', 'company_industry', 'company_sector', 'asset_type',
         'historical_volatility_30d', 'iv_rank', 'iv_percentile',
         'spread_width', 'net_credit', 'max_profit', 'max_profit%', 'risk_reward',
         'break_even', 'break_even%', 'bpr', 'profit_to_bpr', 'spread_theta',
