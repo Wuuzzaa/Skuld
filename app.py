@@ -29,6 +29,7 @@ universe = st.Page("pages/universe.py", title="Universum")
 delta_portfolio = st.Page("pages/delta_portfolio.py", title="Delta Portfolio")
 watchlist = st.Page("pages/watchlist.py", title="Watchlist")
 spreads = st.Page("pages/spreads.py", title="Spreads")
+spreads_enhanced = st.Page("pages/spreads_enhanced.py", title="Spreads Enhanced")
 marrieds = st.Page("pages/married_put_analysis.py", title="Married Puts")
 position_insurance = st.Page("pages/position_insurance_tool.py", title="Position Insurance Tool")
 multifactor_swingtrading = st.Page('pages/multifactor_swingtrading.py', title="Multifactor Swingtrading")
@@ -54,6 +55,7 @@ page = st.navigation(
         delta_portfolio,
         watchlist,
         spreads,
+        spreads_enhanced,
         iron_condors,
         earnings_put_scanner,
         covered_call_scanner,
