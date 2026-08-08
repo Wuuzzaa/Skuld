@@ -43,6 +43,7 @@ CONTRACT_MULTIPLIER = 100   # shares_per_contract ist in dieser DB ueberall 100 
 DEFAULT_DELTA_CANDIDATES = 3
 DEFAULT_DTE_MIN = 0
 DEFAULT_DTE_MAX = 90
+DTE_SLIDER_MAX = 90  # feste Obergrenze der DTE-Skala (Termine darueber werden ignoriert)
 DEFAULT_OPTION_TYPE = "put"
 DEFAULT_MIN_DAY_VOLUME = 20
 DEFAULT_MIN_OPEN_INTEREST = 100
@@ -169,11 +170,17 @@ with st.expander("Configuration and Filters", expanded=True):
         )
 
         # DTE-Range statt Einzeldatum: min/max Tage bis Verfall.
+        # Skala fest auf DTE_SLIDER_MAX gedeckelt (sonst reicht sie bis zum entferntesten
+        # Index-Termin, z.B. I:SPX bis 2031 -> unbrauchbare Skala).
+        _dte_default = (
+            int(min(st.session_state.enh_dte_min, DTE_SLIDER_MAX)),
+            int(min(st.session_state.enh_dte_max, DTE_SLIDER_MAX)),
+        )
         dte_lo, dte_hi = st.slider(
             "DTE-Bereich (Tage bis Verfall)",
             min_value=0,
-            max_value=int(max(90, filtered_dates_df['days_to_expiration'].max() if not filtered_dates_df.empty else 90)),
-            value=(int(st.session_state.enh_dte_min), int(st.session_state.enh_dte_max)),
+            max_value=DTE_SLIDER_MAX,
+            value=_dte_default,
             step=1,
             key="enh_dte_range",
             help="Zeigt alle Verfallstermine in diesem Tagebereich (kombiniert mit Monthly/Weekly/Daily).",
