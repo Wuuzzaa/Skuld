@@ -4,9 +4,12 @@
 --      (statt erst in TargetOptions) -> die CTE materialisiert nur die relevanten
 --      Zeilen statt aller ~117k Optionen. ~20% schneller pro Lauf.
 --   2) Mehrere Verfallstermine in EINER Query via IN-Liste. Der Platzhalter
---      __EXP_LIST__ wird von der Page durch :d0, :d1, ... ersetzt (Einzel-Params),
---      damit kein PG-Array-Binding noetig ist. ROW_NUMBER partitioniert weiterhin
+--      __EXP_LIST__ wird von der Page durch die noetigen Datums-Binds ersetzt
+--      (Einzel-Params, kein PG-Array-Binding). ROW_NUMBER partitioniert weiterhin
 --      pro (symbol, expiration_date, option_type), also ein Delta-Ranking je Termin.
+-- WICHTIG: keine doppelpunkt-Parameter-Beispiele in Kommentaren schreiben!
+--      SQLAlchemy text() parst solche Vorkommen als echte Bind-Parameter und
+--      verlangt dann Werte dafuer (fuehrte zu "value required for bind parameter d1").
 WITH FilteredOptions AS (
     SELECT
         option_osi,
