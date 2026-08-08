@@ -10,6 +10,7 @@ from config import (
 from pages.backtesting.spreads_backtesting import display_spreads_backtesting
 from pages.documentation_text.spreads_page_doc import get_spreads_documentation
 from src.historization import select_timetravel_into_dataframe
+from src.database import select_into_dataframe
 from src.logger_config import setup_logging
 from src.page_display_dataframe import page_display_dataframe, _create_claude_prompt_page_spreads
 from src.spreads_calculation import get_page_spreads_enhanced
@@ -47,6 +48,13 @@ DEFAULT_MIN_MAX_PROFIT = 80.0
 DEFAULT_MIN_IV_RANK = 0
 DEFAULT_MIN_IV_PERCENTILE = 0
 DEFAULT_STRATEGY_TYPE = "credit"
+DEFAULT_ASSET_TYPE = "all"  # all | stock | etf | index
+ASSET_TYPE_LABELS = {
+    "all": "Alle",
+    "stock": "Nur Aktien",
+    "etf": "Nur ETFs",
+    "index": "Nur Indizes (I:...)",
+}
 
 # Page header
 st.title("Spreads Enhanced")
@@ -69,6 +77,8 @@ DEFAULTS = {
     'enh_spread_width': DEFAULT_SPREAD_WIDTH,
     'enh_spread_exact': False,
     'enh_delta_candidates': DEFAULT_DELTA_CANDIDATES,
+    'enh_asset_type': DEFAULT_ASSET_TYPE,
+    'enh_sectors': [],  # leer = alle Sektoren
     'enh_option_type': DEFAULT_OPTION_TYPE,
     'enh_min_day_volume': DEFAULT_MIN_DAY_VOLUME,
     'enh_min_open_interest': DEFAULT_MIN_OPEN_INTEREST,
@@ -104,6 +114,8 @@ def clear_all_filters():
     st.session_state.enh_min_max_profit = 0.0
     st.session_state.enh_min_iv_rank = 0
     st.session_state.enh_min_iv_percentile = 0
+    st.session_state.enh_asset_type = "all"
+    st.session_state.enh_sectors = []
 
 
 selected_date = render_date_filter(
@@ -278,6 +290,42 @@ with st.expander("Configuration and Filters", expanded=True):
     with col_iv3:
         st.info("IV correction mode: 'auto' (Automatic), 0.0-1.0 (Manual reduction), 0.0 (No correction)")
 
+    st.divider()
+    col_at1, col_at2 = st.columns([1, 2])
+    with col_at1:
+        asset_type_key = st.radio(
+            "Asset-Typ",
+            options=list(ASSET_TYPE_LABELS.keys()),
+            format_func=lambda k: ASSET_TYPE_LABELS[k],
+            key="enh_asset_type",
+            horizontal=False,
+            help=(
+                "Aktien = mit Sektor-Fundamentaldaten. ETFs = ohne Fundamentaldaten (z.B. SPY, QQQ). "
+                "Indizes = Symbol beginnt mit 'I:' (z.B. I:SPX, I:RUT)."
+            ),
+        )
+    with col_at2:
+        # Sektor-Liste dynamisch laden (nur relevant fuer Aktien)
+        try:
+            _sectors_df = select_into_dataframe(
+                query='SELECT DISTINCT company_sector AS sector FROM "FundamentalData" '
+                      "WHERE company_sector IS NOT NULL AND company_sector <> '' ORDER BY company_sector"
+            )
+            _sector_options = _sectors_df["sector"].dropna().tolist()
+        except Exception as exc:  # pragma: no cover - defensive
+            logging.warning(f"Konnte Sektorliste nicht laden: {exc}")
+            _sector_options = []
+        selected_sectors = st.multiselect(
+            "Sektoren (leer = alle)",
+            options=_sector_options,
+            key="enh_sectors",
+            help=(
+                "Filtert nach Sektor. Leer lassen = alle Sektoren. "
+                "Um z.B. Tech auszuschliessen: alle ausser 'Technology' waehlen. "
+                "Greift nur bei Aktien (ETFs/Indizes haben keinen Sektor)."
+            ),
+        )
+
 
 @st.cache_data(ttl=300)  # 5 Minuten
 def _cached_select_into_dataframe(date, sql_file_path, params):
@@ -308,6 +356,7 @@ with st.spinner("Calculating spreads..."):
         "min_iv_rank": min_iv_rank,
         "min_iv_percentile": min_iv_percentile,
         "strategy_type": strategy_type,
+        "asset_type": st.session_state.enh_asset_type,
     }
 
     logging.debug(f"Params for database query: {params}")
@@ -319,7 +368,7 @@ with st.spinner("Calculating spreads..."):
         f"{selected_date}|{expiration_date}|{option_type}|{st.session_state.enh_delta_target}|"
         f"{delta_candidates}|{min_open_interest}|{spread_width}|{spread_exact}|{min_day_volume}|"
         f"{min_iv_rank}|{min_iv_percentile}|{strategy_type}|{st.session_state.enh_iv_correction}|"
-        f"{st.session_state.enh_risk_free_rate}"
+        f"{st.session_state.enh_risk_free_rate}|{st.session_state.enh_asset_type}"
     )
 
     logging.debug(f"Loaded {len(df)} rows from DB")
@@ -382,6 +431,15 @@ filtered_df = _apply_filter(filtered_df, filtered_df['sell_iv'] >= min_sell_iv, 
 
 # Max sell IV
 filtered_df = _apply_filter(filtered_df, filtered_df['sell_iv'] <= max_sell_iv, f"Max Sell IV ≤ {max_sell_iv:.2f}")
+
+# Sektor-Filter (leer = alle). Greift nur bei Aktien mit Sektor; ETFs/Indizes haben keinen.
+selected_sectors = st.session_state.get("enh_sectors", []) or []
+if selected_sectors and 'company_sector' in filtered_df.columns:
+    filtered_df = _apply_filter(
+        filtered_df,
+        filtered_df['company_sector'].isin(selected_sectors),
+        f"Sektor in {', '.join(selected_sectors)}",
+    )
 
 filtered_df.reset_index(drop=True, inplace=True)
 
