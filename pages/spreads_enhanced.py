@@ -378,6 +378,11 @@ def _cached_select_into_dataframe(date, sql_file_path, params):
 
 
 @st.cache_data(ttl=300)  # 5 Minuten
+def _cached_select_multidate(date, query, params):
+    return select_timetravel_into_dataframe(date=date, query=query, params=params)
+
+
+@st.cache_data(ttl=300)  # 5 Minuten
 def _cached_get_page_spreads_enhanced(cache_key: str, df, strategy_type, iv_correction, risk_free_rate, delta_target):
     return get_page_spreads_enhanced(
         df, strategy_type=strategy_type, iv_correction=iv_correction,
@@ -389,33 +394,31 @@ def _cached_get_page_spreads_enhanced(cache_key: str, df, strategy_type, iv_corr
 with st.spinner("Calculating spreads..."):
     spread_exact = st.session_state.get("enh_spread_exact", False)
 
-    def _build_params(exp_date):
-        return {
-            "expiration_date": exp_date,
-            "option_type": option_type,
-            "delta_target": st.session_state.enh_delta_target,
-            "delta_candidates": int(delta_candidates),
-            "min_open_interest": min_open_interest,
-            "spread_width": spread_width,
-            "spread_width_min": spread_width if spread_exact else 1,
-            "min_day_volume": min_day_volume,
-            "min_iv_rank": min_iv_rank,
-            "min_iv_percentile": min_iv_percentile,
-            "strategy_type": strategy_type,
-            "asset_type": st.session_state.enh_asset_type,
-        }
+    # Eine Query ueber ALLE Termine im DTE-Range via IN-Liste (:d0, :d1, ...).
+    # Vermeidet N DB-Runden und PG-Array-Binding. exp-Filter greift frueh in der CTE.
+    exp_placeholders = ", ".join(f":d{i}" for i in range(len(expiration_dates)))
+    date_params = {f"d{i}": d for i, d in enumerate(expiration_dates)}
 
-    sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'spreads_enhanced_input.sql'
+    sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'spreads_enhanced_multidate_input.sql'
+    with open(sql_file_path, 'r') as _f:
+        multidate_sql = _f.read().replace("__EXP_LIST__", exp_placeholders)
 
-    # DTE-Range: pro Verfallstermin laden und zusammenfuehren
-    raw_frames = [
-        _cached_select_into_dataframe(date=selected_date, sql_file_path=sql_file_path, params=_build_params(exp_date))
-        for exp_date in expiration_dates
-    ]
-    df = (
-        pd.concat([f for f in raw_frames if not f.empty], ignore_index=True)
-        if any(not f.empty for f in raw_frames) else pd.DataFrame()
-    )
+    params = {
+        "option_type": option_type,
+        "delta_target": st.session_state.enh_delta_target,
+        "delta_candidates": int(delta_candidates),
+        "min_open_interest": min_open_interest,
+        "spread_width": spread_width,
+        "spread_width_min": spread_width if spread_exact else 1,
+        "min_day_volume": min_day_volume,
+        "min_iv_rank": min_iv_rank,
+        "min_iv_percentile": min_iv_percentile,
+        "strategy_type": strategy_type,
+        "asset_type": st.session_state.enh_asset_type,
+        **date_params,
+    }
+
+    df = _cached_select_multidate(date=selected_date, query=multidate_sql, params=params)
 
     cache_key = (
         f"{selected_date}|{','.join(str(d) for d in expiration_dates)}|{option_type}|{st.session_state.enh_delta_target}|"
@@ -424,7 +427,7 @@ with st.spinner("Calculating spreads..."):
         f"{st.session_state.enh_risk_free_rate}|{st.session_state.enh_asset_type}"
     )
 
-    logging.debug(f"Loaded {len(df)} rows from DB across {len(expiration_dates)} date(s)")
+    logging.debug(f"Loaded {len(df)} rows from DB across {len(expiration_dates)} date(s) in one query")
 
     spreads_df = _cached_get_page_spreads_enhanced(
         cache_key, df,
@@ -557,6 +560,16 @@ if not filtered_df.empty:
         row = filtered_df.iloc[selected_idx]
 
         st.divider()
+
+        # Verfallsdatum + DTE prominent zeigen — bei DTE-Range sind mehrere Termine gemischt
+        _exp_disp = pd.to_datetime(row['expiration_date']).strftime('%d.%m.%Y (%A)')
+        _dte_disp = int(row['days_to_expiration']) if pd.notnull(row.get('days_to_expiration')) else '—'
+        _at_disp = row.get('asset_type', '')
+        st.info(
+            f"**{row['symbol']}**  ·  Verfall: **{_exp_disp}**  ·  **{_dte_disp} DTE**  "
+            f"·  Breite {int(row.get('spread_width', 0))}  ·  {row.get('option_type','')}/{strategy_type}"
+            + (f"  ·  {_at_disp}" if _at_disp else "")
+        )
 
         is_credit = strategy_type == "credit"
 
