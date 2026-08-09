@@ -466,7 +466,9 @@ def calc_jade_lizards(put_df: pd.DataFrame, call_spread_df: pd.DataFrame,
     combined['call_spread_width'] = (combined['buy_strike_call'] - combined['sell_strike_call']).abs()
 
     # Total credit = put premium + call spread net credit
-    combined['put_credit']        = combined['last_option_price_put']
+    # put_df kommt aus short_strangle_input.sql: Spalte heisst 'last_option_price', nach merge '_put'
+    put_price_col = 'last_option_price_put' if 'last_option_price_put' in combined.columns else 'last_option_price'
+    combined['put_credit']        = combined[put_price_col]
     combined['call_spread_credit'] = combined['sell_last_option_price_call'] - combined['buy_last_option_price_call']
     combined['total_credit']      = combined['put_credit'] + combined['call_spread_credit']
     combined['total_credit_dollar'] = combined['total_credit'] * 100
