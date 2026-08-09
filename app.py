@@ -40,6 +40,7 @@ dividend_scanner = st.Page("pages/dividend_scanner.py", title="Dividend Scanner"
 zahltagstrategie = st.Page("pages/dividend_screener_zahltagstrategie.py", title="Zahltagstrategie")
 data_logs = st.Page("pages/data_change_logs.py", title="Data Logs")
 iron_condors = st.Page("pages/iron_condors.py", title="Iron Condors")
+iron_condors_enhanced = st.Page("pages/iron_condors_enhanced.py", title="Iron Condors Enhanced")
 earnings_put_scanner = st.Page("pages/earnings_put_scanner.py", title="Earnings Put Scanner")
 covered_call_scanner = st.Page("pages/covered_call_scanner.py", title="ITM Covered Call Scanner")
 volatility = st.Page("pages/volatility.py", title="Volatility")
@@ -57,6 +58,7 @@ page = st.navigation(
         spreads,
         spreads_enhanced,
         iron_condors,
+        iron_condors_enhanced,
         earnings_put_scanner,
         covered_call_scanner,
         volatility,

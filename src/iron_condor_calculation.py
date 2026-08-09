@@ -277,5 +277,64 @@ def get_page_iron_condors(df: pd.DataFrame) -> pd.DataFrame:
     
     # Only keep columns that actually exist in the dataframe
     existing_columns = [col for col in columns if col in df.columns]
-    
+
+    return df[existing_columns]
+
+
+def get_page_iron_condors_enhanced(df: pd.DataFrame) -> pd.DataFrame:
+    """Like get_page_iron_condors but keeps asset_type column added by the enhanced page."""
+    if df.empty:
+        return df
+
+    columns = [
+        'symbol',
+        'Company',
+        'asset_type',
+        'earnings_date',
+        'earnings_warning',
+        'close',
+        'analyst_mean_target',
+        'company_industry',
+        'company_sector',
+        'iv_rank',
+        'iv_percentile',
+        'max_profit',
+        'bpr',
+        'expected_value',
+        'sell_iv',
+        'APDI',
+        'APDI_EV',
+        'optionstrat_url',
+        'total_theta',
+        'days_to_expiration',
+        'days_to_earnings',
+        'sell_strike_put',
+        'buy_strike_put',
+        'sell_strike_call',
+        'buy_strike_call',
+        '%_otm_put',
+        '%_otm_call',
+        'sell_delta_put',
+        'sell_delta_call',
+        'expiration_date_put',
+        'expiration_date_call',
+        'sell_last_option_price_put', 'buy_last_option_price_put',
+        'sell_last_option_price_call', 'buy_last_option_price_call',
+        'sell_bs_price_put', 'buy_bs_price_put',
+        'sell_bs_price_call', 'buy_bs_price_call',
+        'sell_iv_put', 'buy_iv_put', 'sell_iv_call', 'buy_iv_call',
+        'sell_theta_put', 'buy_theta_put', 'sell_theta_call', 'buy_theta_call',
+        'sell_open_interest_put', 'buy_open_interest_put',
+        'sell_open_interest_call', 'buy_open_interest_call',
+        'buy_delta_put', 'buy_delta_call',
+        'sell_day_volume_put', 'buy_day_volume_put',
+        'sell_day_volume_call', 'buy_day_volume_call',
+        'sell_expected_move_put', 'buy_expected_move_put',
+        'sell_expected_move_call', 'buy_expected_move_call',
+        'sell_last_updated_put', 'buy_last_updated_put',
+        'sell_last_updated_call', 'buy_last_updated_call',
+        'historical_volatility_30d_put'
+    ]
+
+    existing_columns = [col for col in columns if col in df.columns]
     return df[existing_columns]
