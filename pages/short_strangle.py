@@ -249,7 +249,7 @@ if not df.empty:
         "no_upside_risk": st.column_config.CheckboxColumn(label="No ↑ Risk"),
         "total_credit_dollar": st.column_config.NumberColumn(label="Credit $", format="$%.0f"),
     }
-    page_display_dataframe(df, page='iron_condors', symbol_column='symbol',
+    page_display_dataframe(df, page='spreads', symbol_column='symbol',
                            column_config=column_config, on_select="rerun", selection_mode="single-row")
 else:
     st.warning("No results found for the selected criteria.")
