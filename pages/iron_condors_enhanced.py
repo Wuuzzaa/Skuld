@@ -188,7 +188,14 @@ with st.expander("Configuration and Filters", expanded=True):
         # Put und Call nutzen denselben ersten Termin im Range
         expiration_date_put  = str(expiration_dates[0])
         expiration_date_call = str(expiration_dates[0])
-        st.caption(f"{len(expiration_dates)} Verfallstermin(e) im Bereich {dte_lo}–{dte_hi} DTE")
+
+        first_row = range_dates_df.iloc[0]
+        first_dte = int(first_row['days_to_expiration'])
+        first_date = pd.to_datetime(first_row['expiration_date'])
+        exp_type = get_expiration_type(first_row['expiration_date'])
+        st.info(f"📅 Verwendeter Verfall: **{first_date.strftime('%d.%m.%Y')} ({first_date.strftime('%A')})** · {first_dte} DTE · {exp_type}")
+        if len(expiration_dates) > 1:
+            st.caption(f"{len(expiration_dates)} Termine im Range — es wird der nächste ({first_date.strftime('%d.%m.%Y')}) verwendet.")
 
     with col2:
         st.number_input("Put Delta Target", 0.0, 1.0, step=0.01, key="ice_delta_put",
