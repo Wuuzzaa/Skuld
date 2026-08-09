@@ -1,6 +1,6 @@
 -- Iron Condors Enhanced Multi-Date Query
--- __EXP_LIST__ wird durch :d0, :d1, ... ersetzt (eine Zeile pro Termin im DTE-Range).
--- WICHTIG: keine Doppelpunkt-Parameter-Beispiele in Kommentaren schreiben!
+-- __EXP_LIST__ wird von der Page durch Datums-Binds ersetzt (d0, d1, ...).
+-- WICHTIG: keine Doppelpunkt-Parameter in Kommentaren schreiben!
 WITH FilteredOptions AS (
     SELECT
         symbol,
