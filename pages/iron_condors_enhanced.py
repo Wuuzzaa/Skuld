@@ -35,14 +35,17 @@ DEFAULT_MIN_SELL_IV = 0.0     # lower default: ETFs/indices have lower IV
 DEFAULT_MAX_SELL_IV = 0.9
 DEFAULT_MIN_MAX_PROFIT = 50.0
 DEFAULT_DELTA_CANDIDATES = 3
+DEFAULT_STRATEGY = 'Iron Condor'
 
 DTE_SLIDER_MAX = 90
-
-st.title("Iron Condors Enhanced")
 
 selected_date = render_date_filter(
     date_query='select date from (select date from "DatesHistory" union select current_date) as sub ORDER BY date DESC',
 )
+
+# Dynamic title — set before session state so it updates on strategy change
+_strategy_label = st.session_state.get('ice_strategy', DEFAULT_STRATEGY)
+st.title(f"{'Iron Fly' if _strategy_label == 'Iron Fly' else 'Iron Condors'} Enhanced")
 
 DEFAULTS = {
     'ice_show_monthly': DEFAULT_SHOW_MONTHLY,
@@ -62,6 +65,7 @@ DEFAULTS = {
     'ice_delta_candidates': DEFAULT_DELTA_CANDIDATES,
     'ice_asset_type': 'All',
     'ice_sectors': [],
+    'ice_strategy': DEFAULT_STRATEGY,
 }
 
 init_session_state(DEFAULTS)
@@ -73,6 +77,13 @@ def _on_asset_type_change():
         st.session_state.ice_max_risk = 1000
         st.session_state.ice_delta_candidates = 5
         st.session_state.ice_show_only_spreads_with_no_earnings = False
+
+
+def _on_strategy_change():
+    if st.session_state.ice_strategy == 'Iron Fly':
+        st.session_state.ice_delta_put = 0.50
+        st.session_state.ice_delta_call = 0.50
+        st.session_state.ice_max_risk = 500
 
 
 def reset_to_defaults():
@@ -93,16 +104,27 @@ def clear_all_filters():
 with st.expander("Documentation"):
     st.markdown(get_iron_condor_documentation())
     st.info(
-        "**Enhanced** vs. Classic: delta_rank ≤ N (mehrere Kandidaten), BETWEEN-Breite (nicht exakt), "
-        "Asset-Filter (Aktien/ETFs/Indizes), Sektor-Filter, Min-IV Default 0."
+        "**Enhanced** vs. Classic: delta_rank ≤ N, BETWEEN-Breite, Asset-Filter, Sektor-Filter, Min-IV 0. "
+        "**Iron Fly**: beide Short-Strikes ATM (delta ~0.50), Flügel = Schutz."
     )
 
 with st.expander("Configuration and Filters", expanded=True):
-    btn_col1, btn_col2 = st.columns(2)
+    # --- Strategy Toggle ---
+    strat_col, btn_col1, btn_col2 = st.columns([2, 1, 1])
+    with strat_col:
+        st.radio(
+            "Strategy",
+            ['Iron Condor', 'Iron Fly'],
+            key='ice_strategy',
+            horizontal=True,
+            on_change=_on_strategy_change,
+        )
     with btn_col1:
         st.button("Reset to Defaults", on_click=reset_to_defaults, width="stretch")
     with btn_col2:
         st.button("Clear All Filters (Show All)", on_click=clear_all_filters, width="stretch")
+
+    is_iron_fly = st.session_state.ice_strategy == 'Iron Fly'
 
     # --- Asset type + Sector ---
     asset_col, sector_col = st.columns([1, 2])
@@ -178,8 +200,12 @@ with st.expander("Configuration and Filters", expanded=True):
         expiration_date_call = str(slider_dates.iloc[dte_labels.index(exp_call)]['expiration_date'])
 
     with col2:
-        st.number_input("Put Delta Target", 0.0, 1.0, step=0.01, key="ice_delta_put")
-        st.number_input("Call Delta Target", 0.0, 1.0, step=0.01, key="ice_delta_call")
+        st.number_input("Put Delta Target", 0.0, 1.0, step=0.01, key="ice_delta_put",
+                        disabled=is_iron_fly)
+        st.number_input("Call Delta Target", 0.0, 1.0, step=0.01, key="ice_delta_call",
+                        disabled=is_iron_fly)
+        if is_iron_fly:
+            st.info("Iron Fly: Short-Strikes ATM → delta ~0.50 (automatisch)")
         st.number_input("Delta Candidates", 1, 10, step=1, key="ice_delta_candidates",
                         help="Anzahl Sell-Kandidaten pro Symbol (delta_rank ≤ N). Höher = mehr Symbole.")
 
