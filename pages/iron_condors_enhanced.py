@@ -36,6 +36,8 @@ DEFAULT_MAX_SELL_IV = 0.9
 DEFAULT_MIN_MAX_PROFIT = 50.0
 DEFAULT_DELTA_CANDIDATES = 3
 DEFAULT_STRATEGY = 'Iron Condor'
+DEFAULT_DTE_MIN = 30
+DEFAULT_DTE_MAX = 52
 
 DTE_SLIDER_MAX = 90
 
@@ -66,6 +68,8 @@ DEFAULTS = {
     'ice_asset_type': 'All',
     'ice_sectors': [],
     'ice_strategy': DEFAULT_STRATEGY,
+    'ice_dte_min': DEFAULT_DTE_MIN,
+    'ice_dte_max': DEFAULT_DTE_MAX,
 }
 
 init_session_state(DEFAULTS)
@@ -158,46 +162,33 @@ with st.expander("Configuration and Filters", expanded=True):
             st.session_state.ice_show_daily
         )
 
-        # DTE slider capped at DTE_SLIDER_MAX
-        if not filtered_dates_df.empty:
-            dte_values = filtered_dates_df['days_to_expiration'].astype(int).tolist()
-            capped = [d for d in dte_values if d <= DTE_SLIDER_MAX]
-            slider_dates = filtered_dates_df[filtered_dates_df['days_to_expiration'].astype(int) <= DTE_SLIDER_MAX]
-        else:
-            slider_dates = filtered_dates_df
+        dte_lo, dte_hi = st.slider(
+            "DTE-Bereich (Tage bis Verfall)",
+            min_value=0,
+            max_value=DTE_SLIDER_MAX,
+            value=(
+                int(min(st.session_state.ice_dte_min, DTE_SLIDER_MAX)),
+                int(min(st.session_state.ice_dte_max, DTE_SLIDER_MAX)),
+            ),
+            key="ice_dte_range",
+        )
+        st.session_state.ice_dte_min = dte_lo
+        st.session_state.ice_dte_max = dte_hi
 
-        dte_labels = [
-            (
-                f"{int(row['days_to_expiration'])} DTE - "
-                f"{pd.to_datetime(row['expiration_date']).strftime('%A')}  "
-                f"{row['expiration_date']} - "
-                f"{get_expiration_type(row['expiration_date'])}"
-            )
-            for _, row in slider_dates.iterrows()
+        range_dates_df = filtered_dates_df[
+            (filtered_dates_df['days_to_expiration'] >= dte_lo) &
+            (filtered_dates_df['days_to_expiration'] <= dte_hi)
         ]
+        expiration_dates = range_dates_df['expiration_date'].tolist()
 
-        if not dte_labels:
-            # Fall back to unfiltered dates if DTE cap removes everything
-            slider_dates = filtered_dates_df
-            dte_labels = [
-                (
-                    f"{int(row['days_to_expiration'])} DTE - "
-                    f"{pd.to_datetime(row['expiration_date']).strftime('%A')}  "
-                    f"{row['expiration_date']} - "
-                    f"{get_expiration_type(row['expiration_date'])}"
-                )
-                for _, row in slider_dates.iterrows()
-            ]
-
-        if not dte_labels:
-            st.warning("No expiration dates match the selected filters.")
+        if not expiration_dates:
+            st.warning(f"Keine Verfallstermine im DTE-Bereich {dte_lo}–{dte_hi}. Slider anpassen.")
             st.stop()
 
-        exp_put = st.selectbox("Put Expiration", dte_labels, index=min(1, len(dte_labels) - 1))
-        exp_call = st.selectbox("Call Expiration", dte_labels, index=min(1, len(dte_labels) - 1))
-
-        expiration_date_put = str(slider_dates.iloc[dte_labels.index(exp_put)]['expiration_date'])
-        expiration_date_call = str(slider_dates.iloc[dte_labels.index(exp_call)]['expiration_date'])
+        # Put und Call nutzen denselben ersten Termin im Range
+        expiration_date_put  = str(expiration_dates[0])
+        expiration_date_call = str(expiration_dates[0])
+        st.caption(f"{len(expiration_dates)} Verfallstermin(e) im Bereich {dte_lo}–{dte_hi} DTE")
 
     with col2:
         st.number_input("Put Delta Target", 0.0, 1.0, step=0.01, key="ice_delta_put",
