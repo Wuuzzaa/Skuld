@@ -28,8 +28,8 @@ WITH FilteredOptions AS (
     FROM
         "OptionDataMerged"
     WHERE
-        open_interest >= :min_open_interest
-        AND day_volume >= :min_day_volume
+        open_interest IS NOT NULL AND open_interest >= :min_open_interest
+        AND day_volume IS NOT NULL AND day_volume >= :min_day_volume
         AND iv_rank >= :min_iv_rank
         AND iv_percentile >= :min_iv_percentile
 ),
