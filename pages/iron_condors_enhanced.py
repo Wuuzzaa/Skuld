@@ -185,17 +185,10 @@ with st.expander("Configuration and Filters", expanded=True):
             st.warning(f"Keine Verfallstermine im DTE-Bereich {dte_lo}–{dte_hi}. Slider anpassen.")
             st.stop()
 
-        # Put und Call nutzen denselben ersten Termin im Range
+        # Put und Call nutzen alle Termine im Range — Multi-Date Query
         expiration_date_put  = str(expiration_dates[0])
         expiration_date_call = str(expiration_dates[0])
-
-        first_row = range_dates_df.iloc[0]
-        first_dte = int(first_row['days_to_expiration'])
-        first_date = pd.to_datetime(first_row['expiration_date'])
-        exp_type = get_expiration_type(first_row['expiration_date'])
-        st.info(f"📅 Verwendeter Verfall: **{first_date.strftime('%d.%m.%Y')} ({first_date.strftime('%A')})** · {first_dte} DTE · {exp_type}")
-        if len(expiration_dates) > 1:
-            st.caption(f"{len(expiration_dates)} Termine im Range — es wird der nächste ({first_date.strftime('%d.%m.%Y')}) verwendet.")
+        st.caption(f"{len(expiration_dates)} Verfallstermin(e) im Bereich {dte_lo}–{dte_hi} DTE")
 
     with col2:
         st.number_input("Put Delta Target", 0.0, 1.0, step=0.01, key="ice_delta_put",
