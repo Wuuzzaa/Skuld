@@ -301,7 +301,7 @@ if not df.empty:
         "max_loss_call_side": st.column_config.NumberColumn(label="Call MaxLoss $", format="$%.0f"),
         "optionstrat_url": st.column_config.LinkColumn(label="", help="OptionStrat", display_text="🎯"),
     }
-    page_display_dataframe(df, page='spreads', symbol_column='symbol',
+    page_display_dataframe(df, page=None, symbol_column='symbol',
                            column_config=column_config, on_select="rerun", selection_mode="single-row")
 else:
     st.warning("No results found for the selected criteria.")
