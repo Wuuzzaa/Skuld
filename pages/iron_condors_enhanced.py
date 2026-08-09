@@ -269,8 +269,8 @@ with st.expander("Configuration and Filters", expanded=True):
 
 
 @st.cache_data(ttl=300)
-def _cached_select(date, sql_file_path, params):
-    return select_timetravel_into_dataframe(date=date, sql_file_path=sql_file_path, params=params)
+def _cached_select_query(date, query, params):
+    return select_timetravel_into_dataframe(date=date, query=query, params=params)
 
 
 @st.cache_data
@@ -294,15 +294,21 @@ with st.spinner("Calculating Iron Condors Enhanced..."):
         "spread_width_min": spread_width_min,
     }
 
-    sql_query_path = PATH_DATABASE_QUERY_FOLDER / 'iron_condors_enhanced_input.sql'
+    multidate_sql_path = PATH_DATABASE_QUERY_FOLDER / 'iron_condors_enhanced_multidate_input.sql'
+    with open(multidate_sql_path, 'r') as _f:
+        _multidate_sql_raw = _f.read()
 
-    put_params = {**common_params, "expiration_date": expiration_date_put, "option_type": "put", "delta_target": st.session_state.ice_delta_put}
-    call_params = {**common_params, "expiration_date": expiration_date_call, "option_type": "call", "delta_target": st.session_state.ice_delta_call}
+    exp_placeholders = ", ".join(f":d{i}" for i in range(len(expiration_dates)))
+    date_params = {f"d{i}": d for i, d in enumerate(expiration_dates)}
+    multidate_sql = _multidate_sql_raw.replace("__EXP_LIST__", exp_placeholders)
+
+    put_params  = {**common_params, **date_params, "option_type": "put",  "delta_target": st.session_state.ice_delta_put}
+    call_params = {**common_params, **date_params, "option_type": "call", "delta_target": st.session_state.ice_delta_call}
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-        future_put = executor.submit(_cached_select, date=selected_date, sql_file_path=sql_query_path, params=put_params)
-        future_call = executor.submit(_cached_select, date=selected_date, sql_file_path=sql_query_path, params=call_params)
-        put_df = future_put.result()
+        future_put  = executor.submit(_cached_select_query, date=selected_date, query=multidate_sql, params=put_params)
+        future_call = executor.submit(_cached_select_query, date=selected_date, query=multidate_sql, params=call_params)
+        put_df  = future_put.result()
         call_df = future_call.result()
 
     ic_df_raw = _cached_calc(put_df, call_df, st.session_state.ice_iv_correction, st.session_state.ice_risk_free_rate / 100)
@@ -335,12 +341,14 @@ if not ic_df.empty:
     if selected_sectors:
         ic_df = ic_df[ic_df['company_sector'].isin(selected_sectors)]
 
-    # For each symbol keep the candidate closest to delta target on sell side
+    # Best candidate per symbol+expiration: nächster Delta zum Ziel
     if not ic_df.empty:
         ic_df['_put_delta_dist'] = (ic_df['sell_delta_put'] - st.session_state.ice_delta_put).abs()
         ic_df['_call_delta_dist'] = (ic_df['sell_delta_call'] - st.session_state.ice_delta_call).abs()
         ic_df['_total_delta_dist'] = ic_df['_put_delta_dist'] + ic_df['_call_delta_dist']
-        ic_df = ic_df.sort_values('_total_delta_dist').drop_duplicates(subset=['symbol'], keep='first')
+        ic_df = ic_df.sort_values('_total_delta_dist').drop_duplicates(
+            subset=['symbol', 'expiration_date_put'], keep='first'
+        )
         ic_df = ic_df.drop(columns=['_put_delta_dist', '_call_delta_dist', '_total_delta_dist'])
 
 if not ic_df.empty:
@@ -382,6 +390,7 @@ if not ic_df.empty:
 
     column_config = {
         "asset_type": st.column_config.TextColumn(label="Type"),
+        "days_to_expiration": st.column_config.NumberColumn(label="DTE", format="%d"),
         "optionstrat_url": st.column_config.LinkColumn(label="", help="OptionStrat", display_text="🎯"),
     }
 
@@ -400,6 +409,15 @@ if not ic_df.empty:
         row = ic_df.iloc[selected_idx]
 
         st.divider()
+
+        # Verfallsdatum prominent zeigen — bei DTE-Range sind mehrere Termine gemischt
+        _exp_put_disp  = pd.to_datetime(row['expiration_date_put']).strftime('%d.%m.%Y (%A)')
+        _exp_call_disp = pd.to_datetime(row['expiration_date_call']).strftime('%d.%m.%Y (%A)')
+        _dte_disp = int(row.get('days_to_expiration', 0))
+        if row['expiration_date_put'] == row['expiration_date_call']:
+            st.info(f"**{row['symbol']}**  ·  Verfall: **{_exp_put_disp}**  ·  **{_dte_disp} DTE**")
+        else:
+            st.info(f"**{row['symbol']}**  ·  Put: **{_exp_put_disp}**  ·  Call: **{_exp_call_disp}**  ·  **{_dte_disp} DTE**")
 
         legs = [
             OptionLeg(
