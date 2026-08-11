@@ -413,11 +413,14 @@ def main():
         st.subheader(f"Ideale Short Puts (Delta -0.30, 30-60 DTE) für {selected_symbol}")
         options_df = get_options_for_symbol(selected_date, selected_symbol)
         if not options_df.empty:
-            st.table(options_df.style.format({
-                'strike_price': '{:.2f}',
-                'greeks_delta': '{:.3f}',
-                'implied_volatility': '{:.1%}'
-            }))
+            fmt = {}
+            if 'strike_price' in options_df.columns:
+                fmt['strike_price'] = '{:.2f}'
+            if 'greeks_delta' in options_df.columns:
+                fmt['greeks_delta'] = '{:.3f}'
+            if 'implied_volatility' in options_df.columns:
+                fmt['implied_volatility'] = '{:.1%}'
+            st.dataframe(options_df.style.format(fmt), use_container_width=True)
         else:
             st.info("Keine passenden Optionen in der Datenbank gefunden.")
 
