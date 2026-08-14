@@ -129,7 +129,7 @@ with tab_jobs:
             "(setzt DB-Views neu auf und/oder überschreibt Massendaten via TRUNCATE). "
             "Zum Bestätigen den Modusnamen exakt eintippen."
         )
-        typed = st.text_input(f"Zur Bestätigung „{selected_mode}" eingeben", key="destructive_confirm")
+        typed = st.text_input(f"Zur Bestaetigung '{selected_mode}' eingeben", key="destructive_confirm")
         confirmed = typed.strip() == selected_mode
 
     if st.button("Einplanen", type="primary", disabled=not confirmed):
