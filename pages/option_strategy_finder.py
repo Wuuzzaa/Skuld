@@ -72,6 +72,14 @@ def _load_chain(date: str, symbol: str, dte_min: int, dte_max: int,
 
 # ── Strategie-Builder ─────────────────────────────────────────────────────────
 
+def _closest_delta(sub: pd.DataFrame, target: float) -> pd.Series | None:
+    if sub.empty:
+        return None
+    sub = sub.copy()
+    sub["_dd"] = (sub["greeks_delta"].abs() - target).abs()
+    return sub.loc[sub["_dd"].idxmin()]
+
+
 def _bs(S, K, iv, dte, is_call) -> float | None:
     try:
         if any(v is None or (isinstance(v, float) and (v != v)) for v in [S, K, iv, dte]):
