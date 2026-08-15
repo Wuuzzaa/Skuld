@@ -436,6 +436,8 @@ def main():
             max_risk   = st.number_input("Max. Risiko ($)", 100, 500000, 2000, 100)
             min_oi     = st.number_input("Min. Open Interest", 0, 10000, MIN_OI_DEFAULT, 10)
             min_vol    = st.number_input("Min. Tagesvolumen", 0, 10000, MIN_VOL_DEFAULT, 1)
+            exclude_earnings = st.toggle("Earnings ausschließen", value=False,
+                                         help="Alle Strategien ausblenden, bei denen Earnings vor dem Verfall liegen.")
 
     run = st.button("Strategien suchen", type="primary", use_container_width=True)
 
@@ -473,6 +475,8 @@ def main():
     all_results  = st.session_state.get("sf_results", [])
     strat_filter = st.session_state.get("sf_strategies", strategies if run else [])
     filtered     = [s for s in all_results if s["Strategie"] in strat_filter]
+    if exclude_earnings:
+        filtered = [s for s in filtered if not s["_earnings_warn"]]
 
     if not filtered:
         if all_results:
