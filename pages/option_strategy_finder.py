@@ -136,6 +136,7 @@ def build_strategies(df: pd.DataFrame, min_profit: float, max_risk: float,
 
     stock_price = df["stock_price"].iloc[0]
     symbol = df["symbol"].iloc[0] if "symbol" in df.columns else ""
+    company_name = df["company_name"].iloc[0] if "company_name" in df.columns else symbol
     results: list[dict] = []
 
     puts  = df[df["option_type"] == "put"].copy()
@@ -310,7 +311,8 @@ def _row(strat, symbol, exp_date, dte, legs, kredit, max_profit, max_risk,
             "earnings_date": earnings_date, "expiration": exp_date
         })),
         "_legs": leg_data or [],
-        "_stock_price": None,  # wird in build_strategies gesetzt
+        "_stock_price": None,
+        "_company_name": company_name,
     }
 
 
@@ -444,7 +446,7 @@ def _render_detail(s: dict):
         "close": stock_price,
     }
 
-    display_strategy_details(s["Symbol"], s["Symbol"], option_legs, metrics, extra_info)
+    display_strategy_details(s["Symbol"], s.get("_company_name") or s["Symbol"], option_legs, metrics, extra_info)
 
 
 def _render_table(rows: list[dict], tab_key: str):
