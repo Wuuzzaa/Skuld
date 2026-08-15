@@ -306,7 +306,40 @@ def _style_table(df: pd.DataFrame):
     )
 
 
-def _render_table(rows: list[dict]):
+def _render_detail(s: dict):
+    """Detail-View für eine angeklickte Strategie-Zeile."""
+    st.divider()
+    st.subheader(f"{s['Strategie']} — {s['Symbol']}")
+
+    # Externe Links
+    sym = s["Symbol"]
+    lc1, lc2, lc3, lc4 = st.columns(4)
+    lc1.link_button("TradingView", f"https://www.tradingview.com/chart/?symbol={sym}", use_container_width=True)
+    lc2.link_button("Finviz", f"https://finviz.com/quote.ashx?t={sym}", use_container_width=True)
+    lc3.link_button("Yahoo Finance", f"https://finance.yahoo.com/quote/{sym}", use_container_width=True)
+    lc4.link_button("Seeking Alpha", f"https://seekingalpha.com/symbol/{sym}", use_container_width=True)
+
+    st.caption(f"Verfall: **{s['Verfall']}** · {s['DTE']} DTE")
+    st.code(s["Beine"], language=None)
+
+    if s["_earnings_warn"]:
+        st.warning(f"Earnings vor Verfall ({s['earnings_date']}) — erhöhtes Gap-Risiko.")
+
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("Kredit",      f"${s['Kredit $']:.0f}")
+    c2.metric("Max Profit",  f"${s['Max Profit $']:.0f}")
+    c3.metric("Max Risiko",  f"${s['Max Risiko $']:.0f}")
+    c4.metric("RoR %",       f"{s['RoR %']:.1f}%")
+    c5.metric("Breakeven",   f"${s['Breakeven']:.2f}")
+
+    c6, c7, c8, c9 = st.columns(4)
+    c6.metric("Delta",   f"{s['Delta']:.2f}")
+    c7.metric("IV %",    f"{s['IV %']:.1f}%")
+    c8.metric("IV Rank", f"{s['IV Rank']:.0f}")
+    c9.metric("OTM %",   f"{s['OTM %']:.1f}%")
+
+
+def _render_table(rows: list[dict], tab_key: str):
     if not rows:
         st.info("Keine Treffer in dieser Kategorie.")
         return
@@ -315,10 +348,14 @@ def _render_table(rows: list[dict]):
     if warns:
         syms = ", ".join(sorted({r["Symbol"] for r in warns}))
         st.warning(f"Earnings vor Verfall: {syms} — erhöhtes Gap-Risiko prüfen.")
-    st.dataframe(
+
+    event = st.dataframe(
         _style_table(df),
         use_container_width=True,
         hide_index=True,
+        on_select="rerun",
+        selection_mode="single-row",
+        key=f"sf_table_{tab_key}",
         column_config={
             "Beine": st.column_config.TextColumn("Beine", width="large"),
             "Kredit $":     st.column_config.NumberColumn("Kredit $",     format="$%.0f"),
@@ -327,6 +364,12 @@ def _render_table(rows: list[dict]):
             "Breakeven":    st.column_config.NumberColumn("Breakeven",    format="$%.2f"),
         },
     )
+
+    sel_rows = event.selection.rows if hasattr(event, "selection") else []
+    if sel_rows:
+        _render_detail(rows[sel_rows[0]])
+    else:
+        st.caption("Zeile anklicken für Details.")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -459,7 +502,8 @@ def main():
     for i, tab in enumerate(tabs):
         with tab:
             subset = filtered if i == len(seen_types) else [s for s in filtered if s["Strategie"] == seen_types[i]]
-            _render_table(subset)
+            tab_key = "alle" if i == len(seen_types) else seen_types[i].replace(" ", "_")
+            _render_table(subset, tab_key)
 
     # CSV-Export
     with st.expander("CSV Export"):

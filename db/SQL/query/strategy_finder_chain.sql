@@ -4,6 +4,7 @@
 -- Keine bid/ask vorhanden → premium = day_close (Last Price).
 -- Params: :symbol, :dte_min, :dte_max, :min_open_interest, :min_day_volume
 SELECT
+    o.symbol,
     o.contract_type                       AS option_type,
     o.strike_price,
     o.day_close                           AS premium,
