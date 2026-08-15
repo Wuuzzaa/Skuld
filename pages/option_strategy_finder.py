@@ -31,17 +31,34 @@ def _load_sectors() -> list[str]:
 
 
 @st.cache_data(ttl=600)
-def _load_symbols_for_sector(sector: str) -> list[str]:
-    df = select_into_dataframe(
-        query="""
-            SELECT DISTINCT o.symbol
-            FROM "OptionDataMerged" o
-            JOIN "FundamentalData" f ON f.symbol = o.symbol
-            WHERE f.company_sector = :sector
-            ORDER BY o.symbol ASC
-        """,
-        params={"sector": sector},
-    )
+def _load_symbols_for_sector(sector: str, min_market_cap_b: float = 0.0) -> list[str]:
+    query = """
+        SELECT DISTINCT o.symbol
+        FROM "OptionDataMerged" o
+        JOIN "FundamentalData" f ON f.symbol = o.symbol
+        WHERE f.company_sector = :sector
+    """
+    if min_market_cap_b > 0:
+        query += ' AND o."Summary_marketCap" >= :min_mcap'
+    query += " ORDER BY o.symbol ASC"
+    params = {"sector": sector}
+    if min_market_cap_b > 0:
+        params["min_mcap"] = min_market_cap_b * 1_000_000_000
+    df = select_into_dataframe(query=query, params=params)
+    if df is None or df.empty:
+        return []
+    return df["symbol"].dropna().astype(str).tolist()
+
+
+@st.cache_data(ttl=600)
+def _load_all_symbols(min_market_cap_b: float = 0.0) -> list[str]:
+    query = 'SELECT DISTINCT symbol FROM "OptionDataMerged" WHERE 1=1'
+    params = {}
+    if min_market_cap_b > 0:
+        query += ' AND "Summary_marketCap" >= :min_mcap'
+        params["min_mcap"] = min_market_cap_b * 1_000_000_000
+    query += " ORDER BY symbol ASC"
+    df = select_into_dataframe(query=query, params=params)
     if df is None or df.empty:
         return []
     return df["symbol"].dropna().astype(str).tolist()
@@ -318,6 +335,10 @@ def _row(strat, symbol, exp_date, dte, legs, kredit, max_profit, max_risk,
         "_legs": leg_data or [],
         "_stock_price": None,
         "_company_name": company_name,
+        "_all_overpriced": all(
+            (l.get("bs") is not None and l["premium"] > l["bs"])
+            for l in (leg_data or [])
+        ) if leg_data else False,
     }
 
 
@@ -511,7 +532,12 @@ def main():
             placeholder="z.B. AAPL, MSFT, SPY",
         ).upper().strip()
         symbols_to_scan = [symbol_input] if symbol_input else []
+        min_market_cap_b = 0.0
     else:
+        min_market_cap_b = st.slider(
+            "Min. Market Cap (Mrd $)", 0.0, 50.0, 2.0, 0.5,
+            help="Symbole unter diesem Marktwert werden nicht geladen. Default: 2 Mrd."
+        )
         sectors = _load_sectors()
         chosen_sector = st.selectbox(
             "Sektor", [""] + sectors,
@@ -519,7 +545,7 @@ def main():
             placeholder="Sektor wählen...",
         )
         if chosen_sector:
-            sector_symbols = _load_symbols_for_sector(chosen_sector)
+            sector_symbols = _load_symbols_for_sector(chosen_sector, min_market_cap_b=min_market_cap_b)
             chosen_symbols = st.multiselect(
                 f"Symbole aus {chosen_sector} ({len(sector_symbols)} verfügbar)",
                 sector_symbols,
@@ -555,6 +581,8 @@ def main():
                                    help="Sell-Strike muss mindestens X% vom aktuellen Kurs entfernt sein.")
             exclude_earnings = st.toggle("Earnings ausschließen", value=False,
                                          help="Alle Strategien ausblenden, bei denen Earnings vor dem Verfall liegen.")
+            only_overpriced = st.toggle("Nur BS-überbewertet", value=False,
+                                        help="Nur Strategien zeigen, bei denen ALLE Legs teurer als der BS-Preis sind (gut für Prämienverkäufer).")
 
     run = st.button("Strategien suchen", type="primary", use_container_width=True)
 
@@ -596,6 +624,8 @@ def main():
         filtered = [s for s in filtered if not s["_earnings_warn"]]
     if min_puffer > 0:
         filtered = [s for s in filtered if s["OTM %"] >= min_puffer]
+    if only_overpriced:
+        filtered = [s for s in filtered if s.get("_all_overpriced", False)]
 
     if not filtered:
         if all_results:

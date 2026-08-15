@@ -23,7 +23,8 @@ SELECT
     o.days_to_earnings,
     o.company_name,
     o.company_sector,
-    o.company_industry
+    o.company_industry,
+    o."Summary_marketCap"                 AS market_cap
 FROM "OptionDataMerged" o
 WHERE o.symbol            = :symbol
   AND o.days_to_expiration BETWEEN :dte_min AND :dte_max
