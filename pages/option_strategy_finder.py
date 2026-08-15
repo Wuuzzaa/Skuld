@@ -164,6 +164,7 @@ def build_strategies(df: pd.DataFrame, min_profit: float, max_risk: float,
                         float(leg.get("iv_rank") or 0),
                         (stock_price - float(leg["strike_price"])) / stock_price * 100,
                         leg.get("earnings_date"),
+                        company_name=company_name,
                         leg_data=[_leg(leg, is_call=False, is_long=False, stock_price=stock_price)],
                     ))
 
@@ -186,6 +187,7 @@ def build_strategies(df: pd.DataFrame, min_profit: float, max_risk: float,
                         float(leg.get("iv_rank") or 0),
                         (float(leg["strike_price"]) - stock_price) / stock_price * 100,
                         leg.get("earnings_date"),
+                        company_name=company_name,
                         leg_data=[_leg(leg, is_call=True, is_long=False, stock_price=stock_price)],
                     ))
 
@@ -211,7 +213,8 @@ def build_strategies(df: pd.DataFrame, min_profit: float, max_risk: float,
                             float(sell_leg.get("iv_rank") or 0),
                             (stock_price - float(sell_leg["strike_price"])) / stock_price * 100,
                             sell_leg.get("earnings_date"),
-                            leg_data=[
+                            company_name=company_name,
+                        leg_data=[
                                 _leg(sell_leg, is_call=False, is_long=False, stock_price=stock_price),
                                 _leg(buy_leg,  is_call=False, is_long=True,  stock_price=stock_price),
                             ],
@@ -239,7 +242,8 @@ def build_strategies(df: pd.DataFrame, min_profit: float, max_risk: float,
                             float(sell_leg.get("iv_rank") or 0),
                             (float(sell_leg["strike_price"]) - stock_price) / stock_price * 100,
                             sell_leg.get("earnings_date"),
-                            leg_data=[
+                            company_name=company_name,
+                        leg_data=[
                                 _leg(sell_leg, is_call=True, is_long=False, stock_price=stock_price),
                                 _leg(buy_leg,  is_call=True, is_long=True,  stock_price=stock_price),
                             ],
@@ -274,7 +278,8 @@ def build_strategies(df: pd.DataFrame, min_profit: float, max_risk: float,
                             float(put_sell.get("iv_rank") or 0),
                             (stock_price - float(put_sell["strike_price"])) / stock_price * 100,
                             put_sell.get("earnings_date"),
-                            leg_data=[
+                            company_name=company_name,
+                        leg_data=[
                                 _leg(put_sell,  is_call=False, is_long=False, stock_price=stock_price),
                                 _leg(put_buy,   is_call=False, is_long=True,  stock_price=stock_price),
                                 _leg(call_sell, is_call=True,  is_long=False, stock_price=stock_price),
@@ -290,7 +295,7 @@ def build_strategies(df: pd.DataFrame, min_profit: float, max_risk: float,
 
 def _row(strat, symbol, exp_date, dte, legs, kredit, max_profit, max_risk,
          breakeven, ror, delta, iv, iv_rank, otm_pct, earnings_date,
-         leg_data=None) -> dict:
+         leg_data=None, company_name=None) -> dict:
     return {
         "Strategie":   strat,
         "Symbol":      symbol,
