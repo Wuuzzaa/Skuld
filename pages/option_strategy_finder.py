@@ -279,6 +279,9 @@ def build_strategies(df: pd.DataFrame, min_profit: float, max_risk: float,
                             ],
                         ))
 
+    # stock_price in alle rows eintragen
+    for r in results:
+        r["_stock_price"] = float(stock_price)
     return results
 
 
@@ -305,6 +308,7 @@ def _row(strat, symbol, exp_date, dte, legs, kredit, max_profit, max_risk,
             "earnings_date": earnings_date, "expiration": exp_date
         })),
         "_legs": leg_data or [],
+        "_stock_price": None,  # wird in build_strategies gesetzt
     }
 
 
@@ -380,7 +384,11 @@ def _render_detail(s: dict):
         f"</div>",
         unsafe_allow_html=True,
     )
-    st.caption(f"Verfall: **{s['Verfall']}** · {s['DTE']} DTE")
+
+    # Kurs + Verfall
+    stock_price = s.get("_stock_price")
+    kurs_txt = f"Kurs: **${stock_price:.2f}** · " if stock_price else ""
+    st.caption(f"{kurs_txt}Verfall: **{s['Verfall']}** · {s['DTE']} DTE")
     st.code(s["Beine"], language=None)
 
     if s["_earnings_warn"]:
@@ -415,55 +423,60 @@ def _render_detail(s: dict):
             if bs is not None:
                 diff = mkt - bs
                 diff_pct = diff / bs * 100 if bs > 0 else 0
-                vs = f"+{diff:.2f} ({diff_pct:+.1f}%)" if diff >= 0 else f"{diff:.2f} ({diff_pct:.1f}%)"
                 overpriced = diff > 0
             else:
-                vs = "N/A"
+                diff = None
+                diff_pct = None
                 overpriced = None
-            leg_rows.append({
-                "Aktion":    f"{'Long' if l['action']=='Long' else 'Short'} {l['type']}",
-                "Strike":    l["strike"],
-                "Marktpreis": mkt,
-                "BS-Preis":  bs if bs is not None else float("nan"),
-                "Differenz": vs,
-                "Delta":     l["delta"],
-                "IV %":      round(l["iv"] * 100, 1),
-                "Theta":     round(l["theta"], 4),
-                "OI":        l["oi"],
-                "Vol":       l["volume"],
-                "_over":     overpriced,
-            })
+            leg_rows.append({**l, "bs": bs, "diff": diff, "diff_pct": diff_pct, "overpriced": overpriced})
 
-        leg_df = pd.DataFrame(leg_rows)
-
-        def _bs_color(row):
-            styles = [""] * len(row)
-            over = row["_over"]
-            bs_idx = leg_df.columns.get_loc("BS-Preis")
-            diff_idx = leg_df.columns.get_loc("Differenz")
+        cols = st.columns(len(leg_rows))
+        for col, l in zip(cols, leg_rows):
+            is_short = l["action"] == "Short"
+            over = l["overpriced"]
             if over is True:
-                styles[bs_idx]   = "background-color:#14532d;color:#4ade80;font-weight:700"
-                styles[diff_idx] = "color:#4ade80;font-weight:700"
+                border = "#4ade80"; bg = "#14532d22"
+                bs_style = "color:#4ade80;font-weight:700"
             elif over is False:
-                styles[bs_idx]   = "background-color:#450a0a;color:#f87171;font-weight:700"
-                styles[diff_idx] = "color:#f87171"
-            return styles
+                border = "#f87171"; bg = "#450a0a22"
+                bs_style = "color:#f87171;font-weight:700"
+            else:
+                border = "#475569"; bg = "transparent"
+                bs_style = "color:#94a3b8"
 
-        display_df = leg_df.drop(columns=["_over"])
-        st.dataframe(
-            display_df.style
-            .apply(_bs_color, axis=1)
-            .format({
-                "Strike":     "${:.2f}",
-                "Marktpreis": "${:.2f}",
-                "BS-Preis":   lambda v: f"${v:.2f}" if pd.notna(v) else "N/A",
-                "Delta":      "{:.2f}",
-                "IV %":       "{:.1f}",
-                "Theta":      "{:.4f}",
-            }),
-            hide_index=True,
-            use_container_width=True,
-        )
+            action_color = "#ef4444" if is_short else "#34d399"
+            bs_txt = f"${l['bs']:.2f}" if l["bs"] is not None else "N/A"
+            diff_txt = ""
+            if l["diff"] is not None:
+                sign = "+" if l["diff"] >= 0 else ""
+                diff_txt = f"{sign}{l['diff']:.2f} ({l['diff_pct']:+.1f}%)"
+
+            with col:
+                st.markdown(f"""
+<div style="background:{bg};border:1px solid {border}55;border-radius:10px;padding:14px 16px;">
+  <div style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:{action_color};font-weight:700;margin-bottom:6px;">
+    {l['action']} {l['type']}
+  </div>
+  <div style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;color:#f1f5f9;margin-bottom:12px;">
+    ${l['strike']:.2f}
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;">
+    <div><div style="color:#64748b;font-size:10px;text-transform:uppercase;">Marktpreis</div>
+         <div style="color:#f1f5f9;font-weight:600;">${l['premium']:.2f}</div></div>
+    <div><div style="color:#64748b;font-size:10px;text-transform:uppercase;">BS-Preis</div>
+         <div style="{bs_style}">{bs_txt}</div></div>
+    <div style="grid-column:span 2"><div style="color:#64748b;font-size:10px;text-transform:uppercase;">vs. BS</div>
+         <div style="{bs_style};font-size:11px;">{diff_txt if diff_txt else "—"}</div></div>
+    <div><div style="color:#64748b;font-size:10px;text-transform:uppercase;">Delta</div>
+         <div style="color:#cbd5e1;">{l['delta']:.2f}</div></div>
+    <div><div style="color:#64748b;font-size:10px;text-transform:uppercase;">IV</div>
+         <div style="color:#cbd5e1;">{l['iv']*100:.1f}%</div></div>
+    <div><div style="color:#64748b;font-size:10px;text-transform:uppercase;">Theta</div>
+         <div style="color:#cbd5e1;">{l['theta']:.4f}</div></div>
+    <div><div style="color:#64748b;font-size:10px;text-transform:uppercase;">OI / Vol</div>
+         <div style="color:#94a3b8;">{l['oi']} / {l['volume']}</div></div>
+  </div>
+</div>""", unsafe_allow_html=True)
 
     # Externe Links
     sym = s["Symbol"]
