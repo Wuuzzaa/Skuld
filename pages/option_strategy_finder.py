@@ -2,6 +2,8 @@
 
 import pandas as pd
 import streamlit as st
+from src.ui_strategy_display import display_strategy_details
+from src.options_utils import OptionLeg, StrategyMetrics, calculate_apdi
 
 from config import PATH_DATABASE_QUERY_FOLDER, RISK_FREE_RATE
 from src.database import select_into_dataframe
@@ -371,136 +373,78 @@ def _render_detail(s: dict):
     ror_color = "#34d399" if ror >= 15 else ("#f59e0b" if ror >= 8 else "#ef4444")
     ivr = s["IV Rank"]
     ivr_color = "#34d399" if 35 <= ivr <= 65 else ("#f59e0b" if 20 <= ivr <= 80 else "#ef4444")
+    stock_price = s.get("_stock_price") or 0.0
 
     st.markdown(
         f"<div style='display:flex;align-items:center;gap:16px;margin-bottom:8px;'>"
         f"<span style='font-size:22px;font-weight:700;'>{s['Strategie']} — {s['Symbol']}</span>"
         f"<span style='background:{ror_color}22;border:1px solid {ror_color}66;border-radius:20px;"
-        f"padding:3px 14px;font-size:13px;font-weight:700;color:{ror_color};'>"
-        f"RoR {ror:.1f}%</span>"
+        f"padding:3px 14px;font-size:13px;font-weight:700;color:{ror_color};'>RoR {ror:.1f}%</span>"
         f"<span style='background:{ivr_color}22;border:1px solid {ivr_color}66;border-radius:20px;"
-        f"padding:3px 14px;font-size:13px;font-weight:600;color:{ivr_color};'>"
-        f"IV Rank {ivr:.0f}</span>"
+        f"padding:3px 14px;font-size:13px;font-weight:600;color:{ivr_color};'>IV Rank {ivr:.0f}</span>"
+        f"{'<span style=\"background:#1e293b;border:1px solid #334155;border-radius:20px;padding:3px 14px;font-size:13px;color:#94a3b8;\">Kurs $' + f'{stock_price:.2f}' + '</span>' if stock_price else ''}"
         f"</div>",
         unsafe_allow_html=True,
     )
-
-    # Kurs + Verfall
-    stock_price = s.get("_stock_price")
-    kurs_txt = f"Kurs: **${stock_price:.2f}** · " if stock_price else ""
-    st.caption(f"{kurs_txt}Verfall: **{s['Verfall']}** · {s['DTE']} DTE")
+    st.caption(f"Verfall: **{s['Verfall']}** · {s['DTE']} DTE")
     st.code(s["Beine"], language=None)
 
     if s["_earnings_warn"]:
         st.warning(f"Earnings vor Verfall ({s['earnings_date']}) — erhöhtes Gap-Risiko.")
 
-    # Kennzahlen — Kredit == Max Profit bei reinen Credit Strategies → nur einmal zeigen
-    kredit = s["Kredit $"]
-    max_profit = s["Max Profit $"]
-    same = abs(kredit - max_profit) < 1
-
-    puffer_pct = s["OTM %"]  # OTM % = Abstand Sell-Strike vom Kurs
-    puffer_color = "#34d399" if puffer_pct >= 10 else ("#f59e0b" if puffer_pct >= 5 else "#ef4444")
-
-    if same:
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Kredit / Max Profit", f"${kredit:.0f}")
-        c2.metric("Max Risiko",          f"${s['Max Risiko $']:.0f}")
-        c3.metric("RoR %",               f"{s['RoR %']:.1f}%")
-        c4.metric("Breakeven",           f"${s['Breakeven']:.2f}")
-    else:
-        c1, c2, c3, c4, c5 = st.columns(5)
-        c1.metric("Kredit",      f"${kredit:.0f}")
-        c2.metric("Max Profit",  f"${max_profit:.0f}")
-        c3.metric("Max Risiko",  f"${s['Max Risiko $']:.0f}")
-        c4.metric("RoR %",       f"{s['RoR %']:.1f}%")
-        c5.metric("Breakeven",   f"${s['Breakeven']:.2f}")
-
-    c6, c7, c8, c9, c10 = st.columns(5)
-    c6.metric("Delta",   f"{s['Delta']:.2f}")
-    c7.metric("IV %",    f"{s['IV %']:.1f}%")
-    c8.metric("IV Rank", f"{s['IV Rank']:.0f}")
-    c9.metric("OTM %",   f"{puffer_pct:.1f}%")
-    c10.metric("Puffer $", f"${stock_price * puffer_pct / 100:.2f}" if stock_price else "N/A")
-
-    # Black-Scholes Leg-Tabelle
-    legs = s.get("_legs", [])
-    if legs:
-        st.markdown("#### Black-Scholes Bewertung je Leg")
-        st.caption(
-            "BS-Preis berechnet mit impliziter Volatilität des jeweiligen Strikes. "
-            "Marktpreis > BS-Preis (grün) = Option ist teurer als BS → gut für Verkäufer."
+    # Legs als OptionLeg-Objekte aufbauen
+    raw_legs = s.get("_legs", [])
+    option_legs = [
+        OptionLeg(
+            strike=l["strike"],
+            premium=l["premium"],
+            is_call=l["type"] == "Call",
+            is_long=l["action"] == "Long",
+            delta=l["delta"],
+            iv=l["iv"],
+            theta=l["theta"],
+            oi=l["oi"],
+            volume=l["volume"],
+            bs_price=l["bs"],
         )
-        leg_rows = []
-        for l in legs:
-            bs = l["bs"]
-            mkt = l["premium"]
-            if bs is not None:
-                diff = mkt - bs
-                diff_pct = diff / bs * 100 if bs > 0 else 0
-                overpriced = diff > 0
-            else:
-                diff = None
-                diff_pct = None
-                overpriced = None
-            leg_rows.append({**l, "bs": bs, "diff": diff, "diff_pct": diff_pct, "overpriced": overpriced})
+        for l in raw_legs
+    ]
 
-        cols = st.columns(len(leg_rows))
-        for col, l in zip(cols, leg_rows):
-            is_short = l["action"] == "Short"
-            over = l["overpriced"]
-            if over is True:
-                border = "#4ade80"; bg = "#14532d22"
-                bs_style = "color:#4ade80;font-weight:700"
-            elif over is False:
-                border = "#f87171"; bg = "#450a0a22"
-                bs_style = "color:#f87171;font-weight:700"
-            else:
-                border = "#475569"; bg = "transparent"
-                bs_style = "color:#94a3b8"
+    # StrategyMetrics berechnen
+    kredit   = s["Kredit $"]
+    max_prof = s["Max Profit $"]
+    max_risk = s["Max Risiko $"]
+    dte      = s["DTE"]
+    total_theta = sum(
+        (l["theta"] if l["action"] == "Short" else -l["theta"])
+        for l in raw_legs if l["theta"]
+    )
+    bpr = max_risk  # Buying Power Requirement = Max Risiko bei Credit Spreads
+    apdi = calculate_apdi(max_prof, dte, bpr)
 
-            action_color = "#ef4444" if is_short else "#34d399"
-            bs_txt = f"${l['bs']:.2f}" if l["bs"] is not None else "N/A"
-            diff_txt = ""
-            if l["diff"] is not None:
-                sign = "+" if l["diff"] >= 0 else ""
-                diff_txt = f"{sign}{l['diff']:.2f} ({l['diff_pct']:+.1f}%)"
+    metrics = StrategyMetrics(
+        max_profit=max_prof,
+        max_loss=max_risk,
+        bpr=bpr,
+        expected_value=0.0,   # kein Monte Carlo hier
+        total_theta=total_theta,
+        profit_to_bpr=max_prof / bpr * 100 if bpr > 0 else 0,
+        apdi=apdi,
+        apdi_ev=0.0,
+        iv_correction_factor=1.0,
+        corrected_volatility=s["IV %"] / 100,
+    )
 
-            with col:
-                st.markdown(f"""
-<div style="background:{bg};border:1px solid {border}55;border-radius:10px;padding:14px 16px;">
-  <div style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:{action_color};font-weight:700;margin-bottom:6px;">
-    {l['action']} {l['type']}
-  </div>
-  <div style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;color:#f1f5f9;margin-bottom:12px;">
-    ${l['strike']:.2f}
-  </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;">
-    <div><div style="color:#64748b;font-size:10px;text-transform:uppercase;">Marktpreis</div>
-         <div style="color:#f1f5f9;font-weight:600;">${l['premium']:.2f}</div></div>
-    <div><div style="color:#64748b;font-size:10px;text-transform:uppercase;">BS-Preis</div>
-         <div style="{bs_style}">{bs_txt}</div></div>
-    <div style="grid-column:span 2"><div style="color:#64748b;font-size:10px;text-transform:uppercase;">vs. BS</div>
-         <div style="{bs_style};font-size:11px;">{diff_txt if diff_txt else "—"}</div></div>
-    <div><div style="color:#64748b;font-size:10px;text-transform:uppercase;">Delta</div>
-         <div style="color:#cbd5e1;">{l['delta']:.2f}</div></div>
-    <div><div style="color:#64748b;font-size:10px;text-transform:uppercase;">IV</div>
-         <div style="color:#cbd5e1;">{l['iv']*100:.1f}%</div></div>
-    <div><div style="color:#64748b;font-size:10px;text-transform:uppercase;">Theta</div>
-         <div style="color:#cbd5e1;">{l['theta']:.4f}</div></div>
-    <div><div style="color:#64748b;font-size:10px;text-transform:uppercase;">OI / Vol</div>
-         <div style="color:#94a3b8;">{l['oi']} / {l['volume']}</div></div>
-  </div>
-</div>""", unsafe_allow_html=True)
+    extra_info = {
+        "iv_rank":        s["IV Rank"],
+        "iv_percentile":  None,
+        "company_sector": None,
+        "company_industry": None,
+        "analyst_mean_target": None,
+        "close": stock_price,
+    }
 
-    # Externe Links
-    sym = s["Symbol"]
-    st.markdown("#### Links")
-    lc1, lc2, lc3, lc4 = st.columns(4)
-    lc1.link_button("TradingView", f"https://www.tradingview.com/chart/?symbol={sym}", use_container_width=True)
-    lc2.link_button("Finviz", f"https://finviz.com/quote.ashx?t={sym}", use_container_width=True)
-    lc3.link_button("Yahoo Finance", f"https://finance.yahoo.com/quote/{sym}", use_container_width=True)
-    lc4.link_button("Seeking Alpha", f"https://seekingalpha.com/symbol/{sym}", use_container_width=True)
+    display_strategy_details(s["Symbol"], s["Symbol"], option_legs, metrics, extra_info)
 
 
 def _render_table(rows: list[dict], tab_key: str):
