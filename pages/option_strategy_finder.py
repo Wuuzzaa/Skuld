@@ -394,19 +394,34 @@ def _render_detail(s: dict):
     if s["_earnings_warn"]:
         st.warning(f"Earnings vor Verfall ({s['earnings_date']}) — erhöhtes Gap-Risiko.")
 
-    # Kennzahlen
-    c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("Kredit",      f"${s['Kredit $']:.0f}")
-    c2.metric("Max Profit",  f"${s['Max Profit $']:.0f}")
-    c3.metric("Max Risiko",  f"${s['Max Risiko $']:.0f}")
-    c4.metric("RoR %",       f"{s['RoR %']:.1f}%")
-    c5.metric("Breakeven",   f"${s['Breakeven']:.2f}")
+    # Kennzahlen — Kredit == Max Profit bei reinen Credit Strategies → nur einmal zeigen
+    kredit = s["Kredit $"]
+    max_profit = s["Max Profit $"]
+    same = abs(kredit - max_profit) < 1
 
-    c6, c7, c8, c9 = st.columns(4)
+    puffer_pct = s["OTM %"]  # OTM % = Abstand Sell-Strike vom Kurs
+    puffer_color = "#34d399" if puffer_pct >= 10 else ("#f59e0b" if puffer_pct >= 5 else "#ef4444")
+
+    if same:
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Kredit / Max Profit", f"${kredit:.0f}")
+        c2.metric("Max Risiko",          f"${s['Max Risiko $']:.0f}")
+        c3.metric("RoR %",               f"{s['RoR %']:.1f}%")
+        c4.metric("Breakeven",           f"${s['Breakeven']:.2f}")
+    else:
+        c1, c2, c3, c4, c5 = st.columns(5)
+        c1.metric("Kredit",      f"${kredit:.0f}")
+        c2.metric("Max Profit",  f"${max_profit:.0f}")
+        c3.metric("Max Risiko",  f"${s['Max Risiko $']:.0f}")
+        c4.metric("RoR %",       f"{s['RoR %']:.1f}%")
+        c5.metric("Breakeven",   f"${s['Breakeven']:.2f}")
+
+    c6, c7, c8, c9, c10 = st.columns(5)
     c6.metric("Delta",   f"{s['Delta']:.2f}")
     c7.metric("IV %",    f"{s['IV %']:.1f}%")
     c8.metric("IV Rank", f"{s['IV Rank']:.0f}")
-    c9.metric("OTM %",   f"{s['OTM %']:.1f}%")
+    c9.metric("OTM %",   f"{puffer_pct:.1f}%")
+    c10.metric("Puffer $", f"${stock_price * puffer_pct / 100:.2f}" if stock_price else "N/A")
 
     # Black-Scholes Leg-Tabelle
     legs = s.get("_legs", [])
@@ -585,6 +600,8 @@ def main():
             max_risk   = st.number_input("Max. Risiko ($)", 100, 500000, 2000, 100)
             min_oi     = st.number_input("Min. Open Interest", 0, 10000, MIN_OI_DEFAULT, 10)
             min_vol    = st.number_input("Min. Tagesvolumen", 0, 10000, MIN_VOL_DEFAULT, 1)
+            min_puffer = st.slider("Min. Puffer % (OTM)", 0, 30, 0, 1,
+                                   help="Sell-Strike muss mindestens X% vom aktuellen Kurs entfernt sein.")
             exclude_earnings = st.toggle("Earnings ausschließen", value=False,
                                          help="Alle Strategien ausblenden, bei denen Earnings vor dem Verfall liegen.")
 
@@ -626,6 +643,8 @@ def main():
     filtered     = [s for s in all_results if s["Strategie"] in strat_filter]
     if exclude_earnings:
         filtered = [s for s in filtered if not s["_earnings_warn"]]
+    if min_puffer > 0:
+        filtered = [s for s in filtered if s["OTM %"] >= min_puffer]
 
     if not filtered:
         if all_results:
