@@ -3,10 +3,11 @@
 import pandas as pd
 import streamlit as st
 
-from config import PATH_DATABASE_QUERY_FOLDER
+from config import PATH_DATABASE_QUERY_FOLDER, RISK_FREE_RATE
 from src.database import select_into_dataframe
 from src.historization import select_timetravel_into_dataframe
 from src.streamlit_helpers import render_date_filter
+from src.black_scholes import PutValue, CallValue
 
 # ── Delta-Konstanten (Defaults, werden per Slider überschrieben) ──────────────
 _DELTA_SHORT_DEFAULT    = 0.30
@@ -71,12 +72,37 @@ def _load_chain(date: str, symbol: str, dte_min: int, dte_max: int,
 
 # ── Strategie-Builder ─────────────────────────────────────────────────────────
 
-def _closest_delta(sub: pd.DataFrame, target: float) -> pd.Series | None:
-    if sub.empty:
+def _bs(S, K, iv, dte, is_call) -> float | None:
+    try:
+        if any(v is None or (isinstance(v, float) and (v != v)) for v in [S, K, iv, dte]):
+            return None
+        if iv <= 0 or dte <= 0:
+            return None
+        fn = CallValue if is_call else PutValue
+        return round(fn(float(S), float(K), float(iv), float(dte), RISK_FREE_RATE), 2)
+    except Exception:
         return None
-    sub = sub.copy()
-    sub["_dd"] = (sub["greeks_delta"].abs() - target).abs()
-    return sub.loc[sub["_dd"].idxmin()]
+
+
+def _leg(row: pd.Series, is_call: bool, is_long: bool, stock_price: float) -> dict:
+    K   = float(row["strike_price"])
+    prem = float(row["premium"])
+    iv   = float(row["implied_volatility"])
+    dte  = float(row["dte"])
+    bs   = _bs(stock_price, K, iv, dte, is_call)
+    return {
+        "type":    "Call" if is_call else "Put",
+        "action":  "Long" if is_long else "Short",
+        "strike":  K,
+        "premium": prem,
+        "bs":      bs,
+        "delta":   float(row["greeks_delta"]),
+        "iv":      iv,
+        "theta":   float(row.get("greeks_theta") or 0),
+        "oi":      int(row.get("open_interest") or 0),
+        "volume":  int(row.get("day_volume") or 0),
+    }
+
 
 
 def _earnings_before_expiry(s: dict) -> str | None:
@@ -127,6 +153,7 @@ def build_strategies(df: pd.DataFrame, min_profit: float, max_risk: float,
                         float(leg.get("iv_rank") or 0),
                         (stock_price - float(leg["strike_price"])) / stock_price * 100,
                         leg.get("earnings_date"),
+                        leg_data=[_leg(leg, is_call=False, is_long=False, stock_price=stock_price)],
                     ))
 
         # Covered Call
@@ -148,6 +175,7 @@ def build_strategies(df: pd.DataFrame, min_profit: float, max_risk: float,
                         float(leg.get("iv_rank") or 0),
                         (float(leg["strike_price"]) - stock_price) / stock_price * 100,
                         leg.get("earnings_date"),
+                        leg_data=[_leg(leg, is_call=True, is_long=False, stock_price=stock_price)],
                     ))
 
         # Bull Put Spread
@@ -172,6 +200,10 @@ def build_strategies(df: pd.DataFrame, min_profit: float, max_risk: float,
                             float(sell_leg.get("iv_rank") or 0),
                             (stock_price - float(sell_leg["strike_price"])) / stock_price * 100,
                             sell_leg.get("earnings_date"),
+                            leg_data=[
+                                _leg(sell_leg, is_call=False, is_long=False, stock_price=stock_price),
+                                _leg(buy_leg,  is_call=False, is_long=True,  stock_price=stock_price),
+                            ],
                         ))
 
         # Bear Call Spread
@@ -196,6 +228,10 @@ def build_strategies(df: pd.DataFrame, min_profit: float, max_risk: float,
                             float(sell_leg.get("iv_rank") or 0),
                             (float(sell_leg["strike_price"]) - stock_price) / stock_price * 100,
                             sell_leg.get("earnings_date"),
+                            leg_data=[
+                                _leg(sell_leg, is_call=True, is_long=False, stock_price=stock_price),
+                                _leg(buy_leg,  is_call=True, is_long=True,  stock_price=stock_price),
+                            ],
                         ))
 
         # Iron Condor
@@ -227,13 +263,20 @@ def build_strategies(df: pd.DataFrame, min_profit: float, max_risk: float,
                             float(put_sell.get("iv_rank") or 0),
                             (stock_price - float(put_sell["strike_price"])) / stock_price * 100,
                             put_sell.get("earnings_date"),
+                            leg_data=[
+                                _leg(put_sell,  is_call=False, is_long=False, stock_price=stock_price),
+                                _leg(put_buy,   is_call=False, is_long=True,  stock_price=stock_price),
+                                _leg(call_sell, is_call=True,  is_long=False, stock_price=stock_price),
+                                _leg(call_buy,  is_call=True,  is_long=True,  stock_price=stock_price),
+                            ],
                         ))
 
     return results
 
 
 def _row(strat, symbol, exp_date, dte, legs, kredit, max_profit, max_risk,
-         breakeven, ror, delta, iv, iv_rank, otm_pct, earnings_date) -> dict:
+         breakeven, ror, delta, iv, iv_rank, otm_pct, earnings_date,
+         leg_data=None) -> dict:
     return {
         "Strategie":   strat,
         "Symbol":      symbol,
@@ -253,6 +296,7 @@ def _row(strat, symbol, exp_date, dte, legs, kredit, max_profit, max_risk,
         "_earnings_warn": bool(_earnings_before_expiry({
             "earnings_date": earnings_date, "expiration": exp_date
         })),
+        "_legs": leg_data or [],
     }
 
 
@@ -309,22 +353,32 @@ def _style_table(df: pd.DataFrame):
 def _render_detail(s: dict):
     """Detail-View für eine angeklickte Strategie-Zeile."""
     st.divider()
-    st.subheader(f"{s['Strategie']} — {s['Symbol']}")
 
-    # Externe Links
-    sym = s["Symbol"]
-    lc1, lc2, lc3, lc4 = st.columns(4)
-    lc1.link_button("TradingView", f"https://www.tradingview.com/chart/?symbol={sym}", use_container_width=True)
-    lc2.link_button("Finviz", f"https://finviz.com/quote.ashx?t={sym}", use_container_width=True)
-    lc3.link_button("Yahoo Finance", f"https://finance.yahoo.com/quote/{sym}", use_container_width=True)
-    lc4.link_button("Seeking Alpha", f"https://seekingalpha.com/symbol/{sym}", use_container_width=True)
+    # Header
+    ror = s["RoR %"]
+    ror_color = "#34d399" if ror >= 15 else ("#f59e0b" if ror >= 8 else "#ef4444")
+    ivr = s["IV Rank"]
+    ivr_color = "#34d399" if 35 <= ivr <= 65 else ("#f59e0b" if 20 <= ivr <= 80 else "#ef4444")
 
+    st.markdown(
+        f"<div style='display:flex;align-items:center;gap:16px;margin-bottom:8px;'>"
+        f"<span style='font-size:22px;font-weight:700;'>{s['Strategie']} — {s['Symbol']}</span>"
+        f"<span style='background:{ror_color}22;border:1px solid {ror_color}66;border-radius:20px;"
+        f"padding:3px 14px;font-size:13px;font-weight:700;color:{ror_color};'>"
+        f"RoR {ror:.1f}%</span>"
+        f"<span style='background:{ivr_color}22;border:1px solid {ivr_color}66;border-radius:20px;"
+        f"padding:3px 14px;font-size:13px;font-weight:600;color:{ivr_color};'>"
+        f"IV Rank {ivr:.0f}</span>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
     st.caption(f"Verfall: **{s['Verfall']}** · {s['DTE']} DTE")
     st.code(s["Beine"], language=None)
 
     if s["_earnings_warn"]:
         st.warning(f"Earnings vor Verfall ({s['earnings_date']}) — erhöhtes Gap-Risiko.")
 
+    # Kennzahlen
     c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("Kredit",      f"${s['Kredit $']:.0f}")
     c2.metric("Max Profit",  f"${s['Max Profit $']:.0f}")
@@ -337,6 +391,80 @@ def _render_detail(s: dict):
     c7.metric("IV %",    f"{s['IV %']:.1f}%")
     c8.metric("IV Rank", f"{s['IV Rank']:.0f}")
     c9.metric("OTM %",   f"{s['OTM %']:.1f}%")
+
+    # Black-Scholes Leg-Tabelle
+    legs = s.get("_legs", [])
+    if legs:
+        st.markdown("#### Black-Scholes Bewertung je Leg")
+        st.caption(
+            "BS-Preis berechnet mit impliziter Volatilität des jeweiligen Strikes. "
+            "Marktpreis > BS-Preis (grün) = Option ist teurer als BS → gut für Verkäufer."
+        )
+        leg_rows = []
+        for l in legs:
+            bs = l["bs"]
+            mkt = l["premium"]
+            if bs is not None:
+                diff = mkt - bs
+                diff_pct = diff / bs * 100 if bs > 0 else 0
+                vs = f"+{diff:.2f} ({diff_pct:+.1f}%)" if diff >= 0 else f"{diff:.2f} ({diff_pct:.1f}%)"
+                overpriced = diff > 0
+            else:
+                vs = "N/A"
+                overpriced = None
+            leg_rows.append({
+                "Aktion":    f"{'Long' if l['action']=='Long' else 'Short'} {l['type']}",
+                "Strike":    l["strike"],
+                "Marktpreis": mkt,
+                "BS-Preis":  bs if bs is not None else float("nan"),
+                "Differenz": vs,
+                "Delta":     l["delta"],
+                "IV %":      round(l["iv"] * 100, 1),
+                "Theta":     round(l["theta"], 4),
+                "OI":        l["oi"],
+                "Vol":       l["volume"],
+                "_over":     overpriced,
+            })
+
+        leg_df = pd.DataFrame(leg_rows)
+
+        def _bs_color(row):
+            styles = [""] * len(row)
+            over = row["_over"]
+            bs_idx = leg_df.columns.get_loc("BS-Preis")
+            diff_idx = leg_df.columns.get_loc("Differenz")
+            if over is True:
+                styles[bs_idx]   = "background-color:#14532d;color:#4ade80;font-weight:700"
+                styles[diff_idx] = "color:#4ade80;font-weight:700"
+            elif over is False:
+                styles[bs_idx]   = "background-color:#450a0a;color:#f87171;font-weight:700"
+                styles[diff_idx] = "color:#f87171"
+            return styles
+
+        display_df = leg_df.drop(columns=["_over"])
+        st.dataframe(
+            display_df.style
+            .apply(_bs_color, axis=1)
+            .format({
+                "Strike":     "${:.2f}",
+                "Marktpreis": "${:.2f}",
+                "BS-Preis":   lambda v: f"${v:.2f}" if pd.notna(v) else "N/A",
+                "Delta":      "{:.2f}",
+                "IV %":       "{:.1f}",
+                "Theta":      "{:.4f}",
+            }),
+            hide_index=True,
+            use_container_width=True,
+        )
+
+    # Externe Links
+    sym = s["Symbol"]
+    st.markdown("#### Links")
+    lc1, lc2, lc3, lc4 = st.columns(4)
+    lc1.link_button("TradingView", f"https://www.tradingview.com/chart/?symbol={sym}", use_container_width=True)
+    lc2.link_button("Finviz", f"https://finviz.com/quote.ashx?t={sym}", use_container_width=True)
+    lc3.link_button("Yahoo Finance", f"https://finance.yahoo.com/quote/{sym}", use_container_width=True)
+    lc4.link_button("Seeking Alpha", f"https://seekingalpha.com/symbol/{sym}", use_container_width=True)
 
 
 def _render_table(rows: list[dict], tab_key: str):
