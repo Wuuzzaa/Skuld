@@ -1,3 +1,11 @@
+-- Enhanced Spreads Query
+-- Identisch zu spreads_input.sql, mit EINER Erweiterung:
+--   Statt nur den EINEN Sell-Strike mit delta_rank = 1 zu testen, werden die
+--   Top-N Sell-Kandidaten am Delta-Ziel zugelassen (delta_rank <= :delta_candidates).
+--   Grund: Wenn der delta-naechste Sell-Strike keinen Buy-Partner im Breiten-Fenster
+--   hat, faellt das Symbol bei =1 komplett raus, obwohl ein Nachbar-Strike einen
+--   validen Spread bilden wuerde. Die finale Auswahl (bester Kandidat pro Symbol)
+--   passiert in spreads_calculation.get_page_spreads_enhanced (Delta am naechsten am Ziel).
 WITH FilteredOptions AS (
     SELECT
         option_osi,
@@ -33,6 +41,16 @@ WITH FilteredOptions AS (
         AND day_volume >= :min_day_volume
         AND (:min_iv_rank <= 0 OR iv_rank IS NULL OR iv_rank >= :min_iv_rank)
         AND (:min_iv_percentile <= 0 OR iv_percentile IS NULL OR iv_percentile >= :min_iv_percentile)
+        -- Asset-Typ-Filter. asset_type: 'all' | 'stock' | 'etf' | 'index'
+        --   index = Symbol-Praefix 'I:'  (z.B. I:SPX, I:RUT)
+        --   stock = hat einen company_sector (Fundamentaldaten vorhanden)
+        --   etf   = kein 'I:'-Praefix UND kein company_sector (Sektor NULL/leer)
+        AND (
+            :asset_type = 'all'
+            OR (:asset_type = 'index' AND symbol LIKE 'I:%')
+            OR (:asset_type = 'stock' AND symbol NOT LIKE 'I:%' AND company_sector IS NOT NULL AND company_sector <> '')
+            OR (:asset_type = 'etf'   AND symbol NOT LIKE 'I:%' AND (company_sector IS NULL OR company_sector = ''))
+        )
 ),
 
 TargetOptions AS (
@@ -62,9 +80,17 @@ SELECT
     sell.analyst_mean_target,
     sell.company_industry,
     sell.company_sector,
+    -- asset type derived from symbol prefix + presence of fundamentals
+    CASE
+        WHEN sell.symbol LIKE 'I:%' THEN 'index'
+        WHEN sell.company_sector IS NULL OR sell.company_sector = '' THEN 'etf'
+        ELSE 'stock'
+    END AS asset_type,
     sell.historical_volatility_30d,
     sell.iv_rank,
     sell.iv_percentile,
+    -- ranking of the sell candidate at the delta target (1 = closest)
+    sell.delta_rank,
     -- sell option
     sell.option_osi AS sell_option_osi,
     sell.strike AS sell_strike,
@@ -112,4 +138,4 @@ INNER JOIN
         END
     )
 WHERE
-    sell.delta_rank = 1;
+    sell.delta_rank <= :delta_candidates;

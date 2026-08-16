@@ -25,6 +25,9 @@
 		"day_volume" DOUBLE PRECISION,
 		"day_vwap" DOUBLE PRECISION,
 		"day_last_updated" TIMESTAMP WITHOUT TIME ZONE,
+		"total_day_volume" DOUBLE PRECISION,
+		"call_volume_pct" DOUBLE PRECISION,
+		"put_volume_pct" DOUBLE PRECISION,
 		"days_to_expiration" INTEGER,
 		"premium_option_price" NUMERIC,
 		"last_updated_option_data" TEXT)
@@ -53,13 +56,17 @@
     a.day_volume,
     a.day_vwap,
     a.day_last_updated,
+    b.total_day_volume,
+    b.call_volume_pct,
+    ((100)::double precision - b.call_volume_pct) AS put_volume_pct,
         CASE
             WHEN ((a.expiration_date - p_target_date) >= 0) THEN (a.expiration_date - p_target_date)
             ELSE 0
         END AS days_to_expiration,
     round((a.day_close)::numeric, 2) AS premium_option_price,
     ''::text AS last_updated_option_data
-   FROM "getOptionDataMassiveHistory"(p_target_date) a;
+   FROM ("getOptionDataMassiveHistory"(p_target_date) a
+     LEFT JOIN "OptionAggregations" b ON ((a.symbol = b.symbol)));
         $$
         LANGUAGE sql STABLE;
                 

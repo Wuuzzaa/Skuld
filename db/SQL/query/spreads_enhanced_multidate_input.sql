@@ -1,3 +1,15 @@
+-- Enhanced Spreads Query (Multi-Date / performance-optimiert)
+-- Unterschiede zu spreads_enhanced_input.sql:
+--   1) expiration_date + option_type werden FRUEH in FilteredOptions gefiltert
+--      (statt erst in TargetOptions) -> die CTE materialisiert nur die relevanten
+--      Zeilen statt aller ~117k Optionen. ~20% schneller pro Lauf.
+--   2) Mehrere Verfallstermine in EINER Query via IN-Liste. Der Platzhalter
+--      __EXP_LIST__ wird von der Page durch die noetigen Datums-Binds ersetzt
+--      (Einzel-Params, kein PG-Array-Binding). ROW_NUMBER partitioniert weiterhin
+--      pro (symbol, expiration_date, option_type), also ein Delta-Ranking je Termin.
+-- WICHTIG: keine doppelpunkt-Parameter-Beispiele in Kommentaren schreiben!
+--      SQLAlchemy text() parst solche Vorkommen als echte Bind-Parameter und
+--      verlangt dann Werte dafuer (fuehrte zu "value required for bind parameter d1").
 WITH FilteredOptions AS (
     SELECT
         option_osi,
@@ -33,6 +45,16 @@ WITH FilteredOptions AS (
         AND day_volume >= :min_day_volume
         AND (:min_iv_rank <= 0 OR iv_rank IS NULL OR iv_rank >= :min_iv_rank)
         AND (:min_iv_percentile <= 0 OR iv_percentile IS NULL OR iv_percentile >= :min_iv_percentile)
+        -- exp_date + option_type FRUEH -> CTE bleibt schlank
+        AND expiration_date IN (__EXP_LIST__)
+        AND contract_type = :option_type
+        -- Asset-Typ-Filter. asset_type: 'all' | 'stock' | 'etf' | 'index'
+        AND (
+            :asset_type = 'all'
+            OR (:asset_type = 'index' AND symbol LIKE 'I:%')
+            OR (:asset_type = 'stock' AND symbol NOT LIKE 'I:%' AND company_sector IS NOT NULL AND company_sector <> '')
+            OR (:asset_type = 'etf'   AND symbol NOT LIKE 'I:%' AND (company_sector IS NULL OR company_sector = ''))
+        )
 ),
 
 TargetOptions AS (
@@ -44,9 +66,6 @@ TargetOptions AS (
         ) as delta_rank
     FROM
         FilteredOptions
-    WHERE
-        expiration_date = :expiration_date
-        AND option_type = :option_type
 )
 
 SELECT
@@ -62,9 +81,15 @@ SELECT
     sell.analyst_mean_target,
     sell.company_industry,
     sell.company_sector,
+    CASE
+        WHEN sell.symbol LIKE 'I:%' THEN 'index'
+        WHEN sell.company_sector IS NULL OR sell.company_sector = '' THEN 'etf'
+        ELSE 'stock'
+    END AS asset_type,
     sell.historical_volatility_30d,
     sell.iv_rank,
     sell.iv_percentile,
+    sell.delta_rank,
     -- sell option
     sell.option_osi AS sell_option_osi,
     sell.strike AS sell_strike,
@@ -112,4 +137,4 @@ INNER JOIN
         END
     )
 WHERE
-    sell.delta_rank = 1;
+    sell.delta_rank <= :delta_candidates;

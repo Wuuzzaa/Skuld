@@ -277,5 +277,247 @@ def get_page_iron_condors(df: pd.DataFrame) -> pd.DataFrame:
     
     # Only keep columns that actually exist in the dataframe
     existing_columns = [col for col in columns if col in df.columns]
-    
+
     return df[existing_columns]
+
+
+def get_page_iron_condors_enhanced(df: pd.DataFrame) -> pd.DataFrame:
+    """Like get_page_iron_condors but keeps asset_type column added by the enhanced page."""
+    if df.empty:
+        return df
+
+    columns = [
+        'symbol',
+        'Company',
+        'asset_type',
+        'earnings_date',
+        'earnings_warning',
+        'close',
+        'analyst_mean_target',
+        'company_industry',
+        'company_sector',
+        'iv_rank',
+        'iv_percentile',
+        'max_profit',
+        'bpr',
+        'expected_value',
+        'sell_iv',
+        'APDI',
+        'APDI_EV',
+        'optionstrat_url',
+        'total_theta',
+        'days_to_expiration',
+        'days_to_earnings',
+        'sell_strike_put',
+        'buy_strike_put',
+        'sell_strike_call',
+        'buy_strike_call',
+        '%_otm_put',
+        '%_otm_call',
+        'sell_delta_put',
+        'sell_delta_call',
+        'expiration_date_put',
+        'expiration_date_call',
+        'sell_last_option_price_put', 'buy_last_option_price_put',
+        'sell_last_option_price_call', 'buy_last_option_price_call',
+        'sell_bs_price_put', 'buy_bs_price_put',
+        'sell_bs_price_call', 'buy_bs_price_call',
+        'sell_iv_put', 'buy_iv_put', 'sell_iv_call', 'buy_iv_call',
+        'sell_theta_put', 'buy_theta_put', 'sell_theta_call', 'buy_theta_call',
+        'sell_open_interest_put', 'buy_open_interest_put',
+        'sell_open_interest_call', 'buy_open_interest_call',
+        'buy_delta_put', 'buy_delta_call',
+        'sell_day_volume_put', 'buy_day_volume_put',
+        'sell_day_volume_call', 'buy_day_volume_call',
+        'sell_expected_move_put', 'buy_expected_move_put',
+        'sell_expected_move_call', 'buy_expected_move_call',
+        'sell_last_updated_put', 'buy_last_updated_put',
+        'sell_last_updated_call', 'buy_last_updated_call',
+        'historical_volatility_30d_put'
+    ]
+
+    existing_columns = [col for col in columns if col in df.columns]
+    return df[existing_columns]
+
+
+# ---------------------------------------------------------------------------
+# Short Strangle
+# ---------------------------------------------------------------------------
+
+def _build_strangle_optionstrat_url(row: pd.Series) -> str:
+    base_url = "https://optionstrat.com/build/short-strangle"
+    sym = row['symbol'].upper()
+    p = f"-.{sym}{format_expiration_date(row['expiration_date_put'])}P{format_strike(row['strike_put'])}"
+    c = f"-.{sym}{format_expiration_date(row['expiration_date_call'])}C{format_strike(row['strike_call'])}"
+    return f"{base_url}/{sym}/{p},{c}"
+
+
+@log_function
+def calc_strangles(put_df: pd.DataFrame, call_df: pd.DataFrame,
+                   iv_correction: str = 'auto', risk_free_rate: float = RISK_FREE_RATE) -> pd.DataFrame:
+    if put_df.empty or call_df.empty:
+        return pd.DataFrame()
+
+    combined = put_df.merge(call_df, on='symbol', suffixes=('_put', '_call'))
+    if combined.empty:
+        return combined
+
+    # Rename columns for unified access
+    if 'Company_put' in combined.columns:
+        combined['Company'] = combined['Company_put']
+    elif 'Company' not in combined.columns:
+        combined['Company'] = combined['symbol']
+    combined['Company'] = combined['Company'].replace('', None).fillna(combined['symbol'])
+
+    for field in ['close', 'analyst_mean_target', 'company_industry', 'company_sector',
+                  'iv_rank', 'iv_percentile', 'days_to_expiration', 'days_to_earnings']:
+        if f'{field}_put' in combined.columns:
+            combined[field] = combined[f'{field}_put']
+
+    # Credit = sum of both premiums
+    combined['total_credit'] = (combined['last_option_price_put'] + combined['last_option_price_call'])
+    combined['total_credit_dollar'] = combined['total_credit'] * 100
+
+    # P&L boundaries
+    combined['breakeven_put'] = combined['strike_put'] - combined['total_credit']
+    combined['breakeven_call'] = combined['strike_call'] + combined['total_credit']
+    combined['%_otm_put'] = (combined['close_put'] - combined['strike_put']) / combined['close_put'] * 100
+    combined['%_otm_call'] = (combined['strike_call'] - combined['close_call']) / combined['close_call'] * 100
+
+    # sell_iv = avg of both short IVs
+    combined['sell_iv'] = (combined['iv_put'] + combined['iv_call']) / 2
+
+    # Theta
+    combined['total_theta'] = combined['theta_put'].fillna(0) + combined['theta_call'].fillna(0)
+
+    # Earnings
+    combined['earnings_date'] = pd.to_datetime(combined['earnings_date_put'], errors='coerce')
+    combined['expiration_date_put'] = pd.to_datetime(combined['expiration_date_put'], errors='coerce')
+    combined['expiration_date_call'] = pd.to_datetime(combined['expiration_date_call'], errors='coerce')
+    combined['earnings_warning'] = combined.apply(
+        lambda r: create_earnings_warning(r['earnings_date'], min(r['expiration_date_put'], r['expiration_date_call'])),
+        axis=1
+    )
+    combined['optionstrat_url'] = combined.apply(_build_strangle_optionstrat_url, axis=1)
+
+    return combined
+
+
+def get_page_strangles(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+    columns = [
+        'symbol', 'Company', 'asset_type', 'earnings_date', 'earnings_warning',
+        'close', 'analyst_mean_target', 'company_industry', 'company_sector',
+        'iv_rank', 'iv_percentile', 'sell_iv', 'total_credit', 'total_credit_dollar',
+        'breakeven_put', 'breakeven_call', '%_otm_put', '%_otm_call',
+        'total_theta', 'days_to_expiration', 'days_to_earnings',
+        'strike_put', 'strike_call',
+        'last_option_price_put', 'last_option_price_call',
+        'delta_put', 'delta_call', 'iv_put', 'iv_call',
+        'theta_put', 'theta_call', 'open_interest_put', 'open_interest_call',
+        'day_volume_put', 'day_volume_call',
+        'expiration_date_put', 'expiration_date_call',
+        'optionstrat_url',
+    ]
+    return df[[c for c in columns if c in df.columns]]
+
+
+# ---------------------------------------------------------------------------
+# Jade Lizard  (Short OTM Put  +  Short OTM Call Spread)
+# ---------------------------------------------------------------------------
+
+def _build_jade_lizard_optionstrat_url(row: pd.Series) -> str:
+    base_url = "https://optionstrat.com/build/jade-lizard"
+    sym = row['symbol'].upper()
+    p_sell  = f"-.{sym}{format_expiration_date(row['expiration_date_put'])}P{format_strike(row['strike_put'])}"
+    c_sell  = f"-.{sym}{format_expiration_date(row['expiration_date_call'])}C{format_strike(row['sell_strike_call'])}"
+    c_buy   = f".{sym}{format_expiration_date(row['expiration_date_call'])}C{format_strike(row['buy_strike_call'])}"
+    return f"{base_url}/{sym}/{p_sell},{c_sell},{c_buy}"
+
+
+@log_function
+def calc_jade_lizards(put_df: pd.DataFrame, call_spread_df: pd.DataFrame,
+                      iv_correction: str = 'auto', risk_free_rate: float = RISK_FREE_RATE) -> pd.DataFrame:
+    """put_df: plain short put legs (from jade_lizard_input.sql with option_type=put).
+       call_spread_df: already-built call spreads (sell+buy) from iron_condors_enhanced_input.sql with option_type=call."""
+    if put_df.empty or call_spread_df.empty:
+        return pd.DataFrame()
+
+    combined = put_df.merge(call_spread_df, on='symbol', suffixes=('_put', '_call'))
+    if combined.empty:
+        return combined
+
+    if 'Company_put' in combined.columns:
+        combined['Company'] = combined['Company_put']
+    elif 'Company' not in combined.columns:
+        combined['Company'] = combined['symbol']
+    combined['Company'] = combined['Company'].replace('', None).fillna(combined['symbol'])
+
+    for field in ['close', 'analyst_mean_target', 'company_industry', 'company_sector',
+                  'iv_rank', 'iv_percentile', 'days_to_expiration', 'days_to_earnings']:
+        if f'{field}_put' in combined.columns:
+            combined[field] = combined[f'{field}_put']
+
+    # call spread columns come from iron_condors_enhanced_input with _call suffix
+    combined['sell_strike_call'] = combined.get('sell_strike_call', combined.get('sell_strike_call'))
+    combined['buy_strike_call']  = combined.get('buy_strike_call',  combined.get('buy_strike_call'))
+
+    combined['call_spread_width'] = (combined['buy_strike_call'] - combined['sell_strike_call']).abs()
+
+    # Total credit = put premium + call spread net credit
+    # put_df kommt aus short_strangle_input.sql: Spalte heisst 'last_option_price', nach merge '_put'
+    put_price_col = 'last_option_price_put' if 'last_option_price_put' in combined.columns else 'last_option_price'
+    combined['put_credit']        = combined[put_price_col]
+    combined['call_spread_credit'] = combined['sell_last_option_price_call'] - combined['buy_last_option_price_call']
+    combined['total_credit']      = combined['put_credit'] + combined['call_spread_credit']
+    combined['total_credit_dollar'] = combined['total_credit'] * 100
+
+    # Key tastylive rule: no upside risk when total_credit > call_spread_width
+    combined['no_upside_risk'] = combined['total_credit'] > combined['call_spread_width']
+
+    # Max loss: put side is undefined (put strike - credit if assigned), call side defined
+    combined['max_loss_call_side'] = (combined['call_spread_width'] - combined['call_spread_credit']) * 100
+    combined['breakeven_put'] = combined['strike_put'] - combined['total_credit']
+    combined['%_otm_put'] = (combined['close_put'] - combined['strike_put']) / combined['close_put'] * 100
+    combined['%_otm_call'] = (combined['sell_strike_call'] - combined['close_put']) / combined['close_put'] * 100
+
+    combined['sell_iv'] = (combined['iv_put'] + combined.get('sell_iv_call', combined.get('iv_call', combined['iv_put']))) / 2
+    combined['total_theta'] = combined['theta_put'].fillna(0) + combined.get('sell_theta_call', pd.Series(0, index=combined.index)).fillna(0)
+
+    combined['earnings_date'] = pd.to_datetime(combined['earnings_date_put'], errors='coerce')
+    combined['expiration_date_put']  = pd.to_datetime(combined['expiration_date_put'], errors='coerce')
+    combined['expiration_date_call'] = pd.to_datetime(combined['expiration_date_call'], errors='coerce')
+    combined['earnings_warning'] = combined.apply(
+        lambda r: create_earnings_warning(r['earnings_date'], min(r['expiration_date_put'], r['expiration_date_call'])),
+        axis=1
+    )
+    combined['optionstrat_url'] = combined.apply(_build_jade_lizard_optionstrat_url, axis=1)
+
+    return combined
+
+
+def get_page_jade_lizards(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+    columns = [
+        'symbol', 'Company', 'asset_type', 'earnings_date', 'earnings_warning',
+        'close', 'analyst_mean_target', 'company_industry', 'company_sector',
+        'iv_rank', 'iv_percentile', 'sell_iv',
+        'total_credit', 'total_credit_dollar', 'no_upside_risk',
+        'call_spread_width', 'put_credit', 'call_spread_credit',
+        'breakeven_put', 'max_loss_call_side',
+        '%_otm_put', '%_otm_call',
+        'total_theta', 'days_to_expiration', 'days_to_earnings',
+        'strike_put', 'sell_strike_call', 'buy_strike_call',
+        'last_option_price_put',
+        'sell_last_option_price_call', 'buy_last_option_price_call',
+        'delta_put', 'sell_delta_call',
+        'iv_put', 'sell_iv_call',
+        'theta_put', 'sell_theta_call',
+        'open_interest_put', 'sell_open_interest_call',
+        'day_volume_put', 'sell_day_volume_call',
+        'expiration_date_put', 'expiration_date_call',
+        'optionstrat_url',
+    ]
+    return df[[c for c in columns if c in df.columns]]

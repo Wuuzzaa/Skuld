@@ -69,6 +69,7 @@ DEFAULTS = {
     'show_only_spreads_with_no_earnings_warning': DEFAULT_SHOW_ONLY_SPREADS_WITH_NO_EARNINGS_WARNING,
     'delta_target': DEFAULT_DELTA_TARGET,
     'spread_width': DEFAULT_SPREAD_WIDTH,
+    'spread_exact': False,
     'option_type': DEFAULT_OPTION_TYPE,
     'min_day_volume': DEFAULT_MIN_DAY_VOLUME,
     'min_open_interest': DEFAULT_MIN_OPEN_INTEREST,
@@ -130,10 +131,10 @@ with st.expander("Configuration and Filters", expanded=True):
 
         # Filter dates_df based on checkbox states
         filtered_dates_df = filter_by_expiration_type(
-            dates_df, 
-            'expiration_date', 
-            st.session_state.show_monthly, 
-            st.session_state.show_weekly, 
+            dates_df,
+            'expiration_date',
+            st.session_state.show_monthly,
+            st.session_state.show_weekly,
             st.session_state.show_daily
         )
 
@@ -152,12 +153,10 @@ with st.expander("Configuration and Filters", expanded=True):
             st.warning("No expiration dates match the selected filters.")
             st.stop()
 
-        # Selectbox with DTE labels
         selected_label = st.selectbox("Expiration Date", dte_labels, index=min(1, len(dte_labels)-1))
-
-        # Extract selected expiration date from DTE label
         selected_index = dte_labels.index(selected_label)
-        expiration_date = filtered_dates_df.iloc[selected_index]['expiration_date']
+        expiration_dates = [filtered_dates_df.iloc[selected_index]['expiration_date']]
+        expiration_date = expiration_dates[0]
         logging.debug(f"Extracted selected expiration date: {expiration_date}")
 
     with col2:
@@ -176,11 +175,17 @@ with st.expander("Configuration and Filters", expanded=True):
 
     with col3:
         spread_width = st.number_input(
-            "Spread Width",
+            "Max Spread Width",
             min_value=1,
             max_value=20,
             step=1,
-            key="spread_width"
+            key="spread_width",
+            help="Sucht alle Breiten von 1 bis zu diesem Wert. Pro Symbol wird der Spread mit dem höchsten Max Profit angezeigt.",
+        )
+        spread_exact = st.checkbox(
+            "Nur exakt diese Breite",
+            key="spread_exact",
+            help="Aktiviert: nur Spreads mit genau dieser Breite. Deaktiviert: alle Breiten von 1 bis Max.",
         )
 
     with col4:
@@ -314,36 +319,50 @@ def _cached_select_into_dataframe(date, sql_file_path, params):
 
 
 @st.cache_data(ttl=300)  # 5 Minuten
-def _cached_get_page_spreads(df, strategy_type, iv_correction, risk_free_rate):
+def _cached_get_page_spreads(cache_key: str, df, strategy_type, iv_correction, risk_free_rate):
     return get_page_spreads(df, strategy_type=strategy_type, iv_correction=iv_correction, risk_free_rate=risk_free_rate)
 
 
 # Calculate the spread values with a loading indicator
 with st.spinner("Calculating spreads..."):
-    params = {
-        "expiration_date": expiration_date,
-        "option_type": option_type,
-        "delta_target": st.session_state.delta_target,
-        "min_open_interest": min_open_interest,
-        "spread_width": spread_width,
-        "min_day_volume": min_day_volume,
-        "min_iv_rank": min_iv_rank,
-        "min_iv_percentile": min_iv_percentile,
-        "strategy_type": strategy_type
-    }
+    spread_exact = st.session_state.get("spread_exact", False)
 
-    logging.debug(f"Params for database query: {params}")
+    def _build_params(exp_date):
+        return {
+            "expiration_date": exp_date,
+            "option_type": option_type,
+            "delta_target": st.session_state.delta_target,
+            "min_open_interest": min_open_interest,
+            "spread_width": spread_width,
+            "spread_width_min": spread_width if spread_exact else 1,
+            "min_day_volume": min_day_volume,
+            "min_iv_rank": min_iv_rank,
+            "min_iv_percentile": min_iv_percentile,
+            "strategy_type": strategy_type
+        }
 
     sql_file_path = PATH_DATABASE_QUERY_FOLDER / 'spreads_input.sql'
-    df = _cached_select_into_dataframe(date=selected_date, sql_file_path=sql_file_path, params=params)
-    # logging.debug(f"Input data head: {df.head()}")
 
-    spreads_df = _cached_get_page_spreads(df, strategy_type=strategy_type, iv_correction=st.session_state.iv_correction, risk_free_rate=st.session_state.risk_free_rate / 100)
-    # logging.debug(f"Calculated spreads head: {spreads_df.head()}")
+    raw_frames = [
+        _cached_select_into_dataframe(date=selected_date, sql_file_path=sql_file_path, params=_build_params(exp_date))
+        for exp_date in expiration_dates
+    ]
+    df = pd.concat([f for f in raw_frames if not f.empty], ignore_index=True) if any(not f.empty for f in raw_frames) else pd.DataFrame()
+
+    # Deterministischer Cache-Key aus allen relevanten Parametern
+    cache_key = f"{selected_date}|{','.join(str(d) for d in sorted(expiration_dates))}|{option_type}|{st.session_state.delta_target}|{min_open_interest}|{spread_width}|{spread_exact}|{min_day_volume}|{min_iv_rank}|{min_iv_percentile}|{strategy_type}|{st.session_state.iv_correction}|{st.session_state.risk_free_rate}"
+
+    logging.debug(f"Loaded {len(df)} rows from DB across {len(expiration_dates)} expiration date(s)")
+
+    spreads_df = _cached_get_page_spreads(cache_key, df, strategy_type=strategy_type, iv_correction=st.session_state.iv_correction, risk_free_rate=st.session_state.risk_free_rate / 100)
 
 # Apply spread filters
 filtered_df = spreads_df.copy()
 filter_log: list[tuple[str, int, list[str]]] = []  # (filter_name, removed_count, removed_symbols)
+
+if filtered_df.empty:
+    st.warning("No spreads found for the selected filters. Try a different expiration date or relax the filters.")
+    st.stop()
 
 def _apply_filter(df: pd.DataFrame, mask: pd.Series, label: str) -> pd.DataFrame:
     removed = df[~mask]
@@ -444,7 +463,8 @@ if not filtered_df.empty:
         'sell_open_interest', 'sell_day_volume', 'sell_expected_move',
         'buy_strike', 'buy_last_option_price', 'buy_delta', 'buy_iv', 'buy_theta',
         'buy_open_interest', 'buy_day_volume', 'buy_expected_move',
-        'spread_width', 'max_profit', 'bpr', 'profit_to_bpr',
+        'spread_width', 'net_credit', 'max_profit', 'max_profit%', 'risk_reward',
+        'break_even', 'break_even%', 'bpr', 'profit_to_bpr',
         'expected_value', 'APDI', 'APDI_EV',
         'iv_rank', 'iv_percentile', 'iv_correction_factor',
         'spread_theta', '%_otm', 'days_to_expiration',

@@ -30,8 +30,8 @@ WITH FilteredOptions AS (
     WHERE
         open_interest IS NOT NULL AND open_interest >= :min_open_interest
         AND day_volume IS NOT NULL AND day_volume >= :min_day_volume
-        AND iv_rank >= :min_iv_rank
-        AND iv_percentile >= :min_iv_percentile
+        AND (:min_iv_rank <= 0 OR iv_rank IS NULL OR iv_rank >= :min_iv_rank)
+        AND (:min_iv_percentile <= 0 OR iv_percentile IS NULL OR iv_percentile >= :min_iv_percentile)
 ),
 
 TargetOptions AS (
@@ -49,7 +49,6 @@ TargetOptions AS (
 )
 
 SELECT
-    -- symbol data
     sell.symbol,
     sell.expiration_date,
     sell.option_type,
@@ -64,7 +63,6 @@ SELECT
     sell.historical_volatility_30d,
     sell.iv_rank,
     sell.iv_percentile,
-    -- sell option
     sell.strike AS sell_strike,
     sell.last_option_price AS sell_last_option_price,
     sell.delta AS sell_delta,
@@ -74,7 +72,6 @@ SELECT
     sell.expected_move AS sell_expected_move,
     sell.day_volume AS sell_day_volume,
     sell.day_last_updated AS sell_last_updated,
-    -- buy option
     buy.strike AS buy_strike,
     buy.last_option_price AS buy_last_option_price,
     buy.delta AS buy_delta,
@@ -93,11 +90,12 @@ INNER JOIN
     ON sell.symbol = buy.symbol
     AND sell.expiration_date = buy.expiration_date
     AND sell.option_type = buy.option_type
-    AND buy.strike = (
+    AND buy.strike != sell.strike
+    AND (
         CASE
-            WHEN sell.option_type = 'put' THEN sell.strike - :spread_width
-            WHEN sell.option_type = 'call' THEN sell.strike + :spread_width
+            WHEN sell.option_type = 'put'  THEN buy.strike BETWEEN sell.strike - :spread_width AND sell.strike - :spread_width_min
+            WHEN sell.option_type = 'call' THEN buy.strike BETWEEN sell.strike + :spread_width_min AND sell.strike + :spread_width
         END
     )
 WHERE
-    sell.delta_rank = 1;
+    sell.delta_rank <= :delta_candidates;

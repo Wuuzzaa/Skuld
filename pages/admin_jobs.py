@@ -61,6 +61,28 @@ JOB_DESCRIPTIONS = {
 
 
 # ==============================================================================
+# Helpers
+# ==============================================================================
+
+def _tail_lines(path: Path, n: int) -> list[str]:
+    """Return the last `n` lines without reading the whole file into memory."""
+    with path.open("rb") as fh:
+        chunk = 65536
+        fh.seek(0, 2)
+        remaining = fh.tell()
+        buf = b""
+        lines_found = 0
+        while remaining > 0 and lines_found <= n:
+            read_size = min(chunk, remaining)
+            remaining -= read_size
+            fh.seek(remaining)
+            buf = fh.read(read_size) + buf
+            lines_found = buf.count(b"\n")
+    all_lines = buf.decode("utf-8", errors="replace").splitlines()
+    return all_lines[-n:] if len(all_lines) > n else all_lines
+
+
+# ==============================================================================
 # Page
 # ==============================================================================
 
@@ -100,8 +122,6 @@ with tab_jobs:
             t = st.time_input("Uhrzeit (UTC)", value=(datetime.now(timezone.utc) + timedelta(minutes=5)).time())
             run_at = datetime.combine(d, t, tzinfo=timezone.utc)
 
-    # Sicherheitsnetz: destruktive Modi (all / historical_full / only_run_migrations)
-    # löschen/überschreiben Daten (db_setup + TRUNCATE). Confirm durch Tippen des Modusnamens.
     confirmed = True
     if is_destructive:
         st.warning(
@@ -109,7 +129,7 @@ with tab_jobs:
             "(setzt DB-Views neu auf und/oder überschreibt Massendaten via TRUNCATE). "
             "Zum Bestätigen den Modusnamen exakt eintippen."
         )
-        typed = st.text_input(f"Zur Bestätigung „{selected_mode}“ eingeben", key="destructive_confirm")
+        typed = st.text_input(f"Zur Bestaetigung '{selected_mode}' eingeben", key="destructive_confirm")
         confirmed = typed.strip() == selected_mode
 
     if st.button("Einplanen", type="primary", disabled=not confirmed):
@@ -148,8 +168,6 @@ with tab_jobs:
 
 # ==============================================================================
 # TAB 2: JOB STATUS — one row per finished job, read from logs/_status/*.jsonl
-# Written by run_data_collection.sh at job end (captures OK/FAIL/OOM/TIMEOUT/
-# SKIPPED, even for killed jobs). No per-log parsing → stays fast.
 # ==============================================================================
 STATUS_DIR = LOGS_BASE / "_status"
 
@@ -179,7 +197,7 @@ def _load_status_rows(days: int) -> list[dict]:
             try:
                 rows.append(json_lib.loads(line))
             except json_lib.JSONDecodeError:
-                continue  # skip a corrupt/partial line, keep the rest
+                continue
     return rows
 
 
@@ -208,11 +226,9 @@ with tab_status:
             import pandas as pd
 
             df = pd.DataFrame(rows)
-            # Newest first by timestamp.
             if "ts" in df.columns:
                 df = df.sort_values("ts", ascending=False, kind="stable")
 
-            # Summary counts per status.
             counts = df["status"].value_counts().to_dict()
             metric_cols = st.columns(5)
             for i, key in enumerate(["OK", "FAIL", "OOM", "TIMEOUT", "SKIPPED"]):
@@ -224,7 +240,6 @@ with tab_status:
             if sel_mode != "(all)":
                 df = df[df["mode"] == sel_mode]
 
-            # Pretty display columns.
             disp = df.copy()
             disp["status"] = disp["status"].map(lambda s: STATUS_STYLE.get(s, s))
             if "duration_s" in disp.columns:
@@ -249,16 +264,14 @@ with tab_status:
 
 
 # ==============================================================================
-# TAB 2: LOG FILES — browse & download only, no in-page rendering
+# TAB 3: LOG FILES — browse, view in-browser, and download
 # ==============================================================================
 with tab_logs:
-    st.markdown("#### Download Log Files")
-    st.caption("Browse the log directory and download files. No in-page rendering to keep things fast.")
+    st.markdown("#### Log Files")
 
     if not LOGS_BASE.exists():
         st.info("No log directories found.")
     else:
-        # Component
         components = sorted(
             d.name for d in LOGS_BASE.iterdir()
             if d.is_dir() and d.name not in NON_LOG_DIRS
@@ -270,7 +283,7 @@ with tab_logs:
             col1, col2, col3 = st.columns(3)
 
             with col1:
-                selected_component = st.selectbox("Component", components)
+                selected_component = st.selectbox("Component", components, key="lv_component")
 
             component_dir = LOGS_BASE / selected_component
             dates = sorted(
@@ -280,11 +293,12 @@ with tab_logs:
 
             with col2:
                 if dates:
-                    selected_date = st.selectbox("Date", dates)
+                    selected_date = st.selectbox("Date", dates, key="lv_date")
                 else:
                     selected_date = None
                     st.warning("No dates available.")
 
+            selected_file = None
             if selected_date:
                 log_dir = component_dir / selected_date
                 log_files = sorted(
@@ -299,29 +313,70 @@ with tab_logs:
                             "Log File",
                             log_files,
                             format_func=lambda f: f"{f.name} ({f.stat().st_size // 1024} KB)",
+                            key="lv_file",
                         )
                     else:
-                        selected_file = None
                         st.warning("No log files for this date.")
 
-                if selected_file:
-                    file_bytes = selected_file.read_bytes()
+            # ------------------------------------------------------------------
+            # Viewer + Download
+            # ------------------------------------------------------------------
+            if selected_file:
+                file_size_kb = selected_file.stat().st_size // 1024
+
+                vcol1, vcol2, vcol3 = st.columns([2, 3, 2])
+                with vcol1:
+                    tail_n = st.selectbox(
+                        "Lines to show (tail)",
+                        [100, 250, 500, 1000, 2000],
+                        index=1,
+                        key="lv_tail",
+                    )
+                with vcol2:
+                    filter_text = st.text_input(
+                        "Filter (contains, case-insensitive)",
+                        key="lv_filter",
+                        placeholder="ERROR, WARNING, ...",
+                    )
+                with vcol3:
+                    st.markdown("<div style='margin-top:28px'>", unsafe_allow_html=True)
                     st.download_button(
-                        label=f"Download {selected_file.name}",
-                        data=file_bytes,
+                        label=f"Download ({file_size_kb} KB)",
+                        data=selected_file.read_bytes(),
                         file_name=selected_file.name,
                         mime="text/plain",
-                        type="primary",
                         use_container_width=True,
+                        key="lv_download",
                     )
-                    st.caption(f"Size: {len(file_bytes) // 1024} KB")
+                    st.markdown("</div>", unsafe_allow_html=True)
 
-        # Full directory listing — direkt anklickbar + herunterladbar.
+                lines = _tail_lines(selected_file, tail_n)
+
+                if filter_text.strip():
+                    needle = filter_text.strip().lower()
+                    lines = [ln for ln in lines if needle in ln.lower()]
+
+                # Count total lines without loading full file
+                with selected_file.open("rb") as _fh:
+                    total_lines = sum(1 for _ in _fh)
+
+                matched_info = f" · {len(lines)} match filter" if filter_text.strip() else ""
+                st.caption(
+                    f"{selected_file.name} · {file_size_kb} KB · "
+                    f"{total_lines:,} total lines · showing last {tail_n}"
+                    + matched_info
+                )
+
+                st.code("\n".join(lines) if lines else "(no matching lines)", language="log")
+
+        # ----------------------------------------------------------------------
+        # Full directory listing — row-select + download (unchanged)
+        # ----------------------------------------------------------------------
         st.markdown("---")
         st.markdown("#### All Log Files")
-        st.caption("Zeile anklicken → Download-Button erscheint darunter. Kein In-Page-Rendering.")
+        st.caption("Zeile anklicken → Download-Button erscheint darunter.")
 
-        rows = []
+        all_rows = []
         for comp_dir in sorted(LOGS_BASE.iterdir()):
             if not comp_dir.is_dir() or comp_dir.name in NON_LOG_DIRS:
                 continue
@@ -331,18 +386,18 @@ with tab_logs:
                 for lf in sorted(date_dir.iterdir(), reverse=True):
                     if lf.suffix != ".log":
                         continue
-                    rows.append({
+                    all_rows.append({
                         "Component": comp_dir.name,
                         "Date": date_dir.name,
                         "File": lf.name,
                         "Size (KB)": round(lf.stat().st_size / 1024, 1),
-                        "_path": str(lf),  # intern, nicht angezeigt
+                        "_path": str(lf),
                     })
 
-        if rows:
+        if all_rows:
             import pandas as pd
 
-            all_df = pd.DataFrame(rows)
+            all_df = pd.DataFrame(all_rows)
             event = st.dataframe(
                 all_df.drop(columns=["_path"]),
                 use_container_width=True,

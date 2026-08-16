@@ -53,10 +53,42 @@ def get_spreads_documentation() -> str:
 
 ### Spread Metriken
 
+**Net Credit** - Erhaltene Nettoprämie (Last Price, kein Bid/Ask verfügbar)
+```
+Net Credit = Sell Last Price - Buy Last Price
+```
+
 **Max Profit** - Maximaler Gewinn des Spreads in $ (bei Verfall OTM)
 ```
-Max Profit = (Sell Premium - Buy Premium) × 100
+Max Profit = Net Credit × 100
 ```
+
+**Max Loss** - Maximaler Verlust des Spreads in $
+```
+Max Loss = (Spread Width - Net Credit) × 100
+```
+
+**Max Profit %** - Maximaler Gewinn als Anteil am eingesetzten Kapital
+```
+Max Profit % = Max Profit / (Max Profit + Max Loss) × 100
+```
+
+**Risk/Reward** - Verhältnis von maximalem Verlust zu maximalem Gewinn
+```
+Risk/Reward = Max Loss / Max Profit
+```
+*Niedriger Wert = besseres Chance/Risiko-Verhältnis. z.B. 4.0 bedeutet: für $1 Gewinn riskiert man $4*
+
+**Break Even** - Kurs des Basiswerts bei dem der Spread weder Gewinn noch Verlust macht
+```
+Break Even = Sell Strike - Net Credit
+```
+
+**Break Even %** - Prozentualer Abstand vom aktuellen Kurs zum Break-Even
+```
+Break Even % = (Break Even - Close) / Close × 100
+```
+*Negativer Wert = Break Even liegt unterhalb des aktuellen Kurses (Puffer)*
 
 **BPR (Buying Power Reduction)** - Erforderliche Margin/Kapitalbindung
 ```

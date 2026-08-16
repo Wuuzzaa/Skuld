@@ -97,6 +97,29 @@ def _calculate_spread_metrics(df: pd.DataFrame, strategy_type: str = 'credit', i
     # % Out-of-the-Money (OTM)
     df["%_otm"] = (df["sell_strike"] - df["close"]).abs() / df["close"] * 100
 
+    # Net Credit / Net Debit (using Last Price, no Bid/Ask available)
+    # Credit spreads: positive = premium received
+    # Debit spreads:  negative = premium paid (net_credit < 0 means net debit)
+    df["net_credit"] = df["sell_last_option_price"] - df["buy_last_option_price"]
+
+    # Break Even — depends on strategy type and option type:
+    #   Bull Put  (credit, put):  sell_strike - net_credit
+    #   Bear Call (credit, call): sell_strike + net_credit
+    #   Bull Call (debit,  call): sell_strike - net_credit  (net_credit is negative → adds)
+    #   Bear Put  (debit,  put):  sell_strike + net_credit  (net_credit is negative → subtracts)
+    is_credit = strategy_type == "credit"
+    is_put = df["option_type"] == "put"
+
+    df["break_even"] = (
+        (df["sell_strike"] - df["net_credit"]).where(is_credit & is_put)
+        .fillna((df["sell_strike"] + df["net_credit"]).where(is_credit & ~is_put))
+        .fillna((df["sell_strike"] - df["net_credit"]).where(~is_credit & ~is_put))
+        .fillna(df["sell_strike"] + df["net_credit"])  # debit put
+    )
+
+    # Break Even % = distance from current price to break even
+    df["break_even%"] = (df["break_even"] - df["close"]) / df["close"] * 100
+
     # Black-Scholes theoretical prices
     is_call = df['option_type'] == 'call'
     df['sell_bs_price'] = df.apply(
@@ -107,6 +130,13 @@ def _calculate_spread_metrics(df: pd.DataFrame, strategy_type: str = 'credit', i
     # Calculate all generic metrics
     metrics_df = df.apply(lambda r: _calculate_metrics_for_row(r, strategy_type, iv_correction=iv_correction), axis=1)
     df = pd.concat([df, metrics_df], axis=1)
+
+    # Max Profit % = Max Profit / (Max Profit + Max Loss) * 100
+    total = df["max_profit"] + df["max_loss"]
+    df["max_profit%"] = (df["max_profit"] / total * 100).where(total > 0)
+
+    # Risk/Reward Ratio = Max Loss / Max Profit
+    df["risk_reward"] = (df["max_loss"] / df["max_profit"]).where(df["max_profit"] > 0)
 
     # Filter out invalid spreads
     df = df[df['max_profit'] > 0].copy()
@@ -183,15 +213,23 @@ def get_page_spreads(df: pd.DataFrame, strategy_type: str = 'credit', iv_correct
         return df
 
     df = calc_spreads(df, strategy_type, iv_correction=iv_correction, risk_free_rate=risk_free_rate)
-    
+
     if df.empty:
         return df
+
+    # Keep only the best spread per symbol+expiration (highest max_profit across all widths up to spread_width_max)
+    df = (
+        df.sort_values("max_profit", ascending=False)
+        .drop_duplicates(subset=["symbol", "expiration_date"], keep="first")
+        .reset_index(drop=True)
+    )
 
     columns = [
         'symbol', 'Company', 'earnings_date', 'earnings_warning', 'close', 
         'analyst_mean_target', 'company_industry', 'company_sector', 
         'historical_volatility_30d', 'iv_rank', 'iv_percentile',
-        'spread_width', 'max_profit', 'bpr', 'profit_to_bpr', 'spread_theta', 
+        'spread_width', 'net_credit', 'max_profit', 'max_profit%', 'risk_reward',
+        'break_even', 'break_even%', 'bpr', 'profit_to_bpr', 'spread_theta',
         'expected_value', 'iv_correction_factor', 'APDI', 'APDI_EV', 'optionstrat_url',
         'sell_strike', 'sell_option_osi', 'sell_last_option_price', 'sell_delta', 'sell_iv', '%_otm',
         'sell_theta', 'sell_open_interest', 'sell_expected_move', 'sell_day_volume',
@@ -204,6 +242,66 @@ def get_page_spreads(df: pd.DataFrame, strategy_type: str = 'credit', iv_correct
     
     existing_columns = [col for col in columns if col in df.columns]
     return df[existing_columns]
+
+
+def get_page_spreads_enhanced(df: pd.DataFrame, strategy_type: str = 'credit', iv_correction: str = 'auto', risk_free_rate: float = RISK_FREE_RATE, delta_target: float = 0.2) -> pd.DataFrame:
+    """Enhanced variant of get_page_spreads.
+
+    The enhanced SQL (spreads_enhanced_input.sql) returns multiple sell candidates
+    per symbol (delta_rank <= :delta_candidates) instead of only the single closest
+    one. This rescues symbols whose delta-closest sell strike happens to have no buy
+    partner in the width window.
+
+    Selection rule: keep, per symbol+expiration, the spread whose SELL leg delta is
+    closest to the delta target (falls back to smallest delta_rank, then highest
+    max_profit as tie-breakers). This preserves the "hit the delta target" intent of
+    the original scanner while no longer dropping symbols on a missing exact partner.
+    """
+    if df.empty:
+        return df
+
+    df = calc_spreads(df, strategy_type, iv_correction=iv_correction, risk_free_rate=risk_free_rate)
+
+    if df.empty:
+        return df
+
+    # Distance of the sell leg delta from the target — primary selection key.
+    df["_delta_dist"] = (df["sell_delta"].astype(float) - float(delta_target)).abs()
+    # delta_rank comes from the SQL (1 = closest sell candidate). Fallback if absent.
+    if "delta_rank" not in df.columns:
+        df["delta_rank"] = 1
+
+    # Keep the best candidate per symbol+expiration:
+    #   1) sell delta closest to target, 2) lowest delta_rank, 3) highest max_profit.
+    df = (
+        df.sort_values(
+            by=["_delta_dist", "delta_rank", "max_profit"],
+            ascending=[True, True, False],
+        )
+        .drop_duplicates(subset=["symbol", "expiration_date"], keep="first")
+        .reset_index(drop=True)
+    )
+    df = df.drop(columns=["_delta_dist"], errors="ignore")
+
+    columns = [
+        'symbol', 'Company', 'earnings_date', 'earnings_warning', 'close',
+        'analyst_mean_target', 'company_industry', 'company_sector', 'asset_type',
+        'historical_volatility_30d', 'iv_rank', 'iv_percentile',
+        'spread_width', 'net_credit', 'max_profit', 'max_profit%', 'risk_reward',
+        'break_even', 'break_even%', 'bpr', 'profit_to_bpr', 'spread_theta',
+        'expected_value', 'iv_correction_factor', 'APDI', 'APDI_EV', 'optionstrat_url',
+        'sell_strike', 'sell_option_osi', 'sell_last_option_price', 'sell_delta', 'sell_iv', '%_otm',
+        'sell_theta', 'sell_open_interest', 'sell_expected_move', 'sell_day_volume',
+        'sell_last_updated', 'sell_bs_price',
+        'buy_strike', 'buy_option_osi', 'buy_last_option_price', 'buy_delta', 'buy_iv', 'buy_theta',
+        'buy_open_interest', 'buy_expected_move', 'buy_day_volume',
+        'buy_last_updated', 'last_updated_option_data', 'last_updated_stock_data', 'buy_bs_price',
+        'option_type', 'expiration_date', 'days_to_expiration', 'days_to_earnings'
+    ]
+
+    existing_columns = [col for col in columns if col in df.columns]
+    return df[existing_columns]
+
 
 if __name__ == "__main__":
     """
