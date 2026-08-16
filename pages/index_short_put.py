@@ -101,11 +101,14 @@ st.caption("Tägliche Arbeitsfläche: Strike-Auswahl, Netto-Prämie, Teeni-Budge
 col_sym, col_dte, col_delta, col_cr, col_hedge = st.columns([2, 2, 2, 2, 2])
 
 with col_sym:
-    symbol = st.selectbox(
+    st.markdown("**Instrument**")
+    symbol = st.radio(
         "Instrument",
         options=list(_INSTRUMENTS.keys()),
-        format_func=lambda s: _INSTRUMENTS[s]["label"],
+        format_func=lambda s: _INSTRUMENTS[s]["label"].split(" ")[0],
+        horizontal=True,
         key="isp_symbol",
+        label_visibility="collapsed",
     )
 
 with col_dte:
