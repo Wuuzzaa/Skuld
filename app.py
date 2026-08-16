@@ -38,6 +38,7 @@ rsl_momentum = st.Page('pages/rsl_momentum.py', title="RSL Momentum")
 expected_value = st.Page('pages/expected_value.py', title="Expected Value")
 dividend_scanner = st.Page("pages/dividend_scanner.py", title="Dividend Scanner")
 option_strategy_finder = st.Page("pages/option_strategy_finder.py", title="Option Strategy Finder")
+index_short_put = st.Page("pages/index_short_put.py", title="Index Short Put")
 zahltagstrategie = st.Page("pages/dividend_screener_zahltagstrategie.py", title="Zahltagstrategie")
 data_logs = st.Page("pages/data_change_logs.py", title="Data Logs")
 iron_condors = st.Page("pages/iron_condors.py", title="Iron Condors")
@@ -76,6 +77,7 @@ page = st.navigation(
         expected_value,
         dividend_scanner,
         option_strategy_finder,
+        index_short_put,
         zahltagstrategie,
         data_logs,
         symbolpage,
