@@ -41,6 +41,7 @@ JOB_MODES = [
     "historization",
     "only_run_migrations",
     "sp500_constituents",
+    "correlation_precompute",
 ]
 
 JOB_DESCRIPTIONS = {
@@ -57,6 +58,7 @@ JOB_DESCRIPTIONS = {
     "historical_full": "Full historical backfill (prices -> technicals -> IV, sequential)",
     "historization": "Archive/version current data",
     "only_run_migrations": "Run DB migrations only (no data collection)",
+    "correlation_precompute": "Precompute pairwise correlations for all symbols (required for Crash Hedge Finder)",
 }
 
 
