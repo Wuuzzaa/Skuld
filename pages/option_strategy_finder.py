@@ -4,6 +4,7 @@ import pandas as pd
 import streamlit as st
 from src.ui_strategy_display import display_strategy_details
 from src.options_utils import OptionLeg, StrategyMetrics, calculate_apdi
+from src.page_display_dataframe import create_claude_prompt_strategy_finder
 
 from config import PATH_DATABASE_QUERY_FOLDER, RISK_FREE_RATE
 from src.database import select_into_dataframe
@@ -154,6 +155,7 @@ def build_strategies(df: pd.DataFrame, min_profit: float, max_risk: float,
     stock_price = df["stock_price"].iloc[0]
     symbol = df["symbol"].iloc[0] if "symbol" in df.columns else ""
     company_name = df["company_name"].iloc[0] if "company_name" in df.columns else symbol
+    company_sector = df["company_sector"].iloc[0] if "company_sector" in df.columns else None
     results: list[dict] = []
 
     puts  = df[df["option_type"] == "put"].copy()
@@ -182,6 +184,7 @@ def build_strategies(df: pd.DataFrame, min_profit: float, max_risk: float,
                         (stock_price - float(leg["strike_price"])) / stock_price * 100,
                         leg.get("earnings_date"),
                         company_name=company_name,
+                        company_sector=company_sector,
                         leg_data=[_leg(leg, is_call=False, is_long=False, stock_price=stock_price)],
                     ))
 
@@ -205,6 +208,7 @@ def build_strategies(df: pd.DataFrame, min_profit: float, max_risk: float,
                         (float(leg["strike_price"]) - stock_price) / stock_price * 100,
                         leg.get("earnings_date"),
                         company_name=company_name,
+                        company_sector=company_sector,
                         leg_data=[_leg(leg, is_call=True, is_long=False, stock_price=stock_price)],
                     ))
 
@@ -231,6 +235,7 @@ def build_strategies(df: pd.DataFrame, min_profit: float, max_risk: float,
                             (stock_price - float(sell_leg["strike_price"])) / stock_price * 100,
                             sell_leg.get("earnings_date"),
                             company_name=company_name,
+                            company_sector=company_sector,
                         leg_data=[
                                 _leg(sell_leg, is_call=False, is_long=False, stock_price=stock_price),
                                 _leg(buy_leg,  is_call=False, is_long=True,  stock_price=stock_price),
@@ -260,6 +265,7 @@ def build_strategies(df: pd.DataFrame, min_profit: float, max_risk: float,
                             (float(sell_leg["strike_price"]) - stock_price) / stock_price * 100,
                             sell_leg.get("earnings_date"),
                             company_name=company_name,
+                            company_sector=company_sector,
                         leg_data=[
                                 _leg(sell_leg, is_call=True, is_long=False, stock_price=stock_price),
                                 _leg(buy_leg,  is_call=True, is_long=True,  stock_price=stock_price),
@@ -296,6 +302,7 @@ def build_strategies(df: pd.DataFrame, min_profit: float, max_risk: float,
                             (stock_price - float(put_sell["strike_price"])) / stock_price * 100,
                             put_sell.get("earnings_date"),
                             company_name=company_name,
+                            company_sector=company_sector,
                         leg_data=[
                                 _leg(put_sell,  is_call=False, is_long=False, stock_price=stock_price),
                                 _leg(put_buy,   is_call=False, is_long=True,  stock_price=stock_price),
@@ -312,7 +319,7 @@ def build_strategies(df: pd.DataFrame, min_profit: float, max_risk: float,
 
 def _row(strat, symbol, exp_date, dte, legs, kredit, max_profit, max_risk,
          breakeven, ror, delta, iv, iv_rank, otm_pct, earnings_date,
-         leg_data=None, company_name=None) -> dict:
+         leg_data=None, company_name=None, company_sector=None) -> dict:
     return {
         "Strategie":   strat,
         "Symbol":      symbol,
@@ -335,6 +342,7 @@ def _row(strat, symbol, exp_date, dte, legs, kredit, max_profit, max_risk,
         "_legs": leg_data or [],
         "_stock_price": None,
         "_company_name": company_name,
+        "_company_sector": company_sector,
         "_all_overpriced": all(
             (l.get("bs") is not None and l["premium"] > l["bs"])
             for l in (leg_data or [])
@@ -473,6 +481,9 @@ def _render_detail(s: dict):
     }
 
     display_strategy_details(s["Symbol"], s.get("_company_name") or s["Symbol"], option_legs, metrics, extra_info)
+
+    claude_url = create_claude_prompt_strategy_finder(s, sector=s.get("_company_sector"))
+    st.link_button("Claude AI Analyse", claude_url, type="primary", use_container_width=True)
 
 
 def _render_table(rows: list[dict], tab_key: str):
