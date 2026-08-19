@@ -388,7 +388,301 @@ def _build_short_put_candidates(opt_df: pd.DataFrame, corr_map: dict,
     return results
 
 
-# ── Rendering ─────────────────────────────────────────────────────────────────
+@st.cache_data(ttl=3600, show_spinner=False)
+def _load_betas(symbols: tuple[str, ...]) -> dict[str, float]:
+    """Lädt Summary_beta aus OptionDataMerged für die gegebenen Symbole."""
+    if not symbols:
+        return {}
+    df = select_into_dataframe(
+        query="""
+            SELECT DISTINCT ON (symbol) symbol, "Summary_beta"
+            FROM "OptionDataMerged"
+            WHERE symbol = ANY(:syms)
+              AND "Summary_beta" IS NOT NULL
+        """,
+        params={"syms": list(symbols)},
+    )
+    if df is None or df.empty:
+        return {}
+    return dict(zip(df["symbol"], df["Summary_beta"].astype(float)))
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _load_stock_prices_current(symbols: tuple[str, ...]) -> dict[str, float]:
+    """Aktueller Kurs pro Symbol aus OptionDataMerged."""
+    if not symbols:
+        return {}
+    df = select_into_dataframe(
+        query="""
+            SELECT DISTINCT ON (symbol) symbol, live_stock_price
+            FROM "OptionDataMerged"
+            WHERE symbol = ANY(:syms)
+              AND live_stock_price IS NOT NULL
+        """,
+        params={"syms": list(symbols)},
+    )
+    if df is None or df.empty:
+        return {}
+    return dict(zip(df["symbol"], df["live_stock_price"].astype(float)))
+
+
+# ── Stress-Test Berechnung ────────────────────────────────────────────────────
+
+_SCENARIOS = {
+    "−5% Korrektur":   -0.05,
+    "−10% Schwäche":   -0.10,
+    "−20% Bärenmarkt": -0.20,
+    "−30% Crash":      -0.30,
+    "−50% Crash 2008": -0.50,
+}
+
+# Bekannte Betas für ETFs/Indizes die nicht in OptionDataMerged sind
+_FALLBACK_BETAS = {
+    "GLD": -0.05, "SLV": 0.10, "TLT": -0.30, "IEF": -0.20,
+    "XLU": 0.35,  "XLP": 0.45, "XLV": 0.55,  "VXX": -3.5,
+    "SPY": 1.0,   "QQQ": 1.2,  "IWM": 1.1,
+}
+
+
+def _estimate_portfolio_pnl(
+    positions: list[dict],
+    betas: dict[str, float],
+    prices: dict[str, float],
+    market_move: float,
+) -> dict:
+    """
+    Schätzt P&L des Portfolios für ein Markt-Szenario.
+    Nur Long-Aktienpositionen fließen ein (Optionen vereinfacht via Delta-Näherung).
+    """
+    rows = []
+    total_pnl = 0.0
+    total_value = 0.0
+
+    seen = set()
+    for p in positions:
+        sym = p["symbol"]
+        if sym in seen or p.get("direction") != "Long":
+            continue
+        seen.add(sym)
+
+        beta  = betas.get(sym) or _FALLBACK_BETAS.get(sym) or 1.0
+        price = prices.get(sym)
+        qty   = p.get("qty", 0)
+        if not price or not qty:
+            continue
+
+        pos_value   = price * qty
+        est_move    = market_move * beta
+        est_pnl     = pos_value * est_move
+        total_value += pos_value
+        total_pnl   += est_pnl
+
+        rows.append({
+            "Symbol":        sym,
+            "Beta":          round(beta, 2),
+            "Kurs":          round(price, 2),
+            "Qty":           qty,
+            "Position $":    round(pos_value, 0),
+            "Geschätzte Bewegung %": round(est_move * 100, 1),
+            "Est. P&L $":    round(est_pnl, 0),
+        })
+
+    return {
+        "rows":        sorted(rows, key=lambda x: x["Est. P&L $"]),
+        "total_pnl":   round(total_pnl, 0),
+        "total_value": round(total_value, 0),
+    }
+
+
+def _estimate_hedge_pnl(strategy: dict, corr: float, market_move: float) -> dict:
+    """
+    Schätzt P&L einer Short-Put Hedge-Position im Szenario.
+    Underlying bewegt sich ca. corr × market_move (vereinfacht).
+    Short Put verliert wenn Underlying fällt unter Break-even.
+    """
+    underlying_move = corr * market_move  # negativ korreliert → positiv wenn Markt fällt
+    stock_price     = strategy["_stock_price"]
+    strike          = strategy["_legs"][0]["strike"]
+    premium         = strategy["_legs"][0]["premium"]
+    delta           = abs(strategy["_legs"][0]["delta"])
+    credit          = strategy["Kredit $"]
+    breakeven       = strategy["Breakeven"]
+
+    new_price       = stock_price * (1 + underlying_move)
+    # Short Put P&L: wenn new_price > strike → voller Kredit
+    # wenn new_price zwischen strike und breakeven → partial loss
+    # wenn new_price < breakeven → verlust
+    if new_price >= strike:
+        option_pnl = credit  # voll verfallen
+    elif new_price > breakeven:
+        option_pnl = (new_price - breakeven) * 100
+    else:
+        option_pnl = (new_price - strike) * 100 + credit  # max loss
+
+    return {
+        "underlying_move_pct": round(underlying_move * 100, 1),
+        "new_price":           round(new_price, 2),
+        "option_pnl":          round(option_pnl, 0),
+        "credit":              round(credit, 0),
+    }
+
+
+# ── Stress-Test Rendering ─────────────────────────────────────────────────────
+
+def _render_stress_test(positions: list[dict], results: list[dict],
+                         betas: dict, prices: dict):
+    st.markdown("#### Portfolio Stress-Test")
+    st.caption(
+        "Schätzt den Verlust deines Portfolios in verschiedenen Marktszenarien "
+        "und zeigt wie viel ein Hedge-Kandidat davon abfangen würde."
+    )
+
+    # Szenario-Auswahl
+    scenario_name = st.select_slider(
+        "Szenario", options=list(_SCENARIOS.keys()), value="−20% Bärenmarkt"
+    )
+    market_move = _SCENARIOS[scenario_name]
+
+    port_result = _estimate_portfolio_pnl(positions, betas, prices, market_move)
+
+    if not port_result["rows"]:
+        st.warning("Keine Aktienpositionen mit Kursdaten für den Stress-Test gefunden.")
+        return
+
+    # Übersicht-Kacheln
+    pnl   = port_result["total_pnl"]
+    val   = port_result["total_value"]
+    pct   = pnl / val * 100 if val else 0
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Portfolio-Wert (Aktien)", f"${val:,.0f}")
+    c2.metric("Geschätzter Verlust", f"${pnl:,.0f}", delta=f"{pct:.1f}%",
+              delta_color="inverse")
+    c3.metric("Szenario", scenario_name)
+
+    # Portfolio-Tabelle
+    with st.expander("Portfolio-Positionen im Detail", expanded=False):
+        df_port = pd.DataFrame(port_result["rows"])
+
+        def _color_pnl(col):
+            return ["color:#ef4444;font-weight:700" if v < 0
+                    else "color:#34d399;font-weight:700" for v in col]
+
+        st.dataframe(
+            df_port.style
+            .apply(_color_pnl, subset=["Est. P&L $"])
+            .format({"Kurs": "${:.2f}", "Position $": "${:,.0f}",
+                     "Est. P&L $": "${:,.0f}", "Geschätzte Bewegung %": "{:.1f}%"}),
+            hide_index=True,
+            use_container_width=True,
+        )
+        st.caption("Schätzung basiert auf Beta × Marktbewegung. Optionspositionen nicht enthalten.")
+
+    st.divider()
+
+    # Hedge-Kandidaten Gegenrechnung
+    st.markdown("#### Hedge-Kandidaten im Szenario")
+    st.caption(
+        "Für jeden Hedge-Kandidaten: wie entwickelt sich der Kurs im Szenario "
+        "(via Korrelation), und wie viel P&L bringt / kostet der Short Put?"
+    )
+
+    if not results:
+        st.info("Erst 'Hedge-Kandidaten suchen' ausführen.")
+        return
+
+    hedge_rows = []
+    for r in results[:30]:  # Top 30
+        h = _estimate_hedge_pnl(r, r["Korrelation"], market_move)
+        hedge_rows.append({
+            "Symbol":             r["Symbol"],
+            "Strategie":          r["Beine"],
+            "Korrelation":        r["Korrelation"],
+            "Underlying Δ%":      h["underlying_move_pct"],
+            "Neuer Kurs":         h["new_price"],
+            "Kredit $":           h["credit"],
+            "Option P&L $":       h["option_pnl"],
+            "Hedge-Effizienz %":  round(h["option_pnl"] / abs(pnl) * 100, 1) if pnl != 0 else 0,
+            "_r": r,
+        })
+
+    hedge_rows.sort(key=lambda x: x["Option P&L $"], reverse=True)
+
+    display_cols = ["Symbol", "Strategie", "Korrelation", "Underlying Δ%",
+                    "Kredit $", "Option P&L $", "Hedge-Effizienz %"]
+    df_hedge = pd.DataFrame(hedge_rows)[display_cols].copy()
+
+    def _color_hedge(col):
+        return ["color:#34d399;font-weight:700" if v > 0
+                else "color:#ef4444" for v in col]
+    def _color_corr(col):
+        return ["color:#34d399;font-weight:700" if v <= -0.4
+                else ("color:#f59e0b" if v <= -0.2 else "color:#94a3b8") for v in col]
+
+    event = st.dataframe(
+        df_hedge.style
+        .apply(_color_hedge, subset=["Option P&L $"])
+        .apply(_color_corr,  subset=["Korrelation"])
+        .format({
+            "Korrelation":       "{:.3f}",
+            "Underlying Δ%":     "{:+.1f}%",
+            "Kredit $":          "${:.0f}",
+            "Option P&L $":      "${:+.0f}",
+            "Hedge-Effizienz %": "{:.1f}%",
+        }),
+        hide_index=True,
+        use_container_width=True,
+        on_select="rerun",
+        selection_mode="single-row",
+        key="chf_stress_table",
+    )
+
+    sel = event.selection.rows if hasattr(event, "selection") else []
+    if sel:
+        row_data = hedge_rows[sel[0]]
+        h = _estimate_hedge_pnl(row_data["_r"], row_data["_r"]["Korrelation"], market_move)
+        st.divider()
+        st.markdown(f"**{row_data['Symbol']} — {row_data['Strategie']} im Szenario '{scenario_name}'**")
+        d1, d2, d3, d4 = st.columns(4)
+        d1.metric("Underlying Δ", f"{h['underlying_move_pct']:+.1f}%",
+                  help="Geschätzte Kursbewegung via Korrelation × Marktbewegung")
+        d2.metric("Neuer Kurs", f"${h['new_price']:.2f}")
+        d3.metric("Option P&L", f"${h['option_pnl']:+.0f}",
+                  help="Positiv = Prämie bleibt, Negativ = Position läuft gegen dich")
+        d4.metric("Hedge-Effizienz",
+                  f"{row_data['Hedge-Effizienz %']:.1f}%",
+                  help="Option P&L als % des geschätzten Portfolio-Verlustes")
+
+        net = pnl + h["option_pnl"]
+        net_pct = net / val * 100 if val else 0
+        st.info(
+            f"Portfolio-Verlust ohne Hedge: **${pnl:,.0f}** ({pct:.1f}%)  \n"
+            f"Option P&L: **${h['option_pnl']:+,.0f}**  \n"
+            f"**Netto-Verlust mit Hedge: ${net:,.0f} ({net_pct:.1f}%)**"
+        )
+        _render_detail(row_data["_r"])
+
+    with st.expander("Wie wird der Stress-Test berechnet?"):
+        st.markdown("""
+**Portfolio-Verlust:**
+`Position $ × Beta × Marktbewegung`
+Beta misst wie stark ein Aktie historisch auf den Markt reagiert. Beta 1.5 = 1.5× Marktbewegung.
+
+**Underlying-Bewegung des Hedge-Kandidaten:**
+`Korrelation × Marktbewegung`
+Korrelation −0.6 bei −20% Markt → Underlying +12% (Gegenbewegung).
+
+**Option P&L (Short Put):**
+- Underlying steigt über Strike → voller Kredit eingenommen ✅
+- Underlying zwischen Strike und Break-even → teilweiser Verlust
+- Underlying unter Break-even → maximaler Verlust
+
+**Hedge-Effizienz %:**
+`Option P&L ÷ Portfolio-Verlust × 100`
+Zeigt wie viel % des Portfolio-Verlustes der Hedge theoretisch auffängt.
+
+⚠️ *Vereinfachtes Modell — keine Vega/Theta-Effekte, keine Bid-Ask-Spreads, keine Gamma-Einflüsse.*
+""")
+
 
 _DISPLAY_COLS = [
     "Symbol", "Strategie", "Verfall", "DTE", "Beine",
@@ -621,21 +915,31 @@ def main():
             results = _build_short_put_candidates(opt_df, corr_map, min_credit, min_iv_rank)
             results.sort(key=lambda x: x["Hedge Score"], reverse=True)
             st.write(f"→ {len(results)} Strategien berechnet")
+
+            # Betas + aktuelle Kurse für Stress-Test
+            all_port_syms = tuple(sorted(portfolio_symbols))
+            st.write("Lade Beta-Werte für Stress-Test...")
+            betas  = _load_betas(all_port_syms)
+            prices = _load_stock_prices_current(all_port_syms)
             status.update(label="Fertig", state="complete", expanded=False)
 
         st.session_state["chf_results"]   = results
         st.session_state["chf_corr_df"]   = neg_corr
         st.session_state["chf_portfolio"] = portfolio_symbols
         st.session_state["chf_lookback"]  = lookback_days
+        st.session_state["chf_betas"]     = betas
+        st.session_state["chf_prices"]    = prices
 
     # ── Ergebnisse ────────────────────────────────────────────────────────────
     results        = st.session_state.get("chf_results", [])
     neg_corr       = st.session_state.get("chf_corr_df", pd.DataFrame())
     portfolio_syms = st.session_state.get("chf_portfolio", portfolio_symbols)
     lb             = st.session_state.get("chf_lookback", lookback_days)
+    betas          = st.session_state.get("chf_betas", {})
+    prices         = st.session_state.get("chf_prices", {})
 
-    tab_heatmap, tab_corr, tab_strategies = st.tabs([
-        "Portfolio-Matrix", "Negativ-Korrelierte", "Hedge-Strategien"
+    tab_heatmap, tab_corr, tab_strategies, tab_stress = st.tabs([
+        "Portfolio-Matrix", "Negativ-Korrelierte", "Hedge-Strategien", "Stress-Test"
     ])
 
     with tab_heatmap:
@@ -701,6 +1005,15 @@ Ein Short Put auf XLU mit Korrelation −0.3 und RoR 18% → Score **5.4**
 
 → GLD ist als Crash-Hedge attraktiver, obwohl XLU mehr Prämie bringt.
 """)
+
+    with tab_stress:
+        if not results:
+            st.info("Erst 'Hedge-Kandidaten suchen' ausführen.")
+        else:
+            _render_stress_test(
+                [p for p in positions if p.get("direction", "Long") == "Long"],
+                results, betas, prices,
+            )
 
 
 if __name__ == "__main__":
