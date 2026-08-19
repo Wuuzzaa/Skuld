@@ -92,10 +92,14 @@ def _load_chain(date: str, symbol: str, dte_min: int, dte_max: int,
 
 # ── Strategie-Builder ─────────────────────────────────────────────────────────
 
-def _closest_delta(sub: pd.DataFrame, target: float) -> pd.Series | None:
+def _closest_delta(sub: pd.DataFrame, target: float, max_delta: float | None = None) -> pd.Series | None:
     if sub.empty:
         return None
     sub = sub.copy()
+    if max_delta is not None:
+        sub = sub[sub["greeks_delta"].abs() <= max_delta]
+        if sub.empty:
+            return None
     sub["_dd"] = (sub["greeks_delta"].abs() - target).abs()
     return sub.loc[sub["_dd"].idxmin()]
 
@@ -148,7 +152,8 @@ def _earnings_before_expiry(s: dict) -> str | None:
 
 
 def build_strategies(df: pd.DataFrame, min_profit: float, max_risk: float,
-                     outlook: str, delta_short: float, delta_buy: float) -> list[dict]:
+                     outlook: str, delta_short: float, delta_buy: float,
+                     max_delta: float | None = None) -> list[dict]:
     if df.empty:
         return []
 
@@ -167,7 +172,7 @@ def build_strategies(df: pd.DataFrame, min_profit: float, max_risk: float,
 
         # Short Put
         if outlook in ("Bullish", "Neutral"):
-            leg = _closest_delta(exp_puts, delta_short)
+            leg = _closest_delta(exp_puts, delta_short, max_delta=max_delta)
             if leg is not None:
                 credit = float(leg["premium"]) * 100
                 risk   = float(leg["strike_price"]) * 100
@@ -190,7 +195,7 @@ def build_strategies(df: pd.DataFrame, min_profit: float, max_risk: float,
 
         # Covered Call
         if outlook in ("Neutral", "Bearish") and not exp_calls.empty:
-            leg = _closest_delta(exp_calls, delta_short)
+            leg = _closest_delta(exp_calls, delta_short, max_delta=max_delta)
             if leg is not None:
                 credit = float(leg["premium"]) * 100
                 if credit >= min_profit:
@@ -214,7 +219,7 @@ def build_strategies(df: pd.DataFrame, min_profit: float, max_risk: float,
 
         # Bull Put Spread
         if outlook in ("Bullish", "Neutral") and len(exp_puts) >= 2:
-            sell_leg = _closest_delta(exp_puts, delta_short)
+            sell_leg = _closest_delta(exp_puts, delta_short, max_delta=max_delta)
             if sell_leg is not None:
                 buy_cands = exp_puts[exp_puts["strike_price"] < sell_leg["strike_price"]]
                 buy_leg = _closest_delta(buy_cands, delta_buy)
@@ -244,7 +249,7 @@ def build_strategies(df: pd.DataFrame, min_profit: float, max_risk: float,
 
         # Bear Call Spread
         if outlook in ("Bearish", "Neutral") and len(exp_calls) >= 2:
-            sell_leg = _closest_delta(exp_calls, delta_short)
+            sell_leg = _closest_delta(exp_calls, delta_short, max_delta=max_delta)
             if sell_leg is not None:
                 buy_cands = exp_calls[exp_calls["strike_price"] > sell_leg["strike_price"]]
                 buy_leg = _closest_delta(buy_cands, delta_buy)
@@ -274,8 +279,8 @@ def build_strategies(df: pd.DataFrame, min_profit: float, max_risk: float,
 
         # Iron Condor
         if outlook == "Neutral" and len(exp_puts) >= 2 and len(exp_calls) >= 2:
-            put_sell  = _closest_delta(exp_puts,  delta_short)
-            call_sell = _closest_delta(exp_calls, delta_short)
+            put_sell  = _closest_delta(exp_puts,  delta_short, max_delta=max_delta)
+            call_sell = _closest_delta(exp_calls, delta_short, max_delta=max_delta)
             if put_sell is not None and call_sell is not None:
                 put_buys  = exp_puts[exp_puts["strike_price"] < put_sell["strike_price"]]
                 call_buys = exp_calls[exp_calls["strike_price"] > call_sell["strike_price"]]
@@ -578,6 +583,12 @@ def main():
                                     help="Ziel-Delta für den verkauften Strike (Short Put, Short Call, Spread-Sell-Bein).")
             delta_buy   = st.slider("Delta Buy-Leg (Spreads)", 0.05, 0.40, _DELTA_SPREAD_BUY_DEF, 0.05,
                                     help="Ziel-Delta für den gekauften Strike bei Bull Put / Bear Call / IC.")
+            use_max_delta = st.toggle("Max Delta erzwingen", value=False,
+                                      help="Sell-Leg Delta darf diesen Wert nicht überschreiten. "
+                                           "Strikes mit |Delta| > Max werden ignoriert.")
+            max_delta_val = st.slider("Max Delta (Sell-Leg)", 0.05, 0.80, delta_short + 0.10, 0.05,
+                                      disabled=not use_max_delta,
+                                      help="Absoluter Delta-Grenzwert. Alles darüber wird verworfen.")
             strategies  = st.multiselect(
                 "Strategien",
                 ["Short Put", "Covered Call", "Bull Put Spread", "Bear Call Spread", "Iron Condor"],
@@ -618,7 +629,8 @@ def main():
             )
             if df.empty:
                 continue
-            rows = build_strategies(df, min_profit, max_risk, outlook, delta_short, delta_buy)
+            rows = build_strategies(df, min_profit, max_risk, outlook, delta_short, delta_buy,
+                                    max_delta=max_delta_val if use_max_delta else None)
             all_results.extend(rows)
         progress.empty()
 
