@@ -326,65 +326,143 @@ def _compute_correlations(portfolio_symbols: list[str], universe_symbols: list[s
 
 # ── Strategie-Builder ─────────────────────────────────────────────────────────
 
-def _build_short_put_candidates(opt_df: pd.DataFrame, corr_map: dict,
-                                 min_credit: float, min_iv_rank: float) -> list[dict]:
+def _build_candidates(opt_df: pd.DataFrame, corr_map: dict,
+                      min_credit: float, min_iv_rank: float,
+                      strategies: list[str]) -> list[dict]:
+    """
+    Baut Hedge-Kandidaten aus Optionsdaten.
+    Strategien: "Short Put" und/oder "Bear Call Spread"
+    - Short Put: auf Symbole die bei Crash steigen (negativ korreliert) → Put verfällt wertlos
+    - Bear Call Spread: auf Symbole die bei Crash steigen → Calls verfallen wertlos, Prämie eingenommen
+    """
     results = []
-    puts = opt_df[opt_df["option_type"] == "put"].copy()
+
     for col in ["strike_price", "premium", "greeks_delta", "iv", "iv_rank",
                 "open_interest", "dte", "stock_price"]:
-        puts[col] = pd.to_numeric(puts[col], errors="coerce")
-    puts = puts.dropna(subset=["premium", "greeks_delta", "iv_rank", "stock_price"])
+        opt_df[col] = pd.to_numeric(opt_df[col], errors="coerce")
+    opt_df = opt_df.dropna(subset=["premium", "greeks_delta", "iv_rank", "stock_price"])
 
-    for (sym, exp), group in puts.groupby(["symbol", "expiration_date"]):
-        group = group.copy()
-        group["_dd"] = (group["greeks_delta"].abs() - 0.30).abs()
-        leg = group.loc[group["_dd"].idxmin()]
+    puts  = opt_df[opt_df["option_type"] == "put"].copy()
+    calls = opt_df[opt_df["option_type"] == "call"].copy()
 
-        stock_price = float(leg["stock_price"])
-        strike      = float(leg["strike_price"])
-        premium     = float(leg["premium"])
-        credit      = premium * 100
-        risk        = strike * 100
-        iv_rank     = float(leg["iv_rank"])
-        dte         = int(leg["dte"])
-        iv          = float(leg["iv"])
+    for sym, sym_df in opt_df.groupby("symbol"):
+        corr     = corr_map.get(sym, 0.0)
+        sym_puts  = puts[puts["symbol"] == sym]
+        sym_calls = calls[calls["symbol"] == sym]
 
-        if credit < min_credit or risk <= 0 or iv_rank < min_iv_rank:
-            continue
+        for exp_date in sym_df["expiration_date"].unique():
+            exp_puts  = sym_puts[sym_puts["expiration_date"] == exp_date].copy()
+            exp_calls = sym_calls[sym_calls["expiration_date"] == exp_date].copy()
+            if exp_puts.empty and exp_calls.empty:
+                continue
 
-        ror  = credit / risk * 100
-        otm  = (stock_price - strike) / stock_price * 100
-        corr = corr_map.get(sym, 0.0)
-        hedge_score = round(abs(corr) * ror, 2)
+            dte = int(sym_df[sym_df["expiration_date"] == exp_date]["dte"].iloc[0])
 
-        results.append({
-            "Strategie":     "Short Put",
-            "Symbol":        sym,
-            "Verfall":       str(exp),
-            "DTE":           dte,
-            "Beine":         f"Sell {strike:.2f}P",
-            "Kredit $":      round(credit, 0),
-            "Max Profit $":  round(credit, 0),
-            "Max Risiko $":  round(risk, 0),
-            "RoR %":         round(ror, 1),
-            "Breakeven":     round(strike - premium, 2),
-            "Delta":         round(float(leg["greeks_delta"]), 2),
-            "IV %":          round(iv * 100, 1),
-            "IV Rank":       round(iv_rank, 0),
-            "OTM %":         round(otm, 1),
-            "Korrelation":   round(corr, 3),
-            "Hedge Score":   hedge_score,
-            "_stock_price":  stock_price,
-            "_company_name": str(leg.get("company_name") or sym),
-            "_company_sector": str(leg.get("company_sector") or ""),
-            "_legs": [{
-                "type": "Put", "action": "Short",
-                "strike": strike, "premium": premium, "bs": None,
-                "delta": float(leg["greeks_delta"]), "iv": iv,
-                "theta": 0.0, "oi": int(leg.get("open_interest") or 0), "volume": 0,
-            }],
-            "_earnings_warn": False,
-        })
+            # ── Short Put ────────────────────────────────────────────────────
+            if "Short Put" in strategies and not exp_puts.empty:
+                exp_puts["_dd"] = (exp_puts["greeks_delta"].abs() - 0.30).abs()
+                leg = exp_puts.loc[exp_puts["_dd"].idxmin()]
+                stock_price = float(leg["stock_price"])
+                strike      = float(leg["strike_price"])
+                premium     = float(leg["premium"])
+                credit      = premium * 100
+                risk        = strike * 100
+                iv_rank     = float(leg["iv_rank"])
+                iv          = float(leg["iv"])
+                if credit >= min_credit and risk > 0 and iv_rank >= min_iv_rank:
+                    ror         = credit / risk * 100
+                    otm         = (stock_price - strike) / stock_price * 100
+                    hedge_score = round(abs(corr) * ror, 2)
+                    results.append({
+                        "Strategie":       "Short Put",
+                        "Symbol":          sym,
+                        "Verfall":         str(exp_date),
+                        "DTE":             dte,
+                        "Beine":           f"Sell {strike:.2f}P",
+                        "Kredit $":        round(credit, 0),
+                        "Max Profit $":    round(credit, 0),
+                        "Max Risiko $":    round(risk, 0),
+                        "RoR %":           round(ror, 1),
+                        "Breakeven":       round(strike - premium, 2),
+                        "Delta":           round(float(leg["greeks_delta"]), 2),
+                        "IV %":            round(iv * 100, 1),
+                        "IV Rank":         round(iv_rank, 0),
+                        "OTM %":           round(otm, 1),
+                        "Korrelation":     round(corr, 3),
+                        "Hedge Score":     hedge_score,
+                        "_stock_price":    stock_price,
+                        "_company_name":   str(leg.get("company_name") or sym),
+                        "_company_sector": str(leg.get("company_sector") or ""),
+                        "_legs": [{"type": "Put", "action": "Short",
+                                   "strike": strike, "premium": premium, "bs": None,
+                                   "delta": float(leg["greeks_delta"]), "iv": iv,
+                                   "theta": 0.0, "oi": int(leg.get("open_interest") or 0),
+                                   "volume": 0}],
+                        "_earnings_warn": False,
+                    })
+
+            # ── Bear Call Spread ──────────────────────────────────────────────
+            if "Bear Call Spread" in strategies and len(exp_calls) >= 2:
+                exp_calls = exp_calls.sort_values("strike_price")
+                # Sell-Leg: Delta ~0.30
+                exp_calls["_dd"] = (exp_calls["greeks_delta"].abs() - 0.30).abs()
+                sell_leg = exp_calls.loc[exp_calls["_dd"].idxmin()]
+                # Buy-Leg: höherer Strike (OTM Call)
+                buy_cands = exp_calls[exp_calls["strike_price"] > sell_leg["strike_price"]]
+                if buy_cands.empty:
+                    continue
+                buy_cands = buy_cands.copy()
+                buy_cands["_dd"] = (buy_cands["greeks_delta"].abs() - 0.15).abs()
+                buy_leg = buy_cands.loc[buy_cands["_dd"].idxmin()]
+
+                stock_price = float(sell_leg["stock_price"])
+                sell_strike = float(sell_leg["strike_price"])
+                buy_strike  = float(buy_leg["strike_price"])
+                credit      = (float(sell_leg["premium"]) - float(buy_leg["premium"])) * 100
+                width       = buy_strike - sell_strike
+                risk        = width * 100 - credit
+                iv_rank     = float(sell_leg["iv_rank"])
+                iv          = float(sell_leg["iv"])
+
+                if credit >= min_credit and risk > 0 and iv_rank >= min_iv_rank:
+                    ror         = credit / risk * 100
+                    otm         = (sell_strike - stock_price) / stock_price * 100
+                    hedge_score = round(abs(corr) * ror, 2)
+                    results.append({
+                        "Strategie":       "Bear Call Spread",
+                        "Symbol":          sym,
+                        "Verfall":         str(exp_date),
+                        "DTE":             dte,
+                        "Beine":           f"Sell {sell_strike:.2f}C / Buy {buy_strike:.2f}C",
+                        "Kredit $":        round(credit, 0),
+                        "Max Profit $":    round(credit, 0),
+                        "Max Risiko $":    round(risk, 0),
+                        "RoR %":           round(ror, 1),
+                        "Breakeven":       round(sell_strike + credit / 100, 2),
+                        "Delta":           round(float(sell_leg["greeks_delta"]), 2),
+                        "IV %":            round(iv * 100, 1),
+                        "IV Rank":         round(iv_rank, 0),
+                        "OTM %":           round(otm, 1),
+                        "Korrelation":     round(corr, 3),
+                        "Hedge Score":     hedge_score,
+                        "_stock_price":    stock_price,
+                        "_company_name":   str(sell_leg.get("company_name") or sym),
+                        "_company_sector": str(sell_leg.get("company_sector") or ""),
+                        "_legs": [
+                            {"type": "Call", "action": "Short",
+                             "strike": sell_strike, "premium": float(sell_leg["premium"]),
+                             "bs": None, "delta": float(sell_leg["greeks_delta"]),
+                             "iv": iv, "theta": 0.0,
+                             "oi": int(sell_leg.get("open_interest") or 0), "volume": 0},
+                            {"type": "Call", "action": "Long",
+                             "strike": buy_strike, "premium": float(buy_leg["premium"]),
+                             "bs": None, "delta": float(buy_leg["greeks_delta"]),
+                             "iv": float(buy_leg["iv"]), "theta": 0.0,
+                             "oi": int(buy_leg.get("open_interest") or 0), "volume": 0},
+                        ],
+                        "_earnings_warn": False,
+                    })
+
     return results
 
 
@@ -866,6 +944,13 @@ def main():
             min_credit   = st.number_input("Min. Kredit ($)", 0, 5000, _MIN_CREDIT, 10)
             min_oi       = st.number_input("Min. Open Interest", 0, 10000, _MIN_OI, 10)
             top_n        = st.slider("Top N Gegenwerte", 5, 50, 20, 5)
+            hedge_strategies = st.multiselect(
+                "Strategien",
+                ["Short Put", "Bear Call Spread"],
+                default=["Short Put", "Bear Call Spread"],
+                help="Short Put: Prämie auf negativ-korrelierte Gegenwerte. "
+                     "Bear Call Spread: begrenzteres Risiko, Prämie wenn Gegenwert steigt.",
+            )
 
         # Sektor-Filter — volle Breite unter den 3 Spalten
         try:
@@ -904,10 +989,13 @@ def main():
                 return
 
             neg_corr = corr_df[corr_df["correlation_mean"] <= min_neg_corr].head(top_n)
-            # Bekannte Hedge-Symbole immer ergänzen
+            # Bekannte Hedge-Symbole nur ergänzen wenn sie tatsächlich negativ korreliert sind
             extra = [s for s in _KNOWN_HEDGES if s not in neg_corr["peer_symbol"].values]
             if extra:
-                extra_df = corr_df[corr_df["peer_symbol"].isin(extra)]
+                extra_df = corr_df[
+                    corr_df["peer_symbol"].isin(extra) &
+                    (corr_df["correlation_mean"] <= 0)
+                ]
                 neg_corr = pd.concat([neg_corr, extra_df], ignore_index=True).drop_duplicates("peer_symbol")
 
             st.write(f"→ {len(neg_corr)} negativ-korrelierte Gegenwerte gefunden")
@@ -928,7 +1016,8 @@ def main():
                 st.warning("Keine Optionsdaten — DTE-Fenster oder OI-Filter anpassen.")
                 return
 
-            results = _build_short_put_candidates(opt_df, corr_map, min_credit, min_iv_rank)
+            results = _build_candidates(opt_df, corr_map, min_credit, min_iv_rank,
+                                        strategies=hedge_strategies or ["Short Put"])
             results.sort(key=lambda x: x["Hedge Score"], reverse=True)
             st.write(f"→ {len(results)} Strategien berechnet")
 
