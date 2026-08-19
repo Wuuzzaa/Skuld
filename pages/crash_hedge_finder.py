@@ -416,9 +416,16 @@ def main():
         p1, p2, p3 = st.columns(3)
         with p1:
             lookback_days = st.selectbox(
-                "Korrelations-Lookback", [63, 126, 252],
+                "Korrelations-Lookback", [63, 126, 252, 504, 756, 1260],
                 index=2,
-                format_func=lambda x: {63: "3 Monate", 126: "6 Monate", 252: "1 Jahr"}[x],
+                format_func=lambda x: {
+                    63:   "3 Monate",
+                    126:  "6 Monate",
+                    252:  "1 Jahr",
+                    504:  "2 Jahre",
+                    756:  "3 Jahre",
+                    1260: "5 Jahre",
+                }[x],
             )
             min_neg_corr = st.slider(
                 "Max. Korrelation (Schwelle)", -1.0, 0.0, _MIN_NEG_CORR, 0.05,
