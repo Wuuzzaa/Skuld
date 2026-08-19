@@ -27,7 +27,87 @@ _MIN_MARKET_CAP_B = 10.0   # ≥ $10 Mrd
 
 # ── CSV-Import ────────────────────────────────────────────────────────────────
 
+def _extract_symbol_from_ibkr(raw: str) -> str | None:
+    """Extrahiert Underlying aus IBKR Options-Symbol (z.B. 'AAPL  260904P00295000' → 'AAPL')."""
+    raw = raw.strip()
+    # IBKR compact format: "AAPL  260904P00295000"
+    m = re.match(r"^([A-Z0-9]{1,6})\s+\d{6}[CP]\d+", raw)
+    if m:
+        return m.group(1)
+    # Reines Aktien-Symbol: "AAPL", "MSFT"
+    if re.match(r"^[A-Z]{1,5}$", raw):
+        return raw
+    return None
+
+
+def _parse_transaction_history_csv(content: str) -> list[dict]:
+    """
+    Parst IBKR Transaction History CSV.
+    Leitet offene Positionen ab: nettiert Qty pro Underlying, gibt Symbole mit Netto != 0 zurück.
+    Format: Transaction History,Data,Date,Account,Description,Transaction Type,Symbol,Quantity,...
+    """
+    from collections import defaultdict
+    qty_net: dict[str, float] = defaultdict(float)
+    header: list[str] = []
+
+    reader = csv.reader(io.StringIO(content))
+    for row in reader:
+        if not row or len(row) < 3:
+            continue
+        section = row[0].strip()
+        if section != "Transaction History":
+            continue
+        record_type = row[1].strip()
+        if record_type == "Header":
+            header = [c.strip() for c in row[2:]]
+            continue
+        if record_type != "Data" or not header:
+            continue
+
+        data = dict(zip(header, row[2:]))
+        tx_type  = data.get("Transaction Type", "").strip()
+        sym_raw  = data.get("Symbol", "").strip()
+        qty_str  = data.get("Quantity", "").strip()
+
+        # Nur echte Trades (keine Dividenden, FX, Fees)
+        if tx_type not in ("Buy", "Sell", "BuyOrSell"):
+            continue
+        if not sym_raw or sym_raw == "-":
+            continue
+
+        underlying = _extract_symbol_from_ibkr(sym_raw)
+        if not underlying:
+            continue
+
+        try:
+            qty = float(qty_str) if qty_str and qty_str != "-" else 0.0
+        except ValueError:
+            continue
+
+        qty_net[underlying] += qty
+
+    # Alle Symbole die netto != 0 haben = offene Position
+    positions = []
+    for sym, net_qty in qty_net.items():
+        if abs(net_qty) >= 0.5:
+            positions.append({
+                "type": "option",
+                "symbol": sym,
+                "qty": int(abs(net_qty)),
+                "direction": "Long" if net_qty > 0 else "Short",
+            })
+    return positions
+
+
 def _parse_ibkr_csv(content: str) -> list[dict]:
+    """
+    Universeller Parser — erkennt automatisch Activity Statement vs. Transaction History.
+    """
+    # Transaction History Format
+    if "Transaction History" in content[:500]:
+        return _parse_transaction_history_csv(content)
+
+    # Activity Statement Format (Mark-to-Market)
     positions = []
     reader = csv.reader(io.StringIO(content))
     mtm_header: list[str] = []
@@ -376,10 +456,14 @@ def main():
                 imported = _parse_ibkr_csv(content)
                 if imported:
                     st.session_state["chf_positions"] = imported
-                    st.success(f"{len(imported)} Positionen importiert.")
+                    syms = sorted({p["symbol"] for p in imported})
+                    st.success(f"{len(imported)} Positionen importiert: {', '.join(syms[:10])}{'...' if len(syms) > 10 else ''}")
                 else:
-                    st.error("Keine Positionen gefunden — prüfe ob die CSV die "
-                             "'Mark-to-Market-Performance-Überblick' Sektion enthält.")
+                    st.error(
+                        "Keine offenen Positionen gefunden. Unterstützte Formate:\n"
+                        "- **Transaction History** CSV (Flex Query / TRANSACTIONS)\n"
+                        "- **Activity Statement** CSV mit 'Mark-to-Market Performance' Sektion"
+                    )
 
         with col_manual:
             st.markdown("**Symbole manuell eingeben**")
