@@ -251,43 +251,33 @@ with tab_status:
                     if pd.notna(s) else ""
                 )
 
-            # Rows with a pipeline report get an expander; rows without are
-            # collected and shown in a compact dataframe at the end.
-            has_report = "report" in disp.columns
-            no_report_rows = []
+            keep = [c for c in ["ts", "mode", "status", "duration", "exit_code", "note"] if c in disp.columns]
+            event = st.dataframe(
+                disp[keep],
+                use_container_width=True,
+                hide_index=True,
+                on_select="rerun",
+                selection_mode="single-row",
+                key="status_table",
+                column_config={
+                    "ts": "Time (UTC)",
+                    "mode": "Mode",
+                    "status": "Status",
+                    "duration": "Duration",
+                    "exit_code": "Exit",
+                    "note": "Note",
+                },
+            )
 
-            for _, row in disp.iterrows():
-                report_text = row.get("report", "") if has_report else ""
-                ts_str = row.get("ts", "")
-                mode_str = row.get("mode", "")
-                status_str = row.get("status", "")
-                duration_str = row.get("duration", "")
-                note_str = row.get("note", "")
-
+            sel = event.selection.rows if event and event.selection else []
+            if sel:
+                row = df.iloc[sel[0]]
+                report_text = row.get("report", "") if "report" in df.columns else ""
+                st.markdown(f"**{row.get('ts', '')} · {row.get('mode', '')}**")
                 if report_text and str(report_text).strip():
-                    label = f"{status_str}  ·  {mode_str}  ·  {ts_str}  ·  {duration_str}"
-                    with st.expander(label, expanded=False):
-                        st.code(report_text, language="text")
-                        if note_str:
-                            st.caption(f"Note: {note_str}")
+                    st.code(report_text, language="text")
                 else:
-                    no_report_rows.append(row)
-
-            if no_report_rows:
-                keep = [c for c in ["ts", "mode", "status", "duration", "exit_code", "note"] if c in disp.columns]
-                st.dataframe(
-                    pd.DataFrame(no_report_rows)[keep],
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        "ts": "Time (UTC)",
-                        "mode": "Mode",
-                        "status": "Status",
-                        "duration": "Duration",
-                        "exit_code": "Exit",
-                        "note": "Note",
-                    },
-                )
+                    st.info("Kein detaillierter Report für diesen Eintrag (älterer Job-Lauf).")
 
 
 # ==============================================================================
