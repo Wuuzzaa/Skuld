@@ -213,7 +213,7 @@ def _load_option_candidates(symbols: tuple[str, ...], dte_min: int, dte_max: int
     df = select_into_dataframe(
         query="""
             SELECT
-                symbol, option_type, strike_price,
+                symbol, contract_type AS option_type, strike_price,
                 day_close          AS premium,
                 greeks_delta,
                 implied_volatility AS iv,
