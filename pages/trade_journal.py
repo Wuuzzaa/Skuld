@@ -127,57 +127,68 @@ def _detect_strategy(legs: list[dict]) -> str:
 
 def _build_trades(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Gruppiert Legs zu Trades. Schließungs-Legs (C) tragen den realisierten P&L.
-    Gruppen-Schlüssel: underlying + expiry + trade_date (gleicher Tag = zusammengehöriger Trade).
+    Gruppiert alle Transaktionen eines Trades zusammen.
+    Schlüssel: underlying + expiry (alle Legs über alle Tage).
+    P&L = Summe FifoPnlRealized aller Schließungs-Legs.
+    Status: offen wenn noch keine Schließungs-Transaktion vorhanden.
     """
     if df.empty:
         return pd.DataFrame()
 
-    records = []
-
-    # Gruppiere nach underlying + expiry + trade_date
-    group_cols = ["underlying", "expiry", "trade_date"]
+    group_cols = ["underlying", "expiry"]
     missing = [c for c in group_cols if c not in df.columns]
     if missing:
         return pd.DataFrame()
 
-    for (underlying, expiry, trade_date), grp in df.groupby(group_cols, dropna=False):
-        legs = grp.to_dict("records")
-        strategy  = _detect_strategy(legs)
-        pnl       = grp["pnl_realized"].sum() if "pnl_realized" in grp.columns else 0
-        commission = grp["commission"].sum() if "commission" in grp.columns else 0
-        net_cash  = grp["net_cash"].sum() if "net_cash" in grp.columns else 0
-        open_close = "O" if all(l.get("open_close") == "O" for l in legs) else \
-                     "C" if all(l.get("open_close") == "C" for l in legs) else "O+C"
+    records = []
 
-        # Beine-String
+    for (underlying, expiry), grp in df.groupby(group_cols, dropna=False):
+        legs_open  = grp[grp["open_close"] == "O"] if "open_close" in grp.columns else grp
+        legs_close = grp[grp["open_close"] == "C"] if "open_close" in grp.columns else pd.DataFrame()
+
+        # Strategie aus den Eröffnungs-Legs ableiten
+        open_legs  = legs_open.to_dict("records")
+        strategy   = _detect_strategy(open_legs) if open_legs else _detect_strategy(grp.to_dict("records"))
+
+        # P&L nur aus Schließungs-Legs (FifoPnlRealized ist 0 bei O)
+        pnl        = grp["pnl_realized"].sum() if "pnl_realized" in grp.columns else 0
+        commission = grp["commission"].sum()   if "commission"    in grp.columns else 0
+        net_cash   = grp["net_cash"].sum()     if "net_cash"      in grp.columns else 0
+
+        open_date  = legs_open["trade_date"].min()  if not legs_open.empty  and "trade_date" in legs_open.columns  else None
+        close_date = legs_close["trade_date"].max() if not legs_close.empty and "trade_date" in legs_close.columns else None
+
+        is_closed  = not legs_close.empty
+        status     = "Geschlossen" if is_closed else "Offen"
+
+        # Beine-String aus Eröffnungs-Legs
         leg_parts = []
-        for l in sorted(legs, key=lambda x: (x.get("put_call",""), float(x.get("strike", 0) or 0))):
-            qty  = int(l.get("quantity", 0))
-            pc   = l.get("put_call", "?")
-            sk   = l.get("strike", "?")
-            act  = "Sell" if qty < 0 else "Buy"
+        for l in sorted(open_legs, key=lambda x: (x.get("put_call", ""), float(x.get("strike", 0) or 0))):
+            qty = int(l.get("quantity", 0))
+            pc  = l.get("put_call", "?")
+            sk  = l.get("strike", "?")
+            act = "Sell" if qty < 0 else "Buy"
             leg_parts.append(f"{act} {sk}{pc}")
         beine = " / ".join(leg_parts)
 
         records.append({
-            "Underlying":  underlying,
-            "Strategie":   strategy,
-            "Verfall":     expiry.strftime("%Y-%m-%d") if pd.notna(expiry) else "",
-            "Datum":       trade_date.strftime("%Y-%m-%d") if pd.notna(trade_date) else "",
-            "O/C":         open_close,
-            "Beine":       beine,
-            "P&L $":       round(pnl, 2),
-            "Provision $": round(commission, 2),
-            "Net P&L $":   round(pnl + commission, 2),
-            "Net Cash $":  round(net_cash, 2),
-            "_legs":       len(legs),
+            "Underlying":    underlying,
+            "Strategie":     strategy,
+            "Verfall":       expiry.strftime("%Y-%m-%d") if pd.notna(expiry) else "",
+            "Eröffnet":      open_date.strftime("%Y-%m-%d")  if pd.notna(open_date)  else "",
+            "Geschlossen":   close_date.strftime("%Y-%m-%d") if pd.notna(close_date) else "",
+            "Status":        status,
+            "Beine":         beine,
+            "P&L $":         round(pnl, 2),
+            "Provision $":   round(commission, 2),
+            "Net P&L $":     round(pnl + commission, 2),
         })
 
     out = pd.DataFrame(records)
-    if not out.empty and "Datum" in out.columns:
-        out = out.sort_values("Datum", ascending=False)
+    if not out.empty:
+        out = out.sort_values("Eröffnet", ascending=False)
     return out
+
 
 
 # ── Styling ───────────────────────────────────────────────────────────────────
@@ -250,7 +261,7 @@ def main():
             all_strats   = sorted(trades_df["Strategie"].dropna().unique())
             sel_strats   = st.multiselect("Strategie", all_strats, key="tj_strats")
         with f3:
-            oc_opts      = ["Alle", "Nur geschlossene (C)", "Nur offene (O)"]
+            oc_opts      = ["Alle", "Nur geschlossene", "Nur offene"]
             sel_oc       = st.radio("Status", oc_opts, horizontal=True, key="tj_oc")
 
     filt = trades_df.copy()
@@ -258,13 +269,13 @@ def main():
         filt = filt[filt["Underlying"].isin(sel_syms)]
     if sel_strats:
         filt = filt[filt["Strategie"].isin(sel_strats)]
-    if sel_oc == "Nur geschlossene (C)":
-        filt = filt[filt["O/C"].str.contains("C")]
-    elif sel_oc == "Nur offene (O)":
-        filt = filt[filt["O/C"] == "O"]
+    if sel_oc == "Nur geschlossene":
+        filt = filt[filt["Status"] == "Geschlossen"]
+    elif sel_oc == "Nur offene":
+        filt = filt[filt["Status"] == "Offen"]
 
     # ── KPI-Kacheln ──────────────────────────────────────────────────────────
-    closed = filt[filt["O/C"].str.contains("C")]
+    closed = filt[filt["Status"] == "Geschlossen"]
     total_pnl    = closed["Net P&L $"].sum()
     winners      = closed[closed["Net P&L $"] > 0]
     losers       = closed[closed["Net P&L $"] < 0]
@@ -289,8 +300,8 @@ def main():
     ])
 
     with tab_trades:
-        disp_cols = ["Datum", "Underlying", "Strategie", "Verfall", "O/C",
-                     "Beine", "P&L $", "Provision $", "Net P&L $"]
+        disp_cols = ["Eröffnet", "Geschlossen", "Underlying", "Strategie", "Verfall",
+                     "Status", "Beine", "P&L $", "Provision $", "Net P&L $"]
         show = filt[[c for c in disp_cols if c in filt.columns]].copy()
         event = st.dataframe(
             _style_trades(show),
@@ -376,7 +387,7 @@ def main():
             st.info("Keine geschlossenen Trades.")
         else:
             tl = closed.copy()
-            tl["Datum"] = pd.to_datetime(tl["Datum"], errors="coerce")
+            tl["Datum"] = pd.to_datetime(tl["Geschlossen"], errors="coerce")
             tl = tl.dropna(subset=["Datum"]).sort_values("Datum")
             tl["Kumulativer P&L $"] = tl["Net P&L $"].cumsum()
 
