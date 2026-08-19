@@ -212,16 +212,41 @@ def main(args):
     finally:
         if pipeline:
             pipeline.stop()
-            
-            # Generator and log report
-            report, _ = pipeline.generate_report(run_successful)
-            
+
+            # Generate and log report
+            report, total_duration = pipeline.generate_report(run_successful)
+
             logger.info("\n" + "#" * 80)
             logger.info("DATA COLLECTION PIPELINE SUMMARY")
             logger.info("#" * 80)
             logger.info(report)
             logger.info("#" * 80 + "\n")
-            
+
+            # Write pipeline summary into the _status JSONL so the admin page
+            # shows the same detail level as Telegram (without reading .log files).
+            try:
+                import json as _json
+                from pathlib import Path as _Path
+                from datetime import datetime as _dt
+                _status_dir = _Path(__file__).resolve().parent / "logs" / "_status"
+                _status_dir.mkdir(parents=True, exist_ok=True)
+                _status_file = _status_dir / f"{_dt.utcnow().strftime('%Y-%m-%d')}.jsonl"
+                _failed = [n for n, (_, e) in pipeline.results.items() if e is not None]
+                _status = "OK" if run_successful and not _failed else ("WARNING" if run_successful else "FAIL")
+                _entry = {
+                    "ts": _dt.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "mode": args.mode,
+                    "status": _status,
+                    "exit_code": 0,
+                    "duration_s": total_duration,
+                    "note": f"failures: {','.join(_failed)}" if _failed else "",
+                    "report": report,
+                }
+                with _status_file.open("a", encoding="utf-8") as _fh:
+                    _fh.write(_json.dumps(_entry) + "\n")
+            except Exception as e:
+                logger.warning(f"Could not write pipeline summary to _status: {e}")
+
             # Send Telegram message
             try:
                 pipeline.send_telegram_summary(run_successful)

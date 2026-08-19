@@ -175,6 +175,7 @@ STATUS_DIR = LOGS_BASE / "_status"
 
 STATUS_STYLE = {
     "OK": "🟢 OK",
+    "WARNING": "🟡 WARNING",
     "FAIL": "🔴 FAIL",
     "OOM": "🔴 OOM",
     "TIMEOUT": "🟠 TIMEOUT",
@@ -232,8 +233,8 @@ with tab_status:
                 df = df.sort_values("ts", ascending=False, kind="stable")
 
             counts = df["status"].value_counts().to_dict()
-            metric_cols = st.columns(5)
-            for i, key in enumerate(["OK", "FAIL", "OOM", "TIMEOUT", "SKIPPED"]):
+            metric_cols = st.columns(6)
+            for i, key in enumerate(["OK", "WARNING", "FAIL", "OOM", "TIMEOUT", "SKIPPED"]):
                 metric_cols[i].metric(STATUS_STYLE[key].split(" ", 1)[-1], counts.get(key, 0))
 
             with col_b:
@@ -249,20 +250,44 @@ with tab_status:
                     lambda s: f"{int(s) // 3600}h {int(s) % 3600 // 60}m {int(s) % 60}s"
                     if pd.notna(s) else ""
                 )
-            keep = [c for c in ["ts", "mode", "status", "duration", "exit_code", "note"] if c in disp.columns]
-            st.dataframe(
-                disp[keep],
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "ts": "Time (UTC)",
-                    "mode": "Mode",
-                    "status": "Status",
-                    "duration": "Duration",
-                    "exit_code": "Exit",
-                    "note": "Note",
-                },
-            )
+
+            # Rows with a pipeline report get an expander; rows without are
+            # collected and shown in a compact dataframe at the end.
+            has_report = "report" in disp.columns
+            no_report_rows = []
+
+            for _, row in disp.iterrows():
+                report_text = row.get("report", "") if has_report else ""
+                ts_str = row.get("ts", "")
+                mode_str = row.get("mode", "")
+                status_str = row.get("status", "")
+                duration_str = row.get("duration", "")
+                note_str = row.get("note", "")
+
+                if report_text and str(report_text).strip():
+                    label = f"{status_str}  ·  {mode_str}  ·  {ts_str}  ·  {duration_str}"
+                    with st.expander(label, expanded=False):
+                        st.code(report_text, language="text")
+                        if note_str:
+                            st.caption(f"Note: {note_str}")
+                else:
+                    no_report_rows.append(row)
+
+            if no_report_rows:
+                keep = [c for c in ["ts", "mode", "status", "duration", "exit_code", "note"] if c in disp.columns]
+                st.dataframe(
+                    pd.DataFrame(no_report_rows)[keep],
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "ts": "Time (UTC)",
+                        "mode": "Mode",
+                        "status": "Status",
+                        "duration": "Duration",
+                        "exit_code": "Exit",
+                        "note": "Note",
+                    },
+                )
 
 
 # ==============================================================================
