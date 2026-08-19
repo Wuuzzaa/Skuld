@@ -99,10 +99,59 @@ def _parse_transaction_history_csv(content: str) -> list[dict]:
     return positions
 
 
+def _parse_position_report_csv(content: str) -> list[dict]:
+    """
+    Parst IBKR/CapTrader Flex Query Position Report.
+    Format: ClientAccountID, Symbol, Quantity, MarkPrice, ..., AssetClass, ...
+    Direkte offene Positionen — kein Netting nötig.
+    """
+    positions = []
+    reader = csv.reader(io.StringIO(content))
+    header = []
+    for row in reader:
+        if not row:
+            continue
+        # Erster Row = Header
+        if not header:
+            header = [c.strip().strip('"') for c in row]
+            continue
+        data = dict(zip(header, [c.strip().strip('"') for c in row]))
+        asset_class = data.get("AssetClass", "").strip()
+        symbol_raw  = data.get("Symbol", "").strip()
+        try:
+            qty = float(data.get("Quantity", "0") or "0")
+        except ValueError:
+            continue
+        if qty == 0:
+            continue
+
+        if asset_class == "STK":
+            positions.append({
+                "type": "stock",
+                "symbol": symbol_raw,
+                "qty": int(abs(qty)),
+                "direction": "Long" if qty > 0 else "Short",
+            })
+        elif asset_class == "OPT":
+            underlying = _extract_symbol_from_ibkr(symbol_raw)
+            if underlying:
+                positions.append({
+                    "type": "option",
+                    "symbol": underlying,
+                    "qty": int(abs(qty)),
+                    "direction": "Long" if qty > 0 else "Short",
+                })
+    return positions
+
+
 def _parse_ibkr_csv(content: str) -> list[dict]:
     """
-    Universeller Parser — erkennt automatisch Activity Statement vs. Transaction History.
+    Universeller Parser — erkennt automatisch Position Report vs. Transaction History vs. Activity Statement.
     """
+    # Position Report (Flex Query) — hat ClientAccountID als erste Spalte
+    if content.lstrip().startswith('"ClientAccountID"') or content.lstrip().startswith('ClientAccountID'):
+        return _parse_position_report_csv(content)
+
     # Transaction History Format
     if "Transaction History" in content[:500]:
         return _parse_transaction_history_csv(content)
@@ -448,7 +497,7 @@ def main():
 
         with col_csv:
             st.markdown("**CSV-Import (CapTrader / IBKR)**")
-            st.caption("Activity Statement → Format CSV → Sektion 'Mark-to-Market Performance'")
+            st.caption("Flex Query Position Report **oder** Activity Statement CSV")
             uploaded = st.file_uploader("CSV hochladen", type=["csv"], key="chf_csv",
                                         label_visibility="collapsed")
             if uploaded is not None:
