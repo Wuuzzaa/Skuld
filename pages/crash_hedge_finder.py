@@ -867,6 +867,22 @@ def main():
             min_oi       = st.number_input("Min. Open Interest", 0, 10000, _MIN_OI, 10)
             top_n        = st.slider("Top N Gegenwerte", 5, 50, 20, 5)
 
+        # Sektor-Filter — volle Breite unter den 3 Spalten
+        try:
+            _sec_df = select_into_dataframe(
+                query='SELECT DISTINCT company_sector AS sector FROM "FundamentalData" '
+                      "WHERE company_sector IS NOT NULL AND company_sector <> '' ORDER BY company_sector"
+            )
+            _sector_options = _sec_df["sector"].dropna().tolist() if _sec_df is not None else []
+        except Exception:
+            _sector_options = []
+        selected_sectors = st.multiselect(
+            "Sektoren filtern (leer = alle)",
+            options=_sector_options,
+            key="chf_sectors",
+            help="Filtert die Hedge-Strategien nach Sektor des Underlying. Leer = alle Sektoren.",
+        )
+
     # ── Suche-Button ──────────────────────────────────────────────────────────
     run = st.button("Hedge-Kandidaten suchen", type="primary", use_container_width=True)
 
@@ -938,6 +954,14 @@ def main():
     betas          = st.session_state.get("chf_betas", {})
     prices         = st.session_state.get("chf_prices", {})
 
+    # Sektor-Filter on-the-fly (kein Rerun nötig)
+    selected_sectors = st.session_state.get("chf_sectors", []) or []
+    if selected_sectors and results:
+        results_filtered = [r for r in results
+                            if r.get("_company_sector", "") in selected_sectors]
+    else:
+        results_filtered = results
+
     tab_heatmap, tab_corr, tab_strategies, tab_stress = st.tabs([
         "Portfolio-Matrix", "Negativ-Korrelierte", "Hedge-Strategien", "Stress-Test"
     ])
@@ -959,16 +983,18 @@ def main():
             st.dataframe(styled_corr, hide_index=True, use_container_width=True)
 
     with tab_strategies:
-        if not results:
-            st.info("Keine Strategien — Parameter lockern.")
+        if not results_filtered:
+            st.info("Keine Strategien — Parameter lockern oder Sektor-Filter entfernen.")
         else:
             m1, m2, m3, m4 = st.columns(4)
-            m1.metric("Kandidaten",       len({r["Symbol"] for r in results}))
-            m2.metric("Strategien",        len(results))
-            m3.metric("Bester Hedge Score", f"{results[0]['Hedge Score']:.2f}")
-            m4.metric("Bester RoR",         f"{results[0]['RoR %']:.1f}%")
+            m1.metric("Kandidaten",        len({r["Symbol"] for r in results_filtered}))
+            m2.metric("Strategien",         len(results_filtered))
+            m3.metric("Bester Hedge Score", f"{results_filtered[0]['Hedge Score']:.2f}")
+            m4.metric("Bester RoR",         f"{results_filtered[0]['RoR %']:.1f}%")
+            if selected_sectors:
+                st.caption(f"Sektor-Filter aktiv: {', '.join(selected_sectors)} · {len(results) - len(results_filtered)} ausgeblendet")
 
-            df_disp = pd.DataFrame(results)[_DISPLAY_COLS].copy()
+            df_disp = pd.DataFrame(results_filtered)[_DISPLAY_COLS].copy()
             event = st.dataframe(
                 _style_table(df_disp),
                 use_container_width=True,
@@ -985,7 +1011,7 @@ def main():
             )
             sel = event.selection.rows if hasattr(event, "selection") else []
             if sel:
-                _render_detail(results[sel[0]])
+                _render_detail(results_filtered[sel[0]])
             else:
                 st.caption(
                     "Zeile anklicken für Details + Claude-Analyse. "
@@ -1007,12 +1033,12 @@ Ein Short Put auf XLU mit Korrelation −0.3 und RoR 18% → Score **5.4**
 """)
 
     with tab_stress:
-        if not results:
+        if not results_filtered:
             st.info("Erst 'Hedge-Kandidaten suchen' ausführen.")
         else:
             _render_stress_test(
                 [p for p in positions if p.get("direction", "Long") == "Long"],
-                results, betas, prices,
+                results_filtered, betas, prices,
             )
 
 
