@@ -618,6 +618,23 @@ if not filtered_df.empty:
             corrected_volatility=row.get('corrected_volatility', row.get('sell_iv', 0))
         )
 
+        @st.cache_data(ttl=300)
+        def _load_tech_indicators(symbol: str) -> dict:
+            try:
+                tech_df = select_into_dataframe(
+                    query=(
+                        'SELECT "STOCHk_14_3_1", "STOCHd_14_3_1", "STOCHh_14_3_1", '
+                        '"RSI_14", "EMA_200", "EMA_50", "MACD_12_26_9" '
+                        'FROM "TechnicalIndicatorsCalculated" WHERE symbol = :sym'
+                    ),
+                    params={"sym": symbol}
+                )
+                if not tech_df.empty:
+                    return tech_df.iloc[0].to_dict()
+            except Exception as exc:
+                logger.warning(f"Tech indicators load failed for {symbol}: {exc}")
+            return {}
+
         extra_info = {
             'iv_rank': row.get('iv_rank'),
             'iv_percentile': row.get('iv_percentile'),
@@ -626,7 +643,8 @@ if not filtered_df.empty:
             'analyst_mean_target': row.get('analyst_mean_target'),
             'close': row.get('close'),
             'optionstrat_url': row.get('optionstrat_url'),
-            'Claude': _create_claude_prompt_page_spreads(row)
+            'Claude': _create_claude_prompt_page_spreads(row),
+            'tech_indicators': _load_tech_indicators(row['symbol']),
         }
 
         display_strategy_details(row['symbol'], row.get('Company', 'N/A'), legs, metrics, extra_info)
