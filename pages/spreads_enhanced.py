@@ -41,8 +41,8 @@ DEFAULT_SPREAD_WIDTH = 5
 DEFAULT_MAX_RISK = 1000.0  # $ pro Trade; Breite = floor(max_risk / (100 = shares_per_contract))
 CONTRACT_MULTIPLIER = 100   # shares_per_contract ist in dieser DB ueberall 100 (Aktien, ETFs, Indizes)
 DEFAULT_DELTA_CANDIDATES = 3
-DEFAULT_DTE_MIN = 30
-DEFAULT_DTE_MAX = 52
+DEFAULT_DTE_MIN = 21
+DEFAULT_DTE_MAX = 60
 DTE_SLIDER_MAX = 90  # feste Obergrenze der DTE-Skala (Termine darueber werden ignoriert)
 DEFAULT_OPTION_TYPE = "put"
 DEFAULT_MIN_DAY_VOLUME = 20
