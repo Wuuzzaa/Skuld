@@ -53,6 +53,7 @@ DEFAULT_MIN_MAX_PROFIT = 80.0
 DEFAULT_MIN_IV_RANK = 40
 DEFAULT_MIN_IV_PERCENTILE = 0
 DEFAULT_STRATEGY_TYPE = "credit"
+DEFAULT_MIN_BULL_PUT_SCORE = 0  # 0 = kein Filter
 DEFAULT_ASSET_TYPE = "all"  # all | stock | etf | index
 ASSET_TYPE_LABELS = {
     "all": "Alle",
@@ -95,6 +96,7 @@ DEFAULTS = {
     'enh_min_iv_rank': DEFAULT_MIN_IV_RANK,
     'enh_min_iv_percentile': DEFAULT_MIN_IV_PERCENTILE,
     'enh_strategy_type': DEFAULT_STRATEGY_TYPE,
+    'enh_min_bull_put_score': DEFAULT_MIN_BULL_PUT_SCORE,
     'enh_iv_correction': IV_CORRECTION_MODE,
     'enh_risk_free_rate': RISK_FREE_RATE * 100,
 }
@@ -123,6 +125,7 @@ def clear_all_filters():
     st.session_state.enh_min_iv_percentile = 0
     st.session_state.enh_asset_type = "all"
     st.session_state.enh_sectors = []
+    st.session_state.enh_min_bull_put_score = 0
 
 
 def _on_asset_type_change():
@@ -323,6 +326,16 @@ with st.expander("Configuration and Filters", expanded=True):
     with col19:
         min_iv_percentile = st.number_input("Min iv percentile", min_value=0, max_value=100, step=1, key="enh_min_iv_percentile")
 
+    with col20:
+        min_bull_put_score = st.number_input(
+            "Min Bull-Put-Score (0=aus)",
+            min_value=0,
+            max_value=4,
+            step=1,
+            key="enh_min_bull_put_score",
+            help="Filtert nach Anzahl erfüllter technischer Kriterien (0–4): Kurs > EMA200, Stoch < 20, Stoch dreht hoch, RSI < 45. 0 = kein Filter.",
+        )
+
     st.divider()
     col_iv1, col_iv2, col_iv3 = st.columns(3)
     with col_iv1:
@@ -501,6 +514,15 @@ if selected_sectors and 'company_sector' in filtered_df.columns:
         filtered_df,
         filtered_df['company_sector'].isin(selected_sectors),
         f"Sektor in {', '.join(selected_sectors)}",
+    )
+
+# Min Bull-Put-Score Filter
+min_bull_put_score = st.session_state.get("enh_min_bull_put_score", 0)
+if min_bull_put_score > 0 and 'bull_put_score' in filtered_df.columns:
+    filtered_df = _apply_filter(
+        filtered_df,
+        filtered_df['bull_put_score'] >= min_bull_put_score,
+        f"Bull-Put-Score ≥ {min_bull_put_score}/4",
     )
 
 filtered_df.reset_index(drop=True, inplace=True)

@@ -71,6 +71,19 @@ TargetOptions AS (
 SELECT
     -- symbol data
     sell.symbol,
+    -- technische Indikatoren (LEFT JOIN -> NULL wenn nicht vorhanden)
+    ti."STOCHk_14_3_1",
+    ti."STOCHd_14_3_1",
+    ti."STOCHh_14_3_1",
+    ti."RSI_14",
+    ti."EMA_200",
+    -- Bull-Put-Score: Anzahl erfuellter Kriterien (0-4)
+    (
+        CASE WHEN sell.close > ti."EMA_200"        THEN 1 ELSE 0 END +
+        CASE WHEN ti."STOCHk_14_3_1" < 20          THEN 1 ELSE 0 END +
+        CASE WHEN ti."STOCHh_14_3_1" > 0           THEN 1 ELSE 0 END +
+        CASE WHEN ti."RSI_14" < 45                 THEN 1 ELSE 0 END
+    ) AS bull_put_score,
     sell.expiration_date,
     sell.option_type,
     sell.close,
@@ -136,5 +149,7 @@ INNER JOIN
                 END
         END
     )
+LEFT JOIN
+    "TechnicalIndicatorsCalculated" ti ON ti.symbol = sell.symbol
 WHERE
     sell.delta_rank <= :delta_candidates;
