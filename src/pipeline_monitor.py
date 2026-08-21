@@ -61,23 +61,26 @@ class PipelineMonitor:
     def generate_report(self, success):
         end_time = time.time()
         total_duration = int(end_time - self.start_time) if self.start_time else 0
-        
+
         lines = []
         lines.append(f"Total Runtime: {total_duration}s ({total_duration / 60:.1f} minutes)")
-        
+
         if self.parallel_duration > 0:
             lines.append(f"Parallel Execution: {self.parallel_duration}s")
-            # Estimated savings
             if self.results:
                lines.append(f"Time Saved: ~{(len(self.results) * 60 - self.parallel_duration)}s (estimated)")
 
         lines.append("")
-        
-        # Memory stats
+
+        # Memory stats — only show if at least one task has a real measurement (peak > 0)
         if self.memory_stats:
-            sorted_mem = sorted(self.memory_stats.items(), key=lambda x: x[1]['peak'], reverse=True)
-            max_peak_task = sorted_mem[0]
-            lines.append(f"Highest Peak Memory: {max_peak_task[1]['peak']:.2f} MB ({max_peak_task[0]})")
+            tasks_with_memory = [(name, stats) for name, stats in self.memory_stats.items() if stats['peak'] > 0]
+            if tasks_with_memory:
+                sorted_mem = sorted(tasks_with_memory, key=lambda x: x[1]['peak'], reverse=True)
+                max_peak_task = sorted_mem[0]
+                lines.append(f"Highest Peak Memory: {max_peak_task[1]['peak']:.2f} MB ({max_peak_task[0]})")
+            else:
+                lines.append("Highest Peak Memory: N/A (psutil not available)")
         
         # Failures
         failed_tasks = [name for name, (_, error) in self.results.items() if error is not None]

@@ -95,8 +95,8 @@ if [ $EXIT_CODE -eq 124 ]; then
     /usr/local/bin/python src/send_alert.py "SKULD Alert: Timeout" "Data collection (${MODE}) timed out after ${TIMEOUT_H}h." >> "$LOGFILE" 2>&1
 elif [ $EXIT_CODE -eq 0 ]; then
     echo "$(date): Data collection (${MODE}) completed successfully" >> "$LOGFILE"
-    write_status "OK" "$EXIT_CODE" "$DURATION" ""
-    # Success alert handled by main.py
+    # Status line (OK) is written by main.py's finally-block so the pipeline
+    # summary report is included. No duplicate entry needed here.
 elif [ $EXIT_CODE -eq 137 ]; then
     echo "$(date): Data collection (${MODE}) failed with OUT OF MEMORY (Exit Code 137)" >> "$LOGFILE"
     write_status "OOM" "$EXIT_CODE" "$DURATION" "killed out of memory (137)"

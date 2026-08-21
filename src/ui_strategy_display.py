@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import logging
 import os
+import urllib.parse
 from datetime import datetime
 from typing import List, Optional
 from src.options_utils import OptionLeg, StrategyMetrics
@@ -83,7 +84,10 @@ def display_strategy_details(
     
     # 2. Key Metrics
     st.markdown("#### Kennzahlen & Unternehmensinfos")
-    st.write(f"**Unternehmen:** {company_name}")
+    # Wikipedia: erst DE versuchen, Fallback auf EN
+    wiki_name = urllib.parse.quote(company_name)
+    wiki_url = f"https://de.wikipedia.org/w/index.php?search={wiki_name}&ns0=1"
+    st.markdown(f"**Unternehmen:** [{company_name}]({wiki_url})")
 
     col_info1, col_info2, col_info3, col_info4 = st.columns(4)
     with col_info1:

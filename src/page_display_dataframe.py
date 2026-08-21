@@ -66,6 +66,49 @@ def _add_claude_analysis_link(df: pd.DataFrame, page=None) -> pd.DataFrame:
         df['Claude'] = df.apply(_create_claude_prompt_default, axis=1)
     return df
 
+
+def create_claude_prompt_strategy_finder(strategy: dict, sector: str | None = None) -> str:
+    """Builds a claude.ai URL with pre-filled prompt for a Strategy Finder result row."""
+    symbol = strategy.get("Symbol", "")
+    company = strategy.get("_company_name") or symbol
+    strat_name = strategy.get("Strategie", "")
+    legs_str = strategy.get("Beine", "")
+    verfall = strategy.get("Verfall", "")
+    dte = strategy.get("DTE", "")
+    kredit = strategy.get("Kredit $", 0)
+    max_risk = strategy.get("Max Risiko $", 0)
+    ror = strategy.get("RoR %", 0)
+    delta = strategy.get("Delta", 0)
+    iv = strategy.get("IV %", 0)
+    iv_rank = strategy.get("IV Rank", 0)
+    otm = strategy.get("OTM %", 0)
+    breakeven = strategy.get("Breakeven", 0)
+    stock_price = strategy.get("_stock_price") or 0
+
+    strategy_details = f"""
+Beurteile folgende Options-Strategie für {symbol} ({company}):
+Strategie: {strat_name}
+Beine: {legs_str}
+Verfall: {verfall} ({dte} DTE)
+Kredit: ${kredit:.0f} | Max Risiko: ${max_risk:.0f} | RoR: {ror:.1f}%
+Breakeven: ${breakeven:.2f} | OTM Puffer: {otm:.1f}%
+Delta: {delta:.2f} | IV: {iv:.1f}% | IV Rank: {iv_rank:.0f}
+Aktueller Kurs: ${stock_price:.2f}
+
+Gehe besonders auf die Gewinnwahrscheinlichkeit ein. Kombiniere fundamentale, News, Volatilität und technische Indikatoren.
+Gib eine klare Empfehlung: Strategie umsetzen oder nicht. Begründe mit KPIs.
+"""
+
+    sector_prompt = _get_sector_prompt(sector, symbol)
+    if sector_prompt:
+        prompt = sector_prompt.strip() + "\n" + strategy_details
+    else:
+        prompt = _get_claude_prompt_header(symbol, company) + strategy_details
+
+    prompt += _get_claude_prompt_footer()
+    encoded = urllib.parse.quote(prompt.strip())
+    return f"https://claude.ai/new?q={encoded}"
+
 def _get_claude_prompt_header(symbol, company=None):
     company_info = f" ({company})" if company else ""
     return f"""
