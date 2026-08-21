@@ -641,20 +641,21 @@ if not filtered_df.empty:
         )
 
         @st.cache_data(ttl=300)
-        def _load_tech_indicators(symbol: str) -> dict:
+        def _load_fundamental(symbol: str) -> dict:
             try:
-                tech_df = select_into_dataframe(
+                fd_df = select_into_dataframe(
                     query=(
-                        'SELECT "STOCHk_14_3_1", "STOCHd_14_3_1", "STOCHh_14_3_1", '
-                        '"RSI_14", "EMA_200", "EMA_50", "MACD_12_26_9" '
-                        'FROM "TechnicalIndicatorsCalculated" WHERE symbol = :sym'
+                        'SELECT "FinData_currentRatio", "FinData_debtToEquity", "FinData_returnOnEquity", '
+                        '"FinData_revenueGrowth", "FinData_recommendationKey", "KeyStats_shortPercentOfFloat", '
+                        '"KeyStats_beta", "FinData_profitMargins", "FinData_grossMargins", "FreeCashFlow" '
+                        'FROM "FundamentalData" WHERE symbol = :sym LIMIT 1'
                     ),
                     params={"sym": symbol}
                 )
-                if not tech_df.empty:
-                    return tech_df.iloc[0].to_dict()
+                if not fd_df.empty:
+                    return fd_df.iloc[0].to_dict()
             except Exception as exc:
-                logger.warning(f"Tech indicators load failed for {symbol}: {exc}")
+                logger.warning(f"Fundamental load failed for {symbol}: {exc}")
             return {}
 
         extra_info = {
@@ -667,6 +668,7 @@ if not filtered_df.empty:
             'optionstrat_url': row.get('optionstrat_url'),
             'Claude': _create_claude_prompt_page_spreads(row),
             'tech_indicators': _load_tech_indicators(row['symbol']),
+            'fundamental': _load_fundamental(row['symbol']),
         }
 
         display_strategy_details(row['symbol'], row.get('Company', 'N/A'), legs, metrics, extra_info)

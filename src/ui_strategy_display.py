@@ -166,6 +166,105 @@ def display_strategy_details(
             else:
                 st.warning(f"**Bull-Put-Signal: {score}/4** — Fehlt: {', '.join(not_met)}")
 
+    # Fundamental-Ampel
+    fd = extra_info.get('fundamental') if extra_info else None
+    if fd is not None and any(pd.notnull(fd.get(k)) for k in [
+        'FinData_currentRatio', 'FinData_debtToEquity', 'FinData_returnOnEquity',
+        'FinData_revenueGrowth', 'FinData_recommendationKey', 'KeyStats_shortPercentOfFloat',
+        'KeyStats_beta', 'FinData_profitMargins', 'FinData_grossMargins', 'FreeCashFlow',
+    ]):
+        st.markdown("#### Fundamental-Ampel")
+
+        def _ampel(ok, warn, label, val_str, help_txt):
+            icon = "🟢" if ok else ("🟡" if warn else "🔴")
+            st.metric(f"{icon} {label}", val_str, help=help_txt)
+
+        fc1, fc2, fc3, fc4 = st.columns(4)
+        fund_signals = []
+
+        current_ratio = fd.get('FinData_currentRatio')
+        debt_eq       = fd.get('FinData_debtToEquity')
+        roe           = fd.get('FinData_returnOnEquity')
+        rev_growth    = fd.get('FinData_revenueGrowth')
+        rec_key       = fd.get('FinData_recommendationKey')
+        short_pct     = fd.get('KeyStats_shortPercentOfFloat')
+        beta          = fd.get('KeyStats_beta')
+        profit_margin = fd.get('FinData_profitMargins')
+        gross_margin  = fd.get('FinData_grossMargins')
+        fcf           = fd.get('FreeCashFlow')
+
+        with fc1:
+            if pd.notnull(current_ratio):
+                ok = current_ratio >= 1.5; warn = current_ratio >= 1.0
+                _ampel(ok, warn, "Current Ratio", f"{current_ratio:.2f}",
+                       "≥ 1.5 = solide, < 1.0 = kurzfristig unter Druck")
+                fund_signals.append(ok or warn)
+            if pd.notnull(debt_eq):
+                ok = debt_eq < 50; warn = debt_eq < 150
+                _ampel(ok, warn, "Debt/Equity", f"{debt_eq:.1f}%",
+                       "< 50% = konservativ, > 150% = hohe Verschuldung")
+                fund_signals.append(ok or warn)
+
+        with fc2:
+            if pd.notnull(roe):
+                ok = roe > 0.15; warn = roe > 0
+                _ampel(ok, warn, "ROE", f"{roe*100:.1f}%",
+                       "> 15% = starke Kapitalrendite, < 0% = Verlust")
+                fund_signals.append(ok or warn)
+            if pd.notnull(profit_margin):
+                ok = profit_margin > 0.10; warn = profit_margin > 0
+                _ampel(ok, warn, "Profit Margin", f"{profit_margin*100:.1f}%",
+                       "> 10% = profitabel, < 0% = Verlustzone")
+                fund_signals.append(ok or warn)
+
+        with fc3:
+            if pd.notnull(rev_growth):
+                ok = rev_growth > 0.05; warn = rev_growth > -0.05
+                _ampel(ok, warn, "Rev. Wachstum", f"{rev_growth*100:.1f}%",
+                       "> 5% = wächst, < -5% = schrumpft")
+                fund_signals.append(ok or warn)
+            if pd.notnull(gross_margin):
+                ok = gross_margin > 0.40; warn = gross_margin > 0.20
+                _ampel(ok, warn, "Gross Margin", f"{gross_margin*100:.1f}%",
+                       "> 40% = hohes Pricing Power, < 20% = commodity-artig")
+                fund_signals.append(ok or warn)
+
+        with fc4:
+            if pd.notnull(beta):
+                ok = beta < 1.5; warn = beta < 2.0
+                _ampel(ok, warn, "Beta", f"{beta:.2f}",
+                       "< 1.5 = moderat volatil, > 2.0 = sehr volatil")
+                fund_signals.append(ok or warn)
+            if pd.notnull(short_pct):
+                ok = short_pct < 0.05; warn = short_pct < 0.15
+                _ampel(ok, warn, "Short Interest", f"{short_pct*100:.1f}%",
+                       "< 5% = kein Druck, > 15% = viele wetten gegen die Aktie")
+                fund_signals.append(ok or warn)
+
+        # Analystenmeinung + FCF als Text
+        info_parts = []
+        if pd.notnull(rec_key):
+            rec_icons = {"strong_buy": "🟢 Strong Buy", "buy": "🟢 Buy",
+                         "hold": "🟡 Hold", "sell": "🔴 Sell", "strong_sell": "🔴 Strong Sell"}
+            info_parts.append(f"**Analysten:** {rec_icons.get(rec_key, rec_key)}")
+        if pd.notnull(fcf) and fcf != 0:
+            fcf_b = fcf / 1e9
+            fcf_icon = "🟢" if fcf > 0 else "🔴"
+            info_parts.append(f"**Free Cash Flow:** {fcf_icon} {fcf_b:+.1f}B")
+        if info_parts:
+            st.write("  |  ".join(info_parts))
+
+        # Gesamturteil
+        if fund_signals:
+            green = sum(fund_signals)
+            total = len(fund_signals)
+            if green == total:
+                st.success(f"**Fundamental: {green}/{total}** — Alle Kennzahlen im grünen Bereich")
+            elif green >= total * 0.6:
+                st.info(f"**Fundamental: {green}/{total}** — Überwiegend solide")
+            else:
+                st.warning(f"**Fundamental: {green}/{total}** — Mehrere Warnsignale")
+
     # 3. External Links
     display_external_links(symbol, extra_info)
 
