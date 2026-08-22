@@ -24,8 +24,22 @@ SELECT
     o.company_name,
     o.company_sector,
     o.company_industry,
-    o."Summary_marketCap"                 AS market_cap
+    o."Summary_marketCap"                 AS market_cap,
+    -- Technische Indikatoren (Underlying-Ebene, LEFT JOIN -> NULL wenn nicht vorhanden)
+    ti."RSI_14",
+    ti."STOCHk_14_3_1",
+    ti."STOCHh_14_3_1",
+    ti."EMA_50",
+    ti."EMA_200",
+    ti."MACDh_12_26_9",
+    ti."ADX_10",
+    ti."DMP_10",
+    ti."DMN_10",
+    -- Beta für "Langweilige Aktien"-Filter (Market Cap ist bereits market_cap oben)
+    f."KeyStats_beta"                     AS beta
 FROM "OptionDataMerged" o
+LEFT JOIN "TechnicalIndicatorsCalculated" ti ON ti.symbol = o.symbol
+LEFT JOIN "FundamentalData" f ON f.symbol = o.symbol
 WHERE o.symbol            = :symbol
   AND o.days_to_expiration BETWEEN :dte_min AND :dte_max
   AND o.open_interest     >= :min_open_interest

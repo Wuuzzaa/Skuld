@@ -18,6 +18,69 @@ _DELTA_SPREAD_BUY_DEF   = 0.15
 MIN_OI_DEFAULT          = 50
 MIN_VOL_DEFAULT         = 5
 
+# ── "Langweilige Aktien" Kriterien (wie Spreads Enhanced) ─────────────────────
+BORING_SECTORS = {
+    "Consumer Defensive", "Utilities", "Healthcare",
+    "Consumer Staples", "Communication Services",
+}
+BORING_MAX_BETA = 1.0
+BORING_MAX_IV = 0.40
+BORING_MIN_MARKET_CAP = 20_000_000_000  # $20 Mrd
+
+# ── Strategie → Score-Richtung (mit User geklärt) ─────────────────────────────
+_STRATEGY_DIRECTION = {
+    "Short Put":        "bull",
+    "Bull Put Spread":  "bull",
+    "Bear Call Spread": "bear",
+    "Covered Call":     "bear",
+    "Iron Condor":      None,   # neutral → kein Score
+}
+
+
+def _is_num(v) -> bool:
+    return v is not None and not (isinstance(v, float) and v != v)
+
+
+def _tech_score(tech: dict, direction: str, style: str) -> int | None:
+    """
+    Technischer Timing-Score (0-6), richtungs- + stil-abhängig.
+    Bildet die Kriterien aus spreads_enhanced_multidate_input.sql exakt 1:1 ab.
+    direction: 'bull' | 'bear' ; style: 'trend' | 'dip'. None wenn Indikatoren fehlen.
+    """
+    if direction is None:
+        return None
+    close = tech.get("close")
+    ema50 = tech.get("EMA_50")
+    ema200 = tech.get("EMA_200")
+    rsi = tech.get("RSI_14")
+    stoch_k = tech.get("STOCHk_14_3_1")
+    stoch_h = tech.get("STOCHh_14_3_1")
+    macdh = tech.get("MACDh_12_26_9")
+    adx = tech.get("ADX_10")
+    dmp = tech.get("DMP_10")
+    dmn = tech.get("DMN_10")
+    needed = [close, ema50, ema200, rsi, stoch_k, adx, dmp, dmn, macdh]
+    if not all(_is_num(v) for v in needed):
+        return None
+
+    if direction == "bull" and style == "trend":
+        s = [close > ema200, close > ema50, 45 <= rsi <= 70,
+             20 <= stoch_k <= 80, adx > 18 and dmp > dmn, macdh > 0]
+    elif direction == "bull" and style == "dip":
+        if not _is_num(stoch_h):
+            return None
+        s = [close > ema200, 30 <= rsi <= 45, stoch_k < 20,
+             stoch_h > 0, adx > 18 and dmp > dmn, macdh > 0]
+    elif direction == "bear" and style == "trend":
+        s = [close < ema200, close < ema50, 30 <= rsi <= 55,
+             20 <= stoch_k <= 80, adx > 18 and dmn > dmp, macdh < 0]
+    else:  # bear + dip
+        if not _is_num(stoch_h):
+            return None
+        s = [close < ema200, 55 <= rsi <= 70, stoch_k > 80,
+             stoch_h < 0, adx > 18 and dmn > dmp, macdh < 0]
+    return int(sum(bool(x) for x in s))
+
 
 # ── Datenladen ────────────────────────────────────────────────────────────────
 
@@ -83,7 +146,9 @@ def _load_chain(date: str, symbol: str, dte_min: int, dte_max: int,
         return pd.DataFrame()
     for col in ["strike_price", "premium", "greeks_delta", "implied_volatility",
                 "greeks_theta", "open_interest", "day_volume", "stock_price",
-                "iv_rank", "hv_30d"]:
+                "iv_rank", "hv_30d", "market_cap",
+                "RSI_14", "STOCHk_14_3_1", "STOCHh_14_3_1", "EMA_50", "EMA_200",
+                "MACDh_12_26_9", "ADX_10", "DMP_10", "DMN_10", "beta"]:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
     df["dte"] = pd.to_numeric(df["dte"], errors="coerce")
@@ -153,7 +218,7 @@ def _earnings_before_expiry(s: dict) -> str | None:
 
 def build_strategies(df: pd.DataFrame, min_profit: float, max_risk: float,
                      outlook: str, delta_short: float, delta_buy: float,
-                     max_delta: float | None = None) -> list[dict]:
+                     max_delta: float | None = None, score_style: str = "trend") -> list[dict]:
     if df.empty:
         return []
 
@@ -162,6 +227,19 @@ def build_strategies(df: pd.DataFrame, min_profit: float, max_risk: float,
     company_name = df["company_name"].iloc[0] if "company_name" in df.columns else symbol
     company_sector = df["company_sector"].iloc[0] if "company_sector" in df.columns else None
     results: list[dict] = []
+
+    # Tech-Indikatoren + Beta/MCap sind auf Underlying-Ebene (pro Symbol identisch) → erste Zeile.
+    def _first(col):
+        return df[col].iloc[0] if col in df.columns and len(df) else None
+    tech = {
+        "close": float(stock_price) if _is_num(stock_price) else None,
+        "EMA_50": _first("EMA_50"), "EMA_200": _first("EMA_200"),
+        "RSI_14": _first("RSI_14"), "STOCHk_14_3_1": _first("STOCHk_14_3_1"),
+        "STOCHh_14_3_1": _first("STOCHh_14_3_1"), "MACDh_12_26_9": _first("MACDh_12_26_9"),
+        "ADX_10": _first("ADX_10"), "DMP_10": _first("DMP_10"), "DMN_10": _first("DMN_10"),
+    }
+    sym_beta = _first("beta")
+    sym_mcap = _first("market_cap")
 
     puts  = df[df["option_type"] == "put"].copy()
     calls = df[df["option_type"] == "call"].copy()
@@ -316,9 +394,17 @@ def build_strategies(df: pd.DataFrame, min_profit: float, max_risk: float,
                             ],
                         ))
 
-    # stock_price in alle rows eintragen
+    # stock_price + Tech/Beta/MCap in alle rows eintragen
     for r in results:
         r["_stock_price"] = float(stock_price)
+        r["_tech"] = tech
+        r["_beta"] = float(sym_beta) if _is_num(sym_beta) else None
+        r["_market_cap"] = float(sym_mcap) if _is_num(sym_mcap) else None
+        direction = _STRATEGY_DIRECTION.get(r["Strategie"])
+        r["_score_direction"] = direction
+        r["tech_score"] = _tech_score(tech, direction, score_style)
+        r["_rsi"] = tech.get("RSI_14")
+        r["_stoch_k"] = tech.get("STOCHk_14_3_1")
     return results
 
 
@@ -360,7 +446,7 @@ def _row(strat, symbol, exp_date, dte, legs, kredit, max_profit, max_risk,
 _DISPLAY_COLS = [
     "Strategie", "Symbol", "Verfall", "DTE", "Beine",
     "Kredit $", "Max Profit $", "Max Risiko $", "RoR %",
-    "Breakeven", "Delta", "IV %", "IV Rank", "OTM %",
+    "Breakeven", "Delta", "IV %", "IV Rank", "OTM %", "Score",
 ]
 
 
@@ -476,13 +562,34 @@ def _render_detail(s: dict):
         corrected_volatility=s["IV %"] / 100,
     )
 
+    # Short-Strike der Strategie (für Sicherheitspuffer). Bei Iron Condor: Short-Put-Strike.
+    short_legs = [l for l in raw_legs if l["action"] == "Short"]
+    direction = s.get("_score_direction")  # bull | bear | None
+    # Puffer-Richtung: Put-Seite (Bull Put/Short Put/IC) misst nach unten, Call-Seite nach oben.
+    is_put = direction != "bear"  # bull + neutral(IC) => Put-Referenz nach unten
+    if direction == "bear":
+        ref_short = next((l for l in short_legs if l["type"] == "Call"), None)
+    else:
+        ref_short = next((l for l in short_legs if l["type"] == "Put"),
+                         short_legs[0] if short_legs else None)
+    sell_strike = ref_short["strike"] if ref_short else None
+
     extra_info = {
         "iv_rank":        s["IV Rank"],
         "iv_percentile":  None,
-        "company_sector": None,
+        "company_sector": s.get("_company_sector"),
         "company_industry": None,
         "analyst_mean_target": None,
         "close": stock_price,
+        # Sicherheitspuffer
+        "sell_strike": sell_strike,
+        "break_even": s.get("Breakeven"),
+        "is_put": is_put,
+        # Technische Signale (richtungs-/stil-abhängig). Bei Iron Condor (direction None)
+        # keine Tech-Signale, da neutral.
+        "tech_indicators": s.get("_tech") if direction else None,
+        "tech_score_direction": direction if direction else "bull",
+        "tech_score_style": st.session_state.get("sf_score_style", "trend"),
     }
 
     display_strategy_details(s["Symbol"], s.get("_company_name") or s["Symbol"], option_legs, metrics, extra_info)
@@ -495,6 +602,10 @@ def _render_table(rows: list[dict], tab_key: str):
     if not rows:
         st.info("Keine Treffer in dieser Kategorie.")
         return
+    rows = [dict(r) for r in rows]  # nicht die Originale mutieren
+    for r in rows:
+        ts = r.get("tech_score")
+        r["Score"] = f"{int(ts)}/6" if _is_num(ts) else "–"
     df = pd.DataFrame(rows)[_DISPLAY_COLS].copy()
     warns = [r for r in rows if r["_earnings_warn"]]
     if warns:
@@ -514,6 +625,7 @@ def _render_table(rows: list[dict], tab_key: str):
             "Max Profit $": st.column_config.NumberColumn("Max Profit $", format="$%.0f"),
             "Max Risiko $": st.column_config.NumberColumn("Max Risiko $", format="$%.0f"),
             "Breakeven":    st.column_config.NumberColumn("Breakeven",    format="$%.2f"),
+            "Score": st.column_config.TextColumn("Score", help="Techn. Timing-Score 0-6 passend zur Strategie-Richtung; – = neutral/keine Daten"),
         },
     )
 
@@ -606,6 +718,36 @@ def main():
             only_overpriced = st.toggle("Nur BS-überbewertet", value=False,
                                         help="Nur Strategien zeigen, bei denen ALLE Legs teurer als der BS-Preis sind (gut für Prämienverkäufer).")
 
+    # ── Technische Filter (wie Spreads Enhanced) ──────────────────────────────
+    with st.expander("Technische Filter", expanded=False):
+        tc1, tc2, tc3 = st.columns(3)
+        with tc1:
+            score_style = st.radio(
+                "Score-Stil", ["trend", "dip"],
+                format_func=lambda k: "Trend/Stärke" if k == "trend" else "Dip/Rücksetzer",
+                horizontal=True,
+                key="sf_score_style",
+                help="Trend/Stärke: stabil im Trend, nicht überverkauft (kein fallendes Messer). "
+                     "Dip/Rücksetzer: in überverkaufte Schwäche verkaufen. Score-Richtung folgt "
+                     "der Strategie (Short/Bull Put=bull, Bear Call/Covered Call=bear, Iron Condor=neutral).",
+            )
+            min_tech_score = st.slider("Min Tech-Score (0=aus)", 0, 6, 0,
+                                       help="Filtert nach erfüllten technischen Timing-Kriterien (0-6) "
+                                            "passend zur Richtung der jeweiligen Strategie. Iron Condor "
+                                            "(neutral) wird vom Score-Filter nicht betroffen.")
+        with tc2:
+            rsi_range = st.slider("RSI 14 Bereich", 0, 100, (0, 100),
+                                  help="Zeigt nur Symbole mit RSI in diesem Bereich. 0–100 = aus. "
+                                       "Für 'nicht überverkauft' z.B. 40–70.")
+            stoch_range = st.slider("Stochastik %K Bereich", 0, 100, (0, 100),
+                                    help="Zeigt nur Symbole mit Stochastik %K in diesem Bereich. "
+                                         "0–100 = aus. Für 'nicht über-/unterkauft' z.B. 20–80.")
+        with tc3:
+            boring_only = st.toggle("Nur langweilige Aktien", value=False,
+                                    help="Nur stabile Large-Caps (Coca-Cola/Pepsi-Typ): Beta ≤ 1.0, "
+                                         "IV ≤ 40%, Market Cap ≥ $20 Mrd, defensive Sektoren. "
+                                         "Für ruhige, planbare Prämie.")
+
     run = st.button("Strategien suchen", type="primary", use_container_width=True)
 
     if not run and "sf_results" not in st.session_state:
@@ -630,7 +772,8 @@ def main():
             if df.empty:
                 continue
             rows = build_strategies(df, min_profit, max_risk, outlook, delta_short, delta_buy,
-                                    max_delta=max_delta_val if use_max_delta else None)
+                                    max_delta=max_delta_val if use_max_delta else None,
+                                    score_style=score_style)
             all_results.extend(rows)
         progress.empty()
 
@@ -649,6 +792,34 @@ def main():
         filtered = [s for s in filtered if s["OTM %"] >= min_puffer]
     if only_overpriced:
         filtered = [s for s in filtered if s.get("_all_overpriced", False)]
+
+    # Technische Filter (Score / RSI / Stoch / Langweiler)
+    if min_tech_score > 0:
+        # Iron Condor (tech_score None) neutral → durchlassen; sonst Score-Schwelle
+        filtered = [s for s in filtered
+                    if s.get("tech_score") is None or s["tech_score"] >= min_tech_score]
+    _rsi_lo, _rsi_hi = rsi_range
+    if _rsi_lo > 0 or _rsi_hi < 100:
+        filtered = [s for s in filtered
+                    if not _is_num(s.get("_rsi")) or (_rsi_lo <= s["_rsi"] <= _rsi_hi)]
+    _st_lo, _st_hi = stoch_range
+    if _st_lo > 0 or _st_hi < 100:
+        filtered = [s for s in filtered
+                    if not _is_num(s.get("_stoch_k")) or (_st_lo <= s["_stoch_k"] <= _st_hi)]
+    if boring_only:
+        def _boring(s) -> bool:
+            beta = s.get("_beta"); mcap = s.get("_market_cap")
+            sector = s.get("_company_sector"); iv = s.get("IV %", 0) / 100
+            if not _is_num(beta) or beta > BORING_MAX_BETA:
+                return False
+            if iv > BORING_MAX_IV:
+                return False
+            if not _is_num(mcap) or mcap < BORING_MIN_MARKET_CAP:
+                return False
+            if sector not in BORING_SECTORS:
+                return False
+            return True
+        filtered = [s for s in filtered if _boring(s)]
 
     if not filtered:
         if all_results:
@@ -683,7 +854,11 @@ def main():
 
     # CSV-Export
     with st.expander("CSV Export"):
-        df_export = pd.DataFrame(filtered)[_DISPLAY_COLS]
+        export_rows = [dict(r) for r in filtered]
+        for r in export_rows:
+            ts = r.get("tech_score")
+            r["Score"] = f"{int(ts)}/6" if _is_num(ts) else "–"
+        df_export = pd.DataFrame(export_rows)[_DISPLAY_COLS]
         csv = df_export.to_csv(index=False).encode("utf-8")
         label = st.session_state.get("sf_last_symbol") or "scan"
         st.download_button("Download CSV", csv, f"strategies_{label}.csv", "text/csv")
