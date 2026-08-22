@@ -128,6 +128,26 @@ def _load_all_symbols(min_market_cap_b: float = 0.0) -> list[str]:
     return df["symbol"].dropna().astype(str).tolist()
 
 
+@st.cache_data(ttl=600)
+def _load_fundamental(symbol: str) -> dict:
+    """Fundamentaldaten für die Fundamental-Ampel im Detail-View (wie Spreads Enhanced)."""
+    try:
+        fd_df = select_into_dataframe(
+            query=(
+                'SELECT "FinData_currentRatio", "FinData_debtToEquity", "FinData_returnOnEquity", '
+                '"FinData_revenueGrowth", "FinData_recommendationKey", "KeyStats_shortPercentOfFloat", '
+                '"KeyStats_beta", "FinData_profitMargins", "FinData_grossMargins", "FreeCashFlow" '
+                'FROM "FundamentalData" WHERE symbol = :sym LIMIT 1'
+            ),
+            params={"sym": symbol.upper().strip()},
+        )
+        if fd_df is not None and not fd_df.empty:
+            return fd_df.iloc[0].to_dict()
+    except Exception:
+        pass
+    return {}
+
+
 @st.cache_data(ttl=1800)
 def _load_chain(date: str, symbol: str, dte_min: int, dte_max: int,
                 min_oi: int, min_vol: int) -> pd.DataFrame:
@@ -226,6 +246,7 @@ def build_strategies(df: pd.DataFrame, min_profit: float, max_risk: float,
     symbol = df["symbol"].iloc[0] if "symbol" in df.columns else ""
     company_name = df["company_name"].iloc[0] if "company_name" in df.columns else symbol
     company_sector = df["company_sector"].iloc[0] if "company_sector" in df.columns else None
+    company_industry = df["company_industry"].iloc[0] if "company_industry" in df.columns else None
     results: list[dict] = []
 
     # Tech-Indikatoren + Beta/MCap sind auf Underlying-Ebene (pro Symbol identisch) → erste Zeile.
@@ -400,6 +421,7 @@ def build_strategies(df: pd.DataFrame, min_profit: float, max_risk: float,
         r["_tech"] = tech
         r["_beta"] = float(sym_beta) if _is_num(sym_beta) else None
         r["_market_cap"] = float(sym_mcap) if _is_num(sym_mcap) else None
+        r["_company_industry"] = company_industry
         direction = _STRATEGY_DIRECTION.get(r["Strategie"])
         r["_score_direction"] = direction
         r["tech_score"] = _tech_score(tech, direction, score_style)
@@ -578,7 +600,7 @@ def _render_detail(s: dict):
         "iv_rank":        s["IV Rank"],
         "iv_percentile":  None,
         "company_sector": s.get("_company_sector"),
-        "company_industry": None,
+        "company_industry": s.get("_company_industry"),
         "analyst_mean_target": None,
         "close": stock_price,
         # Sicherheitspuffer
@@ -590,6 +612,8 @@ def _render_detail(s: dict):
         "tech_indicators": s.get("_tech") if direction else None,
         "tech_score_direction": direction if direction else "bull",
         "tech_score_style": st.session_state.get("sf_score_style", "trend"),
+        # Fundamental-Ampel (wie Spreads Enhanced)
+        "fundamental": _load_fundamental(s["Symbol"]),
     }
 
     display_strategy_details(s["Symbol"], s.get("_company_name") or s["Symbol"], option_legs, metrics, extra_info)
