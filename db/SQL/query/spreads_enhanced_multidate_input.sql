@@ -91,11 +91,14 @@ SELECT
     (
         CASE
             -- ── BULL / TREND (Schule A, Default) ──────────────────────────────
+            -- Aktie stabil im Aufwaertstrend, gesundes Momentum, NICHT im Extrem.
+            -- RSI-Fenster 45-70: Cardwell "range shift" -> Aufwaertstrend traegt RSI ~40-80,
+            -- 45-70 = gesunde Staerke ohne die Ueberkauft-Extremzone (>70).
             WHEN :score_direction = 'bull' AND :score_style = 'trend' THEN (
                 CASE WHEN sell.close > ti."EMA_200" THEN 1 ELSE 0 END +          -- Aufwaertstrend (200er)
                 CASE WHEN sell.close > ti."EMA_50"  THEN 1 ELSE 0 END +          -- Trend intakt (50er)
-                CASE WHEN ti."RSI_14" BETWEEN 50 AND 65 THEN 1 ELSE 0 END +      -- Staerke, aber nicht ueberkauft
-                CASE WHEN ti."STOCHk_14_3_1" BETWEEN 20 AND 80 THEN 1 ELSE 0 END +  -- gesundes Mittelfeld (weder ueber-/unterkauft)
+                CASE WHEN ti."RSI_14" BETWEEN 45 AND 70 THEN 1 ELSE 0 END +      -- gesunde Staerke, nicht ueberkauft
+                CASE WHEN ti."STOCHk_14_3_1" BETWEEN 20 AND 80 THEN 1 ELSE 0 END +  -- Mittelfeld (weder ueber-/unterkauft)
                 CASE WHEN ti."ADX_10" > 18 AND ti."DMP_10" > ti."DMN_10" THEN 1 ELSE 0 END +  -- Aufwaertstrend m. Substanz
                 CASE WHEN ti."MACDh_12_26_9" > 0 THEN 1 ELSE 0 END               -- Momentum oben
             )
@@ -109,13 +112,15 @@ SELECT
                 CASE WHEN ti."MACDh_12_26_9" > 0 THEN 1 ELSE 0 END               -- Momentum dreht hoch
             )
             -- ── BEAR / TREND (Schule A gespiegelt) ────────────────────────────
+            -- Exakt gespiegelt: Aktie stabil im Abwaertstrend, NICHT im Extrem.
+            -- RSI 30-55 = gespiegeltes Cardwell-Fenster (Abwaertstrend traegt RSI ~20-60).
             WHEN :score_direction = 'bear' AND :score_style = 'trend' THEN (
-                CASE WHEN sell.close < ti."EMA_200" THEN 1 ELSE 0 END +
-                CASE WHEN sell.close < ti."EMA_50"  THEN 1 ELSE 0 END +
-                CASE WHEN ti."RSI_14" BETWEEN 35 AND 50 THEN 1 ELSE 0 END +
-                CASE WHEN ti."STOCHk_14_3_1" BETWEEN 20 AND 80 THEN 1 ELSE 0 END +  -- gesundes Mittelfeld
-                CASE WHEN ti."ADX_10" > 18 AND ti."DMN_10" > ti."DMP_10" THEN 1 ELSE 0 END +
-                CASE WHEN ti."MACDh_12_26_9" < 0 THEN 1 ELSE 0 END
+                CASE WHEN sell.close < ti."EMA_200" THEN 1 ELSE 0 END +          -- Abwaertstrend (200er)
+                CASE WHEN sell.close < ti."EMA_50"  THEN 1 ELSE 0 END +          -- Trend intakt (50er)
+                CASE WHEN ti."RSI_14" BETWEEN 30 AND 55 THEN 1 ELSE 0 END +      -- gesunde Schwaeche, nicht ueberverkauft
+                CASE WHEN ti."STOCHk_14_3_1" BETWEEN 20 AND 80 THEN 1 ELSE 0 END +  -- Mittelfeld
+                CASE WHEN ti."ADX_10" > 18 AND ti."DMN_10" > ti."DMP_10" THEN 1 ELSE 0 END +  -- Abwaertstrend m. Substanz
+                CASE WHEN ti."MACDh_12_26_9" < 0 THEN 1 ELSE 0 END               -- Momentum unten
             )
             -- ── BEAR / DIP (Schule B gespiegelt = ueberkaufter Rip verkaufen) ──
             WHEN :score_direction = 'bear' AND :score_style = 'dip' THEN (

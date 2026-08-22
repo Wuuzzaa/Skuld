@@ -367,6 +367,31 @@ with st.expander("Configuration and Filters", expanded=True):
                 "aber mehr Risiko. Ändert nur die Score-Kriterien, nicht die Richtung."
             ),
         )
+        with st.expander("Was bedeuten die Indikatoren? (Kriterien-Erklärung)"):
+            st.markdown("""
+Der Score zählt 0–6 erfüllte Timing-Kriterien. **Richtung** folgt dem Option-Typ:
+**Put → Bull Put** (bullish), **Call → Bear Call** (bearish, exakt gespiegelt).
+
+**Trend/Stärke (Default, für Prämienverkäufer empfohlen):**
+
+| Kriterium | Bull Put (Put) | Bear Call (Call) | Warum |
+|---|---|---|---|
+| Kurs vs EMA200 | über | unter | Übergeordneter Trend |
+| Kurs vs EMA50 | über | unter | Mittelfristiger Trend intakt |
+| RSI 14 | 45–70 | 30–55 | Trendstärke, aber **nicht im Extrem** (>70 überkauft / <30 überverkauft) |
+| Stochastic %K | 20–80 | 20–80 | Gesundes Mittelfeld — weder über- noch unterkauft |
+| ADX + DI | ADX>18, +DI>−DI | ADX>18, −DI>+DI | Trend hat Substanz **und** zeigt in die richtige Richtung |
+| MACD-Histogramm | > 0 | < 0 | Momentum bestätigt die Richtung |
+
+Ziel: Aktie läuft **ruhig im Trend**, ist aber **nicht heißgelaufen** (kein Rücksetzer-Risiko
+in der Laufzeit) und **kein fallendes Messer**.
+
+**Dip/Rücksetzer (aggressiver):** verkauft in überverkaufte Schwäche (Bull: RSI 30–45,
+Stoch < 20) — höhere Prämie durch erhöhte IV, aber Timing-Risiko wenn der Fall weitergeht.
+
+*RSI-Fenster nach Cardwell "range shift": ein Aufwärtstrend trägt RSI ~40–80, ein
+Abwärtstrend ~20–60. Quelle: RSI/Stochastic/ADX/MACD-Grundlagen (Wikipedia).*
+""")
 
     st.divider()
     col_iv1, col_iv2, col_iv3 = st.columns(3)
