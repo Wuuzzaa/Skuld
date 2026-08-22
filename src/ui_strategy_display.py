@@ -143,7 +143,7 @@ def display_strategy_details(
         with tc1:
             val = f"{stoch_k:.1f}" if pd.notnull(stoch_k) else "N/A"
             if is_trend:
-                hint = "> 20 = nicht überverkauft" if is_bull else "< 80 = nicht überkauft"
+                hint = "20–80 = gesundes Mittelfeld (nicht über-/unterkauft)"
             else:
                 hint = "< 20 = überverkauft (Dip-Einstieg)" if is_bull else "> 80 = überkauft (Rip)"
             st.metric("Stoch %K", val, help=hint)
@@ -198,9 +198,9 @@ def display_strategy_details(
         if all(pd.notnull(v) for v in _needed):
             if is_bull and is_trend:
                 signals = [close > ema200, close > ema50, 50 <= rsi <= 65,
-                           stoch_k > 20, adx > 18 and dmp > dmn, macdh > 0]
+                           20 <= stoch_k <= 80, adx > 18 and dmp > dmn, macdh > 0]
                 labels = ["Kurs > EMA200", "Kurs > EMA50", "RSI 50–65 (Stärke)",
-                          "Stoch > 20 (nicht überverkauft)", "ADX↑ Aufwärtstrend", "MACD-Hist > 0"]
+                          "Stoch 20–80 (Mittelfeld)", "ADX↑ Aufwärtstrend", "MACD-Hist > 0"]
             elif is_bull and not is_trend:
                 signals = [close > ema200, 30 <= rsi <= 45, stoch_k < 20,
                            stoch_h > 0, adx > 18 and dmp > dmn, macdh > 0]
@@ -208,9 +208,9 @@ def display_strategy_details(
                           "Stoch dreht hoch", "ADX↑ Aufwärtstrend", "MACD-Hist > 0"]
             elif not is_bull and is_trend:
                 signals = [close < ema200, close < ema50, 35 <= rsi <= 50,
-                           stoch_k < 80, adx > 18 and dmn > dmp, macdh < 0]
+                           20 <= stoch_k <= 80, adx > 18 and dmn > dmp, macdh < 0]
                 labels = ["Kurs < EMA200", "Kurs < EMA50", "RSI 35–50 (Schwäche)",
-                          "Stoch < 80 (nicht überkauft)", "ADX↓ Abwärtstrend", "MACD-Hist < 0"]
+                          "Stoch 20–80 (Mittelfeld)", "ADX↓ Abwärtstrend", "MACD-Hist < 0"]
             else:  # bear + dip
                 signals = [close < ema200, 55 <= rsi <= 70, stoch_k > 80,
                            stoch_h < 0, adx > 18 and dmn > dmp, macdh < 0]

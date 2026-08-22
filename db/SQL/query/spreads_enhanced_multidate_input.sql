@@ -94,8 +94,8 @@ SELECT
             WHEN :score_direction = 'bull' AND :score_style = 'trend' THEN (
                 CASE WHEN sell.close > ti."EMA_200" THEN 1 ELSE 0 END +          -- Aufwaertstrend (200er)
                 CASE WHEN sell.close > ti."EMA_50"  THEN 1 ELSE 0 END +          -- Trend intakt (50er)
-                CASE WHEN ti."RSI_14" BETWEEN 50 AND 65 THEN 1 ELSE 0 END +      -- Staerke, nicht ueberkauft
-                CASE WHEN ti."STOCHk_14_3_1" > 20 THEN 1 ELSE 0 END +            -- NICHT ueberverkauft
+                CASE WHEN ti."RSI_14" BETWEEN 50 AND 65 THEN 1 ELSE 0 END +      -- Staerke, aber nicht ueberkauft
+                CASE WHEN ti."STOCHk_14_3_1" BETWEEN 20 AND 80 THEN 1 ELSE 0 END +  -- gesundes Mittelfeld (weder ueber-/unterkauft)
                 CASE WHEN ti."ADX_10" > 18 AND ti."DMP_10" > ti."DMN_10" THEN 1 ELSE 0 END +  -- Aufwaertstrend m. Substanz
                 CASE WHEN ti."MACDh_12_26_9" > 0 THEN 1 ELSE 0 END               -- Momentum oben
             )
@@ -113,7 +113,7 @@ SELECT
                 CASE WHEN sell.close < ti."EMA_200" THEN 1 ELSE 0 END +
                 CASE WHEN sell.close < ti."EMA_50"  THEN 1 ELSE 0 END +
                 CASE WHEN ti."RSI_14" BETWEEN 35 AND 50 THEN 1 ELSE 0 END +
-                CASE WHEN ti."STOCHk_14_3_1" < 80 THEN 1 ELSE 0 END +
+                CASE WHEN ti."STOCHk_14_3_1" BETWEEN 20 AND 80 THEN 1 ELSE 0 END +  -- gesundes Mittelfeld
                 CASE WHEN ti."ADX_10" > 18 AND ti."DMN_10" > ti."DMP_10" THEN 1 ELSE 0 END +
                 CASE WHEN ti."MACDh_12_26_9" < 0 THEN 1 ELSE 0 END
             )
