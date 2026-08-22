@@ -54,8 +54,13 @@ DEFAULT_MIN_IV_RANK = 40
 DEFAULT_MIN_IV_PERCENTILE = 0
 DEFAULT_STRATEGY_TYPE = "credit"
 DEFAULT_MIN_TECH_SCORE = 0  # 0 = kein Filter (Score 0-6, richtungsabhaengig)
+DEFAULT_SCORE_STYLE = "trend"  # trend (Schule A) | dip (Schule B)
 DEFAULT_BORING_ONLY = False  # "Langweilige Aktien" Filter (low-vol, stabile Large-Caps)
 DEFAULT_ASSET_TYPE = "all"  # all | stock | etf | index
+SCORE_STYLE_LABELS = {
+    "trend": "Trend / Stärke (nicht überverkauft)",
+    "dip": "Dip / Rücksetzer (überverkauft)",
+}
 ASSET_TYPE_LABELS = {
     "all": "Alle",
     "stock": "Nur Aktien",
@@ -98,6 +103,7 @@ DEFAULTS = {
     'enh_min_iv_percentile': DEFAULT_MIN_IV_PERCENTILE,
     'enh_strategy_type': DEFAULT_STRATEGY_TYPE,
     'enh_min_tech_score': DEFAULT_MIN_TECH_SCORE,
+    'enh_score_style': DEFAULT_SCORE_STYLE,
     'enh_boring_only': DEFAULT_BORING_ONLY,
     'enh_iv_correction': IV_CORRECTION_MODE,
     'enh_risk_free_rate': RISK_FREE_RATE * 100,
@@ -128,6 +134,7 @@ def clear_all_filters():
     st.session_state.enh_asset_type = "all"
     st.session_state.enh_sectors = []
     st.session_state.enh_min_tech_score = 0
+    st.session_state.enh_score_style = "trend"
     st.session_state.enh_boring_only = False
 
 
@@ -344,8 +351,20 @@ with st.expander("Configuration and Filters", expanded=True):
             help=(
                 f"Filtert nach Anzahl erfüllter technischer Timing-Kriterien (0–6) für ein "
                 f"{_score_label}-Setup. Richtung folgt automatisch dem Option-Typ "
-                f"(Put=bullish, Call=bearish). Kriterien-Details siehe Doku-Expander unten. "
-                f"Empfehlung: 3–4 als solides Setup. 0 = kein Filter."
+                f"(Put=bullish, Call=bearish). Stil (Trend vs. Dip) siehe Schalter daneben. "
+                f"Kriterien-Details im Doku-Expander unten. Empfehlung: 3–4 als solides Setup. 0 = kein Filter."
+            ),
+        )
+        st.radio(
+            "Score-Stil",
+            options=list(SCORE_STYLE_LABELS.keys()),
+            format_func=lambda k: SCORE_STYLE_LABELS[k],
+            key="enh_score_style",
+            help=(
+                "Trend/Stärke (Default): Aktie stabil im Trend, NICHT überverkauft — "
+                "kein fallendes Messer fangen, ruhige Prämie. "
+                "Dip/Rücksetzer: in den überverkauften Rücksetzer verkaufen — höhere Prämie, "
+                "aber mehr Risiko. Ändert nur die Score-Kriterien, nicht die Richtung."
             ),
         )
 
@@ -383,7 +402,7 @@ with st.expander("Configuration and Filters", expanded=True):
             ),
         )
         st.checkbox(
-            "🥱 Nur langweilige Aktien",
+            "Nur langweilige Aktien",
             key="enh_boring_only",
             help=(
                 "Zeigt nur stabile, träge Large-Caps (Coca-Cola/Pepsi-Typ): "
@@ -459,6 +478,7 @@ with st.spinner("Calculating spreads..."):
         "strategy_type": strategy_type,
         "asset_type": st.session_state.enh_asset_type,
         "score_direction": "bull" if option_type == "put" else "bear",
+        "score_style": st.session_state.enh_score_style,
         **date_params,
     }
 
@@ -469,7 +489,7 @@ with st.spinner("Calculating spreads..."):
         f"{delta_candidates}|{min_open_interest}|{spread_width}|{spread_exact}|{min_day_volume}|"
         f"{min_iv_rank}|{min_iv_percentile}|{strategy_type}|{st.session_state.enh_iv_correction}|"
         f"{st.session_state.enh_risk_free_rate}|{st.session_state.enh_asset_type}|"
-        f"{'bull' if option_type == 'put' else 'bear'}"
+        f"{'bull' if option_type == 'put' else 'bear'}|{st.session_state.enh_score_style}"
     )
 
     logging.debug(f"Loaded {len(df)} rows from DB across {len(expiration_dates)} date(s) in one query")
@@ -614,7 +634,7 @@ if st.session_state.get("enh_boring_only", False) and not filtered_df.empty:
     _boring_mask = filtered_df.apply(_is_boring, axis=1)
     filtered_df = _apply_filter(
         filtered_df, _boring_mask,
-        "🥱 Nur langweilige Aktien (Beta≤1.0, IV≤40%, MCap≥$20B, defensiv)",
+        "Nur langweilige Aktien (Beta≤1.0, IV≤40%, MCap≥$20B, defensiv)",
     )
 
 filtered_df.reset_index(drop=True, inplace=True)
@@ -779,6 +799,7 @@ if not filtered_df.empty:
             'Claude': _create_claude_prompt_page_spreads(row),
             'tech_indicators': _load_tech_indicators(row['symbol']),
             'tech_score_direction': "bull" if row.get('option_type') == 'put' else "bear",
+            'tech_score_style': st.session_state.get("enh_score_style", "trend"),
             'fundamental': _load_fundamental(row['symbol']),
         }
 

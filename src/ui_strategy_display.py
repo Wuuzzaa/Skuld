@@ -121,12 +121,16 @@ def display_strategy_details(
     tech = extra_info.get('tech_indicators') if extra_info else None
     if tech is not None:
         direction = extra_info.get('tech_score_direction', 'bull')
+        style = extra_info.get('tech_score_style', 'trend')
         is_bull = direction == 'bull'
+        is_trend = style == 'trend'
         setup_label = "Bull-Put" if is_bull else "Bear-Call"
-        st.markdown(f"#### Technische Signale ({setup_label}-Timing)")
+        style_label = "Trend/Stärke" if is_trend else "Dip/Rücksetzer"
+        st.markdown(f"#### Technische Signale ({setup_label} · {style_label})")
         tc1, tc2, tc3, tc4 = st.columns(4)
 
         stoch_k = tech.get('STOCHk_14_3_1')
+        stoch_h = tech.get('STOCHh_14_3_1')
         rsi = tech.get('RSI_14')
         ema50 = tech.get('EMA_50')
         ema200 = tech.get('EMA_200')
@@ -138,11 +142,18 @@ def display_strategy_details(
 
         with tc1:
             val = f"{stoch_k:.1f}" if pd.notnull(stoch_k) else "N/A"
-            hint = "< 35 = überverkauft (Bull-Einstieg)" if is_bull else "> 65 = überkauft (Bear-Einstieg)"
+            if is_trend:
+                hint = "> 20 = nicht überverkauft" if is_bull else "< 80 = nicht überkauft"
+            else:
+                hint = "< 20 = überverkauft (Dip-Einstieg)" if is_bull else "> 80 = überkauft (Rip)"
             st.metric("Stoch %K", val, help=hint)
         with tc2:
             val = f"{rsi:.1f}" if pd.notnull(rsi) else "N/A"
-            st.metric("RSI 14", val, help="40–60 = gesunde Pullback-/Neutral-Zone")
+            if is_trend:
+                rsi_hint = "50–65 = Stärke (bull)" if is_bull else "35–50 = Schwäche (bear)"
+            else:
+                rsi_hint = "30–45 = Pullback (bull)" if is_bull else "55–70 = Rücklauf (bear)"
+            st.metric("RSI 14", val, help=rsi_hint)
         with tc3:
             if pd.notnull(macdh):
                 st.metric("MACD Hist", f"{macdh:.3f}",
@@ -182,40 +193,38 @@ def display_strategy_details(
             else:
                 st.metric("Trend (EMA200)", "N/A")
 
-        # Gesamtsignal (6 Kriterien, richtungsabhaengig) — spiegelt die SQL-Score-Logik
-        _needed = [ema200, ema50, rsi, stoch_k, adx, dmp, dmn, macdh, close]
+        # Gesamtsignal (6 Kriterien) — spiegelt die SQL-Score-Logik exakt, je Richtung + Stil
+        _needed = [ema200, ema50, rsi, stoch_k, stoch_h, adx, dmp, dmn, macdh, close]
         if all(pd.notnull(v) for v in _needed):
-            if is_bull:
-                signals = [
-                    close > ema200,
-                    close > ema50,
-                    40 <= rsi <= 60,
-                    stoch_k < 35,
-                    adx > 18 and dmp > dmn,
-                    macdh > 0,
-                ]
-                labels = ["Kurs > EMA200", "Kurs > EMA50", "RSI 40–60",
-                          "Stoch < 35 (überverkauft)", "ADX↑ Aufwärtstrend", "MACD-Hist > 0"]
-            else:
-                signals = [
-                    close < ema200,
-                    close < ema50,
-                    40 <= rsi <= 60,
-                    stoch_k > 65,
-                    adx > 18 and dmn > dmp,
-                    macdh < 0,
-                ]
-                labels = ["Kurs < EMA200", "Kurs < EMA50", "RSI 40–60",
-                          "Stoch > 65 (überkauft)", "ADX↓ Abwärtstrend", "MACD-Hist < 0"]
+            if is_bull and is_trend:
+                signals = [close > ema200, close > ema50, 50 <= rsi <= 65,
+                           stoch_k > 20, adx > 18 and dmp > dmn, macdh > 0]
+                labels = ["Kurs > EMA200", "Kurs > EMA50", "RSI 50–65 (Stärke)",
+                          "Stoch > 20 (nicht überverkauft)", "ADX↑ Aufwärtstrend", "MACD-Hist > 0"]
+            elif is_bull and not is_trend:
+                signals = [close > ema200, 30 <= rsi <= 45, stoch_k < 20,
+                           stoch_h > 0, adx > 18 and dmp > dmn, macdh > 0]
+                labels = ["Kurs > EMA200", "RSI 30–45 (Pullback)", "Stoch < 20 (überverkauft)",
+                          "Stoch dreht hoch", "ADX↑ Aufwärtstrend", "MACD-Hist > 0"]
+            elif not is_bull and is_trend:
+                signals = [close < ema200, close < ema50, 35 <= rsi <= 50,
+                           stoch_k < 80, adx > 18 and dmn > dmp, macdh < 0]
+                labels = ["Kurs < EMA200", "Kurs < EMA50", "RSI 35–50 (Schwäche)",
+                          "Stoch < 80 (nicht überkauft)", "ADX↓ Abwärtstrend", "MACD-Hist < 0"]
+            else:  # bear + dip
+                signals = [close < ema200, 55 <= rsi <= 70, stoch_k > 80,
+                           stoch_h < 0, adx > 18 and dmn > dmp, macdh < 0]
+                labels = ["Kurs < EMA200", "RSI 55–70 (Rücklauf)", "Stoch > 80 (überkauft)",
+                          "Stoch dreht runter", "ADX↓ Abwärtstrend", "MACD-Hist < 0"]
             score = sum(signals)
             met = [l for l, s in zip(labels, signals) if s]
             not_met = [l for l, s in zip(labels, signals) if not s]
             if score >= 5:
-                st.success(f"**{setup_label}-Signal: {score}/6** — Erfüllt: {', '.join(met)}")
+                st.success(f"**{setup_label}-Signal ({style_label}): {score}/6** — Erfüllt: {', '.join(met)}")
             elif score >= 3:
-                st.info(f"**{setup_label}-Signal: {score}/6** — Erfüllt: {', '.join(met) or '—'}  |  Fehlt: {', '.join(not_met) or '—'}")
+                st.info(f"**{setup_label}-Signal ({style_label}): {score}/6** — Erfüllt: {', '.join(met) or '—'}  |  Fehlt: {', '.join(not_met) or '—'}")
             else:
-                st.warning(f"**{setup_label}-Signal: {score}/6** — Zu schwaches Timing. Fehlt: {', '.join(not_met)}")
+                st.warning(f"**{setup_label}-Signal ({style_label}): {score}/6** — Zu schwaches Timing. Fehlt: {', '.join(not_met)}")
 
     # Fundamental-Ampel
     fd = extra_info.get('fundamental') if extra_info else None

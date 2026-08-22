@@ -82,32 +82,47 @@ SELECT
     ti."ADX_10",
     ti."DMP_10",
     ti."DMN_10",
-    -- Technischer Timing-Score (0-6), RICHTUNGSABHAENGIG.
-    -- :score_direction = 'bull' -> Bull Put Spread (moderat bullish/neutral, Rebound-Setup)
-    -- :score_direction = 'bear' -> Bear Call Spread (moderat bearish/neutral, exakt gespiegelt)
+    -- Technischer Timing-Score (0-6), RICHTUNGSABHAENGIG + STIL-abhaengig.
+    -- :score_direction = 'bull' (Bull Put) | 'bear' (Bear Call, gespiegelt)
+    -- :score_style     = 'trend' | 'dip'
+    --   'trend' = Schule A: Aktie stabil im Trend, NICHT ueberverkauft (kein fallendes Messer).
+    --   'dip'   = Schule B: in den Ruecksetzer verkaufen (ueberverkauft = hohe Praemie + Rebound).
     -- Fachliche Begruendung je Kriterium siehe Doku-Expander in der Page.
     (
         CASE
-            WHEN :score_direction = 'bull' THEN (
-                -- 1) Uebergeordneter Aufwaertstrend: Kurs ueber der 200er
-                CASE WHEN sell.close > ti."EMA_200" THEN 1 ELSE 0 END +
-                -- 2) Mittelfristiger Trend intakt: Kurs ueber der 50er
-                CASE WHEN sell.close > ti."EMA_50"  THEN 1 ELSE 0 END +
-                -- 3) RSI im gesunden Pullback-Fenster (nicht ueberkauft, nicht im freien Fall)
-                CASE WHEN ti."RSI_14" BETWEEN 40 AND 60 THEN 1 ELSE 0 END +
-                -- 4) Kurzfristig ueberverkauft -> guenstiger Rebound-Einstieg, hoehere Put-Praemie
-                CASE WHEN ti."STOCHk_14_3_1" < 35 THEN 1 ELSE 0 END +
-                -- 5) Aufwaertsgerichteter Trend mit Substanz (nicht seitwaerts/choppy)
-                CASE WHEN ti."ADX_10" > 18 AND ti."DMP_10" > ti."DMN_10" THEN 1 ELSE 0 END +
-                -- 6) Momentum dreht zurueck nach oben
-                CASE WHEN ti."MACDh_12_26_9" > 0 THEN 1 ELSE 0 END
+            -- ── BULL / TREND (Schule A, Default) ──────────────────────────────
+            WHEN :score_direction = 'bull' AND :score_style = 'trend' THEN (
+                CASE WHEN sell.close > ti."EMA_200" THEN 1 ELSE 0 END +          -- Aufwaertstrend (200er)
+                CASE WHEN sell.close > ti."EMA_50"  THEN 1 ELSE 0 END +          -- Trend intakt (50er)
+                CASE WHEN ti."RSI_14" BETWEEN 50 AND 65 THEN 1 ELSE 0 END +      -- Staerke, nicht ueberkauft
+                CASE WHEN ti."STOCHk_14_3_1" > 20 THEN 1 ELSE 0 END +            -- NICHT ueberverkauft
+                CASE WHEN ti."ADX_10" > 18 AND ti."DMP_10" > ti."DMN_10" THEN 1 ELSE 0 END +  -- Aufwaertstrend m. Substanz
+                CASE WHEN ti."MACDh_12_26_9" > 0 THEN 1 ELSE 0 END               -- Momentum oben
             )
-            WHEN :score_direction = 'bear' THEN (
-                -- Exakt gespiegelt fuer Bear Call Spreads
+            -- ── BULL / DIP (Schule B) ─────────────────────────────────────────
+            WHEN :score_direction = 'bull' AND :score_style = 'dip' THEN (
+                CASE WHEN sell.close > ti."EMA_200" THEN 1 ELSE 0 END +          -- uebergeordneter Trend intakt
+                CASE WHEN ti."RSI_14" BETWEEN 30 AND 45 THEN 1 ELSE 0 END +      -- Pullback-Zone
+                CASE WHEN ti."STOCHk_14_3_1" < 20 THEN 1 ELSE 0 END +            -- kurzfristig ueberverkauft
+                CASE WHEN ti."STOCHh_14_3_1" > 0 THEN 1 ELSE 0 END +             -- Stochastik dreht hoch
+                CASE WHEN ti."ADX_10" > 18 AND ti."DMP_10" > ti."DMN_10" THEN 1 ELSE 0 END +  -- Trend weiterhin auf
+                CASE WHEN ti."MACDh_12_26_9" > 0 THEN 1 ELSE 0 END               -- Momentum dreht hoch
+            )
+            -- ── BEAR / TREND (Schule A gespiegelt) ────────────────────────────
+            WHEN :score_direction = 'bear' AND :score_style = 'trend' THEN (
                 CASE WHEN sell.close < ti."EMA_200" THEN 1 ELSE 0 END +
                 CASE WHEN sell.close < ti."EMA_50"  THEN 1 ELSE 0 END +
-                CASE WHEN ti."RSI_14" BETWEEN 40 AND 60 THEN 1 ELSE 0 END +
-                CASE WHEN ti."STOCHk_14_3_1" > 65 THEN 1 ELSE 0 END +
+                CASE WHEN ti."RSI_14" BETWEEN 35 AND 50 THEN 1 ELSE 0 END +
+                CASE WHEN ti."STOCHk_14_3_1" < 80 THEN 1 ELSE 0 END +
+                CASE WHEN ti."ADX_10" > 18 AND ti."DMN_10" > ti."DMP_10" THEN 1 ELSE 0 END +
+                CASE WHEN ti."MACDh_12_26_9" < 0 THEN 1 ELSE 0 END
+            )
+            -- ── BEAR / DIP (Schule B gespiegelt = ueberkaufter Rip verkaufen) ──
+            WHEN :score_direction = 'bear' AND :score_style = 'dip' THEN (
+                CASE WHEN sell.close < ti."EMA_200" THEN 1 ELSE 0 END +
+                CASE WHEN ti."RSI_14" BETWEEN 55 AND 70 THEN 1 ELSE 0 END +
+                CASE WHEN ti."STOCHk_14_3_1" > 80 THEN 1 ELSE 0 END +
+                CASE WHEN ti."STOCHh_14_3_1" < 0 THEN 1 ELSE 0 END +
                 CASE WHEN ti."ADX_10" > 18 AND ti."DMN_10" > ti."DMP_10" THEN 1 ELSE 0 END +
                 CASE WHEN ti."MACDh_12_26_9" < 0 THEN 1 ELSE 0 END
             )
