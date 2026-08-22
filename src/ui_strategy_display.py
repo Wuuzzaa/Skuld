@@ -117,6 +117,53 @@ def display_strategy_details(
         if 'analyst_mean_target' in extra_info and pd.notnull(extra_info['analyst_mean_target']):
             st.write(f"**Analyst Kursziel:** ${extra_info['analyst_mean_target']:.2f}$ (Aktuell: ${extra_info.get('close', 0):.2f}$)")
 
+    # Sicherheitspuffer: wie weit darf der Kurs laufen, bis der Short-Strike / Break-Even
+    # erreicht ist? Fuer Bull Put (Put) nach unten, fuer Bear Call (Call) nach oben.
+    if extra_info:
+        close = extra_info.get('close')
+        sell_strike = extra_info.get('sell_strike')
+        break_even = extra_info.get('break_even')
+        is_put = extra_info.get('is_put', True)
+        if pd.notnull(close) and close and pd.notnull(sell_strike):
+            st.markdown("#### Sicherheitspuffer")
+            direction_word = "fallen" if is_put else "steigen"
+            # Puffer bis Short-Strike (ab hier beginnt der Verlustbereich)
+            strike_buffer_pct = (close - sell_strike) / close * 100 if is_put else (sell_strike - close) / close * 100
+            pb1, pb2, pb3 = st.columns(3)
+            with pb1:
+                st.metric(
+                    "Puffer bis Short-Strike",
+                    f"{strike_buffer_pct:+.1f}%",
+                    help=(f"Der Kurs (${close:.2f}) müsste um {abs(strike_buffer_pct):.1f}% "
+                          f"{direction_word} auf ${sell_strike:.2f}, bevor der Short-Strike "
+                          f"ITM wird und der Spread in die Verlustzone läuft.")
+                )
+            with pb2:
+                if pd.notnull(break_even) and break_even:
+                    be_buffer_pct = (close - break_even) / close * 100 if is_put else (break_even - close) / close * 100
+                    st.metric(
+                        "Puffer bis Break-Even",
+                        f"{be_buffer_pct:+.1f}%",
+                        help=(f"Bis zum Break-Even (${break_even:.2f}) darf der Kurs um "
+                              f"{abs(be_buffer_pct):.1f}% {direction_word} — erst darunter/darüber "
+                              f"macht die Position tatsächlich Verlust (Prämie eingerechnet).")
+                    )
+                else:
+                    st.metric("Puffer bis Break-Even", "N/A")
+            with pb3:
+                # Ampel-Einschaetzung des Puffers
+                _b = abs(strike_buffer_pct)
+                if _b >= 10:
+                    st.metric("Bewertung", "🟢 komfortabel", help="≥10% Puffer bis Short-Strike")
+                elif _b >= 5:
+                    st.metric("Bewertung", "🟡 moderat", help="5–10% Puffer")
+                else:
+                    st.metric("Bewertung", "🔴 knapp", help="<5% Puffer — Kurs nah am Short-Strike")
+            st.caption(
+                f"Der Kurs steht bei **${close:.2f}**. Er darf um **{abs(strike_buffer_pct):.1f}% "
+                f"{direction_word}** (auf ${sell_strike:.2f}), bevor dein Short-Strike ITM wird."
+            )
+
     # Technische Signale
     tech = extra_info.get('tech_indicators') if extra_info else None
     if tech is not None:

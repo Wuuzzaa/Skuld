@@ -825,6 +825,10 @@ if not filtered_df.empty:
             'tech_indicators': _load_tech_indicators(row['symbol']),
             'tech_score_direction': "bull" if row.get('option_type') == 'put' else "bear",
             'tech_score_style': st.session_state.get("enh_score_style", "trend"),
+            # Sicherheitspuffer: wie weit darf der Kurs laufen bis Short-Strike / Break-Even?
+            'sell_strike': row.get('sell_strike'),
+            'break_even': row.get('break_even'),
+            'is_put': row.get('option_type') == 'put',
             'fundamental': _load_fundamental(row['symbol']),
         }
 
