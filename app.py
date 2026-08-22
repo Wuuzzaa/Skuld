@@ -39,6 +39,7 @@ expected_value = st.Page('pages/expected_value.py', title="Expected Value")
 dividend_scanner = st.Page("pages/dividend_scanner.py", title="Dividend Scanner")
 option_strategy_finder = st.Page("pages/option_strategy_finder.py", title="Option Strategy Finder")
 crash_hedge_finder = st.Page("pages/crash_hedge_finder.py", title="Crash Hedge Finder")
+portfolio_hedge_calculator = st.Page("pages/portfolio_hedge_calculator.py", title="Portfolio Hedge Calculator")
 trade_journal = st.Page("pages/trade_journal.py", title="Trade Journal")
 index_short_put = st.Page("pages/index_short_put.py", title="Index Short Put")
 zahltagstrategie = st.Page("pages/dividend_screener_zahltagstrategie.py", title="Zahltagstrategie")
@@ -80,6 +81,7 @@ page = st.navigation(
         dividend_scanner,
         option_strategy_finder,
         crash_hedge_finder,
+        portfolio_hedge_calculator,
         trade_journal,
         index_short_put,
         zahltagstrategie,
