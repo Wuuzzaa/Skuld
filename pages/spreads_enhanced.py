@@ -53,7 +53,8 @@ DEFAULT_MIN_MAX_PROFIT = 80.0
 DEFAULT_MIN_IV_RANK = 40
 DEFAULT_MIN_IV_PERCENTILE = 0
 DEFAULT_STRATEGY_TYPE = "credit"
-DEFAULT_MIN_BULL_PUT_SCORE = 0  # 0 = kein Filter
+DEFAULT_MIN_TECH_SCORE = 0  # 0 = kein Filter (Score 0-6, richtungsabhaengig)
+DEFAULT_BORING_ONLY = False  # "Langweilige Aktien" Filter (low-vol, stabile Large-Caps)
 DEFAULT_ASSET_TYPE = "all"  # all | stock | etf | index
 ASSET_TYPE_LABELS = {
     "all": "Alle",
@@ -96,7 +97,8 @@ DEFAULTS = {
     'enh_min_iv_rank': DEFAULT_MIN_IV_RANK,
     'enh_min_iv_percentile': DEFAULT_MIN_IV_PERCENTILE,
     'enh_strategy_type': DEFAULT_STRATEGY_TYPE,
-    'enh_min_bull_put_score': DEFAULT_MIN_BULL_PUT_SCORE,
+    'enh_min_tech_score': DEFAULT_MIN_TECH_SCORE,
+    'enh_boring_only': DEFAULT_BORING_ONLY,
     'enh_iv_correction': IV_CORRECTION_MODE,
     'enh_risk_free_rate': RISK_FREE_RATE * 100,
 }
@@ -125,7 +127,8 @@ def clear_all_filters():
     st.session_state.enh_min_iv_percentile = 0
     st.session_state.enh_asset_type = "all"
     st.session_state.enh_sectors = []
-    st.session_state.enh_min_bull_put_score = 0
+    st.session_state.enh_min_tech_score = 0
+    st.session_state.enh_boring_only = False
 
 
 def _on_asset_type_change():
@@ -327,13 +330,23 @@ with st.expander("Configuration and Filters", expanded=True):
         min_iv_percentile = st.number_input("Min iv percentile", min_value=0, max_value=100, step=1, key="enh_min_iv_percentile")
 
     with col20:
-        min_bull_put_score = st.number_input(
-            "Min Bull-Put-Score (0=aus)",
+        # Richtung des Scores aus Option-Typ ableiten:
+        #   put  -> Bull Put Spread  -> bullish/neutrales Timing gesucht
+        #   call -> Bear Call Spread -> bearish/neutrales Timing gesucht
+        _score_dir = "bull" if st.session_state.get("enh_option_type", "put") == "put" else "bear"
+        _score_label = "Bull-Put" if _score_dir == "bull" else "Bear-Call"
+        min_tech_score = st.number_input(
+            f"Min {_score_label}-Score (0=aus)",
             min_value=0,
-            max_value=4,
+            max_value=6,
             step=1,
-            key="enh_min_bull_put_score",
-            help="Filtert nach Anzahl erfüllter technischer Kriterien (0–4): Kurs > EMA200, Stoch < 20, Stoch dreht hoch, RSI < 45. 0 = kein Filter.",
+            key="enh_min_tech_score",
+            help=(
+                f"Filtert nach Anzahl erfüllter technischer Timing-Kriterien (0–6) für ein "
+                f"{_score_label}-Setup. Richtung folgt automatisch dem Option-Typ "
+                f"(Put=bullish, Call=bearish). Kriterien-Details siehe Doku-Expander unten. "
+                f"Empfehlung: 3–4 als solides Setup. 0 = kein Filter."
+            ),
         )
 
     st.divider()
@@ -367,6 +380,16 @@ with st.expander("Configuration and Filters", expanded=True):
                 "Aktien = mit Sektor-Fundamentaldaten. ETFs = ohne Fundamentaldaten (z.B. SPY, QQQ). "
                 "Indizes = Symbol beginnt mit 'I:' (z.B. I:SPX, I:RUT). "
                 "Bei 'Nur Indizes' werden automatisch passende Defaults gesetzt (Min IV 0, Breite bis 10, Delta-Kandidaten 5)."
+            ),
+        )
+        st.checkbox(
+            "🥱 Nur langweilige Aktien",
+            key="enh_boring_only",
+            help=(
+                "Zeigt nur stabile, träge Large-Caps (Coca-Cola/Pepsi-Typ): "
+                "niedriges Beta (≤ 1.0), moderate IV (sell IV ≤ 40%), große Marktkapitalisierung "
+                "(≥ $20 Mrd) und defensive/nicht-zyklische Sektoren. "
+                "Ideal für ruhige, planbare Prämie ohne Kurssprünge. Greift nur bei Aktien."
             ),
         )
     with col_at2:
@@ -435,6 +458,7 @@ with st.spinner("Calculating spreads..."):
         "min_iv_percentile": min_iv_percentile,
         "strategy_type": strategy_type,
         "asset_type": st.session_state.enh_asset_type,
+        "score_direction": "bull" if option_type == "put" else "bear",
         **date_params,
     }
 
@@ -444,7 +468,8 @@ with st.spinner("Calculating spreads..."):
         f"{selected_date}|{','.join(str(d) for d in expiration_dates)}|{option_type}|{st.session_state.enh_delta_target}|"
         f"{delta_candidates}|{min_open_interest}|{spread_width}|{spread_exact}|{min_day_volume}|"
         f"{min_iv_rank}|{min_iv_percentile}|{strategy_type}|{st.session_state.enh_iv_correction}|"
-        f"{st.session_state.enh_risk_free_rate}|{st.session_state.enh_asset_type}"
+        f"{st.session_state.enh_risk_free_rate}|{st.session_state.enh_asset_type}|"
+        f"{'bull' if option_type == 'put' else 'bear'}"
     )
 
     logging.debug(f"Loaded {len(df)} rows from DB across {len(expiration_dates)} date(s) in one query")
@@ -516,13 +541,80 @@ if selected_sectors and 'company_sector' in filtered_df.columns:
         f"Sektor in {', '.join(selected_sectors)}",
     )
 
-# Min Bull-Put-Score Filter
-min_bull_put_score = st.session_state.get("enh_min_bull_put_score", 0)
-if min_bull_put_score > 0 and 'bull_put_score' in filtered_df.columns:
+# Min Tech-Score Filter (richtungsabhaengig, 0-6)
+min_tech_score = st.session_state.get("enh_min_tech_score", 0)
+_score_dir = "bull" if option_type == "put" else "bear"
+_score_label = "Bull-Put" if _score_dir == "bull" else "Bear-Call"
+if min_tech_score > 0 and 'tech_score' in filtered_df.columns:
     filtered_df = _apply_filter(
         filtered_df,
-        filtered_df['bull_put_score'] >= min_bull_put_score,
-        f"Bull-Put-Score ≥ {min_bull_put_score}/4",
+        filtered_df['tech_score'] >= min_tech_score,
+        f"{_score_label}-Score ≥ {min_tech_score}/6",
+    )
+
+# "Langweilige Aktien" Filter: stabile, traege Large-Caps (Coca-Cola/Pepsi-Typ).
+# Kriterien: Beta <= 1.0, sell IV <= 40%, Market Cap >= $20 Mrd, defensiver Sektor.
+# Beta + Market Cap sind nicht in der Spreads-Query -> per Batch-Query nachladen.
+BORING_SECTORS = {
+    "Consumer Defensive", "Utilities", "Healthcare",
+    "Consumer Staples", "Communication Services",
+}
+BORING_MAX_BETA = 1.0
+BORING_MAX_SELL_IV = 0.40
+BORING_MIN_MARKET_CAP = 20_000_000_000  # $20 Mrd
+
+
+@st.cache_data(ttl=600)
+def _load_boring_metrics(symbols: tuple[str, ...]) -> pd.DataFrame:
+    """Laedt Beta + Market Cap fuer die Kandidaten-Symbole (fuer 'langweilige Aktien' Filter)."""
+    if not symbols:
+        return pd.DataFrame(columns=["symbol", "beta", "market_cap"])
+    try:
+        return select_into_dataframe(
+            query=(
+                'SELECT symbol, "KeyStats_beta" AS beta, "Summary_marketCap" AS market_cap '
+                'FROM "FundamentalData" WHERE symbol = ANY(:syms)'
+            ),
+            params={"syms": list(symbols)},
+        )
+    except Exception as exc:  # pragma: no cover - defensive
+        logging.warning(f"Konnte Beta/MarketCap nicht laden: {exc}")
+        return pd.DataFrame(columns=["symbol", "beta", "market_cap"])
+
+
+if st.session_state.get("enh_boring_only", False) and not filtered_df.empty:
+    _syms = tuple(sorted(filtered_df['symbol'].unique().tolist()))
+    _boring = _load_boring_metrics(_syms)
+    _beta_map = {}
+    _mcap_map = {}
+    if not _boring.empty:
+        _beta_map = dict(zip(_boring['symbol'], pd.to_numeric(_boring['beta'], errors='coerce')))
+        _mcap_map = dict(zip(_boring['symbol'], pd.to_numeric(_boring['market_cap'], errors='coerce')))
+
+    def _is_boring(r) -> bool:
+        sym = r['symbol']
+        beta = _beta_map.get(sym)
+        mcap = _mcap_map.get(sym)
+        sector = r.get('company_sector')
+        sell_iv = r.get('sell_iv')
+        # Beta niedrig (fehlend -> nicht langweilig genug)
+        if beta is None or pd.isna(beta) or beta > BORING_MAX_BETA:
+            return False
+        # IV moderat
+        if pd.notnull(sell_iv) and sell_iv > BORING_MAX_SELL_IV:
+            return False
+        # Grosse Marktkapitalisierung
+        if mcap is None or pd.isna(mcap) or mcap < BORING_MIN_MARKET_CAP:
+            return False
+        # Defensiver / nicht-zyklischer Sektor
+        if sector not in BORING_SECTORS:
+            return False
+        return True
+
+    _boring_mask = filtered_df.apply(_is_boring, axis=1)
+    filtered_df = _apply_filter(
+        filtered_df, _boring_mask,
+        "🥱 Nur langweilige Aktien (Beta≤1.0, IV≤40%, MCap≥$20B, defensiv)",
     )
 
 filtered_df.reset_index(drop=True, inplace=True)
@@ -646,7 +738,8 @@ if not filtered_df.empty:
                 df = select_into_dataframe(
                     query=(
                         'SELECT "STOCHk_14_3_1", "STOCHd_14_3_1", "STOCHh_14_3_1", '
-                        '"RSI_14", "EMA_200" '
+                        '"RSI_14", "EMA_50", "EMA_200", "MACDh_12_26_9", '
+                        '"ADX_10", "DMP_10", "DMN_10" '
                         'FROM "TechnicalIndicatorsCalculated" WHERE symbol = :sym LIMIT 1'
                     ),
                     params={"sym": symbol}
@@ -685,6 +778,7 @@ if not filtered_df.empty:
             'optionstrat_url': row.get('optionstrat_url'),
             'Claude': _create_claude_prompt_page_spreads(row),
             'tech_indicators': _load_tech_indicators(row['symbol']),
+            'tech_score_direction': "bull" if row.get('option_type') == 'put' else "bear",
             'fundamental': _load_fundamental(row['symbol']),
         }
 

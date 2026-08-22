@@ -76,14 +76,44 @@ SELECT
     ti."STOCHd_14_3_1",
     ti."STOCHh_14_3_1",
     ti."RSI_14",
+    ti."EMA_50",
     ti."EMA_200",
-    -- Bull-Put-Score: Anzahl erfuellter Kriterien (0-4)
+    ti."MACDh_12_26_9",
+    ti."ADX_10",
+    ti."DMP_10",
+    ti."DMN_10",
+    -- Technischer Timing-Score (0-6), RICHTUNGSABHAENGIG.
+    -- :score_direction = 'bull' -> Bull Put Spread (moderat bullish/neutral, Rebound-Setup)
+    -- :score_direction = 'bear' -> Bear Call Spread (moderat bearish/neutral, exakt gespiegelt)
+    -- Fachliche Begruendung je Kriterium siehe Doku-Expander in der Page.
     (
-        CASE WHEN sell.close > ti."EMA_200"        THEN 1 ELSE 0 END +
-        CASE WHEN ti."STOCHk_14_3_1" < 20          THEN 1 ELSE 0 END +
-        CASE WHEN ti."STOCHh_14_3_1" > 0           THEN 1 ELSE 0 END +
-        CASE WHEN ti."RSI_14" < 45                 THEN 1 ELSE 0 END
-    ) AS bull_put_score,
+        CASE
+            WHEN :score_direction = 'bull' THEN (
+                -- 1) Uebergeordneter Aufwaertstrend: Kurs ueber der 200er
+                CASE WHEN sell.close > ti."EMA_200" THEN 1 ELSE 0 END +
+                -- 2) Mittelfristiger Trend intakt: Kurs ueber der 50er
+                CASE WHEN sell.close > ti."EMA_50"  THEN 1 ELSE 0 END +
+                -- 3) RSI im gesunden Pullback-Fenster (nicht ueberkauft, nicht im freien Fall)
+                CASE WHEN ti."RSI_14" BETWEEN 40 AND 60 THEN 1 ELSE 0 END +
+                -- 4) Kurzfristig ueberverkauft -> guenstiger Rebound-Einstieg, hoehere Put-Praemie
+                CASE WHEN ti."STOCHk_14_3_1" < 35 THEN 1 ELSE 0 END +
+                -- 5) Aufwaertsgerichteter Trend mit Substanz (nicht seitwaerts/choppy)
+                CASE WHEN ti."ADX_10" > 18 AND ti."DMP_10" > ti."DMN_10" THEN 1 ELSE 0 END +
+                -- 6) Momentum dreht zurueck nach oben
+                CASE WHEN ti."MACDh_12_26_9" > 0 THEN 1 ELSE 0 END
+            )
+            WHEN :score_direction = 'bear' THEN (
+                -- Exakt gespiegelt fuer Bear Call Spreads
+                CASE WHEN sell.close < ti."EMA_200" THEN 1 ELSE 0 END +
+                CASE WHEN sell.close < ti."EMA_50"  THEN 1 ELSE 0 END +
+                CASE WHEN ti."RSI_14" BETWEEN 40 AND 60 THEN 1 ELSE 0 END +
+                CASE WHEN ti."STOCHk_14_3_1" > 65 THEN 1 ELSE 0 END +
+                CASE WHEN ti."ADX_10" > 18 AND ti."DMN_10" > ti."DMP_10" THEN 1 ELSE 0 END +
+                CASE WHEN ti."MACDh_12_26_9" < 0 THEN 1 ELSE 0 END
+            )
+            ELSE 0
+        END
+    ) AS tech_score,
     sell.expiration_date,
     sell.option_type,
     sell.close,
