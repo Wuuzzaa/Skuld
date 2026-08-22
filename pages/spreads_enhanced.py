@@ -641,6 +641,23 @@ if not filtered_df.empty:
         )
 
         @st.cache_data(ttl=300)
+        def _load_tech_indicators(symbol: str) -> dict:
+            try:
+                df = select_into_dataframe(
+                    query=(
+                        'SELECT "STOCHk_14_3_1", "STOCHd_14_3_1", "STOCHh_14_3_1", '
+                        '"RSI_14", "EMA_200" '
+                        'FROM "TechnicalIndicatorsCalculated" WHERE symbol = :sym LIMIT 1'
+                    ),
+                    params={"sym": symbol}
+                )
+                if not df.empty:
+                    return df.iloc[0].to_dict()
+            except Exception as exc:
+                logger.warning(f"Tech indicators load failed for {symbol}: {exc}")
+            return {}
+
+        @st.cache_data(ttl=300)
         def _load_fundamental(symbol: str) -> dict:
             try:
                 fd_df = select_into_dataframe(
