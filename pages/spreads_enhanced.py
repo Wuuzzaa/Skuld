@@ -56,6 +56,8 @@ DEFAULT_STRATEGY_TYPE = "credit"
 DEFAULT_MIN_TECH_SCORE = 0  # 0 = kein Filter (Score 0-6, richtungsabhaengig)
 DEFAULT_SCORE_STYLE = "trend"  # trend (Schule A) | dip (Schule B)
 DEFAULT_BORING_ONLY = False  # "Langweilige Aktien" Filter (low-vol, stabile Large-Caps)
+DEFAULT_RSI_RANGE = (0, 100)   # aus = ganze Range (filtert nichts)
+DEFAULT_STOCH_RANGE = (0, 100)  # aus = ganze Range (filtert nichts)
 DEFAULT_ASSET_TYPE = "all"  # all | stock | etf | index
 SCORE_STYLE_LABELS = {
     "trend": "Trend / Stärke (nicht überverkauft)",
@@ -105,6 +107,8 @@ DEFAULTS = {
     'enh_min_tech_score': DEFAULT_MIN_TECH_SCORE,
     'enh_score_style': DEFAULT_SCORE_STYLE,
     'enh_boring_only': DEFAULT_BORING_ONLY,
+    'enh_rsi_range': DEFAULT_RSI_RANGE,
+    'enh_stoch_range': DEFAULT_STOCH_RANGE,
     'enh_iv_correction': IV_CORRECTION_MODE,
     'enh_risk_free_rate': RISK_FREE_RATE * 100,
 }
@@ -136,6 +140,8 @@ def clear_all_filters():
     st.session_state.enh_min_tech_score = 0
     st.session_state.enh_score_style = "trend"
     st.session_state.enh_boring_only = False
+    st.session_state.enh_rsi_range = (0, 100)
+    st.session_state.enh_stoch_range = (0, 100)
 
 
 def _on_asset_type_change():
@@ -392,6 +398,21 @@ Stoch < 20) — höhere Prämie durch erhöhte IV, aber Timing-Risiko wenn der F
 *RSI-Fenster nach Cardwell "range shift": ein Aufwärtstrend trägt RSI ~40–80, ein
 Abwärtstrend ~20–60. Quelle: RSI/Stochastic/ADX/MACD-Grundlagen (Wikipedia).*
 """)
+        st.markdown("**Direkte Indikator-Filter** (0–100 = aus)")
+        st.slider(
+            "RSI 14 Bereich",
+            min_value=0, max_value=100, step=1,
+            key="enh_rsi_range",
+            help="Zeigt nur Aktien mit RSI in diesem Bereich. Standard 0–100 = aus. "
+                 "Für 'nicht überverkauft' z.B. 40–70 setzen (blendet RSI<40 und >70 aus).",
+        )
+        st.slider(
+            "Stochastic %K Bereich",
+            min_value=0, max_value=100, step=1,
+            key="enh_stoch_range",
+            help="Zeigt nur Aktien mit Stochastik %K in diesem Bereich. Standard 0–100 = aus. "
+                 "Für 'nicht überverkauft/überkauft' z.B. 20–80 setzen.",
+        )
 
     st.divider()
     col_iv1, col_iv2, col_iv3 = st.columns(3)
@@ -596,6 +617,21 @@ if min_tech_score > 0 and 'tech_score' in filtered_df.columns:
         filtered_df['tech_score'] >= min_tech_score,
         f"{_score_label}-Score ≥ {min_tech_score}/6",
     )
+
+# Direkte Indikator-Filter: RSI + Stochastik-Bereich (0-100 = aus).
+# Ermoeglicht z.B. "nicht ueberverkauft" -> RSI 40-70, Stoch 20-80.
+_rsi_lo, _rsi_hi = st.session_state.get("enh_rsi_range", (0, 100))
+if (_rsi_lo > 0 or _rsi_hi < 100) and 'RSI_14' in filtered_df.columns:
+    _rsi = pd.to_numeric(filtered_df['RSI_14'], errors='coerce')
+    # NaN (kein Indikator vorhanden) durchlassen statt fälschlich rausfiltern
+    rsi_mask = _rsi.isna() | ((_rsi >= _rsi_lo) & (_rsi <= _rsi_hi))
+    filtered_df = _apply_filter(filtered_df, rsi_mask, f"RSI 14 in [{_rsi_lo}, {_rsi_hi}]")
+
+_stoch_lo, _stoch_hi = st.session_state.get("enh_stoch_range", (0, 100))
+if (_stoch_lo > 0 or _stoch_hi < 100) and 'STOCHk_14_3_1' in filtered_df.columns:
+    _stoch = pd.to_numeric(filtered_df['STOCHk_14_3_1'], errors='coerce')
+    stoch_mask = _stoch.isna() | ((_stoch >= _stoch_lo) & (_stoch <= _stoch_hi))
+    filtered_df = _apply_filter(filtered_df, stoch_mask, f"Stochastik %K in [{_stoch_lo}, {_stoch_hi}]")
 
 # "Langweilige Aktien" Filter: stabile, traege Large-Caps (Coca-Cola/Pepsi-Typ).
 # Kriterien: Beta <= 1.0, sell IV <= 40%, Market Cap >= $20 Mrd, defensiver Sektor.

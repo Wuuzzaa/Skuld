@@ -237,7 +237,9 @@ def get_page_spreads(df: pd.DataFrame, strategy_type: str = 'credit', iv_correct
         'buy_strike', 'buy_option_osi', 'buy_last_option_price', 'buy_delta', 'buy_iv', 'buy_theta',
         'buy_open_interest', 'buy_expected_move', 'buy_day_volume',
         'buy_last_updated', 'last_updated_option_data', 'last_updated_stock_data', 'buy_bs_price',
-        'option_type', 'expiration_date', 'days_to_expiration', 'days_to_earnings'
+        'option_type', 'expiration_date', 'days_to_expiration', 'days_to_earnings',
+        'tech_score', 'RSI_14', 'STOCHk_14_3_1', 'STOCHd_14_3_1', 'STOCHh_14_3_1',
+        'EMA_50', 'EMA_200', 'MACDh_12_26_9', 'ADX_10', 'DMP_10', 'DMN_10'
     ]
     
     existing_columns = [col for col in columns if col in df.columns]
@@ -296,7 +298,9 @@ def get_page_spreads_enhanced(df: pd.DataFrame, strategy_type: str = 'credit', i
         'buy_strike', 'buy_option_osi', 'buy_last_option_price', 'buy_delta', 'buy_iv', 'buy_theta',
         'buy_open_interest', 'buy_expected_move', 'buy_day_volume',
         'buy_last_updated', 'last_updated_option_data', 'last_updated_stock_data', 'buy_bs_price',
-        'option_type', 'expiration_date', 'days_to_expiration', 'days_to_earnings'
+        'option_type', 'expiration_date', 'days_to_expiration', 'days_to_earnings',
+        'tech_score', 'RSI_14', 'STOCHk_14_3_1', 'STOCHd_14_3_1', 'STOCHh_14_3_1',
+        'EMA_50', 'EMA_200', 'MACDh_12_26_9', 'ADX_10', 'DMP_10', 'DMN_10'
     ]
 
     existing_columns = [col for col in columns if col in df.columns]
