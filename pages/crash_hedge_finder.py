@@ -102,8 +102,10 @@ def _parse_transaction_history_csv(content: str) -> list[dict]:
 def _parse_position_report_csv(content: str) -> list[dict]:
     """
     Parst IBKR/CapTrader Flex Query Position Report.
-    Format: ClientAccountID, Symbol, Quantity, MarkPrice, ..., AssetClass, ...
+    Format: ClientAccountID, Symbol, Quantity, MarkPrice, PositionValue,
+            CostBasisPrice, CostBasisMoney, FifoPnlUnrealized, CurrencyPrimary, AssetClass, ...
     Direkte offene Positionen — kein Netting nötig.
+    Gibt pro Position auch CostBasisPrice + MarkPrice zurück (für Prämienberechnung).
     """
     positions = []
     reader = csv.reader(io.StringIO(content))
@@ -111,7 +113,6 @@ def _parse_position_report_csv(content: str) -> list[dict]:
     for row in reader:
         if not row:
             continue
-        # Erster Row = Header
         if not header:
             header = [c.strip().strip('"') for c in row]
             continue
@@ -125,23 +126,201 @@ def _parse_position_report_csv(content: str) -> list[dict]:
         if qty == 0:
             continue
 
+        def _f(key: str) -> float | None:
+            v = data.get(key, "").strip()
+            try:
+                return float(v) if v else None
+            except ValueError:
+                return None
+
+        cost_basis_price = _f("CostBasisPrice")
+        mark_price       = _f("MarkPrice")
+        pos_value        = _f("PositionValue")
+        currency         = data.get("CurrencyPrimary", "USD").strip()
+
         if asset_class == "STK":
             positions.append({
-                "type": "stock",
-                "symbol": symbol_raw,
-                "qty": int(abs(qty)),
-                "direction": "Long" if qty > 0 else "Short",
+                "type":             "stock",
+                "symbol":           symbol_raw,
+                "qty":              int(abs(qty)),
+                "direction":        "Long" if qty > 0 else "Short",
+                "cost_basis_price": cost_basis_price,
+                "mark_price":       mark_price,
+                "currency":         currency,
             })
         elif asset_class == "OPT":
             underlying = _extract_symbol_from_ibkr(symbol_raw)
-            if underlying:
-                positions.append({
-                    "type": "option",
-                    "symbol": underlying,
-                    "qty": int(abs(qty)),
-                    "direction": "Long" if qty > 0 else "Short",
-                })
+            if not underlying:
+                continue
+            # Parse Option-Felder aus Symbol: "AAPL  260925P00295000"
+            m = re.match(r"^([A-Z0-9]{1,6})\s+(\d{6})([CP])(\d+)$", symbol_raw.strip())
+            strike      = None
+            expiry      = None
+            option_type = None
+            if m:
+                try:
+                    from datetime import datetime as _dt
+                    expiry      = _dt.strptime(m.group(2), "%y%m%d").strftime("%Y-%m-%d")
+                    option_type = "call" if m.group(3) == "C" else "put"
+                    strike      = float(m.group(4)) / 1000.0
+                except Exception:
+                    pass
+            positions.append({
+                "type":             "option",
+                "symbol":           underlying,
+                "symbol_full":      symbol_raw,
+                "qty":              int(abs(qty)),
+                "direction":        "Long" if qty > 0 else "Short",
+                "strike":           strike,
+                "expiry":           expiry,
+                "option_type":      option_type,
+                "cost_basis_price": cost_basis_price,
+                "mark_price":       mark_price,
+                "pos_value":        pos_value,
+                "currency":         currency,
+            })
     return positions
+
+
+# ── Spread + Prämien-Analyse aus Open Positions CSV ───────────────────────────
+
+def _analyse_portfolio_premium(positions: list[dict]) -> dict:
+    """
+    Berechnet Prämieneinnahmen, Spreads und Budget-Daten aus geparsten Positionen.
+
+    Returns dict mit:
+      total_credit:       Summe aller eingenommenen Prämien (Short-Optionen) in USD
+      total_debit:        Summe aller bezahlten Prämien (Long-Optionen) in USD
+      net_credit:         total_credit - total_debit
+      spreads:            Liste erkannter Spread-Paare
+      naked_shorts:       Short-Optionen ohne passendes Long-Leg
+      total_max_loss:     Geschätztes max. Risiko aller Spreads
+      premium_per_month:  Hochrechnung auf 30 Tage (aus DTE-gewichtetem Credit)
+    """
+    from datetime import date as _date
+    import math
+
+    opts = [p for p in positions if p["type"] == "option"]
+    today = _date.today()
+
+    # Alle Short-Legs und Long-Legs nach (Underlying, Expiry, Type) gruppieren
+    by_key: dict[tuple, list[dict]] = {}
+    for p in opts:
+        key = (p["symbol"], p.get("expiry", ""), p.get("option_type", ""))
+        by_key.setdefault(key, []).append(p)
+
+    total_credit  = 0.0
+    total_debit   = 0.0
+    spreads:      list[dict] = []
+    naked_shorts: list[dict] = []
+
+    # Alle Short-Positionen durchgehen und versuchen zu einem Spread zu kombinieren
+    processed_keys: set = set()
+    for (sym, expiry, otype), legs in by_key.items():
+        if not legs:
+            continue
+        shorts = [l for l in legs if l["direction"] == "Short"]
+        longs  = [l for l in legs if l["direction"] == "Long"]
+
+        for s in shorts:
+            cb_price = s.get("cost_basis_price") or 0.0
+            contracts = s.get("qty", 1)
+            credit = cb_price * contracts * 100
+            total_credit += credit
+
+        for l in longs:
+            cb_price = l.get("cost_basis_price") or 0.0
+            contracts = l.get("qty", 1)
+            debit = cb_price * contracts * 100
+            total_debit += debit
+
+    # Spread-Erkennung: gleiches Underlying + Expiry + gleicher Typ
+    # Erkenne Bull Put Spreads: Short höherer Strike + Long niedrigerer Strike
+    # Erkenne Bear Call Spreads: Short niedrigerer Strike + Long höherer Strike
+    by_sym_exp: dict[tuple, dict] = {}
+    for p in opts:
+        key = (p["symbol"], p.get("expiry", ""), p.get("option_type", ""))
+        by_sym_exp.setdefault(key, {"longs": [], "shorts": []})
+        if p["direction"] == "Short":
+            by_sym_exp[key]["shorts"].append(p)
+        else:
+            by_sym_exp[key]["longs"].append(p)
+
+    matched_shorts: set[int] = set()
+    matched_longs:  set[int] = set()
+
+    for (sym, expiry, otype), grp in by_sym_exp.items():
+        for s in grp["shorts"]:
+            s_strike = s.get("strike") or 0.0
+            best_long = None
+            for l in grp["longs"]:
+                if id(l) in matched_longs:
+                    continue
+                l_strike = l.get("strike") or 0.0
+                if otype == "put" and l_strike < s_strike:
+                    best_long = l
+                elif otype == "call" and l_strike > s_strike:
+                    best_long = l
+            if best_long:
+                matched_shorts.add(id(s))
+                matched_longs.add(id(best_long))
+                s_cb   = s.get("cost_basis_price") or 0.0
+                l_cb   = best_long.get("cost_basis_price") or 0.0
+                contracts = min(s.get("qty", 1), best_long.get("qty", 1))
+                net_cred  = (s_cb - l_cb) * contracts * 100
+                s_strike  = s.get("strike") or 0.0
+                l_strike  = best_long.get("strike") or 0.0
+                width     = abs(s_strike - l_strike)
+                max_loss  = width * contracts * 100 - net_cred
+
+                try:
+                    exp_date = _date.fromisoformat(expiry)
+                    dte = max(0, (exp_date - today).days)
+                except Exception:
+                    dte = 30
+
+                label = (
+                    f"Bull Put {l_strike:.0f}/{s_strike:.0f}"
+                    if otype == "put"
+                    else f"Bear Call {s_strike:.0f}/{l_strike:.0f}"
+                )
+                spreads.append({
+                    "symbol":    sym,
+                    "expiry":    expiry,
+                    "dte":       dte,
+                    "type":      label,
+                    "net_credit":round(net_cred, 2),
+                    "width":     round(width, 2),
+                    "max_loss":  round(max_loss, 2),
+                    "contracts": contracts,
+                    "s_strike":  s_strike,
+                    "l_strike":  l_strike,
+                })
+            else:
+                naked_shorts.append(s)
+
+    total_max_loss = sum(sp["max_loss"] for sp in spreads if sp["max_loss"] > 0)
+
+    # Prämieneinnahme auf 30 Tage hochrechnen: gewichtet nach DTE
+    # Jeder Spread: Credit × (30 / DTE) → was würde man verdienen wenn man jetzt öffnet
+    if spreads:
+        monthly_est = sum(
+            sp["net_credit"] * (30 / max(sp["dte"], 1))
+            for sp in spreads
+        )
+    else:
+        monthly_est = total_credit  # Fallback: rohe Summe
+
+    return {
+        "total_credit":    round(total_credit, 2),
+        "total_debit":     round(total_debit, 2),
+        "net_credit":      round(total_credit - total_debit, 2),
+        "spreads":         spreads,
+        "naked_shorts":    naked_shorts,
+        "total_max_loss":  round(total_max_loss, 2),
+        "premium_per_month": round(monthly_est, 2),
+        "n_spreads":       len(spreads),
+    }
 
 
 def _parse_ibkr_csv(content: str) -> list[dict]:
@@ -464,6 +643,484 @@ def _build_candidates(opt_df: pd.DataFrame, corr_map: dict,
                     })
 
     return results
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def _load_insurance_candidates(
+    symbol: str,
+    stock_price: float,
+    dte_min: int,
+    dte_max: int,
+    puffer_min_pct: float,
+    puffer_max_pct: float,
+) -> pd.DataFrame:
+    """
+    Lädt Long-Put-Kandidaten für den Hedge-Budget Tab.
+    puffer_min_pct / puffer_max_pct = Abstand vom Kurs in % (z.B. 5 = 5% OTM).
+    """
+    lo = round(stock_price * (1 - puffer_max_pct / 100), 2)
+    hi = round(stock_price * (1 - puffer_min_pct / 100), 2)
+    df = select_into_dataframe(
+        query="""
+            SELECT
+                symbol,
+                strike_price,
+                expiration_date,
+                days_to_expiration      AS dte,
+                ROUND(day_close::numeric, 2)             AS premium,
+                ROUND(greeks_delta::numeric, 3)          AS delta,
+                ROUND(implied_volatility::numeric * 100, 1) AS iv_pct,
+                ROUND(iv_rank::numeric, 1)               AS iv_rank,
+                open_interest                            AS oi
+            FROM "OptionDataMerged"
+            WHERE symbol = :sym
+              AND contract_type = 'put'
+              AND strike_price BETWEEN :lo AND :hi
+              AND days_to_expiration BETWEEN :dmin AND :dmax
+              AND open_interest >= 50
+              AND day_close > 0
+            ORDER BY days_to_expiration, strike_price DESC
+        """,
+        params={"sym": symbol, "lo": lo, "hi": hi, "dmin": dte_min, "dmax": dte_max},
+    )
+    return df if df is not None and not df.empty else pd.DataFrame()
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def _load_vix_call_candidates(dte_min: int, dte_max: int) -> pd.DataFrame:
+    """Lädt VIX-Call-Kandidaten für den Hedge-Budget Tab."""
+    df = select_into_dataframe(
+        query="""
+            SELECT
+                symbol,
+                strike_price,
+                expiration_date,
+                days_to_expiration      AS dte,
+                ROUND(day_close::numeric, 2)             AS premium,
+                ROUND(greeks_delta::numeric, 3)          AS delta,
+                ROUND(implied_volatility::numeric * 100, 1) AS iv_pct,
+                open_interest                            AS oi
+            FROM "OptionDataMerged"
+            WHERE symbol IN ('VIX', '^VIX')
+              AND contract_type = 'call'
+              AND days_to_expiration BETWEEN :dmin AND :dmax
+              AND open_interest >= 20
+              AND day_close > 0
+            ORDER BY days_to_expiration, strike_price
+        """,
+        params={"dmin": dte_min, "dmax": dte_max},
+    )
+    return df if df is not None and not df.empty else pd.DataFrame()
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _load_spy_price() -> float | None:
+    df = select_into_dataframe(
+        query='SELECT live_stock_price FROM "OptionDataMerged" WHERE symbol = :s AND live_stock_price IS NOT NULL LIMIT 1',
+        params={"s": "SPY"},
+    )
+    if df is not None and not df.empty:
+        return float(df.iloc[0]["live_stock_price"])
+    return None
+
+
+# ── Hedge-Budget Tab ──────────────────────────────────────────────────────────
+
+def _render_hedge_budget(positions: list[dict]):
+    """
+    Rendert den 'Hedge-Budget' Tab:
+    3 Größen nebeneinander: Crash-Risiko / Versicherungskosten / Prämieneinnahme
+    + konkrete SPY-Put und VIX-Call Kandidaten aus der DB.
+    """
+    st.markdown("### 💰 Hedge-Budget — Versicherung vs. Prämieneinnahme")
+    st.caption(
+        "Wie viel kostet dich eine Absicherung — und wie viel % deiner monatlichen "
+        "Prämieneinnahme frisst sie? Die drei Zahlen nebeneinander."
+    )
+
+    premium_data = _analyse_portfolio_premium(positions)
+
+    # ── Schritt 1: Prämieneinnahme anzeigen + überschreiben ──────────────────
+    with st.container(border=True):
+        st.markdown("**Schritt 1 — Prämieneinnahmen aus deinem Portfolio**")
+        col_auto, col_man = st.columns([2, 1])
+        with col_auto:
+            n_sp  = premium_data["n_spreads"]
+            cred  = premium_data["total_credit"]
+            deb   = premium_data["total_debit"]
+            net   = premium_data["net_credit"]
+            est_m = premium_data["premium_per_month"]
+
+            if n_sp > 0:
+                st.success(
+                    f"**{n_sp} Spread{'s' if n_sp != 1 else ''}** erkannt · "
+                    f"Eingenommene Prämie (Summe): **${cred:,.2f}** · "
+                    f"Bezahlte Prämie (Long-Legs): **${deb:,.2f}** · "
+                    f"**Netto-Credit: ${net:,.2f}**"
+                )
+                st.caption(
+                    f"Monatliche Hochrechnung (DTE-gewichtet): ~**${est_m:,.0f}/Monat** "
+                    f"— wird verwendet wenn kein manueller Wert eingetragen."
+                )
+            else:
+                st.warning(
+                    "Keine Spreads automatisch erkannt. "
+                    "Bitte monatliche Prämieneinnahme manuell eingeben."
+                )
+
+        with col_man:
+            monthly_override = st.number_input(
+                "Manuell: monatliche Prämien $",
+                min_value=0.0,
+                value=float(max(est_m, 0)),
+                step=100.0,
+                format="%.0f",
+                key="hb_monthly_premium",
+                help="Überschreibt die automatische Hochrechnung.",
+            )
+
+    monthly_income = monthly_override if monthly_override > 0 else max(est_m, 1)
+
+    # ── Schritt 2: Parameter ──────────────────────────────────────────────────
+    with st.container(border=True):
+        st.markdown("**Schritt 2 — Absicherungs-Parameter**")
+        p1, p2, p3 = st.columns(3)
+        with p1:
+            insurance_days = st.selectbox(
+                "Versicherungszeitraum",
+                [30, 45, 60, 90, 120],
+                index=1,
+                format_func=lambda x: f"{x} Tage",
+                key="hb_days",
+            )
+        with p2:
+            crash_pct = st.slider(
+                "Crash-Szenario absichern gegen",
+                5, 50, 20, 5,
+                format="%d%%",
+                key="hb_crash_pct",
+                help="Wieviel % Marktfall willst du abfedern?",
+            )
+        with p3:
+            cover_pct = st.slider(
+                "Wieviel % des Schadens abfedern",
+                10, 100, 50, 10,
+                format="%d%%",
+                key="hb_cover_pct",
+                help="50% = Hedge soll die Hälfte des Crashschadens ausgleichen.",
+            )
+
+    # ── Crash-Risiko berechnen ────────────────────────────────────────────────
+    total_max_loss = premium_data["total_max_loss"]
+
+    # Beta-gewichtetes Verlustrisiko der Aktien-Seite
+    stock_syms = tuple(sorted({p["symbol"] for p in positions if p["type"] == "stock"}))
+    opt_syms   = tuple(sorted({p["symbol"] for p in positions if p["type"] == "option"}))
+    all_syms   = tuple(sorted(set(stock_syms) | set(opt_syms)))
+    betas_hb   = _load_betas(all_syms) if all_syms else {}
+    prices_hb  = _load_stock_prices_current(all_syms) if all_syms else {}
+
+    # Aktien-Portfolio-Wert
+    stock_value = sum(
+        (prices_hb.get(p["symbol"]) or 0) * p["qty"]
+        for p in positions
+        if p["type"] == "stock" and p.get("direction", "Long") == "Long"
+    )
+
+    # Beta-gew. Verlust der Aktien bei crash_pct% Rückgang
+    beta_weighted_loss = 0.0
+    for p in positions:
+        if p["type"] != "stock" or p.get("direction", "Long") != "Long":
+            continue
+        sym  = p["symbol"]
+        beta = betas_hb.get(sym) or _FALLBACK_BETAS.get(sym) or 1.0
+        px   = prices_hb.get(sym) or 0.0
+        qty  = p.get("qty", 0)
+        beta_weighted_loss += px * qty * beta * (crash_pct / 100)
+
+    # Optionen-Seite: max_loss der Spreads anteilsmäßig (grober Schätzer)
+    options_crash_loss = total_max_loss  # Worst case: alle Spreads maximal verlieren
+
+    total_crash_loss = beta_weighted_loss + options_crash_loss
+    target_hedge_value = total_crash_loss * (cover_pct / 100)
+
+    # ── Monatliche Versicherungskosten-Budget ─────────────────────────────────
+    months_covered   = insurance_days / 30.0
+    income_for_period = monthly_income * months_covered
+    budget_30pct     = income_for_period * 0.30
+    budget_20pct     = income_for_period * 0.20
+    budget_10pct     = income_for_period * 0.10
+
+    # ── Die 3 Zahlen nebeneinander ────────────────────────────────────────────
+    st.divider()
+    st.markdown("#### Die drei Zahlen")
+    kc1, kc2, kc3 = st.columns(3)
+
+    with kc1:
+        st.markdown(
+            f"<div style='background:#7f1d1d22;border:2px solid #ef4444;border-radius:10px;"
+            f"padding:16px;text-align:center;'>"
+            f"<div style='color:#9ca3af;font-size:12px;font-weight:600;'>CRASH-RISIKO</div>"
+            f"<div style='color:#ef4444;font-size:32px;font-weight:800;'>${total_crash_loss:,.0f}</div>"
+            f"<div style='color:#fca5a5;font-size:12px;'>bei −{crash_pct}% Marktfall</div>"
+            f"<div style='color:#9ca3af;font-size:11px;margin-top:6px;'>"
+            f"Aktien: ${beta_weighted_loss:,.0f} · Spreads: ${options_crash_loss:,.0f}</div>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+    with kc2:
+        abfed_val = total_crash_loss * cover_pct / 100
+        st.markdown(
+            f"<div style='background:#78350f22;border:2px solid #f59e0b;border-radius:10px;"
+            f"padding:16px;text-align:center;'>"
+            f"<div style='color:#9ca3af;font-size:12px;font-weight:600;'>ABSICHERUNGSZIEL</div>"
+            f"<div style='color:#f59e0b;font-size:32px;font-weight:800;'>${abfed_val:,.0f}</div>"
+            f"<div style='color:#fcd34d;font-size:12px;'>{cover_pct}% des Schadens abfedern</div>"
+            f"<div style='color:#9ca3af;font-size:11px;margin-top:6px;'>"
+            f"für {insurance_days} Tage Schutz</div>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+    with kc3:
+        st.markdown(
+            f"<div style='background:#14532d22;border:2px solid #22c55e;border-radius:10px;"
+            f"padding:16px;text-align:center;'>"
+            f"<div style='color:#9ca3af;font-size:12px;font-weight:600;'>PRÄMIENEINNAHME</div>"
+            f"<div style='color:#22c55e;font-size:32px;font-weight:800;'>${monthly_income:,.0f}</div>"
+            f"<div style='color:#86efac;font-size:12px;'>pro Monat</div>"
+            f"<div style='color:#9ca3af;font-size:11px;margin-top:6px;'>"
+            f"in {insurance_days}d = ${income_for_period:,.0f}</div>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+    # ── Budget-Ampel ──────────────────────────────────────────────────────────
+    st.divider()
+    st.markdown("#### Versicherungsbudget (empfohlen ≤ 30% der Prämieneinnahme)")
+    b1, b2, b3 = st.columns(3)
+    b1.metric("30%-Budget (konservativ)", f"${budget_30pct:,.0f}",
+              help=f"30% von ${income_for_period:,.0f} für {insurance_days} Tage")
+    b2.metric("20%-Budget (empfohlen)", f"${budget_20pct:,.0f}")
+    b3.metric("10%-Budget (sparsam)", f"${budget_10pct:,.0f}")
+
+    st.caption(
+        f"Wenn eine Versicherung **< ${budget_20pct:,.0f}** kostet und {cover_pct}% des "
+        f"${total_crash_loss:,.0f}-Crashs abfedert → **selbstfinanziert**. "
+        f"Teurer → frisst deinen Edge."
+    )
+
+    # ── SPY Put Kandidaten ────────────────────────────────────────────────────
+    st.divider()
+    st.markdown("#### SPY Long Put — echte Crash-Versicherung")
+    st.caption(
+        f"Welcher SPY Put kostet wie viel — und wie viel % deiner {insurance_days}-Tage-"
+        f"Prämie frisst er?"
+    )
+
+    spy_price = _load_spy_price()
+    if spy_price:
+        spy_puts = _load_insurance_candidates(
+            "SPY", spy_price,
+            dte_min=max(insurance_days - 15, 14),
+            dte_max=insurance_days + 30,
+            puffer_min_pct=crash_pct * 0.4,
+            puffer_max_pct=crash_pct * 1.3,
+        )
+        if not spy_puts.empty:
+            spy_puts = spy_puts.copy()
+            spy_puts["puffer_%"]     = ((spy_price - spy_puts["strike_price"]) / spy_price * 100).round(1)
+            spy_puts["kosten_1kt"]   = (spy_puts["premium"] * 100).round(0).astype(int)
+
+            # Kontraktanzahl um target_hedge_value zu erreichen
+            # Grob: Put-Schutz bei max Verlust ≈ (strike - puffer) × 100 × Kontrakte
+            # Vereinfacht: Kontrakte = target / (crash% × spy_price × 100)
+            est_contracts = max(1, round(target_hedge_value / (crash_pct / 100 * spy_price * 100)))
+            spy_puts["kosten_gesamt"] = (spy_puts["premium"] * 100 * est_contracts).round(0).astype(int)
+            spy_puts["% der Prämie"] = (spy_puts["kosten_gesamt"] / income_for_period * 100).round(1)
+
+            disp_spy = spy_puts[["strike_price","expiration_date","dte","puffer_%",
+                                  "premium","kosten_1kt","kosten_gesamt","% der Prämie",
+                                  "delta","iv_pct","iv_rank","oi"]].copy()
+            disp_spy.columns = ["Strike","Verfall","DTE","Puffer %","Prämie $",
+                                 "Kosten/Kt $","Kosten gesamt $","% der Prämie",
+                                 "Delta","IV %","IV Rank","OI"]
+
+            st.caption(
+                f"SPY ${spy_price:.2f} · ~{est_contracts} Kontrakte für {cover_pct}%-Schutz "
+                f"bei −{crash_pct}% · **Grün = ≤ 20% der Prämie**"
+            )
+
+            def _color_pct(col):
+                return [
+                    "color:#22c55e;font-weight:700" if v <= 20
+                    else ("color:#f59e0b;font-weight:700" if v <= 35 else "color:#ef4444;font-weight:700")
+                    for v in col
+                ]
+
+            sel_spy = st.dataframe(
+                disp_spy.style
+                .apply(_color_pct, subset=["% der Prämie"])
+                .format({
+                    "Puffer %":       "{:.1f}%",
+                    "Prämie $":       "${:.2f}",
+                    "Kosten/Kt $":    "${:.0f}",
+                    "Kosten gesamt $":"${:,.0f}",
+                    "% der Prämie":   "{:.1f}%",
+                    "Delta":          "{:.3f}",
+                    "IV %":           "{:.1f}%",
+                    "IV Rank":        "{:.0f}",
+                }),
+                hide_index=True,
+                use_container_width=True,
+                on_select="rerun",
+                selection_mode="single-row",
+                key="hb_spy_sel",
+                height=min(350, 50 + 38 * len(disp_spy)),
+            )
+            rows_spy = sel_spy.selection.rows if hasattr(sel_spy, "selection") else []
+            if rows_spy:
+                r = disp_spy.iloc[rows_spy[0]]
+                cost = float(r["Kosten gesamt $"])
+                pct_prem = float(r["% der Prämie"])
+                color = "#22c55e" if pct_prem <= 20 else ("#f59e0b" if pct_prem <= 35 else "#ef4444")
+                verdict = "✅ selbstfinanziert" if pct_prem <= 20 else ("⚠️ akzeptabel" if pct_prem <= 35 else "❌ frisst den Edge")
+                st.markdown(
+                    f"**SPY Put Strike {r['Strike']:.0f} · Verfall {r['Verfall']} · "
+                    f"{est_contracts} Kontrakt{'e' if est_contracts != 1 else ''}**  \n"
+                    f"Kosten: **${cost:,.0f}** = "
+                    f"<span style='color:{color};font-weight:700;'>{pct_prem:.1f}% der {insurance_days}-Tage-Prämie {verdict}</span>  \n"
+                    f"Abfederung bei −{crash_pct}%: ~**{cover_pct}%** des geschätzten Schadens (${target_hedge_value:,.0f})",
+                    unsafe_allow_html=True,
+                )
+        else:
+            st.info(f"Keine SPY-Puts in DTE-Fenster {insurance_days - 15}–{insurance_days + 30} gefunden.")
+    else:
+        st.warning("SPY-Kurs nicht in DB verfügbar.")
+
+    # ── VIX Call Kandidaten ───────────────────────────────────────────────────
+    st.divider()
+    st.markdown("#### VIX Long Call — Volatilitäts-Versicherung")
+    st.caption(
+        "VIX-Calls explodieren bei echten Crashes (+300–500%). "
+        "Günstig wenn VIX niedrig. Basisrisiko: VIX muss spiken."
+    )
+
+    vix_df = select_into_dataframe(
+        query='SELECT close FROM "StockPricesYahoo" WHERE symbol = :s ORDER BY date DESC LIMIT 1',
+        params={"s": "^VIX"},
+    )
+    vix_level = float(vix_df.iloc[0]["close"]) if vix_df is not None and not vix_df.empty else None
+
+    if vix_level:
+        v_color = "#22c55e" if vix_level < 15 else ("#f59e0b" if vix_level < 25 else "#ef4444")
+        v_label = "günstig — jetzt kaufen" if vix_level < 15 else ("fair" if vix_level < 25 else "teuer — Crash läuft bereits")
+        st.markdown(
+            f"VIX aktuell: <b style='color:{v_color};font-size:20px;'>{vix_level:.1f}</b> "
+            f"<span style='color:{v_color};'>— {v_label}</span>",
+            unsafe_allow_html=True,
+        )
+
+    vix_calls = _load_vix_call_candidates(
+        dte_min=max(insurance_days - 15, 14),
+        dte_max=insurance_days + 30,
+    )
+    if not vix_calls.empty:
+        vix_calls = vix_calls.copy()
+        # Schätzung: VIX-Call-Wert bei Crash
+        # Historisch: −20% Markt → VIX +150%, −30% → VIX +250%
+        vix_mult = {5: 0.5, 10: 0.8, 15: 1.2, 20: 1.5, 25: 2.0, 30: 2.5, 40: 3.5, 50: 4.5}
+        mult = next((v for k, v in sorted(vix_mult.items()) if crash_pct <= k), 4.5)
+        if vix_level:
+            vix_at_crash = vix_level * (1 + mult)
+            vix_calls["est_wert_crash"] = (
+                (vix_at_crash - vix_calls["strike_price"]).clip(lower=0) * 100
+            ).round(0).astype(int)
+        else:
+            vix_calls["est_wert_crash"] = 0
+
+        vix_calls["kosten_1kt"] = (vix_calls["premium"] * 100).round(0).astype(int)
+        vix_n = max(1, round(target_hedge_value / max(vix_calls["est_wert_crash"].max(), 1)))
+        vix_calls["kosten_gesamt"] = (vix_calls["kosten_1kt"] * vix_n).astype(int)
+        vix_calls["% der Prämie"] = (vix_calls["kosten_gesamt"] / income_for_period * 100).round(1)
+        vix_calls["Est. Wert Crash $"] = (vix_calls["est_wert_crash"] * vix_n).astype(int)
+
+        disp_vix = vix_calls[["strike_price","expiration_date","dte","premium",
+                               "kosten_1kt","kosten_gesamt","% der Prämie",
+                               "Est. Wert Crash $","delta","iv_pct","oi"]].copy()
+        disp_vix.columns = ["Strike VIX","Verfall","DTE","Prämie $",
+                             "Kosten/Kt $","Kosten gesamt $","% der Prämie",
+                             f"Est. Wert bei −{crash_pct}% $",
+                             "Delta","IV %","OI"]
+
+        vix_suffix = f"~{vix_n} Kontrakt{'e' if vix_n != 1 else ''}" if vix_n > 0 else ""
+        st.caption(
+            f"VIX-Calls · {vix_suffix} für {cover_pct}%-Schutzwirkung · "
+            f"VIX-Schätzung bei −{crash_pct}%: ~{vix_level * (1 + mult):.0f} (×{1+mult:.1f})"
+            if vix_level else f"VIX-Calls · {vix_suffix}"
+        )
+
+        def _color_pct_vix(col):
+            return [
+                "color:#22c55e;font-weight:700" if v <= 10
+                else ("color:#f59e0b;font-weight:700" if v <= 25 else "color:#ef4444;font-weight:700")
+                for v in col
+            ]
+
+        st.dataframe(
+            disp_vix.style
+            .apply(_color_pct_vix, subset=["% der Prämie"])
+            .format({
+                "Prämie $":           "${:.2f}",
+                "Kosten/Kt $":        "${:.0f}",
+                "Kosten gesamt $":    "${:,.0f}",
+                "% der Prämie":       "{:.1f}%",
+                f"Est. Wert bei −{crash_pct}% $": "${:,.0f}",
+                "Delta":              "{:.3f}",
+                "IV %":               "{:.1f}%",
+            }),
+            hide_index=True,
+            use_container_width=True,
+            height=min(350, 50 + 38 * len(disp_vix)),
+        )
+        st.caption(
+            f"⚠️ VIX-Call-Wert bei Crash ist eine *Schätzung* auf Basis historischer VIX-Reaktionen. "
+            f"Basisrisiko: VIX muss wirklich explodieren — bei langsam fallendem Markt kaum Gewinn."
+        )
+    else:
+        st.info("Keine VIX-Calls in der DB für dieses DTE-Fenster.")
+
+    # ── Spread-Detail (Aufklappen) ────────────────────────────────────────────
+    if premium_data["spreads"]:
+        st.divider()
+        with st.expander(f"📋 {premium_data['n_spreads']} erkannte Spreads im Portfolio", expanded=False):
+            sp_rows = []
+            for sp in sorted(premium_data["spreads"], key=lambda x: x["net_credit"], reverse=True):
+                sp_rows.append({
+                    "Symbol":      sp["symbol"],
+                    "Typ":         sp["type"],
+                    "Verfall":     sp["expiry"],
+                    "DTE":         sp["dte"],
+                    "Net Credit $": sp["net_credit"],
+                    "Breite $":    sp["width"] * sp["contracts"] * 100,
+                    "Max Verlust $": sp["max_loss"],
+                    "Kontrakte":   sp["contracts"],
+                })
+            df_sp = pd.DataFrame(sp_rows)
+            st.dataframe(
+                df_sp.style.format({
+                    "Net Credit $":   "${:.2f}",
+                    "Breite $":       "${:.0f}",
+                    "Max Verlust $":  "${:.0f}",
+                }),
+                hide_index=True,
+                use_container_width=True,
+            )
+            st.caption(
+                f"Gesamtes Spread-Risiko: **${premium_data['total_max_loss']:,.0f}** · "
+                f"Gesamt-Credit: **${premium_data['net_credit']:,.0f}**"
+            )
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -971,7 +1628,12 @@ def main():
     # ── Suche-Button ──────────────────────────────────────────────────────────
     run = st.button("Hedge-Kandidaten suchen", type="primary", use_container_width=True)
 
+    # Hedge-Budget Tab braucht keine Suchergebnisse — nur das Portfolio
     if not run and "chf_results" not in st.session_state:
+        st.divider()
+        tab_budget_early, = st.tabs(["💰 Hedge-Budget"])
+        with tab_budget_early:
+            _render_hedge_budget(positions)
         return
 
     if run:
@@ -1051,8 +1713,8 @@ def main():
     else:
         results_filtered = results
 
-    tab_heatmap, tab_corr, tab_strategies, tab_stress = st.tabs([
-        "Portfolio-Matrix", "Negativ-Korrelierte", "Hedge-Strategien", "Stress-Test"
+    tab_heatmap, tab_corr, tab_strategies, tab_stress, tab_budget = st.tabs([
+        "Portfolio-Matrix", "Negativ-Korrelierte", "Hedge-Strategien", "Stress-Test", "💰 Hedge-Budget"
     ])
 
     with tab_heatmap:
@@ -1129,6 +1791,9 @@ Ein Short Put auf XLU mit Korrelation −0.3 und RoR 18% → Score **5.4**
                 [p for p in positions if p.get("direction", "Long") == "Long"],
                 results_filtered, betas, prices,
             )
+
+    with tab_budget:
+        _render_hedge_budget(positions)
 
 
 if __name__ == "__main__":
