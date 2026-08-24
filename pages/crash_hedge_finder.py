@@ -985,14 +985,22 @@ def _render_hedge_budget(positions: list[dict]):
     spy_puts["est_schutz"]     = (spy_puts["innerer_wert_1kt"] * spy_puts["n_kontrakte_budget"]).round(0)
     spy_puts["schutz_pct_crash"] = (spy_puts["est_schutz"] / max(total_crash_loss, 1) * 100).round(1)
 
-    # Sortieren: erst die mit echtem Schutz (innerer Wert > 0), dann nach pct_praemie
+    # Effizienz = Schutz pro Dollar Kosten — sortiere danach
+    spy_puts["effizienz"] = (
+        spy_puts["est_schutz"] / spy_puts["kosten_gesamt"].clip(lower=1)
+    ).round(2)
+
     spy_puts["hat_schutz"] = spy_puts["innerer_wert_1kt"] > 0
     top3 = (
-        spy_puts
-        .sort_values(["hat_schutz", "est_schutz"], ascending=[False, False])
+        spy_puts[spy_puts["hat_schutz"]]
+        .sort_values("effizienz", ascending=False)
         .head(3)
         .reset_index(drop=True)
     )
+    if len(top3) < 3:
+        # Auffüllen mit OTM-Puts falls zu wenige ITM-Puts
+        otm = spy_puts[~spy_puts["hat_schutz"]].sort_values("pct_praemie").head(3 - len(top3))
+        top3 = pd.concat([top3, otm]).reset_index(drop=True)
 
     # Wenn keine Puts bei Crash ITM → zeige auch OTM-Puts aber mit Hinweis
     alle_otm = top3["innerer_wert_1kt"].sum() == 0
@@ -1018,11 +1026,20 @@ def _render_hedge_budget(positions: list[dict]):
         ivr      = row.get("iv_rank", None)
 
         if schutz > 0:
-            border, bg = "#22c55e", "#14532d22"
+            if pct <= 15:
+                border, bg = "#22c55e", "#0f2a1a"
+                kosten_label = f"✅ {pct:.1f}% — günstig"
+            elif pct <= 25:
+                border, bg = "#f59e0b", "#2a1f0a"
+                kosten_label = f"🟡 {pct:.1f}% — akzeptabel"
+            else:
+                border, bg = "#ef4444", "#2a0f0f"
+                kosten_label = f"🔴 {pct:.1f}% — teuer"
             schutz_label = f"~${schutz:,.0f} ({schutz_p:.0f}% des Crash-Schadens)"
         else:
-            border, bg = "#f59e0b", "#78350f22"
-            schutz_label = f"$0 — Put noch OTM bei −{crash_pct}% (Teenie: zahlt nur bei stärkerem Crash)"
+            border, bg = "#64748b", "#1a2030"
+            kosten_label = f"⚪ {pct:.1f}% — Teenie (OTM)"
+            schutz_label = f"$0 innerer Wert — zahlt erst bei stärkerem Crash aus (Vega-Gewinn möglich)"
 
         rank_label = ["🥇 Option 1", "🥈 Option 2", "🥉 Option 3"][i]
 
@@ -1037,17 +1054,18 @@ def _render_hedge_budget(positions: list[dict]):
         st.markdown(
             f"<div style='background:{bg};border:2px solid {border};"
             f"border-radius:12px;padding:18px 22px;margin-bottom:14px;'>"
-            f"<div style='color:#f1f5f9;font-size:15px;font-weight:700;margin-bottom:12px;'>"
-            f"{rank_label} — SPY Put {strike:.0f} · Verfall {verfall} · {dte} DTE · {puf:.1f}% OTM{iv_hint}</div>"
+            f"<div style='display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px;'>"
+            f"<span style='color:#f1f5f9;font-size:15px;font-weight:700;'>"
+            f"{rank_label} — SPY Put {strike:.0f} · Verfall {verfall} · {dte} DTE · {puf:.1f}% OTM{iv_hint}</span>"
+            f"<span style='background:{border}33;border:1px solid {border};border-radius:20px;"
+            f"padding:4px 14px;color:{border};font-weight:700;font-size:13px;'>{kosten_label}</span>"
+            f"</div>"
             f"<div style='display:flex;gap:40px;flex-wrap:wrap;'>"
-            # Kosten
             f"<div><div style='color:#9ca3af;font-size:11px;text-transform:uppercase;letter-spacing:1px;'>Du zahlst</div>"
             f"<div style='color:#f1f5f9;font-size:28px;font-weight:800;'>${cost:,.0f}</div>"
-            f"<div style='color:{border};font-size:12px;font-weight:700;'>{pct:.1f}% deiner {insurance_days}-Tage-Prämie</div>"
-            f"<div style='color:#9ca3af;font-size:11px;'>{n}× Kontrakt à ${praemie:.2f}</div></div>"
-            # Schutz
+            f"<div style='color:#9ca3af;font-size:12px;'>{n}× Kontrakt à ${praemie:.2f}</div></div>"
             f"<div><div style='color:#9ca3af;font-size:11px;text-transform:uppercase;letter-spacing:1px;'>Schutz bei −{crash_pct}%</div>"
-            f"<div style='color:{border};font-size:18px;font-weight:700;margin-top:4px;'>{schutz_label}</div>"
+            f"<div style='color:{border};font-size:16px;font-weight:700;margin-top:4px;'>{schutz_label}</div>"
             f"<div style='color:#9ca3af;font-size:11px;margin-top:4px;'>SPY bei Crash: ${spy_at_crash:.0f} · Strike: {strike:.0f}</div></div>"
             f"</div></div>",
             unsafe_allow_html=True,
