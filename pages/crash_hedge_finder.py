@@ -305,15 +305,26 @@ def _analyse_portfolio_premium(positions: list[dict]) -> dict:
     # Jeder Spread: Credit × (30 / DTE) → was würde man verdienen wenn man jetzt öffnet
     net_credit_total = total_credit - total_debit
 
-    # Realisierter Credit bei 50%-Rückkauf:
-    # Du kaufst bei ~50% Gewinn zurück → du behältst ~50% des eingenommenen Netto-Credits.
-    # Das ist deine echte monatliche Einnahme pro Zyklus.
-    realized_per_cycle = net_credit_total * 0.50
+    # Realisierter Credit pro Spread:
+    # Rückkauf-Regel: 60% Profit ODER $50 Gewinn — whatever comes first → konservativ = min().
+    # Bei 60% Profit: du behältst 60% des eingenommenen Credits.
+    # Bei $50 Fix-Gewinn: bei kleinen Spreads (<$83 Credit) kommt $50 zuerst.
+    realized_per_cycle = 0.0
+    for sp in spreads:
+        cred = sp["net_credit"]
+        via_60pct = cred * 0.60          # 60% Profit → du behältst 60%
+        via_50usd = min(cred, 50.0)      # $50 Fix → du behältst max $50
+        realized_per_cycle += min(via_60pct, via_50usd)
+    # Naked Shorts ebenfalls einrechnen (gleiche Logik)
+    for ns in naked_shorts:
+        cred = (ns.get("cost_basis_price") or 0) * 100
+        via_60pct = cred * 0.60
+        via_50usd = min(cred, 50.0)
+        realized_per_cycle += min(via_60pct, via_50usd)
 
-    # Zyklen pro Monat: durchschn. DTE der offenen Spreads → wie viele solcher Zyklen passen in 30d?
+    # Zyklen pro Monat: bei 60%-Haltedauer schließt man nach ~60% der Laufzeit
     if spreads:
         avg_dte = sum(sp["dte"] for sp in spreads) / len(spreads)
-        # Bei 50%-Rückkauf schließt man nach ~60% der Laufzeit → effektive Haltedauer
         hold_days = avg_dte * 0.60
         cycles_per_month = 30.0 / max(hold_days, 1)
     else:
