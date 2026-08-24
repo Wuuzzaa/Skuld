@@ -971,7 +971,39 @@ def _render_hedge_budget(positions: list[dict]):
     # Preis von SPY nach Crash
     spy_at_crash = spy_price * (1 - crash_pct / 100)
 
-    # Innerer Wert bei Crash (kann 0 sein wenn noch OTM)
+    # ── Vega-Simulation mit Black-Scholes ─────────────────────────────────────
+    # VIX-Multiplikator bei Crash (historisch kalibriert)
+    _vix_mult_map = {5: 0.5, 10: 0.8, 15: 1.2, 20: 1.5, 25: 2.0, 30: 2.5, 40: 3.5, 50: 4.5}
+    vix_mult = next((v for k, v in sorted(_vix_mult_map.items()) if crash_pct <= k), 4.5)
+
+    try:
+        from src.black_scholes import PutValue as _PutValue
+        _bs_available = True
+    except ImportError:
+        _bs_available = False
+
+    def _sim_put_value(row) -> float:
+        """BS-Neubewertung des Puts bei Crash: Crash-Preis + explodierte IV."""
+        if not _bs_available:
+            return float(row["innerer_wert_1kt"])
+        try:
+            iv_now   = float(row["iv_pct"]) / 100.0 if row.get("iv_pct") else 0.20
+            crash_iv = iv_now * (1 + vix_mult)           # IV explodiert mit VIX
+            rest_dte = max(float(row["dte"]) * 0.40, 1)  # ~40% DTE verbleiben bei sofortigem Crash
+            val = _PutValue(
+                S=spy_at_crash,
+                K=float(row["strike_price"]),
+                sigma=crash_iv,
+                t=rest_dte,
+                r=0.04,
+            )
+            return max(val * 100, 0.0)  # × 100 = Kontraktwert in $
+        except Exception:
+            return float(row["innerer_wert_1kt"])
+
+    spy_puts["bs_wert_crash_1kt"] = spy_puts.apply(_sim_put_value, axis=1).round(0)
+
+    # Innerer Wert (rein rechnerisch, ohne Vega)
     spy_puts["innerer_wert_1kt"] = (
         (spy_puts["strike_price"] - spy_at_crash).clip(lower=0) * 100
     ).round(0)
@@ -980,17 +1012,21 @@ def _render_hedge_budget(positions: list[dict]):
     spy_puts["n_kontrakte_budget"] = (budget_20pct / spy_puts["kosten_1kt"].clip(lower=1)).apply(
         lambda x: max(1, int(x))
     )
-    spy_puts["kosten_gesamt"]  = (spy_puts["kosten_1kt"] * spy_puts["n_kontrakte_budget"]).round(0)
-    spy_puts["pct_praemie"]    = (spy_puts["kosten_gesamt"] / income_for_period * 100).round(1)
-    spy_puts["est_schutz"]     = (spy_puts["innerer_wert_1kt"] * spy_puts["n_kontrakte_budget"]).round(0)
+    spy_puts["kosten_gesamt"]    = (spy_puts["kosten_1kt"] * spy_puts["n_kontrakte_budget"]).round(0)
+    spy_puts["pct_praemie"]      = (spy_puts["kosten_gesamt"] / income_for_period * 100).round(1)
+    # Schutz = BS-Wert bei Crash (beinhaltet Vega-Gewinn) minus Kaufkosten
+    spy_puts["est_schutz"]       = (
+        (spy_puts["bs_wert_crash_1kt"] - spy_puts["kosten_1kt"])
+        .clip(lower=0) * spy_puts["n_kontrakte_budget"]
+    ).round(0)
     spy_puts["schutz_pct_crash"] = (spy_puts["est_schutz"] / max(total_crash_loss, 1) * 100).round(1)
 
-    # Effizienz = Schutz pro Dollar Kosten — sortiere danach
+    # Effizienz = Schutz pro Dollar Kosten
     spy_puts["effizienz"] = (
         spy_puts["est_schutz"] / spy_puts["kosten_gesamt"].clip(lower=1)
     ).round(2)
 
-    spy_puts["hat_schutz"] = spy_puts["innerer_wert_1kt"] > 0
+    spy_puts["hat_schutz"] = spy_puts["bs_wert_crash_1kt"] > spy_puts["kosten_1kt"]
     top3 = (
         spy_puts[spy_puts["hat_schutz"]]
         .sort_values("effizienz", ascending=False)
@@ -998,17 +1034,13 @@ def _render_hedge_budget(positions: list[dict]):
         .reset_index(drop=True)
     )
     if len(top3) < 3:
-        # Auffüllen mit OTM-Puts falls zu wenige ITM-Puts
         otm = spy_puts[~spy_puts["hat_schutz"]].sort_values("pct_praemie").head(3 - len(top3))
         top3 = pd.concat([top3, otm]).reset_index(drop=True)
 
-    # Wenn keine Puts bei Crash ITM → zeige auch OTM-Puts aber mit Hinweis
-    alle_otm = top3["innerer_wert_1kt"].sum() == 0
-
+    alle_otm = top3["hat_schutz"].sum() == 0
     if alle_otm:
         st.warning(
-            f"⚠️ Bei −{crash_pct}% (SPY auf ${spy_at_crash:.0f}) sind alle verfügbaren Puts "
-            f"noch **out of the money** — sie zahlen nichts aus. "
+            f"⚠️ Bei −{crash_pct}% sind auch mit Vega-Effekt keine profitablen Puts verfügbar. "
             f"Crash-Szenario erhöhen oder längere Laufzeit wählen."
         )
 
@@ -1023,6 +1055,9 @@ def _render_hedge_budget(positions: list[dict]):
         praemie  = float(row["premium"])
         schutz   = float(row["est_schutz"])
         schutz_p = float(row["schutz_pct_crash"])
+        bs_wert  = float(row["bs_wert_crash_1kt"]) * int(row["n_kontrakte_budget"])
+        inn_wert = float(row["innerer_wert_1kt"]) * int(row["n_kontrakte_budget"])
+        vega_gewinn = max(bs_wert - inn_wert, 0)
         ivr      = row.get("iv_rank", None)
 
         if schutz > 0:
@@ -1035,11 +1070,13 @@ def _render_hedge_budget(positions: list[dict]):
             else:
                 border, bg = "#ef4444", "#2a0f0f"
                 kosten_label = f"🔴 {pct:.1f}% — teuer"
-            schutz_label = f"~${schutz:,.0f} ({schutz_p:.0f}% des Crash-Schadens)"
+            schutz_label = f"~${schutz:,.0f} Netto-Gewinn ({schutz_p:.0f}% des Crash-Schadens)"
+            vega_label   = f"Innerer Wert: ${inn_wert:,.0f} + Vega-Gewinn: ~${vega_gewinn:,.0f}"
         else:
             border, bg = "#64748b", "#1a2030"
             kosten_label = f"⚪ {pct:.1f}% — Teenie (OTM)"
-            schutz_label = f"$0 innerer Wert — zahlt erst bei stärkerem Crash aus (Vega-Gewinn möglich)"
+            schutz_label = f"Kein innerer Wert — aber Vega-Gewinn möglich bei stärkerem Crash"
+            vega_label   = f"BS-Wert bei Crash: ~${float(row['bs_wert_crash_1kt']) * n:,.0f} (inkl. IV-Explosion ×{1+vix_mult:.1f})"
 
         rank_label = ["🥇 Option 1", "🥈 Option 2", "🥉 Option 3"][i]
 
@@ -1064,16 +1101,18 @@ def _render_hedge_budget(positions: list[dict]):
             f"<div><div style='color:#9ca3af;font-size:11px;text-transform:uppercase;letter-spacing:1px;'>Du zahlst</div>"
             f"<div style='color:#f1f5f9;font-size:28px;font-weight:800;'>${cost:,.0f}</div>"
             f"<div style='color:#9ca3af;font-size:12px;'>{n}× Kontrakt à ${praemie:.2f}</div></div>"
-            f"<div><div style='color:#9ca3af;font-size:11px;text-transform:uppercase;letter-spacing:1px;'>Schutz bei −{crash_pct}%</div>"
+            f"<div><div style='color:#9ca3af;font-size:11px;text-transform:uppercase;letter-spacing:1px;'>Schutz bei −{crash_pct}% (mit Vega)</div>"
             f"<div style='color:{border};font-size:16px;font-weight:700;margin-top:4px;'>{schutz_label}</div>"
-            f"<div style='color:#9ca3af;font-size:11px;margin-top:4px;'>SPY bei Crash: ${spy_at_crash:.0f} · Strike: {strike:.0f}</div></div>"
+            f"<div style='color:#9ca3af;font-size:11px;margin-top:4px;'>{vega_label}</div>"
+            f"<div style='color:#9ca3af;font-size:11px;'>SPY ${spy_at_crash:.0f} · IV ×{1+vix_mult:.1f} · {int(row['dte'])-int(row['dte'])*0.6:.0f} DTE rest</div></div>"
             f"</div></div>",
             unsafe_allow_html=True,
         )
 
     st.caption(
-        f"Budget = 20% der {insurance_days}-Tage-Prämie (${budget_20pct:,.0f}) · "
-        f"SPY aktuell ${spy_price:.2f} · bei −{crash_pct}% = ${spy_at_crash:.0f}"
+        f"SPY ${spy_price:.2f} · Budget = 20% der {insurance_days}-Tage-Prämie (${budget_20pct:,.0f}) · "
+        f"Vega-Simulation: IV ×{1+vix_mult:.1f} bei −{crash_pct}% (historisch kalibriert) · "
+        f"Black-Scholes Neubewertung bei Crash-Preis + explodierter IV"
     )
 
     # ── Spread-Detail (Aufklappen) ────────────────────────────────────────────
