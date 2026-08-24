@@ -917,203 +917,111 @@ def _render_hedge_budget(positions: list[dict]):
 
     # ── Budget-Ampel ──────────────────────────────────────────────────────────
     st.divider()
-    st.markdown("#### Versicherungsbudget (empfohlen ≤ 30% der Prämieneinnahme)")
+    st.markdown("#### Was darfst du ausgeben?")
     b1, b2, b3 = st.columns(3)
-    b1.metric("30%-Budget (konservativ)", f"${budget_30pct:,.0f}",
-              help=f"30% von ${income_for_period:,.0f} für {insurance_days} Tage")
-    b2.metric("20%-Budget (empfohlen)", f"${budget_20pct:,.0f}")
-    b3.metric("10%-Budget (sparsam)", f"${budget_10pct:,.0f}")
-
+    b1.metric("10% der Prämie (sparsam)",    f"${budget_10pct:,.0f}")
+    b2.metric("20% der Prämie (empfohlen)",  f"${budget_20pct:,.0f}")
+    b3.metric("30% der Prämie (konservativ)",f"${budget_30pct:,.0f}")
     st.caption(
-        f"Wenn eine Versicherung **< ${budget_20pct:,.0f}** kostet und {cover_pct}% des "
-        f"${total_crash_loss:,.0f}-Crashs abfedert → **selbstfinanziert**. "
-        f"Teurer → frisst deinen Edge."
+        f"Basis: ${income_for_period:,.0f} Prämieneinnahme in {insurance_days} Tagen · "
+        f"Versicherung ≤ 20% = selbstfinanziert, darüber frisst sie deinen Edge."
     )
 
-    # ── SPY Put Kandidaten ────────────────────────────────────────────────────
+    # ── Top-3 SPY Puts ────────────────────────────────────────────────────────
     st.divider()
-    st.markdown("#### SPY Long Put — echte Crash-Versicherung")
-    st.caption(
-        f"Welcher SPY Put kostet wie viel — und wie viel % deiner {insurance_days}-Tage-"
-        f"Prämie frisst er?"
-    )
+    st.markdown("#### Wie viel zahlst du konkret? — Top 3 SPY Puts")
 
     spy_price = _load_spy_price()
-    if spy_price:
-        spy_puts = _load_insurance_candidates(
-            "SPY", spy_price,
-            dte_min=max(insurance_days - 15, 14),
-            dte_max=insurance_days + 30,
-            puffer_min_pct=crash_pct * 0.4,
-            puffer_max_pct=crash_pct * 1.3,
-        )
-        if not spy_puts.empty:
-            spy_puts = spy_puts.copy()
-            spy_puts["puffer_%"]     = ((spy_price - spy_puts["strike_price"]) / spy_price * 100).round(1)
-            spy_puts["kosten_1kt"]   = (spy_puts["premium"] * 100).round(0).astype(int)
-
-            # Kontraktanzahl um target_hedge_value zu erreichen
-            # Grob: Put-Schutz bei max Verlust ≈ (strike - puffer) × 100 × Kontrakte
-            # Vereinfacht: Kontrakte = target / (crash% × spy_price × 100)
-            est_contracts = max(1, round(target_hedge_value / (crash_pct / 100 * spy_price * 100)))
-            spy_puts["kosten_gesamt"] = (spy_puts["premium"] * 100 * est_contracts).round(0).astype(int)
-            spy_puts["% der Prämie"] = (spy_puts["kosten_gesamt"] / income_for_period * 100).round(1)
-
-            disp_spy = spy_puts[["strike_price","expiration_date","dte","puffer_%",
-                                  "premium","kosten_1kt","kosten_gesamt","% der Prämie",
-                                  "delta","iv_pct","iv_rank","oi"]].copy()
-            disp_spy.columns = ["Strike","Verfall","DTE","Puffer %","Prämie $",
-                                 "Kosten/Kt $","Kosten gesamt $","% der Prämie",
-                                 "Delta","IV %","IV Rank","OI"]
-
-            st.caption(
-                f"SPY ${spy_price:.2f} · ~{est_contracts} Kontrakte für {cover_pct}%-Schutz "
-                f"bei −{crash_pct}% · **Grün = ≤ 20% der Prämie**"
-            )
-
-            def _color_pct(col):
-                return [
-                    "color:#22c55e;font-weight:700" if v <= 20
-                    else ("color:#f59e0b;font-weight:700" if v <= 35 else "color:#ef4444;font-weight:700")
-                    for v in col
-                ]
-
-            sel_spy = st.dataframe(
-                disp_spy.style
-                .apply(_color_pct, subset=["% der Prämie"])
-                .format({
-                    "Puffer %":       "{:.1f}%",
-                    "Prämie $":       "${:.2f}",
-                    "Kosten/Kt $":    "${:.0f}",
-                    "Kosten gesamt $":"${:,.0f}",
-                    "% der Prämie":   "{:.1f}%",
-                    "Delta":          "{:.3f}",
-                    "IV %":           "{:.1f}%",
-                    "IV Rank":        "{:.0f}",
-                }),
-                hide_index=True,
-                use_container_width=True,
-                on_select="rerun",
-                selection_mode="single-row",
-                key="hb_spy_sel",
-                height=min(350, 50 + 38 * len(disp_spy)),
-            )
-            rows_spy = sel_spy.selection.rows if hasattr(sel_spy, "selection") else []
-            if rows_spy:
-                r = disp_spy.iloc[rows_spy[0]]
-                cost = float(r["Kosten gesamt $"])
-                pct_prem = float(r["% der Prämie"])
-                color = "#22c55e" if pct_prem <= 20 else ("#f59e0b" if pct_prem <= 35 else "#ef4444")
-                verdict = "✅ selbstfinanziert" if pct_prem <= 20 else ("⚠️ akzeptabel" if pct_prem <= 35 else "❌ frisst den Edge")
-                st.markdown(
-                    f"**SPY Put Strike {r['Strike']:.0f} · Verfall {r['Verfall']} · "
-                    f"{est_contracts} Kontrakt{'e' if est_contracts != 1 else ''}**  \n"
-                    f"Kosten: **${cost:,.0f}** = "
-                    f"<span style='color:{color};font-weight:700;'>{pct_prem:.1f}% der {insurance_days}-Tage-Prämie {verdict}</span>  \n"
-                    f"Abfederung bei −{crash_pct}%: ~**{cover_pct}%** des geschätzten Schadens (${target_hedge_value:,.0f})",
-                    unsafe_allow_html=True,
-                )
-        else:
-            st.info(f"Keine SPY-Puts in DTE-Fenster {insurance_days - 15}–{insurance_days + 30} gefunden.")
-    else:
+    if not spy_price:
         st.warning("SPY-Kurs nicht in DB verfügbar.")
+        return
 
-    # ── VIX Call Kandidaten ───────────────────────────────────────────────────
-    st.divider()
-    st.markdown("#### VIX Long Call — Volatilitäts-Versicherung")
-    st.caption(
-        "VIX-Calls explodieren bei echten Crashes (+300–500%). "
-        "Günstig wenn VIX niedrig. Basisrisiko: VIX muss spiken."
+    spy_puts = _load_insurance_candidates(
+        "SPY", spy_price,
+        dte_min=max(insurance_days - 15, 14),
+        dte_max=insurance_days + 30,
+        puffer_min_pct=crash_pct * 0.3,
+        puffer_max_pct=crash_pct * 1.5,
     )
 
-    vix_df = select_into_dataframe(
-        query='SELECT close FROM "StockPricesYahoo" WHERE symbol = :s LIMIT 1',
-        params={"s": "I:VIX"},
-    )
-    if vix_df is None or vix_df.empty:
-        vix_df = select_into_dataframe(
-            query='SELECT close FROM "StockPricesYahoo" WHERE symbol = :s LIMIT 1',
-            params={"s": "^VIX"},
-        )
-    vix_level = float(vix_df.iloc[0]["close"]) if vix_df is not None and not vix_df.empty else None
+    if spy_puts.empty:
+        st.info(f"Keine SPY-Puts in DTE {insurance_days - 15}–{insurance_days + 30} in der DB.")
+        return
 
-    if vix_level:
-        v_color = "#22c55e" if vix_level < 15 else ("#f59e0b" if vix_level < 25 else "#ef4444")
-        v_label = "günstig — jetzt kaufen" if vix_level < 15 else ("fair" if vix_level < 25 else "teuer — Crash läuft bereits")
+    spy_puts = spy_puts.copy()
+    spy_puts["puffer_%"] = ((spy_price - spy_puts["strike_price"]) / spy_price * 100).round(1)
+
+    # Kontraktanzahl: so viele dass der Put bei maximalem Einbruch ~cover_pct% des Crash-Schadens deckt
+    # Max-Auszahlung eines Puts = (SPY_aktuell × crash% - puffer%) × 100 × Kontrakte
+    spy_puts["est_auszahlung_1kt"] = (
+        (spy_price * crash_pct / 100 - spy_puts["puffer_%"] / 100 * spy_price).clip(lower=0) * 100
+    ).round(0)
+    spy_puts["n_kontrakte"] = spy_puts["est_auszahlung_1kt"].apply(
+        lambda a: max(1, round(target_hedge_value / a)) if a > 0 else 1
+    )
+    spy_puts["kosten_gesamt"] = (spy_puts["premium"] * 100 * spy_puts["n_kontrakte"]).round(0)
+    spy_puts["pct_praemie"]   = (spy_puts["kosten_gesamt"] / income_for_period * 100).round(1)
+    spy_puts["est_schutz"]    = (spy_puts["est_auszahlung_1kt"] * spy_puts["n_kontrakte"]).round(0)
+
+    # Sortieren nach % der Prämie aufsteigend, Top 3
+    top3 = spy_puts.sort_values("pct_praemie").head(3).reset_index(drop=True)
+
+    for i, row in top3.iterrows():
+        pct  = float(row["pct_praemie"])
+        cost = float(row["kosten_gesamt"])
+        n    = int(row["n_kontrakte"])
+        puf  = float(row["puffer_%"])
+        dte  = int(row["dte"])
+        strike = float(row["strike_price"])
+        verfall = str(row["expiration_date"])
+        praemie = float(row["premium"])
+        schutz  = float(row["est_schutz"])
+        ivr     = row.get("iv_rank", None)
+
+        if pct <= 20:
+            border, bg, label = "#22c55e", "#14532d22", "✅ selbstfinanziert"
+        elif pct <= 35:
+            border, bg, label = "#f59e0b", "#78350f22", "⚠️ akzeptabel"
+        else:
+            border, bg, label = "#ef4444", "#7f1d1d22", "❌ frisst den Edge"
+
+        rank_label = ["🥇 Günstigste", "🥈 Alternative", "🥉 Weitere"][i]
+
+        iv_hint = ""
+        if ivr is not None:
+            try:
+                ivr_f = float(ivr)
+                iv_hint = "· IV Rank günstig 🟢" if ivr_f < 30 else ("· IV Rank fair 🟡" if ivr_f < 60 else "· IV Rank hoch 🔴")
+            except Exception:
+                pass
+
         st.markdown(
-            f"VIX aktuell: <b style='color:{v_color};font-size:20px;'>{vix_level:.1f}</b> "
-            f"<span style='color:{v_color};'>— {v_label}</span>",
+            f"<div style='background:{bg};border:2px solid {border};"
+            f"border-radius:12px;padding:16px 20px;margin-bottom:12px;'>"
+            f"<div style='display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;'>"
+            f"<span style='color:#f1f5f9;font-size:16px;font-weight:700;'>"
+            f"{rank_label} — SPY Put {strike:.0f} · Verfall {verfall} · {dte} DTE</span>"
+            f"<span style='background:{border}33;border:1px solid {border};border-radius:20px;"
+            f"padding:4px 14px;color:{border};font-weight:700;font-size:13px;'>{label}</span>"
+            f"</div>"
+            f"<div style='display:flex;gap:32px;margin-top:12px;flex-wrap:wrap;'>"
+            f"<div><div style='color:#9ca3af;font-size:11px;'>KOSTEN</div>"
+            f"<div style='color:#f1f5f9;font-size:22px;font-weight:800;'>${cost:,.0f}</div>"
+            f"<div style='color:{border};font-size:12px;font-weight:700;'>{pct:.1f}% deiner Prämie</div></div>"
+            f"<div><div style='color:#9ca3af;font-size:11px;'>WAS DU KAUFST</div>"
+            f"<div style='color:#f1f5f9;font-size:14px;font-weight:600;'>{n}× SPY Put {strike:.0f}</div>"
+            f"<div style='color:#9ca3af;font-size:12px;'>${praemie:.2f}/Kontrakt · {puf:.1f}% OTM {iv_hint}</div></div>"
+            f"<div><div style='color:#9ca3af;font-size:11px;'>SCHUTZ BEI −{crash_pct}%</div>"
+            f"<div style='color:#60a5fa;font-size:22px;font-weight:800;'>~${schutz:,.0f}</div>"
+            f"<div style='color:#9ca3af;font-size:12px;'>von ${total_crash_loss:,.0f} Crash-Risiko</div></div>"
+            f"</div></div>",
             unsafe_allow_html=True,
         )
 
-    vix_calls = _load_vix_call_candidates(
-        dte_min=max(insurance_days - 15, 14),
-        dte_max=insurance_days + 30,
+    st.caption(
+        f"SPY ${spy_price:.2f} · Kontrakte berechnet für ~{cover_pct}% Schutzwirkung bei −{crash_pct}% · "
+        f"Schutz-Schätzung vereinfacht (kein Vega-Effekt)"
     )
-    if not vix_calls.empty:
-        vix_calls = vix_calls.copy()
-        # Schätzung: VIX-Call-Wert bei Crash
-        # Historisch: −20% Markt → VIX +150%, −30% → VIX +250%
-        vix_mult = {5: 0.5, 10: 0.8, 15: 1.2, 20: 1.5, 25: 2.0, 30: 2.5, 40: 3.5, 50: 4.5}
-        mult = next((v for k, v in sorted(vix_mult.items()) if crash_pct <= k), 4.5)
-        if vix_level:
-            vix_at_crash = vix_level * (1 + mult)
-            vix_calls["est_wert_crash"] = (
-                (vix_at_crash - vix_calls["strike_price"]).clip(lower=0) * 100
-            ).round(0).astype(int)
-        else:
-            vix_calls["est_wert_crash"] = 0
-
-        vix_calls["kosten_1kt"] = (vix_calls["premium"] * 100).round(0).astype(int)
-        vix_n = max(1, round(target_hedge_value / max(vix_calls["est_wert_crash"].max(), 1)))
-        vix_calls["kosten_gesamt"] = (vix_calls["kosten_1kt"] * vix_n).astype(int)
-        vix_calls["% der Prämie"] = (vix_calls["kosten_gesamt"] / income_for_period * 100).round(1)
-        vix_calls["Est. Wert Crash $"] = (vix_calls["est_wert_crash"] * vix_n).astype(int)
-
-        disp_vix = vix_calls[["strike_price","expiration_date","dte","premium",
-                               "kosten_1kt","kosten_gesamt","% der Prämie",
-                               "Est. Wert Crash $","delta","iv_pct","oi"]].copy()
-        disp_vix.columns = ["Strike VIX","Verfall","DTE","Prämie $",
-                             "Kosten/Kt $","Kosten gesamt $","% der Prämie",
-                             f"Est. Wert bei −{crash_pct}% $",
-                             "Delta","IV %","OI"]
-
-        vix_suffix = f"~{vix_n} Kontrakt{'e' if vix_n != 1 else ''}" if vix_n > 0 else ""
-        st.caption(
-            f"VIX-Calls · {vix_suffix} für {cover_pct}%-Schutzwirkung · "
-            f"VIX-Schätzung bei −{crash_pct}%: ~{vix_level * (1 + mult):.0f} (×{1+mult:.1f})"
-            if vix_level else f"VIX-Calls · {vix_suffix}"
-        )
-
-        def _color_pct_vix(col):
-            return [
-                "color:#22c55e;font-weight:700" if v <= 10
-                else ("color:#f59e0b;font-weight:700" if v <= 25 else "color:#ef4444;font-weight:700")
-                for v in col
-            ]
-
-        st.dataframe(
-            disp_vix.style
-            .apply(_color_pct_vix, subset=["% der Prämie"])
-            .format({
-                "Prämie $":           "${:.2f}",
-                "Kosten/Kt $":        "${:.0f}",
-                "Kosten gesamt $":    "${:,.0f}",
-                "% der Prämie":       "{:.1f}%",
-                f"Est. Wert bei −{crash_pct}% $": "${:,.0f}",
-                "Delta":              "{:.3f}",
-                "IV %":               "{:.1f}%",
-            }),
-            hide_index=True,
-            use_container_width=True,
-            height=min(350, 50 + 38 * len(disp_vix)),
-        )
-        st.caption(
-            f"⚠️ VIX-Call-Wert bei Crash ist eine *Schätzung* auf Basis historischer VIX-Reaktionen. "
-            f"Basisrisiko: VIX muss wirklich explodieren — bei langsam fallendem Markt kaum Gewinn."
-        )
-    else:
-        st.info("Keine VIX-Calls in der DB für dieses DTE-Fenster.")
 
     # ── Spread-Detail (Aufklappen) ────────────────────────────────────────────
     if premium_data["spreads"]:
