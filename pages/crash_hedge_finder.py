@@ -303,23 +303,36 @@ def _analyse_portfolio_premium(positions: list[dict]) -> dict:
 
     # Prämieneinnahme auf 30 Tage hochrechnen: gewichtet nach DTE
     # Jeder Spread: Credit × (30 / DTE) → was würde man verdienen wenn man jetzt öffnet
+    net_credit_total = total_credit - total_debit
+
+    # Realisierter Credit bei 50%-Rückkauf:
+    # Du kaufst bei ~50% Gewinn zurück → du behältst ~50% des eingenommenen Netto-Credits.
+    # Das ist deine echte monatliche Einnahme pro Zyklus.
+    realized_per_cycle = net_credit_total * 0.50
+
+    # Zyklen pro Monat: durchschn. DTE der offenen Spreads → wie viele solcher Zyklen passen in 30d?
     if spreads:
-        monthly_est = sum(
-            sp["net_credit"] * (30 / max(sp["dte"], 1))
-            for sp in spreads
-        )
+        avg_dte = sum(sp["dte"] for sp in spreads) / len(spreads)
+        # Bei 50%-Rückkauf schließt man nach ~60% der Laufzeit → effektive Haltedauer
+        hold_days = avg_dte * 0.60
+        cycles_per_month = 30.0 / max(hold_days, 1)
     else:
-        monthly_est = total_credit  # Fallback: rohe Summe
+        cycles_per_month = 1.0
+
+    monthly_est = realized_per_cycle * cycles_per_month
 
     return {
-        "total_credit":    round(total_credit, 2),
-        "total_debit":     round(total_debit, 2),
-        "net_credit":      round(total_credit - total_debit, 2),
-        "spreads":         spreads,
-        "naked_shorts":    naked_shorts,
-        "total_max_loss":  round(total_max_loss, 2),
+        "total_credit":      round(total_credit, 2),
+        "total_debit":       round(total_debit, 2),
+        "net_credit":        round(net_credit_total, 2),
+        "realized_per_cycle": round(realized_per_cycle, 2),
+        "avg_dte":           round(avg_dte if spreads else 30, 1),
+        "cycles_per_month":  round(cycles_per_month, 2),
+        "spreads":           spreads,
+        "naked_shorts":      naked_shorts,
+        "total_max_loss":    round(total_max_loss, 2),
         "premium_per_month": round(monthly_est, 2),
-        "n_spreads":       len(spreads),
+        "n_spreads":         len(spreads),
     }
 
 
@@ -752,14 +765,18 @@ def _render_hedge_budget(positions: list[dict]):
             est_m = premium_data["premium_per_month"]
 
             if n_sp > 0:
+                avg_dte = premium_data["avg_dte"]
+                hold_days = avg_dte * 0.60
+                cycles = premium_data["cycles_per_month"]
+                realized = premium_data["realized_per_cycle"]
                 st.success(
                     f"**{n_sp} Spread{'s' if n_sp != 1 else ''}** erkannt · "
-                    f"Eingenommene Prämie (Summe): **${cred:,.2f}** · "
-                    f"Bezahlte Prämie (Long-Legs): **${deb:,.2f}** · "
-                    f"**Netto-Credit: ${net:,.2f}**"
+                    f"Netto-Credit (alle offenen Spreads): **${net:,.2f}** · "
+                    f"bei 50%-Rückkauf realisiert: **${realized:,.2f}**/Zyklus"
                 )
                 st.caption(
-                    f"Monatliche Hochrechnung (DTE-gewichtet): ~**${est_m:,.0f}/Monat** "
+                    f"Ø DTE: {avg_dte:.0f} Tage · Haltedauer bei 60%-Rückkauf: ~{hold_days:.0f}d · "
+                    f"{cycles:.1f} Zyklen/Monat → **${est_m:,.0f}/Monat** geschätzte Einnahme "
                     f"— wird verwendet wenn kein manueller Wert eingetragen."
                 )
             else:
@@ -1011,8 +1028,13 @@ def _render_hedge_budget(positions: list[dict]):
 
     vix_df = select_into_dataframe(
         query='SELECT close FROM "StockPricesYahoo" WHERE symbol = :s LIMIT 1',
-        params={"s": "^VIX"},
+        params={"s": "I:VIX"},
     )
+    if vix_df is None or vix_df.empty:
+        vix_df = select_into_dataframe(
+            query='SELECT close FROM "StockPricesYahoo" WHERE symbol = :s LIMIT 1',
+            params={"s": "^VIX"},
+        )
     vix_level = float(vix_df.iloc[0]["close"]) if vix_df is not None and not vix_df.empty else None
 
     if vix_level:
