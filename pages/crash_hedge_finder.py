@@ -951,8 +951,8 @@ def _render_hedge_budget(positions: list[dict]):
         "SPY", spy_price,
         dte_min=max(insurance_days - 15, 14),
         dte_max=insurance_days + 30,
-        puffer_min_pct=crash_pct * 0.3,
-        puffer_max_pct=crash_pct * 1.5,
+        puffer_min_pct=crash_pct * 0.7,   # Strike mindestens 70% des Crash-Wegs OTM
+        puffer_max_pct=crash_pct * 1.3,   # Strike maximal 130% des Crash-Wegs OTM
     )
 
     if spy_puts.empty:
@@ -962,17 +962,26 @@ def _render_hedge_budget(positions: list[dict]):
     spy_puts = spy_puts.copy()
     spy_puts["puffer_%"] = ((spy_price - spy_puts["strike_price"]) / spy_price * 100).round(1)
 
-    # Kontraktanzahl: so viele dass der Put bei maximalem Einbruch ~cover_pct% des Crash-Schadens deckt
-    # Max-Auszahlung eines Puts = (SPY_aktuell × crash% - puffer%) × 100 × Kontrakte
-    spy_puts["est_auszahlung_1kt"] = (
-        (spy_price * crash_pct / 100 - spy_puts["puffer_%"] / 100 * spy_price).clip(lower=0) * 100
+    # Preis von SPY nach Crash
+    spy_at_crash = spy_price * (1 - crash_pct / 100)
+
+    # Innerer Wert des Puts beim Crash-Preis (was der Put wirklich auszahlt)
+    spy_puts["innerer_wert_1kt"] = (
+        (spy_puts["strike_price"] - spy_at_crash).clip(lower=0) * 100
     ).round(0)
-    spy_puts["n_kontrakte"] = spy_puts["est_auszahlung_1kt"].apply(
-        lambda a: max(1, round(target_hedge_value / a)) if a > 0 else 1
+
+    # Netto-Gewinn des Puts = innerer Wert minus bezahlte Prämie
+    spy_puts["netto_gewinn_1kt"] = (
+        spy_puts["innerer_wert_1kt"] - spy_puts["premium"] * 100
+    ).clip(lower=0).round(0)
+
+    # Kontraktanzahl: so viele dass netto_gewinn × n ≈ target_hedge_value
+    spy_puts["n_kontrakte"] = spy_puts["netto_gewinn_1kt"].apply(
+        lambda g: max(1, round(target_hedge_value / g)) if g > 0 else 1
     )
     spy_puts["kosten_gesamt"] = (spy_puts["premium"] * 100 * spy_puts["n_kontrakte"]).round(0)
     spy_puts["pct_praemie"]   = (spy_puts["kosten_gesamt"] / income_for_period * 100).round(1)
-    spy_puts["est_schutz"]    = (spy_puts["est_auszahlung_1kt"] * spy_puts["n_kontrakte"]).round(0)
+    spy_puts["est_schutz"]    = (spy_puts["netto_gewinn_1kt"] * spy_puts["n_kontrakte"]).round(0)
 
     # Sortieren nach % der Prämie aufsteigend, Top 3
     top3 = spy_puts.sort_values("pct_praemie").head(3).reset_index(drop=True)
