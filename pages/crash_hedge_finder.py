@@ -810,6 +810,14 @@ def _render_hedge_budget(positions: list[dict]):
                 help="50% = Hedge soll die Hälfte des Crashschadens ausgleichen.",
             )
 
+    only_options = st.toggle(
+        "Nur Optionen absichern (Aktien-Seite ignorieren)",
+        value=True,
+        key="hb_only_options",
+        help="An: Crash-Risiko nur aus den Spread-Positionen (Max-Loss). "
+             "Aus: Beta-gewichteter Aktien-Verlust wird dazugerechnet.",
+    )
+
     # ── Crash-Risiko berechnen ────────────────────────────────────────────────
     total_max_loss = premium_data["total_max_loss"]
 
@@ -820,26 +828,20 @@ def _render_hedge_budget(positions: list[dict]):
     betas_hb   = _load_betas(all_syms) if all_syms else {}
     prices_hb  = _load_stock_prices_current(all_syms) if all_syms else {}
 
-    # Aktien-Portfolio-Wert
-    stock_value = sum(
-        (prices_hb.get(p["symbol"]) or 0) * p["qty"]
-        for p in positions
-        if p["type"] == "stock" and p.get("direction", "Long") == "Long"
-    )
-
     # Beta-gew. Verlust der Aktien bei crash_pct% Rückgang
     beta_weighted_loss = 0.0
-    for p in positions:
-        if p["type"] != "stock" or p.get("direction", "Long") != "Long":
-            continue
-        sym  = p["symbol"]
-        beta = betas_hb.get(sym) or _FALLBACK_BETAS.get(sym) or 1.0
-        px   = prices_hb.get(sym) or 0.0
-        qty  = p.get("qty", 0)
-        beta_weighted_loss += px * qty * beta * (crash_pct / 100)
+    if not only_options:
+        for p in positions:
+            if p["type"] != "stock" or p.get("direction", "Long") != "Long":
+                continue
+            sym  = p["symbol"]
+            beta = betas_hb.get(sym) or _FALLBACK_BETAS.get(sym) or 1.0
+            px   = prices_hb.get(sym) or 0.0
+            qty  = p.get("qty", 0)
+            beta_weighted_loss += px * qty * beta * (crash_pct / 100)
 
-    # Optionen-Seite: max_loss der Spreads anteilsmäßig (grober Schätzer)
-    options_crash_loss = total_max_loss  # Worst case: alle Spreads maximal verlieren
+    # Optionen-Seite: max_loss der Spreads (Worst case: alle Spreads maximal verlieren)
+    options_crash_loss = total_max_loss
 
     total_crash_loss = beta_weighted_loss + options_crash_loss
     target_hedge_value = total_crash_loss * (cover_pct / 100)
@@ -1008,7 +1010,7 @@ def _render_hedge_budget(positions: list[dict]):
     )
 
     vix_df = select_into_dataframe(
-        query='SELECT close FROM "StockPricesYahoo" WHERE symbol = :s ORDER BY date DESC LIMIT 1',
+        query='SELECT close FROM "StockPricesYahoo" WHERE symbol = :s LIMIT 1',
         params={"s": "^VIX"},
     )
     vix_level = float(vix_df.iloc[0]["close"]) if vix_df is not None and not vix_df.empty else None
