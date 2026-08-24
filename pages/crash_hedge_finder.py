@@ -680,7 +680,7 @@ def _load_insurance_candidates(
 ) -> pd.DataFrame:
     """
     Lädt Long-Put-Kandidaten für den Hedge-Budget Tab.
-    puffer_min_pct / puffer_max_pct = Abstand vom Kurs in % (z.B. 5 = 5% OTM).
+    puffer_min_pct / puffer_max_pct = Abstand vom Kurs in % (z.B. 20 = 20% OTM).
     """
     lo = round(stock_price * (1 - puffer_max_pct / 100), 2)
     hi = round(stock_price * (1 - puffer_min_pct / 100), 2)
@@ -701,7 +701,7 @@ def _load_insurance_candidates(
               AND contract_type = 'put'
               AND strike_price BETWEEN :lo AND :hi
               AND days_to_expiration BETWEEN :dmin AND :dmax
-              AND open_interest >= 50
+              AND open_interest >= 20
               AND day_close > 0
             ORDER BY days_to_expiration, strike_price DESC
         """,
@@ -938,109 +938,124 @@ def _render_hedge_budget(positions: list[dict]):
         f"Versicherung ≤ 20% = selbstfinanziert, darüber frisst sie deinen Edge."
     )
 
-    # ── Top-3 SPY Puts ────────────────────────────────────────────────────────
+    # ── Top-3 SPY Puts — Budget-first ────────────────────────────────────────
     st.divider()
-    st.markdown("#### Wie viel zahlst du konkret? — Top 3 SPY Puts")
+    st.markdown("#### Wie viel zahlst du konkret? — Budget-first")
+    st.caption(
+        "Ausgangspunkt: dein Budget (20% der Prämie). "
+        "Welche Puts kaufst du dafür — und wie viel schützen sie dich?"
+    )
 
     spy_price = _load_spy_price()
     if not spy_price:
         st.warning("SPY-Kurs nicht in DB verfügbar.")
         return
 
+    # Teenies: 20–50% OTM — weit raus, Delta 0.02–0.08, kosten $20–200/Kontrakt
     spy_puts = _load_insurance_candidates(
         "SPY", spy_price,
         dte_min=max(insurance_days - 15, 14),
-        dte_max=insurance_days + 30,
-        puffer_min_pct=crash_pct * 0.7,   # Strike mindestens 70% des Crash-Wegs OTM
-        puffer_max_pct=crash_pct * 1.3,   # Strike maximal 130% des Crash-Wegs OTM
+        dte_max=insurance_days + 45,
+        puffer_min_pct=15,   # mindestens 15% OTM
+        puffer_max_pct=50,   # maximal 50% OTM
     )
 
     if spy_puts.empty:
-        st.info(f"Keine SPY-Puts in DTE {insurance_days - 15}–{insurance_days + 30} in der DB.")
+        st.info("Keine SPY-Puts in der DB für dieses DTE-Fenster.")
         return
 
     spy_puts = spy_puts.copy()
     spy_puts["puffer_%"] = ((spy_price - spy_puts["strike_price"]) / spy_price * 100).round(1)
+    spy_puts["kosten_1kt"] = (spy_puts["premium"] * 100).round(0)
 
     # Preis von SPY nach Crash
     spy_at_crash = spy_price * (1 - crash_pct / 100)
 
-    # Innerer Wert des Puts beim Crash-Preis (was der Put wirklich auszahlt)
+    # Innerer Wert bei Crash (kann 0 sein wenn noch OTM)
     spy_puts["innerer_wert_1kt"] = (
         (spy_puts["strike_price"] - spy_at_crash).clip(lower=0) * 100
     ).round(0)
 
-    # Netto-Gewinn des Puts = innerer Wert minus bezahlte Prämie
-    spy_puts["netto_gewinn_1kt"] = (
-        spy_puts["innerer_wert_1kt"] - spy_puts["premium"] * 100
-    ).clip(lower=0).round(0)
-
-    # Kontraktanzahl: so viele dass netto_gewinn × n ≈ target_hedge_value
-    spy_puts["n_kontrakte"] = spy_puts["netto_gewinn_1kt"].apply(
-        lambda g: max(1, round(target_hedge_value / g)) if g > 0 else 1
+    # Mit Budget 20%: wie viele Kontrakte kann man kaufen?
+    spy_puts["n_kontrakte_budget"] = (budget_20pct / spy_puts["kosten_1kt"].clip(lower=1)).apply(
+        lambda x: max(1, int(x))
     )
-    spy_puts["kosten_gesamt"] = (spy_puts["premium"] * 100 * spy_puts["n_kontrakte"]).round(0)
-    spy_puts["pct_praemie"]   = (spy_puts["kosten_gesamt"] / income_for_period * 100).round(1)
-    spy_puts["est_schutz"]    = (spy_puts["netto_gewinn_1kt"] * spy_puts["n_kontrakte"]).round(0)
+    spy_puts["kosten_gesamt"]  = (spy_puts["kosten_1kt"] * spy_puts["n_kontrakte_budget"]).round(0)
+    spy_puts["pct_praemie"]    = (spy_puts["kosten_gesamt"] / income_for_period * 100).round(1)
+    spy_puts["est_schutz"]     = (spy_puts["innerer_wert_1kt"] * spy_puts["n_kontrakte_budget"]).round(0)
+    spy_puts["schutz_pct_crash"] = (spy_puts["est_schutz"] / max(total_crash_loss, 1) * 100).round(1)
 
-    # Sortieren nach % der Prämie aufsteigend, Top 3
-    top3 = spy_puts.sort_values("pct_praemie").head(3).reset_index(drop=True)
+    # Sortieren: erst die mit echtem Schutz (innerer Wert > 0), dann nach pct_praemie
+    spy_puts["hat_schutz"] = spy_puts["innerer_wert_1kt"] > 0
+    top3 = (
+        spy_puts
+        .sort_values(["hat_schutz", "est_schutz"], ascending=[False, False])
+        .head(3)
+        .reset_index(drop=True)
+    )
+
+    # Wenn keine Puts bei Crash ITM → zeige auch OTM-Puts aber mit Hinweis
+    alle_otm = top3["innerer_wert_1kt"].sum() == 0
+
+    if alle_otm:
+        st.warning(
+            f"⚠️ Bei −{crash_pct}% (SPY auf ${spy_at_crash:.0f}) sind alle verfügbaren Puts "
+            f"noch **out of the money** — sie zahlen nichts aus. "
+            f"Crash-Szenario erhöhen oder längere Laufzeit wählen."
+        )
 
     for i, row in top3.iterrows():
-        pct  = float(row["pct_praemie"])
-        cost = float(row["kosten_gesamt"])
-        n    = int(row["n_kontrakte"])
-        puf  = float(row["puffer_%"])
-        dte  = int(row["dte"])
-        strike = float(row["strike_price"])
-        verfall = str(row["expiration_date"])
-        praemie = float(row["premium"])
-        schutz  = float(row["est_schutz"])
-        ivr     = row.get("iv_rank", None)
+        pct      = float(row["pct_praemie"])
+        cost     = float(row["kosten_gesamt"])
+        n        = int(row["n_kontrakte_budget"])
+        puf      = float(row["puffer_%"])
+        dte      = int(row["dte"])
+        strike   = float(row["strike_price"])
+        verfall  = str(row["expiration_date"])
+        praemie  = float(row["premium"])
+        schutz   = float(row["est_schutz"])
+        schutz_p = float(row["schutz_pct_crash"])
+        ivr      = row.get("iv_rank", None)
 
-        if pct <= 20:
-            border, bg, label = "#22c55e", "#14532d22", "✅ selbstfinanziert"
-        elif pct <= 35:
-            border, bg, label = "#f59e0b", "#78350f22", "⚠️ akzeptabel"
+        if schutz > 0:
+            border, bg = "#22c55e", "#14532d22"
+            schutz_label = f"~${schutz:,.0f} ({schutz_p:.0f}% des Crash-Schadens)"
         else:
-            border, bg, label = "#ef4444", "#7f1d1d22", "❌ frisst den Edge"
+            border, bg = "#f59e0b", "#78350f22"
+            schutz_label = f"$0 — Put noch OTM bei −{crash_pct}% (Teenie: zahlt nur bei stärkerem Crash)"
 
-        rank_label = ["🥇 Günstigste", "🥈 Alternative", "🥉 Weitere"][i]
+        rank_label = ["🥇 Option 1", "🥈 Option 2", "🥉 Option 3"][i]
 
         iv_hint = ""
         if ivr is not None:
             try:
                 ivr_f = float(ivr)
-                iv_hint = "· IV Rank günstig 🟢" if ivr_f < 30 else ("· IV Rank fair 🟡" if ivr_f < 60 else "· IV Rank hoch 🔴")
+                iv_hint = " · IV Rank günstig 🟢" if ivr_f < 30 else (" · IV Rank fair 🟡" if ivr_f < 60 else " · IV Rank hoch 🔴")
             except Exception:
                 pass
 
         st.markdown(
             f"<div style='background:{bg};border:2px solid {border};"
-            f"border-radius:12px;padding:16px 20px;margin-bottom:12px;'>"
-            f"<div style='display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;'>"
-            f"<span style='color:#f1f5f9;font-size:16px;font-weight:700;'>"
-            f"{rank_label} — SPY Put {strike:.0f} · Verfall {verfall} · {dte} DTE</span>"
-            f"<span style='background:{border}33;border:1px solid {border};border-radius:20px;"
-            f"padding:4px 14px;color:{border};font-weight:700;font-size:13px;'>{label}</span>"
-            f"</div>"
-            f"<div style='display:flex;gap:32px;margin-top:12px;flex-wrap:wrap;'>"
-            f"<div><div style='color:#9ca3af;font-size:11px;'>KOSTEN</div>"
-            f"<div style='color:#f1f5f9;font-size:22px;font-weight:800;'>${cost:,.0f}</div>"
-            f"<div style='color:{border};font-size:12px;font-weight:700;'>{pct:.1f}% deiner Prämie</div></div>"
-            f"<div><div style='color:#9ca3af;font-size:11px;'>WAS DU KAUFST</div>"
-            f"<div style='color:#f1f5f9;font-size:14px;font-weight:600;'>{n}× SPY Put {strike:.0f}</div>"
-            f"<div style='color:#9ca3af;font-size:12px;'>${praemie:.2f}/Kontrakt · {puf:.1f}% OTM {iv_hint}</div></div>"
-            f"<div><div style='color:#9ca3af;font-size:11px;'>SCHUTZ BEI −{crash_pct}%</div>"
-            f"<div style='color:#60a5fa;font-size:22px;font-weight:800;'>~${schutz:,.0f}</div>"
-            f"<div style='color:#9ca3af;font-size:12px;'>von ${total_crash_loss:,.0f} Crash-Risiko</div></div>"
+            f"border-radius:12px;padding:18px 22px;margin-bottom:14px;'>"
+            f"<div style='color:#f1f5f9;font-size:15px;font-weight:700;margin-bottom:12px;'>"
+            f"{rank_label} — SPY Put {strike:.0f} · Verfall {verfall} · {dte} DTE · {puf:.1f}% OTM{iv_hint}</div>"
+            f"<div style='display:flex;gap:40px;flex-wrap:wrap;'>"
+            # Kosten
+            f"<div><div style='color:#9ca3af;font-size:11px;text-transform:uppercase;letter-spacing:1px;'>Du zahlst</div>"
+            f"<div style='color:#f1f5f9;font-size:28px;font-weight:800;'>${cost:,.0f}</div>"
+            f"<div style='color:{border};font-size:12px;font-weight:700;'>{pct:.1f}% deiner {insurance_days}-Tage-Prämie</div>"
+            f"<div style='color:#9ca3af;font-size:11px;'>{n}× Kontrakt à ${praemie:.2f}</div></div>"
+            # Schutz
+            f"<div><div style='color:#9ca3af;font-size:11px;text-transform:uppercase;letter-spacing:1px;'>Schutz bei −{crash_pct}%</div>"
+            f"<div style='color:{border};font-size:18px;font-weight:700;margin-top:4px;'>{schutz_label}</div>"
+            f"<div style='color:#9ca3af;font-size:11px;margin-top:4px;'>SPY bei Crash: ${spy_at_crash:.0f} · Strike: {strike:.0f}</div></div>"
             f"</div></div>",
             unsafe_allow_html=True,
         )
 
     st.caption(
-        f"SPY ${spy_price:.2f} · Kontrakte berechnet für ~{cover_pct}% Schutzwirkung bei −{crash_pct}% · "
-        f"Schutz-Schätzung vereinfacht (kein Vega-Effekt)"
+        f"Budget = 20% der {insurance_days}-Tage-Prämie (${budget_20pct:,.0f}) · "
+        f"SPY aktuell ${spy_price:.2f} · bei −{crash_pct}% = ${spy_at_crash:.0f}"
     )
 
     # ── Spread-Detail (Aufklappen) ────────────────────────────────────────────
