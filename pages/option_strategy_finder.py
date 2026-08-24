@@ -728,7 +728,7 @@ def main():
             strategies  = st.multiselect(
                 "Strategien",
                 ["Short Put", "Covered Call", "Bull Put Spread", "Bear Call Spread", "Iron Condor"],
-                default=["Short Put", "Bull Put Spread", "Iron Condor"],
+                default=["Short Put", "Bull Put Spread", "Bear Call Spread", "Iron Condor"],
             )
         with c3:
             min_profit = st.number_input("Min. Kredit ($)", 0, 10000, 50, 10)
