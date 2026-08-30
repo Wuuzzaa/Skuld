@@ -56,9 +56,9 @@ _FALLBACK_BETAS: dict[str, float] = {
 _STRATEGIES = [
     {
         "name":         "VXX Time-Straddle",
-        "badge":        "⭐ Autor's Nr. 1",
+        "badge":        "Autor Nr. 1",
         "badge_color":  "#22c55e",
-        "cost_label":   "🟢 Selbstfinanzierend",
+        "cost_label":   "Selbstfinanzierend",
         "book":         "Kapitel 9 — Der VXX Time-Straddle",
         "short":        "Dauerhafter Crash-Schutz via Volatilität — selbstfinanziert durch wöchentliche Short Calls.",
         "construction": "3× Long Straddle (Put+Call ATM, ≥120 DTE) + 1× Weekly Short Call\nVerhältnis immer 3 Straddles : 1 Short Call",
@@ -68,9 +68,9 @@ _STRATEGIES = [
     },
     {
         "name":         "Grizzly-Hedge",
-        "badge":        "🟢 Selbstfinanziert",
+        "badge":        "Selbstfinanziert",
         "badge_color":  "#22c55e",
-        "cost_label":   "🟢 Kostenlos möglich",
+        "cost_label":   "Kostenlos möglich",
         "book":         "Kapitel 7 — Der Grizzly-Hedge",
         "short":        "Bear Put Spread + Short Call. Der Call finanziert den Spread — keine Kosten.",
         "construction": "Long Put Strike A + Short Put Strike B (B < A) + Short Call Strike C\nCall-Prämie ≥ 50% der Spread-Kosten",
@@ -80,9 +80,9 @@ _STRATEGIES = [
     },
     {
         "name":         "Zorro-Hedge",
-        "badge":        "🟢 Günstig",
+        "badge":        "Günstig",
         "badge_color":  "#22c55e",
-        "cost_label":   "🟢 ~10–15% der Prämie",
+        "cost_label":   "~10–15% der Prämie",
         "book":         "Kapitel 6 — Der Zorro-Hedge",
         "short":        "2× Bear Put Spread — das Zick-Zack-Profil. Mehr Schutz als einfacher Spread.",
         "construction": "2× (Long Put Strike A + Short Put Strike B)\nKosten = 12–20% des maximalen Gewinns (Faustregel)",
@@ -92,9 +92,9 @@ _STRATEGIES = [
     },
     {
         "name":         "Bear Put Spread",
-        "badge":        "🟡 Moderat",
+        "badge":        "Moderat",
         "badge_color":  "#f59e0b",
-        "cost_label":   "🟡 ~10–20% der Prämie",
+        "cost_label":   "~10–20% der Prämie",
         "book":         "Kapitel 6 — Der Zorro-Hedge (Basis)",
         "short":        "Klassischer Bear Put Spread. Schützt in einer definierten Zone.",
         "construction": "Long Put Strike A (aus dem Geld) + Short Put Strike B (B < A)\nBeide gleiche Laufzeit (Vertical Spread)",
@@ -104,9 +104,9 @@ _STRATEGIES = [
     },
     {
         "name":         "Collar / Open Collar",
-        "badge":        "🟡 Kostenlos möglich",
+        "badge":        "Kostenlos möglich",
         "badge_color":  "#f59e0b",
-        "cost_label":   "🟡 Zero-Cost möglich",
+        "cost_label":   "Zero-Cost möglich",
         "book":         "Kapitel 4 — Der Collar und der Open Collar",
         "short":        "Long Put + Short Call gegen bestehende Aktienposition. Call finanziert Put.",
         "construction": "Long Put Strike A (OTM) + Short Call Strike B (OTM, B > Kurs)\nBeide gleiche Laufzeit. 1 Call pro 100 Aktien!",
@@ -116,9 +116,9 @@ _STRATEGIES = [
     },
     {
         "name":         "Butterfly-Hedge",
-        "badge":        "🟡 Sehr günstig",
+        "badge":        "Sehr günstig",
         "badge_color":  "#f59e0b",
-        "cost_label":   "🟡 Fast kostenlos",
+        "cost_label":   "Fast kostenlos",
         "book":         "Kapitel 8 — Der Butterfly-Hedge",
         "short":        "Long Put A + 2× Short Put B + Long Put C. Sehr billig, aber nur für ~10% Korrektur.",
         "construction": "Long Put A (5% OTM) + Short 2× Put B (weitere 7% OTM) + Long Put C (gleicher Abstand)\nAlle gleiche Laufzeit. ≥45 Tage.",
@@ -128,9 +128,9 @@ _STRATEGIES = [
     },
     {
         "name":         "Protective Put",
-        "badge":        "🔴 Teuer",
+        "badge":        "Teuer",
         "badge_color":  "#ef4444",
-        "cost_label":   "🔴 20–30% der Prämie",
+        "cost_label":   "20–30% der Prämie",
         "book":         "Kapitel 3 — Der Protective Put",
         "short":        "Klassische Vollkasko-Versicherung. Teuer — langfristig oft ein Pyrrhussieg.",
         "construction": "Long Put (am Geld oder leicht OTM) pro 100 Aktien\nMin. 6 Monate Laufzeit. Stop-Loss 50%.",
@@ -653,12 +653,12 @@ def _render_portfolio_analyse(positions: list[dict], spreads: list[dict], profil
     )
     if call_spreads:
         st.caption(
-            f"ℹ️ {len(call_spreads)} Bear Call Spread(s) erkannt — bei einem Crash KEIN Problem "
+            f"{len(call_spreads)} Bear Call Spread(s) erkannt — bei einem Crash KEIN Problem "
             f"(Calls profitieren von fallenden Kursen). Nur die Put-Spreads brauchen Absicherung."
         )
 
     if spreads:
-        with st.expander(f"📋 Alle {len(spreads)} Spreads im Detail", expanded=False):
+        with st.expander(f"Alle {len(spreads)} Spreads im Detail", expanded=False):
             rows = []
             for s in sorted(spreads, key=lambda x: x["max_risk"], reverse=True):
                 rows.append({
@@ -678,7 +678,7 @@ def _render_portfolio_analyse(positions: list[dict], spreads: list[dict], profil
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def _render_kanarienvoegel() -> None:
-    st.markdown("### 🚨 Kanarienvögel in der Kohlemine")
+    st.markdown("### Kanarienvögel in der Kohlemine")
     st.caption(
         "Diese Indikatoren fungieren als Frühwarnsystem. Kein Einzelindikator entscheidet — "
         "immer das Gesamtbild betrachten. *(Eric Ludwig, Kapitel 'Kanarienvögel')*"
@@ -707,13 +707,13 @@ def _render_kanarienvoegel() -> None:
         if vix is not None and vix3m is not None:
             if vix >= vix3m:
                 red_count += 1
-                st.error(f"🔴 VIX ({vix:.1f}) ≥ VIX3M ({vix3m:.1f}) — Kurzfristige Unsicherheit größer als langfristige. **Hedging aufstocken!**")
+                st.error(f"VIX ({vix:.1f}) ≥ VIX3M ({vix3m:.1f}) — Kurzfristige Unsicherheit größer als langfristige. **Hedging aufstocken!**")
             else:
-                st.success(f"🟢 Normal: VIX ({vix:.1f}) < VIX3M ({vix3m:.1f}) — Terminkurve in Contango")
+                st.success(f"Normal: VIX ({vix:.1f}) < VIX3M ({vix3m:.1f}) — Terminkurve in Contango")
         elif vix is not None:
             if vix > 20:
                 red_count += 1
-                st.warning(f"🟡 VIX3M nicht verfügbar. VIX {vix:.1f} erhöht — Vorsicht.")
+                st.warning(f"VIX3M nicht verfügbar. VIX {vix:.1f} erhöht — Vorsicht.")
             else:
                 st.info(f"VIX3M nicht in DB. VIX = {vix:.1f}")
         st.caption("Normal: VIX < VIX3M (Märkte erwarten langfristig mehr Unsicherheit). Umkehr = Panik-Signal.")
@@ -746,11 +746,11 @@ def _render_kanarienvoegel() -> None:
         if pcr_manual > 0:
             if pcr_manual < 0.8:
                 red_count += 1
-                st.error(f"🔴 PCR {pcr_manual:.2f} < 0.8 — Zu wenig Hedging am Markt. **Euphorie-Warnung!**")
+                st.error(f"PCR {pcr_manual:.2f} < 0.8 — Zu wenig Hedging am Markt. **Euphorie-Warnung!**")
             elif pcr_manual <= 1.2:
-                st.success(f"🟢 PCR {pcr_manual:.2f} — Normales Niveau")
+                st.success(f"PCR {pcr_manual:.2f} — Normales Niveau")
             else:
-                st.warning(f"🟡 PCR {pcr_manual:.2f} > 1.2 — Erhöhte Absicherung im Markt (oft Bodenbildung)")
+                st.warning(f"PCR {pcr_manual:.2f} > 1.2 — Erhöhte Absicherung im Markt (oft Bodenbildung)")
         st.caption("Sehr niedriger Wert = Marktteilnehmer hedgen kaum = mögliches Warnsignal für Überhitzung.")
 
     # ── Indikator 4: Hindenburg Omen ──────────────────────────────────────────
@@ -764,7 +764,7 @@ def _render_kanarienvoegel() -> None:
                        "https://www.tradingview.com/scripts/hindenburgomen/")
         if hindenburg:
             red_count += 1
-            st.error("🔴 Hindenburg Omen aktiv — erhöhte Crash-Wahrscheinlichkeit!")
+            st.error("Hindenburg Omen aktiv — erhöhte Crash-Wahrscheinlichkeit!")
         with st.expander("Was ist das Hindenburg Omen?"):
             st.markdown("""
 **4 Kriterien müssen gleichzeitig erfüllt sein:**
@@ -782,11 +782,11 @@ Mehrere Signale in 4 Wochen = stärkere Aussagekraft.
     st.divider()
     st.markdown("#### Gesamtbild")
     if red_count >= 2:
-        st.error(f"🔴 **{red_count} Warnsignale aktiv** — Hedging-Positionen aufstocken! Mehrere Indikatoren zeigen erhöhtes Risiko.")
+        st.error(f"**{red_count} Warnsignale aktiv** — Hedging-Positionen aufstocken! Mehrere Indikatoren zeigen erhöhtes Risiko.")
     elif red_count == 1:
-        st.warning(f"🟡 **1 Warnsignal aktiv** — Erhöhte Aufmerksamkeit. Hedges überprüfen.")
+        st.warning(f"**1 Warnsignal aktiv** — Erhöhte Aufmerksamkeit. Hedges überprüfen.")
     else:
-        st.success("🟢 **Keine Warnsignale** — Ruhige Marktlage. Guter Zeitpunkt für Hedge-Aufbau bei niedrigem VIX.")
+        st.success("**Keine Warnsignale** — Ruhige Marktlage. Guter Zeitpunkt für Hedge-Aufbau bei niedrigem VIX.")
 
     with st.expander("Wie kombiniere ich die Indikatoren? (aus dem Buch)"):
         st.markdown("""
@@ -804,7 +804,7 @@ Mehrere Signale in 4 Wochen = stärkere Aussagekraft.
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def _render_strategie_wahl(profile: dict) -> None:
-    st.markdown("### 🛡️ Welche Strategie passt zu dir?")
+    st.markdown("### Welche Strategie passt zu dir?")
 
     # Auto-Empfehlung
     pt   = profile["portfolio_type"]
@@ -845,7 +845,7 @@ def _render_strategie_wahl(profile: dict) -> None:
 
     for strat in _STRATEGIES:
         is_rec = strat["name"] in (rec_primary, rec_secondary)
-        title  = f"{'⭐ ' if is_rec else ''}{strat['name']}  —  {strat['badge']}"
+        title  = f"{'' if is_rec else ''}{strat['name']}  —  {strat['badge']}"
         with st.expander(title, expanded=is_rec):
             col_l, col_r = st.columns([3, 1])
             with col_l:
@@ -865,12 +865,12 @@ def _render_strategie_wahl(profile: dict) -> None:
                     unsafe_allow_html=True,
                 )
                 if st.button(
-                    "🎯 Konfigurieren",
+                    "Konfigurieren",
                     key=f"phc_strat_btn_{strat['key']}",
                     use_container_width=True,
                 ):
                     st.session_state["phc_selected_strategy"] = strat["name"]
-                    st.info(f"Wechsle zum Tab **🎯 Konkrete Absicherung** um {strat['name']} zu konfigurieren.")
+                    st.info(f"Wechsle zum Tab **Konkrete Absicherung** um {strat['name']} zu konfigurieren.")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -878,7 +878,7 @@ def _render_strategie_wahl(profile: dict) -> None:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def _render_konkrete_absicherung(spreads: list[dict], profile: dict) -> None:
-    st.markdown("### 🎯 Konkrete Absicherung")
+    st.markdown("### Konkrete Absicherung")
 
     put_spreads    = [s for s in spreads if s.get("put_call") == "P"]
     total_put_risk = sum(s["max_risk"] for s in put_spreads)
@@ -1194,7 +1194,7 @@ Max-Gewinn wenn {hedge_etf} genau bei ${otm_b:.0f} am Verfallstag.
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def _render_ausstieg() -> None:
-    st.markdown("### 🚪 Das Licht am Ende des Tunnels")
+    st.markdown("### Das Licht am Ende des Tunnels")
     st.caption(
         "Wann Hedging-Positionen reduzieren? Das Doppelsignal aus Eric Ludwigs Buch "
         "*(Kapitel 'Das Licht am Ende des Tunnels')*"
@@ -1225,22 +1225,22 @@ def _render_ausstieg() -> None:
         st.divider()
         if vix_hoch30 and macd_signal:
             st.success(
-                "✅ **BEIDE Bedingungen erfüllt — Hedges jetzt reduzieren!**  \n"
+                "**BEIDE Bedingungen erfüllt — Hedges jetzt reduzieren!**  \n"
                 "Gewinne aus Hedging-Positionen mitnehmen. "
                 "Nicht ALLE Hedges auflösen — kleine Restabsicherung (Bear Put Spread oder Zorro-Hedge) behalten."
             )
         elif vix_hoch30 and not macd_signal:
             st.warning(
-                "🟡 **Bedingung 1 erfüllt — auf MACD-Signal warten.**  \n"
+                "**Bedingung 1 erfüllt — auf MACD-Signal warten.**  \n"
                 "VIX war über 30. Noch kein MACD-Verkaufssignal. Hedges laufen lassen."
             )
         elif not vix_hoch30 and macd_signal:
             st.info(
-                "ℹ️ MACD-Signal aktiv, aber VIX hat noch kein Hoch > 30 gebildet.  \n"
+                "MACD-Signal aktiv, aber VIX hat noch kein Hoch > 30 gebildet.  \n"
                 "MACD-Signal nur relevant wenn es von einem Niveau ÜBER 30 kommt."
             )
         else:
-            st.info("🔵 Noch kein Ausstiegssignal. Hedging-Positionen beibehalten.")
+            st.info("Noch kein Ausstiegssignal. Hedging-Positionen beibehalten.")
 
         st.link_button(
             "VIX MACD auf TradingView prüfen",
@@ -1256,7 +1256,7 @@ def _render_ausstieg() -> None:
         {"Ereignis": "Crash Ende 2018",     "Signal-Datum": "02.01.2019", "Methode": "MACD",                     "Bemerkung": "Korrekt"},
         {"Ereignis": "Korrektur Feb 2018",  "Signal-Datum": "14.02.2018", "Methode": "MACD",                     "Bemerkung": "Korrekt"},
         {"Ereignis": "Korrektur Sommer 2015","Signal-Datum":"03.09.2015", "Methode": "MACD",                     "Bemerkung": "Korrekt"},
-        {"Ereignis": "Finanzkrise 2008",    "Signal-Datum": "20.10.2008", "Methode": "MACD",                     "Bemerkung": "⚠️ Zu früh — S&P 500 fiel danach nochmals −30%"},
+        {"Ereignis": "Finanzkrise 2008",    "Signal-Datum": "20.10.2008", "Methode": "MACD",                     "Bemerkung": "Zu früh — S&P 500 fiel danach nochmals −30%"},
     ])
     st.dataframe(hist, hide_index=True, use_container_width=True)
     st.caption(
@@ -1281,7 +1281,7 @@ def _render_ausstieg() -> None:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def main():
-    st.title("📊 Portfolio Hedge Calculator")
+    st.title("Portfolio Hedge Calculator")
     st.caption(
         "Portfolio analysieren → Frühwarnzeichen prüfen → passende Strategie wählen → "
         "konkrete Kontrakte finden  ·  *Basierend auf Eric Ludwig: Hedging mit Optionen*"
@@ -1319,7 +1319,7 @@ def main():
     if not spreads and not positions:
         st.info("Bitte CSV hochladen um fortzufahren.")
         # Tabs trotzdem anzeigen (Kanarienvögel + Ausstieg brauchen kein Portfolio)
-        tab_k, tab_a = st.tabs(["🚨 Kanarienvögel", "🚪 Ausstiegs-Timing"])
+        tab_k, tab_a = st.tabs(["Kanarienvögel", "Ausstiegs-Timing"])
         with tab_k:
             _render_kanarienvoegel()
         with tab_a:
@@ -1331,11 +1331,11 @@ def main():
 
     # ── 5 Tabs ────────────────────────────────────────────────────────────────
     tab_analyse, tab_kana, tab_strat, tab_konkret, tab_exit = st.tabs([
-        "📋 Portfolio-Analyse",
-        "🚨 Kanarienvögel",
-        "🛡️ Strategie-Wahl",
-        "🎯 Konkrete Absicherung",
-        "🚪 Ausstiegs-Timing",
+        "Portfolio-Analyse",
+        "Kanarienvögel",
+        "Strategie-Wahl",
+        "Konkrete Absicherung",
+        "Ausstiegs-Timing",
     ])
 
     with tab_analyse:
