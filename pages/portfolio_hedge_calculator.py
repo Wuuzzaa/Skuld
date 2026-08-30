@@ -134,14 +134,32 @@ def _parse_position_report(content: str) -> list[dict]:
         qty = _f(data.get("Quantity"))
         if qty == 0:
             continue
-        sym = _extract_symbol(data.get("Symbol", "").strip())
+        sym_raw = data.get("Symbol", "").strip()
+        sym = _extract_symbol(sym_raw)
         if not sym:
             continue
+
+        # Strike/Expiry/PC aus eigenem Spalte ODER aus IBKR-Symbol-String
+        strike_raw   = data.get("Strike", "")
+        expiry_raw   = data.get("Expiry", "") or data.get("LastTradingDay", "")
+        put_call_raw = (data.get("Put/Call", "") or "").strip().upper()
+
+        m = re.match(r"^([A-Z0-9]{1,6})\s+(\d{6})([CP])(\d+)$", sym_raw.strip())
+        if m and (not strike_raw or not put_call_raw):
+            try:
+                from datetime import datetime as _dt
+                expiry_raw   = _dt.strptime(m.group(2), "%y%m%d").strftime("%Y-%m-%d")
+                put_call_raw = m.group(3)
+                strike_raw   = str(float(m.group(4)) / 1000.0)
+            except Exception:
+                pass
+
         legs.append({
-            "symbol": sym, "qty": qty,
-            "strike": _f(data.get("Strike")),
-            "expiry": data.get("Expiry", "") or data.get("LastTradingDay", ""),
-            "put_call": (data.get("Put/Call", "") or "").strip().upper(),
+            "symbol":   sym,
+            "qty":      qty,
+            "strike":   _f(strike_raw),
+            "expiry":   expiry_raw,
+            "put_call": put_call_raw,
         })
 
     grp = defaultdict(list)
