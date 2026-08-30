@@ -669,6 +669,23 @@ def _build_candidates(opt_df: pd.DataFrame, corr_map: dict,
     return results
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def _load_vix_level() -> float | None:
+    """Lädt aktuellen VIX-Stand aus OptionDataMerged."""
+    df = select_into_dataframe(
+        query="""
+            SELECT live_stock_price
+            FROM "OptionDataMerged"
+            WHERE symbol IN ('I:VIX', '^VIX', 'VIX')
+              AND live_stock_price IS NOT NULL
+            LIMIT 1
+        """,
+    )
+    if df is not None and not df.empty:
+        return float(df.iloc[0]["live_stock_price"])
+    return None
+
+
 @st.cache_data(ttl=600, show_spinner=False)
 def _load_insurance_candidates(
     symbol: str,
@@ -1185,6 +1202,32 @@ def _load_stock_prices_current(symbols: tuple[str, ...]) -> dict[str, float]:
     return dict(zip(df["symbol"], df["live_stock_price"].astype(float)))
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def _load_portfolio_meta(symbols: tuple[str, ...]) -> pd.DataFrame:
+    """
+    Einzelabfrage: Beta + Kurs + Sektor + MarketCap für alle Portfolio-Symbole.
+    Nutzt OptionDataMerged analog zu _load_betas / _load_stock_prices_current.
+    """
+    if not symbols:
+        return pd.DataFrame()
+    df = select_into_dataframe(
+        query="""
+            SELECT DISTINCT ON (symbol)
+                symbol,
+                "Summary_beta"      AS beta,
+                live_stock_price    AS price,
+                company_sector      AS sector,
+                "Summary_marketCap" AS market_cap
+            FROM "OptionDataMerged"
+            WHERE symbol = ANY(:syms)
+              AND live_stock_price IS NOT NULL
+            ORDER BY symbol, live_stock_price DESC
+        """,
+        params={"syms": list(symbols)},
+    )
+    return df if df is not None else pd.DataFrame()
+
+
 # ── Stress-Test Berechnung ────────────────────────────────────────────────────
 
 _SCENARIOS = {
@@ -1201,6 +1244,339 @@ _FALLBACK_BETAS = {
     "XLU": 0.35,  "XLP": 0.45, "XLV": 0.55,  "VXX": -3.5,
     "SPY": 1.0,   "QQQ": 1.2,  "IWM": 1.1,
 }
+
+
+_SECTOR_TO_HEDGE: dict[str, str] = {
+    "technology":       "QQQ / XLK",
+    "communication":    "QQQ / XLK",
+    "energy":           "XLE",
+    "utilities":        "XLU",
+    "health":           "XLV",
+    "healthcare":       "XLV",
+    "consumer staples": "XLP",
+    "consumer defensive": "XLP",
+    "financials":       "XLF",
+    "industrials":      "XLI",
+    "materials":        "XLB",
+    "real estate":      "XLRE",
+}
+
+_STRATEGY_MAP: dict[tuple, str] = {
+    ("Prämienverkäufer", "Sparsam",    "Seitwärts"):          "Grizzly-Hedge",
+    ("Prämienverkäufer", "Sparsam",    "Leichter Rückgang"):  "Grizzly-Hedge",
+    ("Prämienverkäufer", "Sparsam",    "Starker Crash"):      "Zorro-Hedge",
+    ("Prämienverkäufer", "Sparsam",    "Keine Ahnung"):       "Grizzly-Hedge",
+    ("Prämienverkäufer", "Ausgewogen", "Seitwärts"):          "Bear Put Spread",
+    ("Prämienverkäufer", "Ausgewogen", "Leichter Rückgang"):  "Bear Put Spread",
+    ("Prämienverkäufer", "Ausgewogen", "Starker Crash"):      "Zorro-Hedge",
+    ("Prämienverkäufer", "Ausgewogen", "Keine Ahnung"):       "Bear Put Spread",
+    ("Prämienverkäufer", "Vollschutz", "Seitwärts"):          "Protective Put",
+    ("Prämienverkäufer", "Vollschutz", "Leichter Rückgang"):  "Protective Put",
+    ("Prämienverkäufer", "Vollschutz", "Starker Crash"):      "Protective Put",
+    ("Prämienverkäufer", "Vollschutz", "Keine Ahnung"):       "Protective Put",
+    ("Aktien-Depot",     "Sparsam",    "Seitwärts"):          "Grizzly-Hedge",
+    ("Aktien-Depot",     "Sparsam",    "Leichter Rückgang"):  "Grizzly-Hedge",
+    ("Aktien-Depot",     "Sparsam",    "Starker Crash"):      "Grizzly-Hedge",
+    ("Aktien-Depot",     "Sparsam",    "Keine Ahnung"):       "Grizzly-Hedge",
+    ("Aktien-Depot",     "Ausgewogen", "Seitwärts"):          "Collar",
+    ("Aktien-Depot",     "Ausgewogen", "Leichter Rückgang"):  "Zorro-Hedge",
+    ("Aktien-Depot",     "Ausgewogen", "Starker Crash"):      "Protective Put",
+    ("Aktien-Depot",     "Ausgewogen", "Keine Ahnung"):       "Bear Put Spread",
+    ("Aktien-Depot",     "Vollschutz", "Seitwärts"):          "Protective Put",
+    ("Aktien-Depot",     "Vollschutz", "Leichter Rückgang"):  "Protective Put",
+    ("Aktien-Depot",     "Vollschutz", "Starker Crash"):      "Protective Put",
+    ("Aktien-Depot",     "Vollschutz", "Keine Ahnung"):       "Protective Put",
+    ("Gemischt",         "Sparsam",    "Seitwärts"):          "Grizzly-Hedge",
+    ("Gemischt",         "Sparsam",    "Leichter Rückgang"):  "Grizzly-Hedge",
+    ("Gemischt",         "Sparsam",    "Starker Crash"):      "Zorro-Hedge",
+    ("Gemischt",         "Sparsam",    "Keine Ahnung"):       "Grizzly-Hedge",
+    ("Gemischt",         "Ausgewogen", "Seitwärts"):          "Collar",
+    ("Gemischt",         "Ausgewogen", "Leichter Rückgang"):  "Bear Put Spread",
+    ("Gemischt",         "Ausgewogen", "Starker Crash"):      "Bear Put Spread",
+    ("Gemischt",         "Ausgewogen", "Keine Ahnung"):       "Bear Put Spread",
+    ("Gemischt",         "Vollschutz", "Seitwärts"):          "Protective Put",
+    ("Gemischt",         "Vollschutz", "Leichter Rückgang"):  "Protective Put",
+    ("Gemischt",         "Vollschutz", "Starker Crash"):      "Protective Put",
+    ("Gemischt",         "Vollschutz", "Keine Ahnung"):       "Protective Put",
+}
+
+_STRATEGY_DETAILS: dict[str, dict] = {
+    "Grizzly-Hedge": {
+        "description": (
+            "Ein Bear Put Spread kombiniert mit einem verkauften Call — "
+            "der Call finanziert den Spread, so dass die Gesamtposition "
+            "kostenlos oder sogar für eine kleine Prämie aufgesetzt werden kann."
+        ),
+        "why_template": (
+            "Als {portfolio_type} mit Beta {beta:.2f} ist der Grizzly-Hedge ideal: "
+            "Die Prämieneinnahmen aus dem Short-Call finanzieren deinen Schutz "
+            "und du musst bei Seitwärtsmärkten nichts bezahlen."
+        ),
+        "cost_estimate": "Selbstfinanziert — 0% der Prämie",
+        "book_reference": "Kapitel 7 — Der Grizzly-Hedge",
+        "color": "#22c55e",
+        "target_tab": "Hedge-Strategien",
+    },
+    "Zorro-Hedge": {
+        "description": (
+            "Ein doppelt gewichteter Bear Put Spread (2× Kontrakte) — "
+            "das Zick-Zack-Profil begrenzt Verluste stark und lässt Gewinne laufen. "
+            "Ideal bei erwartetem stärkerem Rückgang."
+        ),
+        "why_template": (
+            "Dein Portfolio-Beta von {beta:.2f} und {portfolio_type} legen nahe, "
+            "dass ein stärkerer Crash die Positionen überproportional treffen kann. "
+            "Der Zorro-Hedge liefert durch 2× Kontrakte deutlich mehr Schutz."
+        ),
+        "cost_estimate": "Gering — ~10–15% der Prämie",
+        "book_reference": "Kapitel 6 — Der Zorro-Hedge",
+        "color": "#22c55e",
+        "target_tab": "Hedge-Strategien",
+    },
+    "Bear Put Spread": {
+        "description": (
+            "Kauf eines Puts auf günstigem Strike + Verkauf eines tieferen Puts "
+            "zur Kostenreduzierung. Schützt in einer definierten Zone "
+            "und kostet deutlich weniger als ein einfacher Protective Put."
+        ),
+        "why_template": (
+            "Für ein {portfolio_type} mit {n_spreads} Spread-Positionen "
+            "ist der Bear Put Spread eine ausgewogene Wahl: "
+            "überschaubarer Einsatz, klarer Schutz in einem definierten Bereich."
+        ),
+        "cost_estimate": "Moderat — ~10–20% der Prämie",
+        "book_reference": "Kapitel 6 — Der Zorro-Hedge (Bear Put Spread Basis)",
+        "color": "#f59e0b",
+        "target_tab": "Hedge-Strategien",
+    },
+    "Collar": {
+        "description": (
+            "Kauf eines OTM-Puts + Verkauf eines OTM-Calls gegen eine bestehende "
+            "Aktienposition. Der Call finanziert den Put — "
+            "der Collar kann kostenlos (Zero-Cost) aufgesetzt werden."
+        ),
+        "why_template": (
+            "Dein {portfolio_type} mit Seitwärtserwartung profitiert vom Collar: "
+            "du behältst die Aktien, begrenzter Schutz nach unten, "
+            "Aufwärtspotenzial bis zum Call-Strike bleibt erhalten."
+        ),
+        "cost_estimate": "Kostenlos (Zero-Cost möglich)",
+        "book_reference": "Kapitel 4 — Der Collar und der Open Collar",
+        "color": "#f59e0b",
+        "target_tab": "Hedge-Strategien",
+    },
+    "Protective Put": {
+        "description": (
+            "Kauf eines Puts auf den relevanten Index oder die Aktie — "
+            "die klassische Vollkasko-Versicherung. "
+            "Teuer in der Anschaffung, aber unbegrenzter Schutz nach unten."
+        ),
+        "why_template": (
+            "Bei einem Portfolio-Beta von {beta:.2f} und Vollschutz-Anforderung "
+            "ist der Protective Put die richtige Wahl. "
+            "Bitte nur kaufen wenn VIX < 20 — sonst sind die Optionen zu teuer!"
+        ),
+        "cost_estimate": "Hoch — 20–30% der Prämie",
+        "book_reference": "Kapitel 3 — Der Protective Put",
+        "color": "#ef4444",
+        "target_tab": "💰 Hedge-Budget",
+    },
+}
+
+
+# ── Portfolio-Profil Analyse ──────────────────────────────────────────────────
+
+def _load_portfolio_profile(positions: list[dict]) -> dict:
+    """
+    Analysiert das Portfolio und gibt ein Profil-Dict zurück.
+    Kein @st.cache_data (list nicht hashbar) — Sub-Funktionen sind gecacht.
+    """
+    from collections import defaultdict
+
+    stock_pos = [p for p in positions if p["type"] == "stock" and p.get("direction", "Long") == "Long"]
+    opt_pos   = [p for p in positions if p["type"] == "option"]
+    n_stocks  = len(stock_pos)
+    symbols   = tuple(sorted({p["symbol"] for p in positions}))
+
+    meta_df = _load_portfolio_meta(symbols)
+    betas: dict[str, float]  = {}
+    prices: dict[str, float] = {}
+    sectors: dict[str, str]  = {}
+    if not meta_df.empty:
+        for _, row in meta_df.iterrows():
+            sym = str(row["symbol"])
+            if row.get("beta") is not None:
+                try:
+                    betas[sym] = float(row["beta"])
+                except (TypeError, ValueError):
+                    pass
+            if row.get("price") is not None:
+                try:
+                    prices[sym] = float(row["price"])
+                except (TypeError, ValueError):
+                    pass
+            if row.get("sector") is not None and str(row["sector"]).strip():
+                sectors[sym] = str(row["sector"]).strip()
+
+    # Gesamt-Depotwert (Aktien-Seite)
+    total_value = 0.0
+    missing_price_syms: list[str] = []
+    for p in stock_pos:
+        sym  = p["symbol"]
+        px   = prices.get(sym)
+        qty  = p.get("qty", 0)
+        if px and qty:
+            total_value += px * qty
+        elif qty:
+            missing_price_syms.append(sym)
+
+    # Beta gewichtet
+    weighted_beta = 1.0
+    if total_value > 0:
+        numerator = 0.0
+        for p in stock_pos:
+            sym  = p["symbol"]
+            px   = prices.get(sym) or 0.0
+            qty  = p.get("qty", 0)
+            beta = betas.get(sym) or _FALLBACK_BETAS.get(sym) or 1.0
+            numerator += px * qty * beta
+        weighted_beta = numerator / total_value
+
+    # Dominanter Sektor (nach Positionswert)
+    sector_value: dict[str, float] = defaultdict(float)
+    for p in stock_pos:
+        sym    = p["symbol"]
+        px     = prices.get(sym) or 0.0
+        qty    = p.get("qty", 0)
+        sector = sectors.get(sym, "")
+        if sector and sector.lower() != "unknown" and px:
+            sector_value[sector] += px * qty
+    dominant_sector = (
+        max(sector_value, key=lambda s: sector_value[s])
+        if sector_value else "Unbekannt"
+    )
+    sector_weights = (
+        {s: v / total_value * 100 for s, v in sector_value.items()}
+        if total_value > 0 else {}
+    )
+
+    # Prämien-Analyse
+    premium_data  = _analyse_portfolio_premium(positions)
+    n_spreads     = premium_data["n_spreads"]
+    n_naked       = len(premium_data["naked_shorts"])
+    n_short_opts  = n_spreads + n_naked
+    option_max_loss = premium_data["total_max_loss"]
+    depot_groesse   = total_value + option_max_loss
+
+    # Portfolio-Typ
+    if n_spreads > 3 and n_short_opts >= max(n_stocks, 1):
+        portfolio_type = "Prämienverkäufer"
+    elif n_stocks > n_short_opts:
+        portfolio_type = "Aktien-Depot"
+    else:
+        portfolio_type = "Gemischt"
+
+    # Klumpenrisiko
+    klumpen_pairs: list[tuple[str, str]] = []
+    if len(symbols) >= 2:
+        prices_df = _load_prices_for_symbols(symbols, lookback_days=252)
+        if not prices_df.empty:
+            avail = [s for s in symbols if s in prices_df.columns]
+            if len(avail) >= 2:
+                ret_df  = prices_df[avail].pct_change().dropna(how="all")
+                corr_m  = ret_df.corr(method="pearson")
+                for i, a in enumerate(avail):
+                    for b in avail[i + 1:]:
+                        if corr_m.loc[a, b] >= 0.70:
+                            klumpen_pairs.append((a, b))
+
+    return {
+        "total_value":       round(total_value, 2),
+        "option_max_loss":   round(option_max_loss, 2),
+        "depot_groesse":     round(depot_groesse, 2),
+        "weighted_beta":     round(weighted_beta, 2),
+        "dominant_sector":   dominant_sector,
+        "sector_weights":    sector_weights,
+        "portfolio_type":    portfolio_type,
+        "n_spreads":         n_spreads,
+        "n_stocks":          n_stocks,
+        "premium_per_month": premium_data["premium_per_month"],
+        "avg_dte":           premium_data["avg_dte"],
+        "klumpen_pairs":     klumpen_pairs,
+        "betas":             betas,
+        "prices":            prices,
+        "sectors":           sectors,
+        "missing_prices":    missing_price_syms,
+    }
+
+
+# ── Auto-Default-Helfer ───────────────────────────────────────────────────────
+
+def _auto_q1(profile: dict) -> str:
+    sector = profile["dominant_sector"].lower()
+    if profile["n_stocks"] < 5:
+        return "Direkt auf die Aktie"
+    for key, etf in _SECTOR_TO_HEDGE.items():
+        if key in sector:
+            return etf
+    return "SPY / RSP"
+
+
+def _auto_q2(profile: dict) -> int:
+    beta = profile["weighted_beta"]
+    if beta > 1.5:  return 30
+    if beta >= 1.0: return 20
+    if beta >= 0.5: return 15
+    return 10
+
+
+def _auto_q3(profile: dict) -> str:
+    beta = profile["weighted_beta"]
+    if beta > 1.5:
+        return "Vollschutz"
+    if profile["portfolio_type"] == "Prämienverkäufer":
+        return "Sparsam"
+    return "Ausgewogen"
+
+
+def _auto_q5(profile: dict) -> str:
+    avg_dte = profile.get("avg_dte", 30)
+    if profile["n_spreads"] > 0 and 25 <= avg_dte <= 45:
+        return "Kurzfristig (30d)"
+    if profile["n_stocks"] > 0 and profile["n_spreads"] == 0:
+        return "Dauerhaft (90d+)"
+    return "Mittelfristig (45–60d)"
+
+
+# ── Strategie-Empfehlung ──────────────────────────────────────────────────────
+
+def _recommend_strategy(
+    profile: dict,
+    q1_basiswert: str,
+    q2_crash: int,
+    q3_risk: str,
+    q4_market: str,
+    q5_duration: str,
+) -> dict:
+    """Pure Logic — kein DB-Aufruf. Gibt Empfehlungs-Dict zurück."""
+    pt = profile["portfolio_type"]
+    name = _STRATEGY_MAP.get((pt, q3_risk, q4_market), "Bear Put Spread")
+    details = _STRATEGY_DETAILS[name].copy()
+
+    # Personalisiertes "Warum"
+    why = details["why_template"].format(
+        portfolio_type=pt,
+        beta=profile["weighted_beta"],
+        n_spreads=profile["n_spreads"],
+    )
+    details["why"]       = why
+    details["name"]      = name
+    details["basiswert"] = q1_basiswert
+
+    # VXX-Ergänzungshinweis bei hohem Beta
+    details["vxx_hint"] = profile["weighted_beta"] > 1.5
+
+    return details
 
 
 def _estimate_portfolio_pnl(
@@ -1535,6 +1911,264 @@ def _render_portfolio_heatmap(portfolio_symbols: list[str], lookback_days: int):
         st.warning(f"Klumpenrisiko: {pair_strs} korrelieren ≥ 0.70")
 
 
+# ── Hedge-Konfigurator ───────────────────────────────────────────────────────
+
+def _render_hedge_konfigurator(positions: list[dict]) -> None:
+    """Rendert den 🧭 Hedge-Konfigurator Tab."""
+    st.markdown("### 🧭 Hedge-Konfigurator — Welcher Hedge passt zu dir?")
+    st.caption(
+        "Dein Portfolio wird automatisch analysiert. Die 5 Kernfragen aus "
+        "Eric Ludwigs Hedging-Buch werden vorausgefüllt — du kannst sie jederzeit überschreiben."
+    )
+
+    # ── Schritt 1: Portfolio-Profil ───────────────────────────────────────────
+    with st.container(border=True):
+        st.markdown("**Schritt 1 — Portfolio-Profil (automatisch erkannt)**")
+        with st.spinner("Analysiere Portfolio..."):
+            profile = _load_portfolio_profile(positions)
+
+        if profile["missing_prices"]:
+            st.warning(
+                f"Kursdaten fehlen für: {', '.join(profile['missing_prices'][:8])} "
+                f"— diese Positionen fließen nicht in die Berechnung ein."
+            )
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Depotgröße (geschätzt)", f"${profile['depot_groesse']:,.0f}")
+        c2.metric("Portfolio-Beta",          f"{profile['weighted_beta']:.2f}")
+        c3.metric("Dominanter Sektor",       profile["dominant_sector"])
+
+        c4, c5, c6 = st.columns(3)
+        c4.metric("Portfolio-Typ",     profile["portfolio_type"])
+        c5.metric(
+            "Monatliche Prämie",
+            f"${profile['premium_per_month']:,.0f}" if profile["premium_per_month"] > 0 else "—",
+        )
+        n_k = len(profile["klumpen_pairs"])
+        c6.metric(
+            "Klumpenrisiko",
+            f"{n_k} Paare ≥ 0.70" if n_k else "Keines erkannt",
+            delta="Achtung" if n_k else None,
+            delta_color="inverse" if n_k else "normal",
+        )
+        if n_k:
+            pair_str = ", ".join(f"{a}/{b}" for a, b in profile["klumpen_pairs"][:5])
+            st.caption(f"Hoch korrelierte Paare: {pair_str} — Absicherung auf einen breit gestreuten Index empfohlen.")
+
+    # ── Schritt 2: Die 5 Kernfragen ───────────────────────────────────────────
+    st.markdown("**Schritt 2 — Die 5 Kernfragen**")
+    st.caption("Automatisch vorausgefüllt — klick zum Überschreiben.")
+
+    _Q1_OPTIONS = ["SPY / RSP", "QQQ / XLK", "XLE", "XLU", "XLV", "XLP", "XLF", "XLI", "XLRE", "Direkt auf die Aktie"]
+    _Q3_OPTIONS = [
+        "Sparsam — Grizzly-Hedge / Zorro-Hedge (durch Prämie finanziert)",
+        "Ausgewogen — Collar / Bear Put Spread",
+        "Vollschutz — Protective Put + VXX",
+    ]
+    _Q3_SHORT   = ["Sparsam", "Ausgewogen", "Vollschutz"]
+
+    auto_q1 = _auto_q1(profile)
+    auto_q2 = _auto_q2(profile)
+    auto_q3 = _auto_q3(profile)
+    auto_q5 = _auto_q5(profile)
+
+    q1_default_idx = _Q1_OPTIONS.index(auto_q1) if auto_q1 in _Q1_OPTIONS else 0
+    q3_default_idx = _Q3_SHORT.index(auto_q3) if auto_q3 in _Q3_SHORT else 1
+
+    with st.container(border=True):
+        st.markdown("**Frage 1 — Welcher Basiswert passt zu meinem Depot?**")
+        q1 = st.radio(
+            "Basiswert",
+            _Q1_OPTIONS,
+            index=q1_default_idx,
+            horizontal=True,
+            key="chf_hk_q1_basiswert",
+            label_visibility="collapsed",
+        )
+        st.caption(
+            f"Auto-Erkennung: Dominanter Sektor = **{profile['dominant_sector']}** "
+            f"· {profile['n_stocks']} Aktien-Positionen erkannt"
+        )
+
+    with st.container(border=True):
+        st.markdown("**Frage 2 — Gegen wie viel Kursrückgang absichern?**")
+        q2 = st.select_slider(
+            "Crash-Tiefe",
+            options=[10, 15, 20, 30],
+            value=auto_q2,
+            format_func=lambda x: f"−{x}%",
+            key="chf_hk_q2_crash",
+            label_visibility="collapsed",
+        )
+        st.caption(
+            f"Auto-Erkennung: Portfolio-Beta = **{profile['weighted_beta']:.2f}** "
+            f"→ bei −{auto_q2}% Marktfall schätzt das Depot ~−{profile['weighted_beta'] * auto_q2:.0f}%"
+        )
+
+    with st.container(border=True):
+        st.markdown("**Frage 3 — Kostenbereitschaft / Risikotoleranz**")
+        q3_full = st.radio(
+            "Risikotoleranz",
+            _Q3_OPTIONS,
+            index=q3_default_idx,
+            key="chf_hk_q3_risk",
+            label_visibility="collapsed",
+        )
+        q3 = _Q3_SHORT[_Q3_OPTIONS.index(q3_full)]
+        st.caption(
+            f"Auto-Erkennung: **{profile['portfolio_type']}** mit Beta {profile['weighted_beta']:.2f} "
+            f"→ {auto_q3}"
+        )
+
+    with st.container(border=True):
+        # VIX-Ampel
+        vix = _load_vix_level()
+        if vix is not None:
+            if vix < 15:
+                vix_color = "#22c55e"
+                vix_text  = f"VIX {vix:.1f} — Markt sehr ruhig — idealer Zeitpunkt für Hedge-Aufbau"
+            elif vix <= 20:
+                vix_color = "#f59e0b"
+                vix_text  = f"VIX {vix:.1f} — Normale Volatilität — guter Einstiegszeitpunkt"
+            else:
+                vix_color = "#ef4444"
+                vix_text  = f"VIX {vix:.1f} — Erhöhte Volatilität — Optionen teuer, vorsichtig sein"
+            st.markdown(
+                f"<div style='background:{vix_color}22;border:1px solid {vix_color}66;"
+                f"border-radius:8px;padding:8px 14px;margin-bottom:10px;'>"
+                f"<span style='color:{vix_color};font-weight:700;'>{vix_text}</span>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+        st.markdown("**Frage 4 — Wie ist deine aktuelle Marktmeinung?**")
+        q4 = st.radio(
+            "Marktmeinung",
+            ["Seitwärts", "Leichter Rückgang", "Starker Crash", "Keine Ahnung"],
+            index=3,
+            horizontal=True,
+            key="chf_hk_q4_market",
+            label_visibility="collapsed",
+        )
+        st.caption("Wird nicht automatisch erkannt — wähle nach eigener Einschätzung.")
+
+    with st.container(border=True):
+        st.markdown("**Frage 5 — Wie lange soll der Schutz laufen?**")
+        _Q5_OPTIONS = ["Kurzfristig (30d)", "Mittelfristig (45–60d)", "Dauerhaft (90d+)"]
+        q5_idx = _Q5_OPTIONS.index(auto_q5) if auto_q5 in _Q5_OPTIONS else 1
+        q5 = st.radio(
+            "Schutzdauer",
+            _Q5_OPTIONS,
+            index=q5_idx,
+            horizontal=True,
+            key="chf_hk_q5_duration",
+            label_visibility="collapsed",
+        )
+        if profile["n_spreads"] > 0:
+            st.caption(
+                f"Auto-Erkennung: Ø DTE = **{profile['avg_dte']:.0f}** Tage aus {profile['n_spreads']} Spreads"
+            )
+        else:
+            st.caption("Auto-Erkennung: Reines Aktien-Depot → Dauerhafter Schutz empfohlen")
+
+    # ── Schritt 3: Empfehlung ─────────────────────────────────────────────────
+    rec   = _recommend_strategy(profile, q1, q2, q3, q4, q5)
+    color = rec["color"]
+
+    st.markdown("**Schritt 3 — Deine Empfehlung**")
+    st.markdown(
+        f"<div style='background:{color}11;border:2px solid {color};"
+        f"border-radius:14px;padding:20px 24px;margin-bottom:16px;'>"
+        f"<div style='font-size:22px;font-weight:800;color:{color};"
+        f"margin-bottom:8px;'>{rec['name']}</div>"
+        f"<div style='color:#e2e8f0;font-size:14px;margin-bottom:14px;'>{rec['description']}</div>"
+        f"<div style='color:#94a3b8;font-size:11px;font-weight:600;"
+        f"text-transform:uppercase;letter-spacing:1px;'>Warum diese Strategie für dich?</div>"
+        f"<div style='color:#cbd5e1;font-size:13px;margin-top:4px;margin-bottom:16px;'>{rec['why']}</div>"
+        f"<div style='display:flex;gap:28px;flex-wrap:wrap;'>"
+        f"<div><div style='color:#94a3b8;font-size:11px;text-transform:uppercase;'>Basiswert</div>"
+        f"<div style='color:#f1f5f9;font-weight:700;'>{rec['basiswert']}</div></div>"
+        f"<div><div style='color:#94a3b8;font-size:11px;text-transform:uppercase;'>Kosten-Schätzung</div>"
+        f"<div style='color:#f1f5f9;font-weight:700;'>{rec['cost_estimate']}</div></div>"
+        f"<div><div style='color:#94a3b8;font-size:11px;text-transform:uppercase;'>Buchkapitel</div>"
+        f"<div style='color:#f1f5f9;font-weight:700;'>{rec['book_reference']}</div></div>"
+        f"</div></div>",
+        unsafe_allow_html=True,
+    )
+
+    if rec.get("vxx_hint"):
+        st.warning(
+            "Portfolio-Beta > 1.5 erkannt — als **Ergänzung** einen "
+            "**VXX Time-Straddle** in Betracht ziehen (Kapitel 9). "
+            "Der VXX profitiert von einer IV-Explosion bei einem echten Crash."
+        )
+
+    st.info(
+        f"Umsetzung: Wechsle zum Tab **{rec['target_tab']}** "
+        f"um diese Strategie zu konfigurieren und konkrete Optionen zu finden."
+    )
+
+    # ── Schritt 4: Schnellcheck ───────────────────────────────────────────────
+    st.markdown("**Schritt 4 — Schnellcheck**")
+    spy_price = _load_spy_price()
+    vix_ok  = vix is not None and vix < 20
+    beta_ok = profile.get("weighted_beta") is not None
+
+    n_contracts_needed = 0.0
+    size_ok = False
+    if spy_price and profile["depot_groesse"] > 0:
+        n_contracts_needed = profile["depot_groesse"] / (spy_price * 100)
+        size_ok = n_contracts_needed >= 1.0
+
+    checks = [
+        (
+            vix_ok,
+            "VIX-Level für Einstieg geeignet (< 20)",
+            f"VIX = {vix:.1f}" if vix is not None else "VIX nicht verfügbar",
+        ),
+        (
+            beta_ok,
+            "Portfolio-Beta bekannt und berücksichtigt",
+            f"Beta = {profile['weighted_beta']:.2f}",
+        ),
+        (
+            size_ok,
+            "Absicherungsgröße zur Depot-Größe passend",
+            f"~{n_contracts_needed:.1f} Kontrakte für ${profile['depot_groesse']:,.0f} Depot"
+            if spy_price else "SPY-Kurs nicht verfügbar",
+        ),
+    ]
+
+    for ok, label, detail in checks:
+        icon  = "✅" if ok else "❌"
+        color_chk = "#22c55e" if ok else "#ef4444"
+        st.markdown(
+            f"<div style='padding:8px 0;border-bottom:1px solid #1e293b;'>"
+            f"<span style='font-size:16px;'>{icon}</span>&nbsp;"
+            f"<span style='color:#e2e8f0;'>{label}</span>&nbsp;"
+            f"<span style='color:#64748b;font-size:12px;'>— {detail}</span>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+    with st.expander("Wie werden diese Empfehlungen berechnet?"):
+        st.markdown("""
+**Portfolio-Profil:**
+- **Depotgröße** = Σ(Kurs × Qty) aller Long-Aktien + Max-Loss aller Spreads
+- **Beta** = gewichtetes Mittel aller Positionen (Preis × Qty × Beta / Gesamtwert)
+- **Dominanter Sektor** = Sektor mit dem größten Positionswert
+- **Portfolio-Typ** = „Prämienverkäufer" bei > 3 Spreads + Shorts ≥ Aktien, „Aktien-Depot" sonst
+
+**Die 5 Kernfragen (aus Eric Ludwig — Hedging mit Optionen):**
+1. Basiswert → aus dominantem Sektor abgeleitet
+2. Crashtiefe → aus Portfolio-Beta (Beta 1.2 → −20% Szenario empfohlen)
+3. Kostenbereitschaft → aus Portfolio-Typ (Prämienverkäufer → Sparsam)
+4. Marktmeinung → immer manuell (kein Algorithmus kann die Marktmeinung kennen)
+5. Schutzdauer → aus Ø-DTE der Spread-Positionen
+
+**Strategie-Empfehlung:** Lookup-Tabelle aus (Portfolio-Typ × Kostenbereitschaft × Marktmeinung)
+""")
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
@@ -1655,7 +2289,11 @@ def main():
     # Hedge-Budget Tab braucht keine Suchergebnisse — nur das Portfolio
     if not run and "chf_results" not in st.session_state:
         st.divider()
-        tab_budget_early, = st.tabs(["💰 Hedge-Budget"])
+        tab_konfig_early, tab_budget_early = st.tabs(
+            ["🧭 Hedge-Konfigurator", "💰 Hedge-Budget"]
+        )
+        with tab_konfig_early:
+            _render_hedge_konfigurator(positions)
         with tab_budget_early:
             _render_hedge_budget(positions)
         return
@@ -1737,8 +2375,9 @@ def main():
     else:
         results_filtered = results
 
-    tab_heatmap, tab_corr, tab_strategies, tab_stress, tab_budget = st.tabs([
-        "Portfolio-Matrix", "Negativ-Korrelierte", "Hedge-Strategien", "Stress-Test", "💰 Hedge-Budget"
+    tab_heatmap, tab_corr, tab_strategies, tab_stress, tab_konfig, tab_budget = st.tabs([
+        "Portfolio-Matrix", "Negativ-Korrelierte", "Hedge-Strategien", "Stress-Test",
+        "🧭 Hedge-Konfigurator", "💰 Hedge-Budget",
     ])
 
     with tab_heatmap:
@@ -1815,6 +2454,9 @@ Ein Short Put auf XLU mit Korrelation −0.3 und RoR 18% → Score **5.4**
                 [p for p in positions if p.get("direction", "Long") == "Long"],
                 results_filtered, betas, prices,
             )
+
+    with tab_konfig:
+        _render_hedge_konfigurator(positions)
 
     with tab_budget:
         _render_hedge_budget(positions)
