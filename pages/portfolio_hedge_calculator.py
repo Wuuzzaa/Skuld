@@ -663,7 +663,11 @@ def _render_portfolio_analyse(positions: list[dict], spreads: list[dict], profil
             for s in sorted(spreads, key=lambda x: x["max_risk"], reverse=True):
                 rows.append({
                     "Symbol":      s["symbol"],
-                    "Typ":         "Put-Spread" if s["put_call"] == "P" else "Call-Spread",
+                    "Typ":         (
+                        ("Put-Spread" if s["put_call"] == "P" else "Call-Spread")
+                        if s.get("kind") == "spread"
+                        else ("Naked Short Put" if s["put_call"] == "P" else "Naked Short Call")
+                    ),
                     "Short Strike": f"${s['short_strike']:.0f}",
                     "Long Strike":  f"${s['long_strike']:.0f}",
                     "Breite":       f"${s['width']:.0f}",
