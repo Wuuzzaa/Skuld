@@ -1,7 +1,6 @@
 """Job-Scheduler Queue-Logik — SM36/SM37-Stil Sicherheitsnetz.
 
 Reine Dateisystem-Logik, kein DB/Docker. Queue liegt unter logs/_queue/.
-Design: docs/superpowers/specs/2026-07-24-job-scheduler-design.md
 """
 from datetime import datetime, timedelta, timezone
 from pathlib import Path

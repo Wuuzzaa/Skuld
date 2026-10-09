@@ -32,7 +32,6 @@ resolve_download_dir() {
 }
 
 # --- Safety Guards ---
-# See docs/superpowers/specs/2026-07-05-slim-db-download-design.md
 #
 # assert_readonly_sql: refuse any SQL fragment about to be sent to the
 #                      production server that contains destructive keywords.

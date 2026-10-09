@@ -4,8 +4,6 @@ Statt Jobs per Klick sofort zu feuern, landen sie als JSON-Datei in einer dateib
 Queue unter ``logs/_queue/``. Ein Cron-Dispatcher (diese Datei als ``__main__``, jede Minute)
 startet fällige Jobs über die bestehende ``run_data_collection.sh``-Kette.
 
-Design: docs/superpowers/specs/2026-07-24-job-scheduler-design.md
-
 Queue-Datei-Namen kodieren den Status, damit "Claiming" atomar per ``os.rename`` geht:
     <run_at_iso>__<mode>__<id>.<status>.json    status ∈ {geplant, laufend}
 

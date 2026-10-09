@@ -24,7 +24,6 @@ $ErrorActionPreference = "Stop"
 # --- Functions ---
 
 # --- Safety Guards ---
-# See docs/superpowers/specs/2026-07-05-slim-db-download-design.md
 #
 # Assert-ReadonlySql: refuse any SQL payload about to be sent to the
 #                     production server that contains destructive keywords.
