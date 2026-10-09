@@ -1,15 +1,8 @@
-import logging
 import sys
 import streamlit as st
 from src.database import run_migrations
-from src.logger_config import setup_logging
 from config import *
 import os
-
-# # enable logging
-# setup_logging(component="streamlit", log_level=logging.DEBUG, console_output=True)
-# logger = logging.getLogger(__name__)
-# logger.info("Start SKULD")
 
 # Check if "--local" is passed as a command-line argument
 # start in terminal with: streamlit run app.py -- --local

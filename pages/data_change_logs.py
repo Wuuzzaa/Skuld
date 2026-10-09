@@ -2,8 +2,6 @@ import logging
 
 import streamlit as st
 import pandas as pd
-import sqlite3
-import os
 from src.database import select_into_dataframe
 from src.decorator_log_function import log_function
 
