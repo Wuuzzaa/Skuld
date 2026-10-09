@@ -208,3 +208,4 @@ authelia/emails.txt
 uptime-kuma-data/
 src/*_test.py
 /.junie/
+.idea/
