@@ -1,15 +1,8 @@
-import logging
 import sys
 import streamlit as st
 from src.database import run_migrations
-from src.logger_config import setup_logging
 from config import *
 import os
-
-# # enable logging
-# setup_logging(component="streamlit", log_level=logging.DEBUG, console_output=True)
-# logger = logging.getLogger(__name__)
-# logger.info("Start SKULD")
 
 # Check if "--local" is passed as a command-line argument
 # start in terminal with: streamlit run app.py -- --local
@@ -41,7 +34,6 @@ option_strategy_finder = st.Page("pages/option_strategy_finder.py", title="Optio
 crash_hedge_finder = st.Page("pages/crash_hedge_finder.py", title="Crash Hedge Finder")
 portfolio_hedge_calculator = st.Page("pages/portfolio_hedge_calculator.py", title="Portfolio Hedge Calculator")
 trade_journal = st.Page("pages/trade_journal.py", title="Trade Journal")
-index_short_put = st.Page("pages/index_short_put.py", title="Index Short Put")
 zahltagstrategie = st.Page("pages/dividend_screener_zahltagstrategie.py", title="Zahltagstrategie")
 data_logs = st.Page("pages/data_change_logs.py", title="Data Logs")
 iron_condors = st.Page("pages/iron_condors.py", title="Iron Condors")
@@ -83,7 +75,6 @@ page = st.navigation(
         crash_hedge_finder,
         portfolio_hedge_calculator,
         trade_journal,
-        index_short_put,
         zahltagstrategie,
         data_logs,
         symbolpage,

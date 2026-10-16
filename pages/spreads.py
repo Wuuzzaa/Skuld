@@ -27,6 +27,8 @@ from src.utils.option_utils import get_expiration_type
 from src.ui_utils import init_session_state, reset_to_defaults as ui_reset, filter_by_expiration_type
 from src.ui_strategy_display import display_strategy_details
 from src.options_utils import OptionLeg, StrategyMetrics
+from src.spread_checklist import ChecklistThresholds, evaluate_checklist
+from src.traffic_light import checklist_badge, render_checklist_detail
 
 # Ensure logfile gets all columns of wide dataframes
 pd.set_option('display.max_columns', None)
@@ -80,7 +82,16 @@ DEFAULTS = {
     'min_iv_percentile': DEFAULT_MIN_IV_PERCENTILE,
     'strategy_type': DEFAULT_STRATEGY_TYPE,
     'iv_correction': IV_CORRECTION_MODE,
-    'risk_free_rate': RISK_FREE_RATE * 100  # stored as percentage for UI (e.g. 3.0 = 3%)
+    'risk_free_rate': RISK_FREE_RATE * 100,  # stored as percentage for UI (e.g. 3.0 = 3%)
+    # Checklist
+    'chk_only_full': False,
+    'chk_sort': True,
+    'chk_min_iv_rank': 30.0,
+    'chk_delta_min': 0.12,
+    'chk_delta_max': 0.20,
+    'chk_dte_min': 7,
+    'chk_dte_max': 21,
+    'chk_min_credit_pct': 33.0,
 }
 
 init_session_state(DEFAULTS)
@@ -428,13 +439,69 @@ filtered_df.reset_index(drop=True, inplace=True)
 # Format 'earnings_date' for display (do this AFTER all calculations and filtering)
 filtered_df['earnings_date'] = pd.to_datetime(filtered_df['earnings_date']).dt.strftime('%d.%m.%Y')
 
-# Pre-format columns that we want to show in details but not in the main table
-# This ensures they are available in 'row' even after page_display_dataframe might have dropped them from display
-# Actually page_display_dataframe creates a copy for display, so filtered_df remains intact.
-
 total_before = len(spreads_df)
 total_after = len(filtered_df)
 total_removed = total_before - total_after
+
+# ── Checkliste (nur Bull Put Spread) ─────────────────────────────────────────
+_is_bull_put = (strategy_type == "credit") and (option_type == "put")
+
+if _is_bull_put and not filtered_df.empty:
+    with st.expander("Schwellen anpassen", expanded=False):
+        _t_col1, _t_col2, _t_col3 = st.columns(3)
+        with _t_col1:
+            st.number_input("Min IV Rank (%)", min_value=0.0, max_value=100.0, step=1.0, key="chk_min_iv_rank")
+            st.number_input("Delta Min", min_value=0.0, max_value=1.0, step=0.01, format="%.2f", key="chk_delta_min")
+        with _t_col2:
+            st.number_input("Delta Max", min_value=0.0, max_value=1.0, step=0.01, format="%.2f", key="chk_delta_max")
+            st.number_input("DTE Min", min_value=0, max_value=365, step=1, key="chk_dte_min")
+        with _t_col3:
+            st.number_input("DTE Max", min_value=0, max_value=365, step=1, key="chk_dte_max")
+            st.number_input("Min Credit / Breite (%)", min_value=0.0, max_value=100.0, step=1.0, key="chk_min_credit_pct")
+
+    _chk_thresholds = ChecklistThresholds(
+        min_iv_rank=st.session_state.chk_min_iv_rank,
+        delta_min=st.session_state.chk_delta_min,
+        delta_max=st.session_state.chk_delta_max,
+        dte_min=st.session_state.chk_dte_min,
+        dte_max=st.session_state.chk_dte_max,
+        min_credit_pct=st.session_state.chk_min_credit_pct,
+    )
+
+    @st.cache_data(ttl=300)
+    def _cached_evaluate_checklist(cache_key: str, df, t_min_iv_rank, t_delta_min, t_delta_max, t_dte_min, t_dte_max, t_min_credit_pct):
+        t = ChecklistThresholds(
+            min_iv_rank=t_min_iv_rank, delta_min=t_delta_min, delta_max=t_delta_max,
+            dte_min=t_dte_min, dte_max=t_dte_max, min_credit_pct=t_min_credit_pct,
+        )
+        return evaluate_checklist(df, t)
+
+    _chk_cache_key = f"{cache_key}|{st.session_state.chk_min_iv_rank}|{st.session_state.chk_delta_min}|{st.session_state.chk_delta_max}|{st.session_state.chk_dte_min}|{st.session_state.chk_dte_max}|{st.session_state.chk_min_credit_pct}"
+    filtered_df = _cached_evaluate_checklist(
+        _chk_cache_key, filtered_df,
+        st.session_state.chk_min_iv_rank, st.session_state.chk_delta_min,
+        st.session_state.chk_delta_max, st.session_state.chk_dte_min,
+        st.session_state.chk_dte_max, st.session_state.chk_min_credit_pct,
+    )
+
+    _chk_col1, _chk_col2 = st.columns(2)
+    with _chk_col1:
+        st.checkbox("Nur volle Checkliste (5/5)", key="chk_only_full")
+    with _chk_col2:
+        st.checkbox("Nach Checkliste sortieren", key="chk_sort")
+
+    if st.session_state.chk_only_full:
+        filtered_df = filtered_df[filtered_df["chk_full"]].reset_index(drop=True)
+
+    if st.session_state.chk_sort:
+        filtered_df = filtered_df.sort_values(["chk_score", "expected_value"], ascending=[False, False]).reset_index(drop=True)
+
+    filtered_df["Checkliste"] = filtered_df.apply(checklist_badge, axis=1)
+
+elif not _is_bull_put:
+    st.info("Marktampel und Checkliste sind nur für Bull Put Spreads (credit / put) verfügbar.")
+
+# ── Ende Checkliste ───────────────────────────────────────────────────────────
 
 st.markdown(f"### {total_after} Results")
 
@@ -740,6 +807,18 @@ if not filtered_df.empty:
         }
 
         display_strategy_details(row['symbol'], row.get('Company', 'N/A'), legs, metrics, extra_info)
+
+        if _is_bull_put and any(col in row.index for col in ["chk_iv_rank", "chk_delta"]):
+            _chk_t = ChecklistThresholds(
+                min_iv_rank=st.session_state.get("chk_min_iv_rank", 30.0),
+                delta_min=st.session_state.get("chk_delta_min", 0.12),
+                delta_max=st.session_state.get("chk_delta_max", 0.20),
+                dte_min=st.session_state.get("chk_dte_min", 7),
+                dte_max=st.session_state.get("chk_dte_max", 21),
+                min_credit_pct=st.session_state.get("chk_min_credit_pct", 33.0),
+            )
+            render_checklist_detail(row, _chk_t)
+
         display_spreads_backtesting(selected_date, row)
     else:
         st.caption("💡 Klicke auf eine Zeile in der Tabelle, um die Details der einzelnen Legs zu sehen.")

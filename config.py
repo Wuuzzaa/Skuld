@@ -9,8 +9,7 @@ load_dotenv()
 
 # Massiv API
 MASSIVE_API_KEY = os.getenv('MASSIVE_API_KEY')
-MASSIVE_API_KEY_FLAT_FILES = os.getenv('MASSIVE_API_KEY_FLAT_FILES')
-TEST_KEY= os.getenv('TEST_KEY') # DEBUG
+
 
 # LLM / DeepSeek API
 DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY') or os.getenv('DEEP_SEEK')
@@ -50,7 +49,7 @@ PATH_DATABASE_QUERY_FOLDER = PATH_DATABASE_FOLDER / 'SQL' / 'query'
 
 # Tables
 TABLE_OPTION_DATA_TRADINGVIEW = 'OptionDataTradingView'
-TABLE_OPTION_DATA_YAHOO = 'OptionDataYahoo'
+
 TABLE_OPTION_DATA_MASSIVE = 'OptionDataMassive'
 TABLE_ANALYST_PRICE_TARGETS = 'AnalystPriceTargets'
 TABLE_EARNING_DATES = 'EarningDates'
@@ -100,11 +99,6 @@ HISTORY_ENABLED_VIEWS = [
     VIEW_OPTION_DATA_MERGED
 ]
  
- # Dividend Radar
-URL_DIVIDEND_RADAR = "https://www.portfolio-insight.com/dividend-radar"
-
-# App Logfile
-PATH_APP_LOGFILE = BASE_DIR / 'app.log'
 
 # Symbols excel file
 PATH_SYMBOLS_EXCHANGE_FILE = BASE_DIR / 'symbols_exchange.xlsx'
